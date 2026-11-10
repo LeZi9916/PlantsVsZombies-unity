@@ -4,7 +4,7 @@
 
 ## 项目概览
 
-Asteria-unity 是使用Unity进行实现的一款塔防类游戏，采用GPLv3开源许可。
+PlantsVsZombies-unity 是PlantsVsZombies的同人项目，使用Unity进行实现，采用GPLv3开源许可。
 
 当前固定使用 **Unity 6000.3.17f1**（准确版本见 `ProjectSettings/ProjectVersion.txt`），目标平台包括 Windows（x86/x64/ARM64）、Linux、macOS、Android（ARMv7和ARM64） 和 iOS，使用mono和il2cpp后端。
 
@@ -48,9 +48,9 @@ Asteria-unity 是使用Unity进行实现的一款塔防类游戏，采用GPLv3�
 - 所有C#代码不要使用单行语句样式。
 - 所有C#代码都应当启用Nullable（包括Unity object），并在源码中添加`#nullable enable`
 - 为统一代码风格，局部参数尽可能地使用`var`。
-- 主项目的根命名空间为`Asteria`。
+- 主项目的根命名空间为`PlantsVsZombies`。
 - 从`MonoBehaviour`派生的类中，所有由Unity进行序列化和反序列化序列化的字段都应当为`private`，并且使用`SerializeField`和`FormerlySerializedAs`特性，`FormerlySerializedAs`特性中的命名应当为PascalCase；如果该字段有公开访问的需求，可以使用自动属性，并对属性添加`[field: SerializeField]`和`[field: FormerlySerializedAs]`特性；成员声明应当避免和特性处于同一行。
-- 命名空间应与目录和程序集职责一致，通常位于 `Asteria.*` 下。
+- 命名空间应与目录和程序集职责一致，通常位于 `PlantsVsZombies.*` 下。
 - 遵循相邻代码的语言特性和可见性；不要为风格偏好大范围改写已有文件。
 - 运行时代码优先使用 `UnityEngine.Debug`。日志应包含可定位上下文，但不得输出密钥、令牌或用户隐私。
 - 异步操作应传播 `CancellationToken`，并与对象销毁、场景切换或显式关闭生命周期绑定；避免无法观察异常的裸 fire-and-forget。
