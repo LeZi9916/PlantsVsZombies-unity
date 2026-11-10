@@ -1,5 +1,7 @@
 # OptionsView 独立验证
 
+当前 Canvas 与独立输入回归请运行仓库根目录的 `./Tools/Tests/Run-UnityTests.ps1`。本目录的 `UnityProject`、`integration-project` 和 `run.ps1` 保存历史 IMGUI 验证快照，未作为当前运行时的测试入口；以下历史结果不代表本次迁移的验证结果。
+
 `run.ps1` 只在本目录创建独立 Unity 6000.3.17f1 工程，复制当前工作区的设置视图、同工程位图字体代码和所需资源，运行编辑器断言并构建 Windows Player。Player 对工程 StreamingAssets 和原包资源分别渲染，输出截图及像素差检查；这不是原版截图对比。
 
 ```powershell

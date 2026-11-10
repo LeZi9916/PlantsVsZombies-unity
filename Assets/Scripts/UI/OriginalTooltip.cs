@@ -21,7 +21,7 @@ namespace PlantsVsZombies.UI
         /// <summary>Stores background.</summary>
         public static readonly Color Background = new Color32(255, 255, 200, 255);
         /// <summary>Stores title font,  body font.</summary>
-        private ImGuiBitmapFont _titleFont, _bodyFont;
+        private CanvasBitmapFont _titleFont, _bodyFont;
         /// <summary>Stores disposed.</summary>
         private bool _disposed;
         /// <summary>Gets or sets last error.</summary>
@@ -43,12 +43,12 @@ namespace PlantsVsZombies.UI
             {
                 if (_titleFont == null)
                 {
-                    _titleFont = ImGuiBitmapFont.LoadFromResources(TitleFont);
+                    _titleFont = CanvasBitmapFont.LoadFromResources(TitleFont);
                 }
 
                 if (_bodyFont == null)
                 {
-                    _bodyFont = ImGuiBitmapFont.LoadFromResources(BodyFont);
+                    _bodyFont = CanvasBitmapFont.LoadFromResources(BodyFont);
                 }
 
                 return true;
@@ -251,16 +251,11 @@ namespace PlantsVsZombies.UI
                 return false;
             }
 
-            if (Event.current != null && Event.current.type != EventType.Repaint)
-            {
-                return true;
-            }
-
             var bounds = layout.Bounds;
-            var old = GUI.color;
+            var old = CanvasUI.Color;
             try
             {
-                GUI.color = Color.white;
+                CanvasUI.Color = Color.white;
                 Fill(bounds, Background);
                 // Native DrawRect(x,y,w-1,h-1) covers these same inclusive1px outer edges.
                 Fill(new Rect(bounds.x, bounds.y, bounds.width, 1), Color.black);
@@ -289,7 +284,7 @@ namespace PlantsVsZombies.UI
             }
             finally
             {
-                GUI.color = old;
+                CanvasUI.Color = old;
             }
 
             return true;
@@ -301,7 +296,7 @@ namespace PlantsVsZombies.UI
         /// <param name = "bounds">The bounds.</param>
         /// <param name = "baseline">The baseline.</param>
         /// <param name = "color">The color.</param>
-        private static void DrawLine(ImGuiBitmapFont font, BitmapTextLayout text, Rect bounds, int baseline, Color color)
+        private static void DrawLine(CanvasBitmapFont font, BitmapTextLayout text, Rect bounds, int baseline, Color color)
         {
             var x = (int)bounds.x + ((int)bounds.width - (int)text.Width) / 2;
             font.Draw(text, x, baseline - font.Data.Base, color);
@@ -312,10 +307,10 @@ namespace PlantsVsZombies.UI
         /// <param name = "color">The color.</param>
         private static void Fill(Rect rect, Color color)
         {
-            var before = GUI.color;
-            GUI.color = color;
-            GUI.DrawTexture(rect, Texture2D.whiteTexture, ScaleMode.StretchToFill, true);
-            GUI.color = before;
+            var before = CanvasUI.Color;
+            CanvasUI.Color = color;
+            CanvasUI.DrawTexture(rect, Texture2D.whiteTexture, ScaleMode.StretchToFill, true);
+            CanvasUI.Color = before;
         }
 
         /// <summary>Performs dispose.</summary>

@@ -148,10 +148,10 @@ namespace PlantsVsZombies.UI
                 var image = mode.Unidentified0x04;
                 if (thumbnails != null && image >= 0 && image < 22)
                 {
-                    GUI.DrawTextureWithTexCoords(new Rect(card.x + 13, card.y + 4, 80, 65), thumbnails, new Rect(image / 22f, 0, 1f / 22f, 1));
+                    CanvasUI.DrawTextureWithTexCoords(new Rect(card.x + 13, card.y + 4, 80, 65), thumbnails, new Rect(image / 22f, 0, 1f / 22f, 1));
                 }
 
-                DrawTexture(card.Contains(Event.current.mousePosition) && (CanLaunch == null || CanLaunch(mode.Id)) ? "Challenge_Window_Highlight.png" : "Challenge_Window.png", new Rect(card.x - 6, card.y - 2, 118, 120));
+                DrawTexture(card.Contains(CanvasUI.PointerPosition) && (CanLaunch == null || CanLaunch(mode.Id)) ? "Challenge_Window_Highlight.png" : "Challenge_Window.png", new Rect(card.x - 6, card.y - 2, 118, 120));
                 var textColor = new Color(42f / 255f, 42f / 255f, 90f / 255f);
                 var name = Name(mode);
                 if (OriginalCenteredLabel == null || !OriginalCenteredLabel(name, false, card.x + 52f, card.y + 96f, 98f, textColor))
@@ -165,7 +165,7 @@ namespace PlantsVsZombies.UI
                     var lockImage = _texture("lock.png");
                     if (lockImage != null)
                     {
-                        GUI.DrawTexture(new Rect(card.x + 32, card.y + 10, 40, 48), lockImage, ScaleMode.ScaleToFit, true);
+                        CanvasUI.DrawTexture(new Rect(card.x + 32, card.y + 10, 40, 48), lockImage, ScaleMode.ScaleToFit, true);
                     }
                 }
 
@@ -295,7 +295,7 @@ namespace PlantsVsZombies.UI
             var image = _texture(name);
             if (image != null)
             {
-                GUI.DrawTexture(rect, image, ScaleMode.StretchToFill, true);
+                CanvasUI.DrawTexture(rect, image, ScaleMode.StretchToFill, true);
             }
         }
 
@@ -304,10 +304,10 @@ namespace PlantsVsZombies.UI
         /// <param name = "color">The color.</param>
         private static void Fill(Rect rect, Color color)
         {
-            var old = GUI.color;
-            GUI.color = color;
-            GUI.DrawTexture(rect, Texture2D.whiteTexture);
-            GUI.color = old;
+            var old = CanvasUI.Color;
+            CanvasUI.Color = color;
+            CanvasUI.DrawTexture(rect, Texture2D.whiteTexture);
+            CanvasUI.Color = old;
         }
 
         /// <summary>Performs label.</summary>
@@ -321,7 +321,7 @@ namespace PlantsVsZombies.UI
         {
             if (_label == null)
             {
-                _label = new GUIStyle(GUI.skin.label);
+                _label = new GUIStyle();
             }
 
             _label.font = _font;
@@ -330,7 +330,7 @@ namespace PlantsVsZombies.UI
             _label.alignment = alignment;
             _label.wordWrap = wrap;
             _label.normal.textColor = color;
-            GUI.Label(rect, text, _label);
+            CanvasUI.Label(rect, text, _label);
         }
     }
 }

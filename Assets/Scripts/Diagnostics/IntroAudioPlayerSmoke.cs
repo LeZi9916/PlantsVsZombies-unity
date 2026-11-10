@@ -39,7 +39,14 @@ namespace PlantsVsZombies.Diagnostics
         /// <returns>The resulting call.</returns>
         private object Call(string name, params object[] args)
         {
-            return typeof(PvZGame).GetMethod(name, Private).Invoke(_controller, args);
+            var method = typeof(PvZGame).GetMethod(name, Private);
+            if (method != null)
+            {
+                return method.Invoke(_controller, args);
+            }
+
+            var presenter = typeof(PvZGame).GetField("_presenter", Private).GetValue(_controller);
+            return presenter.GetType().GetMethod(name, Private).Invoke(presenter, args);
         }
 
         /// <summary>Gets or sets sim.</summary>

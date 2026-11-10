@@ -154,21 +154,11 @@ namespace PlantsVsZombies.UI
             return SelectorAction.None;
         }
 
-        /// <summary>Call from OnGUI with the caller's scale/translation matrix already set.</summary>
+        /// <summary>Submits the retained Canvas elements using the caller's viewport transform.</summary>
         public void Draw(float seconds)
         {
             ThrowIfDisposed();
-            if (Event.current == null)
-            {
-                throw new InvalidOperationException("Draw must be called from OnGUI.");
-            }
-
-            if (Event.current.type != EventType.Repaint)
-            {
-                return;
-            }
-
-            GUI.BeginGroup(new Rect(0, 0, Width, Height));
+            CanvasUI.BeginGroup(new Rect(0, 0, Width, Height));
             try
             {
                 // The menu-open final frame, plus the independently animated sign's final frame.
@@ -207,7 +197,7 @@ namespace PlantsVsZombies.UI
             }
             finally
             {
-                GUI.EndGroup();
+                CanvasUI.EndGroup();
             }
         }
 
@@ -232,19 +222,19 @@ namespace PlantsVsZombies.UI
                 return;
             }
 
-            var previous = GUI.color;
+            var previous = CanvasUI.Color;
             try
             {
                 if (_locked.Contains(action))
                 {
-                    GUI.color = new Color(previous.r * 0.5f, previous.g * 0.5f, previous.b * 0.5f, previous.a);
+                    CanvasUI.Color = new Color(previous.r * 0.5f, previous.g * 0.5f, previous.b * 0.5f, previous.a);
                 }
 
-                GUI.DrawTexture(new Rect(x, y, width, height), texture, ScaleMode.StretchToFill, true);
+                CanvasUI.DrawTexture(new Rect(x, y, width, height), texture, ScaleMode.StretchToFill, true);
             }
             finally
             {
-                GUI.color = previous;
+                CanvasUI.Color = previous;
             }
         }
 
@@ -270,7 +260,7 @@ namespace PlantsVsZombies.UI
             var texture = GetTexture(path, mask);
             if (texture != null)
             {
-                GUI.DrawTexture(new Rect(x, y, width, height), texture, ScaleMode.StretchToFill, true);
+                CanvasUI.DrawTexture(new Rect(x, y, width, height), texture, ScaleMode.StretchToFill, true);
             }
         }
 

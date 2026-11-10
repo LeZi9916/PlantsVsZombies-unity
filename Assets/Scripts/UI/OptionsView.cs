@@ -1,4 +1,5 @@
 #nullable enable
+using PlantsVsZombies.Inputs;
 using PlantsVsZombies.UI.BitmapFonts;
 using System;
 using System.Collections.Generic;
@@ -8,7 +9,7 @@ using UnityEngine;
 namespace PlantsVsZombies.UI
 {
     /// <summary>
-    /// A modal IMGUI view. Values are drafts; the owner applies them after ReturnToGame.
+    /// A modal Canvas view. Values are drafts; the owner applies them after ReturnToGame.
     /// All drawing and pointer positions use an 800 x 600, top-left-origin coordinate space.
     /// </summary>
     public sealed class OptionsView : IDisposable
@@ -103,19 +104,19 @@ namespace PlantsVsZombies.UI
         /// <summary>Stores image directory.</summary>
         private readonly string _imageDirectory;
         /// <summary>Stores menu font.</summary>
-        private ImGuiBitmapFont _menuFont;
+        private CanvasBitmapFont _menuFont;
         /// <summary>Stores menu hover font.</summary>
-        private ImGuiBitmapFont _menuHoverFont;
+        private CanvasBitmapFont _menuHoverFont;
         /// <summary>Stores return font.</summary>
-        private ImGuiBitmapFont _returnFont;
+        private CanvasBitmapFont _returnFont;
         /// <summary>Stores return hover font.</summary>
-        private ImGuiBitmapFont _returnHoverFont;
+        private CanvasBitmapFont _returnHoverFont;
         /// <summary>Stores dialog title font.</summary>
-        private ImGuiBitmapFont _dialogTitleFont;
+        private CanvasBitmapFont _dialogTitleFont;
         /// <summary>Stores dialog body font.</summary>
-        private ImGuiBitmapFont _dialogBodyFont;
+        private CanvasBitmapFont _dialogBodyFont;
         /// <summary>Stores button layouts.</summary>
-        private readonly Dictionary<ImGuiBitmapFont, Dictionary<string, BitmapTextLayout>> _buttonLayouts = new Dictionary<ImGuiBitmapFont, Dictionary<string, BitmapTextLayout>>();
+        private readonly Dictionary<CanvasBitmapFont, Dictionary<string, BitmapTextLayout>> _buttonLayouts = new Dictionary<CanvasBitmapFont, Dictionary<string, BitmapTextLayout>>();
         /// <summary>Stores button fonts loaded.</summary>
         private bool _buttonFontsLoaded;
         /// <summary>Stores font.</summary>
@@ -251,7 +252,7 @@ namespace PlantsVsZombies.UI
             CloseResult = result;
         }
 
-        /// <summary>Call inside OnGUI after applying the owner's 800 x 600 GUI matrix.</summary>
+        /// <summary>Submits the retained Canvas elements in the owner's logical viewport.</summary>
         public void Draw()
         {
             ThrowIfDisposed();
@@ -262,14 +263,14 @@ namespace PlantsVsZombies.UI
 
             EnsureLabelStyle();
             EnsureButtonFonts();
-            var oldColor = GUI.color;
-            var oldContentColor = GUI.contentColor;
-            var oldEnabled = GUI.enabled;
+            var oldColor = CanvasUI.Color;
+            var oldContentColor = CanvasUI.ContentColor;
+            var oldEnabled = CanvasUI.Enabled;
             try
             {
-                GUI.color = Color.white;
-                GUI.contentColor = Color.white;
-                GUI.enabled = true;
+                CanvasUI.Color = Color.white;
+                CanvasUI.ContentColor = Color.white;
+                CanvasUI.Enabled = true;
                 Image(s_panel, _background, Color.white);
                 var labelColor = new Color(107f / 255f, 109f / 255f, 145f / 255f, 1f);
                 var musicOffset = _selectorMode ? 5f : 0f;
@@ -303,9 +304,9 @@ namespace PlantsVsZombies.UI
             }
             finally
             {
-                GUI.color = oldColor;
-                GUI.contentColor = oldContentColor;
-                GUI.enabled = oldEnabled;
+                CanvasUI.Color = oldColor;
+                CanvasUI.ContentColor = oldContentColor;
+                CanvasUI.Enabled = oldEnabled;
             }
         }
 
@@ -313,7 +314,7 @@ namespace PlantsVsZombies.UI
         /// Handles a left-button MouseDown/MouseDrag/MouseUp or a MouseMove in logical coordinates.
         /// Returns true for these events while open, including outside the panel, to preserve modality.
         /// </summary>
-        public bool HandlePointer(Vector2 position, EventType type)
+        public bool HandlePointer(Vector2 position, PointerPhase type)
         {
             ThrowIfDisposed();
             if (!IsOpen)
@@ -321,7 +322,7 @@ namespace PlantsVsZombies.UI
                 return false;
             }
 
-            if (type != EventType.MouseDown && type != EventType.MouseDrag && type != EventType.MouseUp && type != EventType.MouseMove)
+            if (type != PointerPhase.Down && type != PointerPhase.Drag && type != PointerPhase.Up && type != PointerPhase.Move)
             {
                 return false;
             }
@@ -329,11 +330,11 @@ namespace PlantsVsZombies.UI
             _pointer = position;
             if (_confirmingRestart)
             {
-                if (type == EventType.MouseDown)
+                if (type == PointerPhase.Down)
                 {
                     _capture = s_confirmRestartButton.Contains(position) ? PointerCapture.ConfirmRestart : s_cancelRestartButton.Contains(position) ? PointerCapture.CancelRestart : PointerCapture.None;
                 }
-                else if (type == EventType.MouseUp)
+                else if (type == PointerPhase.Up)
                 {
                     var released = _capture;
                     _capture = PointerCapture.None;
@@ -351,7 +352,7 @@ namespace PlantsVsZombies.UI
                 return true;
             }
 
-            if (type == EventType.MouseDown)
+            if (type == PointerPhase.Down)
             {
                 _capture = PointerCapture.None;
                 var musicTrack = OffsetY(s_musicTrack, _selectorMode ? 5f : 0f);
@@ -392,7 +393,7 @@ namespace PlantsVsZombies.UI
                     _capture = PointerCapture.Almanac;
                 }
             }
-            else if (type == EventType.MouseDrag)
+            else if (type == PointerPhase.Drag)
             {
                 if (_capture == PointerCapture.Music)
                 {
@@ -403,7 +404,7 @@ namespace PlantsVsZombies.UI
                     SoundVolume = SliderDragValue(s_soundTrack, position.x);
                 }
             }
-            else if (type == EventType.MouseUp)
+            else if (type == PointerPhase.Up)
             {
                 var released = _capture;
                 _capture = PointerCapture.None;
@@ -663,12 +664,12 @@ namespace PlantsVsZombies.UI
             _buttonFontsLoaded = true;
             try
             {
-                _menuFont = ImGuiBitmapFont.LoadFromResources("DwarvenTodcraft18GreenInset");
-                _menuHoverFont = ImGuiBitmapFont.LoadFromResources("DwarvenTodcraft18BrightGreenInset");
-                _returnFont = ImGuiBitmapFont.LoadFromResources("DwarvenTodcraft36GreenInset");
-                _returnHoverFont = ImGuiBitmapFont.LoadFromResources("DwarvenTodcraft36BrightGreenInset");
-                _dialogTitleFont = ImGuiBitmapFont.LoadFromResources("DwarvenTodcraft24");
-                _dialogBodyFont = ImGuiBitmapFont.LoadFromResources("DwarvenTodcraft15");
+                _menuFont = CanvasBitmapFont.LoadFromResources("DwarvenTodcraft18GreenInset");
+                _menuHoverFont = CanvasBitmapFont.LoadFromResources("DwarvenTodcraft18BrightGreenInset");
+                _returnFont = CanvasBitmapFont.LoadFromResources("DwarvenTodcraft36GreenInset");
+                _returnHoverFont = CanvasBitmapFont.LoadFromResources("DwarvenTodcraft36BrightGreenInset");
+                _dialogTitleFont = CanvasBitmapFont.LoadFromResources("DwarvenTodcraft24");
+                _dialogBodyFont = CanvasBitmapFont.LoadFromResources("DwarvenTodcraft15");
             }
             catch (Exception error)
             {
@@ -684,7 +685,7 @@ namespace PlantsVsZombies.UI
         /// <param name = "baseline">The baseline.</param>
         /// <param name = "color">The color.</param>
         /// <returns>The resulting draw centered bitmap.</returns>
-        private bool DrawCenteredBitmap(ImGuiBitmapFont bitmap, string text, Rect rect, float offset, float baseline, Color color)
+        private bool DrawCenteredBitmap(CanvasBitmapFont bitmap, string text, Rect rect, float offset, float baseline, Color color)
         {
             if (bitmap == null)
             {
@@ -809,10 +810,10 @@ namespace PlantsVsZombies.UI
         /// <param name = "color">The color.</param>
         private static void Image(Rect rect, Texture2D texture, Color color)
         {
-            var old = GUI.color;
-            GUI.color = color;
-            GUI.DrawTexture(rect, texture, ScaleMode.StretchToFill, true);
-            GUI.color = old;
+            var old = CanvasUI.Color;
+            CanvasUI.Color = color;
+            CanvasUI.DrawTexture(rect, texture, ScaleMode.StretchToFill, true);
+            CanvasUI.Color = old;
         }
 
         /// <summary>Performs ensure label style.</summary>
@@ -829,7 +830,7 @@ namespace PlantsVsZombies.UI
                 "Noto Sans CJK SC",
                 "Arial Unicode MS"
             }, 20);
-            _labelStyle = new GUIStyle(GUI.skin.label);
+            _labelStyle = new GUIStyle();
             if (_font != null)
             {
                 _labelStyle.font = _font;
@@ -853,7 +854,7 @@ namespace PlantsVsZombies.UI
             _labelStyle.fontSize = size;
             _labelStyle.alignment = alignment;
             _labelStyle.normal.textColor = color;
-            GUI.Label(rect, text, _labelStyle);
+            CanvasUI.Label(rect, text, _labelStyle);
         }
 
         /// <summary>Performs native or system label.</summary>

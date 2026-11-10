@@ -1,5 +1,6 @@
 #nullable enable
 using PlantsVsZombies.Randomness;
+using PlantsVsZombies.Rendering;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
@@ -294,32 +295,15 @@ namespace PlantsVsZombies.Reanimation
             return emitter.Definition.Track(name, fallback).Value(emitter.Age / (float)Math.Max(1, emitter.Duration - 1), random);
         }
 
-        /// <summary>Gets or sets can render frame.</summary>
-        private static bool CanRenderFrame
-        {
-            get
-            {
-                return Event.current == null || Event.current.type == EventType.Repaint;
-            }
-        }
-
         /// <summary>Performs begin frame.</summary>
         public void BeginFrame()
         {
-            if (CanRenderFrame)
-            {
-                _frame++;
-            }
+            _frame++;
         }
 
         /// <summary>Performs end frame.</summary>
         public void EndFrame()
         {
-            if (!CanRenderFrame)
-            {
-                return;
-            }
-
             var expired = new List<string>();
             foreach (var pair in _systems)
             {
@@ -352,11 +336,6 @@ namespace PlantsVsZombies.Reanimation
         /// <returns>The resulting draw.</returns>
         public bool Draw(string key, string name, float age, Vector2 origin, int seed, float scale = 1f, float stopAge = -1f)
         {
-            if (Event.current != null && Event.current.type != EventType.Repaint)
-            {
-                return true;
-            }
-
             SystemInstance system;
             if (!_systems.TryGetValue(key, out system))
             {
@@ -421,7 +400,7 @@ namespace PlantsVsZombies.Reanimation
 
             MoveSystemOrigin(system, origin, scale);
             var fraction = age * 100f - target;
-            var previous = GUI.color;
+            var previous = SpriteDrawState.Color;
             foreach (Emitter emitter in system.Emitters)
             {
                 var systemAlpha = SystemValue(system, emitter, "SystemAlpha", 1);
@@ -446,13 +425,13 @@ namespace PlantsVsZombies.Reanimation
                     var size = emitter.Definition.Track("ParticleScale", 1).Value(time, particle.Random[1]);
                     var stretch = emitter.Definition.Track("ParticleStretch", 1).Value(time, particle.Random[2]);
                     var brightness = emitter.Definition.Track("ParticleBrightness", 1).Value(time, particle.Brightness);
-                    GUI.color = new Color(previous.r * emitter.Definition.Track("ParticleRed", 1).Value(time, particle.ColorRed) * brightness, previous.g * emitter.Definition.Track("ParticleGreen", 1).Value(time, particle.ColorGreen) * brightness, previous.b * emitter.Definition.Track("ParticleBlue", 1).Value(time, particle.ColorBlue) * brightness, previous.a * Mathf.Clamp01(alpha));
+                    SpriteDrawState.Color = new Color(previous.r * emitter.Definition.Track("ParticleRed", 1).Value(time, particle.ColorRed) * brightness, previous.g * emitter.Definition.Track("ParticleGreen", 1).Value(time, particle.ColorGreen) * brightness, previous.b * emitter.Definition.Track("ParticleBlue", 1).Value(time, particle.ColorBlue) * brightness, previous.a * Mathf.Clamp01(alpha));
                     var position = Vector2.Lerp(particle.PreviousPosition, particle.Position, fraction);
                     _renderer.DrawResourceSprite(emitter.Definition.Image, origin + position * scale, size * scale, Mathf.Lerp(particle.PreviousAngle, particle.Angle, fraction), particle.Frame, 0, 0, stretch, emitter.Definition.Additive);
                 }
             }
 
-            GUI.color = previous;
+            SpriteDrawState.Color = previous;
             return true;
         }
 

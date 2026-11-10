@@ -249,6 +249,120 @@ namespace PlantsVsZombies.Tests.PlayMode
             }
         }
 
+        /// <summary>Checks direct camera presentation, shared painter order, and retirement of an unused secondary pool.</summary>
+        /// <returns>Frame boundaries allowing URP to render the published scene objects.</returns>
+        [UnityTest]
+        public IEnumerator PresentsSceneObjectsWithoutFrameCompositing()
+        {
+            using var overlay = new ObjectSpriteRenderer();
+            ObjectSpriteRenderer.BeginSceneFrame();
+            using (_renderer.BeginFrame())
+            {
+                Draw(Color.red, Screen.width, Screen.height, Matrix4x4.identity);
+            }
+
+            using (overlay.BeginFrame())
+            {
+                overlay.DrawQuad(_white, Screen.width, Screen.height, new Rect(0f, 0f, 1f, 1f),
+                    Matrix4x4.identity, Color.green, 0);
+            }
+
+            var camera = ObjectSpriteRenderer.SceneCamera;
+            Assert.That(camera.enabled, Is.True);
+            Assert.That(camera.targetTexture, Is.Null, "Production presentation must render directly to the display.");
+            camera.targetTexture = _target;
+            try
+            {
+                yield return null;
+                ReadTargetPixels();
+                AssertColor(_pixels.GetPixel(16, 16), Color.green);
+
+                ObjectSpriteRenderer.BeginSceneFrame();
+                using (_renderer.BeginFrame())
+                {
+                    Draw(Color.blue, Screen.width, Screen.height, Matrix4x4.identity);
+                }
+
+                yield return null;
+                ReadTargetPixels();
+                AssertColor(_pixels.GetPixel(16, 16), Color.blue);
+                Assert.That(_renderer.PooledObjectCount, Is.EqualTo(1));
+            }
+            finally
+            {
+                camera.targetTexture = null;
+            }
+        }
+
+        /// <summary>Checks that cropped native rendering preserves published scene geometry and the direct camera.</summary>
+        /// <returns>A frame boundary allowing the scene camera to render after native capture.</returns>
+        [UnityTest]
+        public IEnumerator NativeCapturePreservesPublishedSceneObjects()
+        {
+            ObjectSpriteRenderer.BeginSceneFrame();
+            using (_renderer.BeginFrame())
+            {
+                Draw(Color.red, Screen.width, Screen.height, Matrix4x4.identity);
+            }
+
+            var camera = ObjectSpriteRenderer.SceneCamera;
+            var position = camera.transform.position;
+            _renderer.RenderTo(_target);
+            Assert.That(camera.transform.position, Is.EqualTo(position));
+            Assert.That(camera.targetTexture, Is.Null);
+            camera.targetTexture = _target;
+            try
+            {
+                yield return null;
+                ReadTargetPixels();
+                AssertColor(_pixels.GetPixel(16, 16), Color.red);
+            }
+            finally
+            {
+                camera.targetTexture = null;
+            }
+        }
+
+        /// <summary>Checks that oversized scene sprites cannot paint outside the shared top-left display clip.</summary>
+        /// <returns>A frame boundary allowing the direct camera to render the clipped geometry.</returns>
+        [UnityTest]
+        public IEnumerator ClipsOversizedSceneSpritesToViewport()
+        {
+            ObjectSpriteRenderer.BeginSceneFrame();
+            SpriteDrawState.Clip = new Rect(Screen.width * .25f, Screen.height * .125f, Screen.width * .5f, Screen.height * .375f);
+            using (_renderer.BeginFrame())
+            {
+                Draw(Color.red, Screen.width * 2f, Screen.height * 2f,
+                    Matrix4x4.Translate(new Vector3(-Screen.width * .5f, -Screen.height * .5f)));
+            }
+
+            var camera = ObjectSpriteRenderer.SceneCamera;
+            camera.targetTexture = _target;
+            try
+            {
+                yield return null;
+                ReadTargetPixels();
+                AssertColor(_pixels.GetPixel(16, 24), Color.red);
+                AssertColor(_pixels.GetPixel(2, 24), Color.black);
+                AssertColor(_pixels.GetPixel(16, 8), Color.black);
+            }
+            finally
+            {
+                camera.targetTexture = null;
+            }
+        }
+
+        /// <summary>Checks that native cropped surfaces use local coordinates independently of the display clip.</summary>
+        [Test]
+        public void NativeCaptureIgnoresDisplayClip()
+        {
+            SpriteDrawState.Clip = new Rect(1000f, 1000f, 2f, 2f);
+            _renderer.BeginBatch();
+            Draw(Color.red, 32f, 32f, Matrix4x4.identity);
+            Capture();
+            AssertColor(_pixels.GetPixel(16, 16), Color.red);
+        }
+
         /// <summary>Submits a tinted white quad in top-left pixel coordinates.</summary>
         /// <param name="color">The quad tint and opacity.</param>
         /// <param name="width">The source width in pixels.</param>
@@ -263,6 +377,12 @@ namespace PlantsVsZombies.Tests.PlayMode
         private void Capture()
         {
             _renderer.RenderTo(_target);
+            ReadTargetPixels();
+        }
+
+        /// <summary>Reads pixels from the current test target without issuing a render request.</summary>
+        private void ReadTargetPixels()
+        {
             var previous = RenderTexture.active;
             try
             {

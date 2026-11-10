@@ -1,4 +1,5 @@
 #nullable enable
+using PlantsVsZombies.Inputs;
 using PlantsVsZombies.Reanimation;
 using PlantsVsZombies.VerifiedData;
 using System;
@@ -192,7 +193,7 @@ namespace PlantsVsZombies.UI
             ClearLockedSelection(false);
         }
 
-        /// <summary>Draw from OnGUI after the host sets its logical 800x600 GUI matrix.</summary>
+        /// <summary>Submits native Canvas elements using the host viewport transform.</summary>
         public void Draw(float seconds)
         {
             ThrowIfDisposed();
@@ -213,10 +214,10 @@ namespace PlantsVsZombies.UI
             }
 
             var animationSeconds = seconds - _animationEpoch;
-            var oldColor = GUI.color;
+            var oldColor = CanvasUI.Color;
             try
             {
-                GUI.color = Color.white;
+                CanvasUI.Color = Color.white;
                 if (Screen == AlmanacScreen.Home)
                 {
                     DrawHome(animationSeconds);
@@ -230,7 +231,7 @@ namespace PlantsVsZombies.UI
             }
             finally
             {
-                GUI.color = oldColor;
+                CanvasUI.Color = oldColor;
             }
         }
 
@@ -247,8 +248,8 @@ namespace PlantsVsZombies.UI
             }
 
             var control = NavigationAt(point) != PointerCapture.None || SlotAt(point) >= 0 || (CanScroll && ScrollBarRect().Contains(point));
-            HandlePointer(point, EventType.MouseDown);
-            HandlePointer(point, EventType.MouseUp);
+            HandlePointer(point, PointerPhase.Down);
+            HandlePointer(point, PointerPhase.Up);
             return control;
         }
 
@@ -256,16 +257,16 @@ namespace PlantsVsZombies.UI
         /// Owns primary down/drag/up and movement while the modal is open. Navigation
         /// requires a press and release over the same button; dragging out cancels it.
         /// </summary>
-        public bool HandlePointer(Vector2 point, EventType type)
+        public bool HandlePointer(Vector2 point, PointerPhase type)
         {
             ThrowIfDisposed();
-            if (IsClosed || (type != EventType.MouseDown && type != EventType.MouseUp && type != EventType.MouseMove && type != EventType.MouseDrag))
+            if (IsClosed || (type != PointerPhase.Down && type != PointerPhase.Up && type != PointerPhase.Move && type != PointerPhase.Drag))
             {
                 return false;
             }
 
             _pointer = point;
-            if (type == EventType.MouseDown)
+            if (type == PointerPhase.Down)
             {
                 _capture = NavigationAt(point);
                 if (_capture != PointerCapture.None)
@@ -300,11 +301,11 @@ namespace PlantsVsZombies.UI
                     _animationEpoch = float.NaN;
                 }
             }
-            else if (type == EventType.MouseDrag && _capture == PointerCapture.ScrollBar)
+            else if (type == PointerPhase.Drag && _capture == PointerCapture.ScrollBar)
             {
                 DragScrollBar(point.y);
             }
-            else if (type == EventType.MouseUp)
+            else if (type == PointerPhase.Up)
             {
                 var pressed = _capture;
                 _capture = PointerCapture.None;
@@ -550,7 +551,7 @@ namespace PlantsVsZombies.UI
         {
             DrawBackground("Almanac_IndexBack.jpg");
             _headingStyle.normal.textColor = new Color(220f / 255f, 220f / 255f, 220f / 255f, 1);
-            GUI.Label(new Rect(100, 32, 600, 40), Text("SUBURBAN_ALMANAC_INDEX"), _headingStyle);
+            CanvasUI.Label(new Rect(100, 32, 600, 40), Text("SUBURBAN_ALMANAC_INDEX"), _headingStyle);
             DrawNativePortrait(true, 1, new Vector2(167, 225), 1f, seconds, false);
             DrawNativePortrait(false, 0, new Vector2(535, 215), 1f, seconds, false);
             DrawButton(s_plantHome, "SeedChooser_Button.png", "SeedChooser_Button_Glow.png", Text("VIEW_PLANTS"), _labelStyle, 0);
@@ -564,7 +565,7 @@ namespace PlantsVsZombies.UI
             var plants = IsPlantScreen;
             DrawBackground(plants ? "Almanac_PlantBack.jpg" : "Almanac_ZombieBack.jpg");
             _headingStyle.normal.textColor = plants ? new Color(213f / 255f, 159f / 255f, 43f / 255f, 1) : new Color(0, 196f / 255f, 0, 1);
-            GUI.Label(new Rect(70, plants ? 20 : 26, 660, 42), Text(plants ? "SUBURBAN_ALMANAC_PLANTS" : "SUBURBAN_ALMANAC_ZOMBIES"), _headingStyle);
+            CanvasUI.Label(new Rect(70, plants ? 20 : 26, 660, 42), Text(plants ? "SUBURBAN_ALMANAC_PLANTS" : "SUBURBAN_ALMANAC_ZOMBIES"), _headingStyle);
             var count = plants ? PlantCount : ZombieCount;
             for (var id = 0; id < count; id++)
             {
@@ -636,7 +637,7 @@ namespace PlantsVsZombies.UI
                 var backgroundCell = id >= 40 && id <= 47 ? 1 : 2;
                 if (seeds != null)
                 {
-                    GUI.DrawTextureWithTexCoords(rect, seeds, new Rect(backgroundCell / 9f, 0, 1f / 9f, 1));
+                    CanvasUI.DrawTextureWithTexCoords(rect, seeds, new Rect(backgroundCell / 9f, 0, 1f / 9f, 1));
                 }
                 else
                 {
@@ -656,7 +657,7 @@ namespace PlantsVsZombies.UI
                     var atlas = Texture("packet_plants.png");
                     if (atlas != null)
                     {
-                        GUI.DrawTextureWithTexCoords(rect, atlas, new Rect(cell / 13f, 0, 1f / 13f, 1));
+                        CanvasUI.DrawTextureWithTexCoords(rect, atlas, new Rect(cell / 13f, 0, 1f / 13f, 1));
                     }
                 }
                 else
@@ -667,7 +668,7 @@ namespace PlantsVsZombies.UI
                     DrawNativePortrait(true, id, origin, scale, 0f, true);
                 }
 
-                GUI.Label(new Rect(rect.x + 2f, rect.y + 53f, rect.width - 7f, 15f), VerifiedDataCatalog.Plants[id].SunCost.ToString(), _iconStyle);
+                CanvasUI.Label(new Rect(rect.x + 2f, rect.y + 53f, rect.width - 7f, 15f), VerifiedDataCatalog.Plants[id].SunCost.ToString(), _iconStyle);
             }
             else
             {
@@ -711,12 +712,12 @@ namespace PlantsVsZombies.UI
 
             DrawImage(plants ? "Almanac_PlantCard.png" : "Almanac_ZombieCard.png", plants ? new Rect(459, 86, 324, 484) : new Rect(455, 78, 324, 497));
             var key = EntryKey(plants, id);
-            GUI.Label(plants ? new Rect(480, 270, 274, 35) : new Rect(480, 344, 268, 35), Text(key), _titleStyle);
+            CanvasUI.Label(plants ? new Rect(480, 270, 274, 35) : new Rect(480, 344, 268, 35), Text(key), _titleStyle);
             var header = plants ? new Rect(485, 309, 258, 100) : new Rect(485, 377, 258, 100);
             var headerText = Text(key + "_DESCRIPTION_HEADER");
             var headerHeight = Math.Min(80f, _bodyStyle.CalcHeight(new GUIContent(headerText), header.width));
             header.height = headerHeight;
-            GUI.Label(header, headerText, _bodyStyle);
+            CanvasUI.Label(header, headerText, _bodyStyle);
             var bottom = plants ? (id == 48 ? 539f : 505f) : 537f;
             _descriptionRect = new Rect(485, header.yMax + 3f, 258, Math.Max(20f, bottom - header.yMax - 3f));
             if (_formattedDescription == null)
@@ -726,9 +727,9 @@ namespace PlantsVsZombies.UI
 
             _descriptionHeight = _bodyStyle.CalcHeight(new GUIContent(_formattedDescription), _descriptionRect.width - 8f);
             _scrollOffset = Math.Max(0f, Math.Min(_scrollOffset, Math.Max(0f, _descriptionHeight - _descriptionRect.height)));
-            GUI.BeginGroup(_descriptionRect);
-            GUI.Label(new Rect(0, -_scrollOffset, _descriptionRect.width - 8f, _descriptionHeight + 2f), _formattedDescription, _bodyStyle);
-            GUI.EndGroup();
+            CanvasUI.BeginGroup(_descriptionRect);
+            CanvasUI.Label(new Rect(0, -_scrollOffset, _descriptionRect.width - 8f, _descriptionHeight + 2f), _formattedDescription, _bodyStyle);
+            CanvasUI.EndGroup();
             if (_descriptionHeight > _descriptionRect.height)
             {
                 DrawScrollBar();
@@ -738,8 +739,8 @@ namespace PlantsVsZombies.UI
             {
                 var plant = VerifiedDataCatalog.Plants[id];
                 var recharge = plant.RechargeThresholdRaw == 750 ? "WAIT_TIME_SHORT" : plant.RechargeThresholdRaw == 3000 ? "WAIT_TIME_LONG" : "WAIT_TIME_VERY_LONG";
-                GUI.Label(new Rect(485, 520, 130, 30), Text("COST") + ": " + plant.SunCost, _smallStyle);
-                GUI.Label(new Rect(610, 520, 132, 30), Text("WAIT_TIME") + ": " + Text(recharge), _smallStyle);
+                CanvasUI.Label(new Rect(485, 520, 130, 30), Text("COST") + ": " + plant.SunCost, _smallStyle);
+                CanvasUI.Label(new Rect(610, 520, 132, 30), Text("WAIT_TIME") + ": " + Text(recharge), _smallStyle);
             }
         }
 
@@ -914,7 +915,7 @@ namespace PlantsVsZombies.UI
         /// <returns>The resulting style.</returns>
         private GUIStyle Style(int size, TextAnchor anchor, Color color, bool bold)
         {
-            var style = new GUIStyle(GUI.skin.label);
+            var style = new GUIStyle();
             style.font = _font;
             style.fontSize = size;
             style.fontStyle = bold ? FontStyle.Bold : FontStyle.Normal;
@@ -1130,7 +1131,7 @@ namespace PlantsVsZombies.UI
                 return false;
             }
 
-            GUI.DrawTexture(rect, texture, ScaleMode.StretchToFill, true);
+            CanvasUI.DrawTexture(rect, texture, ScaleMode.StretchToFill, true);
             return true;
         }
 
@@ -1149,7 +1150,7 @@ namespace PlantsVsZombies.UI
                 OriginalUiWidgets.StoneButton(Texture, rect, hovered, down);
                 if (!OriginalUiWidgets.StoneLabel(rect, text, hovered, down) && !string.IsNullOrEmpty(text))
                 {
-                    GUI.Label(new Rect(rect.x + textOffset, rect.y, rect.width, rect.height), text, style);
+                    CanvasUI.Label(new Rect(rect.x + textOffset, rect.y, rect.width, rect.height), text, style);
                 }
             }
             else
@@ -1157,7 +1158,7 @@ namespace PlantsVsZombies.UI
                 OriginalUiWidgets.ImageButton(Texture, rect, normal, highlight, null, hovered, down);
                 if (!string.IsNullOrEmpty(text))
                 {
-                    GUI.Label(new Rect(rect.x + textOffset, rect.y, rect.width, rect.height), text, style);
+                    CanvasUI.Label(new Rect(rect.x + textOffset, rect.y, rect.width, rect.height), text, style);
                 }
             }
         }
@@ -1167,10 +1168,10 @@ namespace PlantsVsZombies.UI
         /// <param name = "color">The color.</param>
         private static void Fill(Rect rect, Color color)
         {
-            var old = GUI.color;
-            GUI.color = color;
-            GUI.DrawTexture(rect, Texture2D.whiteTexture);
-            GUI.color = old;
+            var old = CanvasUI.Color;
+            CanvasUI.Color = color;
+            CanvasUI.DrawTexture(rect, Texture2D.whiteTexture);
+            CanvasUI.Color = old;
         }
 
         /// <summary>Performs outline.</summary>

@@ -14,7 +14,7 @@ using UnityEngine;
 
 namespace PlantsVsZombies.Diagnostics
 {
-    // This one explicitly requested QA switch creates disposable profiles and uses actual OnGUI/Player audio.
+    // This one explicitly requested QA switch creates disposable profiles and uses the actual Canvas and Player audio.
     /// <summary>Defines combat fidelity player smoke.</summary>
     internal sealed class CombatFidelityPlayerSmoke : MonoBehaviour
     {
@@ -44,7 +44,14 @@ namespace PlantsVsZombies.Diagnostics
         /// <returns>The resulting field.</returns>
         private object Field(string name)
         {
-            return typeof(PvZGame).GetField(name, Private).GetValue(_controller);
+            var field = typeof(PvZGame).GetField(name, Private);
+            if (field != null)
+            {
+                return field.GetValue(_controller);
+            }
+
+            var presenter = typeof(PvZGame).GetField("_presenter", Private).GetValue(_controller);
+            return presenter.GetType().GetField(name, Private).GetValue(presenter);
         }
 
         /// <summary>Performs set.</summary>

@@ -1,4 +1,5 @@
 #nullable enable
+using PlantsVsZombies.Inputs;
 using System;
 using System.IO;
 using System.Text;
@@ -117,7 +118,7 @@ namespace PlantsVsZombies.UI
             IsOpen = true;
         }
 
-        /// <summary>Draw only during OnGUI, after the host maps the logical canvas to its viewport.</summary>
+        /// <summary>Submits native Canvas elements after the host maps its logical viewport.</summary>
         public void Draw()
         {
             ThrowIfDisposed();
@@ -127,11 +128,11 @@ namespace PlantsVsZombies.UI
             }
 
             EnsureStyle();
-            var previous = GUI.color;
-            GUI.BeginGroup(s_canvas);
+            var previous = CanvasUI.Color;
+            CanvasUI.BeginGroup(s_canvas);
             try
             {
-                GUI.color = Color.white;
+                CanvasUI.Color = Color.white;
                 Image(new Rect(-700f, -300f, 2800f, 1200f), _lawn);
                 Image(new Rect(80f, 80f, _paper.width, _paper.height), _paper);
                 Image(new Rect(131f, 132f, _writing.width, _writing.height), _writing);
@@ -144,12 +145,12 @@ namespace PlantsVsZombies.UI
                 }
 
                 _labelStyle.normal.textColor = new Color32(213, 159, 43, 255);
-                GUI.Label(new Rect(buttonRect.x, buttonRect.y - 1f, buttonRect.width, buttonRect.height), _returnLabel, _labelStyle);
+                CanvasUI.Label(new Rect(buttonRect.x, buttonRect.y - 1f, buttonRect.width, buttonRect.height), _returnLabel, _labelStyle);
             }
             finally
             {
-                GUI.color = previous;
-                GUI.EndGroup();
+                CanvasUI.Color = previous;
+                CanvasUI.EndGroup();
             }
         }
 
@@ -157,7 +158,7 @@ namespace PlantsVsZombies.UI
         /// Forward primary-button down, drag and up, plus mouse movement, in logical
         /// coordinates. All supported pointer events are consumed while open.
         /// </summary>
-        public bool HandlePointer(Vector2 position, EventType type)
+        public bool HandlePointer(Vector2 position, PointerPhase type)
         {
             ThrowIfDisposed();
             if (!IsOpen)
@@ -165,17 +166,17 @@ namespace PlantsVsZombies.UI
                 return false;
             }
 
-            if (type != EventType.MouseMove && type != EventType.MouseDown && type != EventType.MouseDrag && type != EventType.MouseUp)
+            if (type != PointerPhase.Move && type != PointerPhase.Down && type != PointerPhase.Drag && type != PointerPhase.Up)
             {
                 return false;
             }
 
             _hovered = s_returnBounds.Contains(position);
-            if (type == EventType.MouseDown)
+            if (type == PointerPhase.Down)
             {
                 _captured = _hovered;
             }
-            else if (type == EventType.MouseUp)
+            else if (type == PointerPhase.Up)
             {
                 var activate = _captured && _hovered;
                 _captured = false;
@@ -258,7 +259,7 @@ namespace PlantsVsZombies.UI
                 "Noto Sans CJK SC",
                 "Arial Unicode MS"
             }, 16);
-            _labelStyle = new GUIStyle(GUI.skin.label);
+            _labelStyle = new GUIStyle();
             if (_font != null)
             {
                 _labelStyle.font = _font;
@@ -278,7 +279,7 @@ namespace PlantsVsZombies.UI
         /// <param name = "texture">The texture.</param>
         private static void Image(Rect bounds, Texture2D texture)
         {
-            GUI.DrawTexture(bounds, texture, ScaleMode.StretchToFill, true);
+            CanvasUI.DrawTexture(bounds, texture, ScaleMode.StretchToFill, true);
         }
 
         /// <summary>Performs read return label.</summary>

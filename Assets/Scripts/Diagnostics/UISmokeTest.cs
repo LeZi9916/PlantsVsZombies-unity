@@ -1,4 +1,6 @@
 #nullable enable
+using PlantsVsZombies.Adventure;
+using PlantsVsZombies.Inputs;
 using PlantsVsZombies.Game;
 using PlantsVsZombies.Profiles;
 using PlantsVsZombies.Simulation;
@@ -31,6 +33,10 @@ namespace PlantsVsZombies.Diagnostics
         private FieldInfo _profileDialogField;
         /// <summary>Stores help field.</summary>
         private FieldInfo _helpField;
+        /// <summary>Stores the independent-mode directory inspected by this smoke scenario.</summary>
+        private FieldInfo _modeField;
+        /// <summary>Stores the isolated Adventure progress used to enter the implemented store.</summary>
+        private FieldInfo _adventureStoreField;
         /// <summary>Stores quit field.</summary>
         private FieldInfo _quitField;
         /// <summary>Stores unavailable field.</summary>
@@ -45,8 +51,6 @@ namespace PlantsVsZombies.Diagnostics
         private MethodInfo _applyOptions;
         /// <summary>Stores close options.</summary>
         private MethodInfo _closeOptions;
-        /// <summary>Stores music field.</summary>
-        private FieldInfo _musicField;
         /// <summary>Stores directory.</summary>
         private string _directory;
         /// <summary>Stores session.</summary>
@@ -79,6 +83,8 @@ namespace PlantsVsZombies.Diagnostics
             _profilesField = type.GetField("_profiles", flags);
             _profileDialogField = type.GetField("_profileDialog", flags);
             _helpField = type.GetField("_helpView", flags);
+            _modeField = type.GetField("_modeView", flags);
+            _adventureStoreField = type.GetField("_adventureStore", flags);
             _quitField = type.GetField("_confirmingQuit", flags);
             _unavailableField = type.GetField("_unavailableFeature", flags);
             _helpPointer = type.GetMethod("HandleHelpPointer", flags);
@@ -86,10 +92,21 @@ namespace PlantsVsZombies.Diagnostics
             _gameField = type.GetField("_game", flags);
             _applyOptions = type.GetMethod("ApplyOptions", flags);
             _closeOptions = type.GetMethod("CloseOptions", flags);
-            _musicField = type.GetField("_musicSource", flags);
-            if (_controller == null || _click == null || _viewField == null || _optionsField == null || _almanacField == null || _profilesField == null || _profileDialogField == null || _helpField == null || _quitField == null || _unavailableField == null || _helpPointer == null || _almanacPointer == null || _gameField == null || _applyOptions == null || _closeOptions == null || _musicField == null)
+            if (_controller == null || _click == null || _viewField == null || _optionsField == null || _almanacField == null || _profilesField == null || _profileDialogField == null || _helpField == null || _modeField == null || _adventureStoreField == null || _quitField == null || _unavailableField == null || _helpPointer == null || _almanacPointer == null || _gameField == null || _applyOptions == null || _closeOptions == null)
             {
                 Fail("UI controller is unavailable");
+                yield break;
+            }
+
+            var startupDeadline = Time.realtimeSinceStartup + 60f;
+            while (_controller.OriginalLoadingActive && Time.realtimeSinceStartup < startupDeadline)
+            {
+                yield return null;
+            }
+
+            if (_controller.OriginalLoadingActive)
+            {
+                Fail("Original startup loading did not complete within 60 seconds");
                 yield break;
             }
 
@@ -196,8 +213,8 @@ namespace PlantsVsZombies.Diagnostics
             }
 
             yield return Capture("help");
-            _helpPointer.Invoke(_controller, new object[] { new Vector2(400, 520), EventType.MouseDown });
-            _helpPointer.Invoke(_controller, new object[] { new Vector2(400, 520), EventType.MouseUp });
+            _helpPointer.Invoke(_controller, new object[] { new Vector2(400, 520), PointerPhase.Down });
+            _helpPointer.Invoke(_controller, new object[] { new Vector2(400, 520), PointerPhase.Up });
             if (!ViewIs("Selector"))
             {
                 Fail("Help did not return to selector");
@@ -212,9 +229,30 @@ namespace PlantsVsZombies.Diagnostics
             }
 
             yield return Capture("modes");
+            var modeView = (ModeSelectionView)_modeField.GetValue(_controller);
+            var lockedModeNotice = typeof(ModeSelectionView).GetField("_lockedNotice", flags);
+            if (modeView == null || lockedModeNotice == null)
+            {
+                Fail("Mode lock notice is unavailable");
+                yield break;
+            }
+
             Click(80, 120);
+            if (!ViewIs("Modes") || string.IsNullOrEmpty(lockedModeNotice.GetValue(modeView) as string))
+            {
+                Fail("Locked mini-game did not show its progression notice");
+                yield break;
+            }
+
+            // Preserve the historical artifact name for existing screenshot comparison workflows.
             yield return Capture("unimplemented-mode");
             Click(400, 350);
+            if (lockedModeNotice.GetValue(modeView) != null)
+            {
+                Fail("Mode progression notice did not close");
+                yield break;
+            }
+
             Click(40, 580);
             if (!ViewIs("Selector"))
             {
@@ -222,19 +260,37 @@ namespace PlantsVsZombies.Diagnostics
                 yield break;
             }
 
-            Click(470, 535);
-            if (!ViewIs("Selector") || !string.Equals(_unavailableField.GetValue(_controller) as string, "商店", StringComparison.Ordinal))
+            var adventureStore = (AdventureProgressStore)_adventureStoreField.GetValue(_controller);
+            if (adventureStore == null || !profiles.SelectedId.HasValue)
             {
-                Fail("Corrected store entry did not show its unavailable notice");
+                Fail("Isolated store progress is unavailable");
                 yield break;
             }
 
-            yield return Capture("unimplemented-store");
-            Click(400, 350);
-            if (_unavailableField.GetValue(_controller) != null)
+            var storeProfile = profiles.SelectedId.Value;
+            var priorStoreProgress = adventureStore.Get(storeProfile);
+            try
             {
-                Fail("Store notice did not close");
-                yield break;
+                adventureStore.Import(storeProfile, 25, 0);
+                Click(470, 535);
+                if (!ViewIs("Store") || _unavailableField.GetValue(_controller) != null)
+                {
+                    Fail("Unlocked store entry did not open the store");
+                    yield break;
+                }
+
+                // Preserve the historical artifact name while capturing the implemented store.
+                yield return Capture("unimplemented-store");
+                Click(435, 552);
+                if (!ViewIs("Selector") || _unavailableField.GetValue(_controller) != null)
+                {
+                    Fail("Store return button did not return to selector");
+                    yield break;
+                }
+            }
+            finally
+            {
+                adventureStore.Import(storeProfile, priorStoreProgress.NextLevel, priorStoreProgress.CompletedRuns);
             }
 
             Click(360, 460);
@@ -350,22 +406,22 @@ namespace PlantsVsZombies.Diagnostics
                 yield break;
             }
 
-            AlmanacPointer(720, 580, EventType.MouseDown);
+            AlmanacPointer(720, 580, PointerPhase.Down);
             if (!ViewIs("Almanac"))
             {
                 Fail("Almanac close committed on press");
                 yield break;
             }
 
-            AlmanacPointer(600, 550, EventType.MouseUp);
+            AlmanacPointer(600, 550, PointerPhase.Up);
             if (!ViewIs("Almanac"))
             {
                 Fail("Almanac close did not cancel after dragging out");
                 yield break;
             }
 
-            AlmanacPointer(720, 580, EventType.MouseDown);
-            AlmanacPointer(720, 580, EventType.MouseUp);
+            AlmanacPointer(720, 580, PointerPhase.Down);
+            AlmanacPointer(720, 580, PointerPhase.Up);
             if (!ViewIs("Selector"))
             {
                 Fail("Almanac did not return to selector on release");
@@ -388,10 +444,10 @@ namespace PlantsVsZombies.Diagnostics
             }
 
             yield return Capture("options");
-            var music = (AudioSource)_musicField.GetValue(_controller);
-            var appliedMusic = music.volume;
-            options.HandlePointer(new Vector2(515, 183), EventType.MouseDown);
-            options.HandlePointer(new Vector2(515, 183), EventType.MouseUp);
+            var musicReport = _controller.GetMusicOutputReport();
+            var appliedMusic = musicReport.savedMusicVolume;
+            options.HandlePointer(new Vector2(515, 183), PointerPhase.Down);
+            options.HandlePointer(new Vector2(515, 183), PointerPhase.Up);
             var draftMusic = options.MusicVolume;
             if (Mathf.Approximately(draftMusic, appliedMusic))
             {
@@ -399,8 +455,8 @@ namespace PlantsVsZombies.Diagnostics
                 yield break;
             }
 
-            options.HandlePointer(new Vector2(400, 310), EventType.MouseDown);
-            options.HandlePointer(new Vector2(400, 310), EventType.MouseUp);
+            options.HandlePointer(new Vector2(400, 310), PointerPhase.Down);
+            options.HandlePointer(new Vector2(400, 310), PointerPhase.Up);
             if (options.CloseResult != OptionsCloseResult.OpenAlmanac)
             {
                 Fail("Options almanac button did not dispatch");
@@ -410,9 +466,10 @@ namespace PlantsVsZombies.Diagnostics
             _applyOptions.Invoke(_controller, null);
             var pausedGame = (GameSimulation)_gameField.GetValue(_controller);
             var pausedElapsed = pausedGame.Elapsed;
-            if (!ViewIs("Almanac") || options.IsOpen || !Mathf.Approximately(music.volume, appliedMusic))
+            musicReport = _controller.GetMusicOutputReport();
+            if (!ViewIs("Almanac") || options.IsOpen || !Mathf.Approximately(musicReport.savedMusicVolume, appliedMusic))
             {
-                Fail("Opening modal almanac applied or lost the options draft");
+                Fail("Opening modal almanac applied or lost the options draft; saved=" + musicReport.savedMusicVolume + "; expected=" + appliedMusic);
                 yield break;
             }
 
@@ -428,11 +485,12 @@ namespace PlantsVsZombies.Diagnostics
                 yield break;
             }
 
-            AlmanacPointer(720, 580, EventType.MouseDown);
-            AlmanacPointer(720, 580, EventType.MouseUp);
-            if (!ViewIs("Board") || !options.IsOpen || !Mathf.Approximately(options.MusicVolume, draftMusic) || !Mathf.Approximately(music.volume, appliedMusic))
+            AlmanacPointer(720, 580, PointerPhase.Down);
+            AlmanacPointer(720, 580, PointerPhase.Up);
+            musicReport = _controller.GetMusicOutputReport();
+            if (!ViewIs("Board") || !options.IsOpen || !Mathf.Approximately(options.MusicVolume, draftMusic) || !Mathf.Approximately(musicReport.savedMusicVolume, appliedMusic))
             {
-                Fail("Closing modal almanac did not restore the unchanged options draft");
+                Fail("Closing modal almanac did not restore the unchanged options draft; saved=" + musicReport.savedMusicVolume + "; expected=" + appliedMusic);
                 yield break;
             }
 
@@ -448,8 +506,8 @@ namespace PlantsVsZombies.Diagnostics
                 yield break;
             }
 
-            options.HandlePointer(new Vector2(400, 355), EventType.MouseDown);
-            options.HandlePointer(new Vector2(400, 355), EventType.MouseUp);
+            options.HandlePointer(new Vector2(400, 355), PointerPhase.Down);
+            options.HandlePointer(new Vector2(400, 355), PointerPhase.Up);
             if (!options.IsOpen || options.CloseResult != OptionsCloseResult.None)
             {
                 Fail("Options restart confirmation did not open");
@@ -457,16 +515,17 @@ namespace PlantsVsZombies.Diagnostics
             }
 
             _closeOptions.Invoke(_controller, null);
-            if (!options.IsOpen || options.CloseResult != OptionsCloseResult.None || !Mathf.Approximately(music.volume, appliedMusic))
+            musicReport = _controller.GetMusicOutputReport();
+            if (!options.IsOpen || options.CloseResult != OptionsCloseResult.None || !Mathf.Approximately(musicReport.savedMusicVolume, appliedMusic))
             {
-                Fail("Cancelling restart applied or closed the options draft");
+                Fail("Cancelling restart applied or closed the options draft; saved=" + musicReport.savedMusicVolume + "; expected=" + appliedMusic);
                 yield break;
             }
 
-            options.HandlePointer(new Vector2(400, 355), EventType.MouseDown);
-            options.HandlePointer(new Vector2(400, 355), EventType.MouseUp);
-            options.HandlePointer(new Vector2(300, 386), EventType.MouseDown);
-            options.HandlePointer(new Vector2(300, 386), EventType.MouseUp);
+            options.HandlePointer(new Vector2(400, 355), PointerPhase.Down);
+            options.HandlePointer(new Vector2(400, 355), PointerPhase.Up);
+            options.HandlePointer(new Vector2(300, 386), PointerPhase.Down);
+            options.HandlePointer(new Vector2(300, 386), PointerPhase.Up);
             if (options.IsOpen || options.CloseResult != OptionsCloseResult.RestartLevel)
             {
                 Fail("Options restart confirmation did not dispatch");
@@ -474,15 +533,16 @@ namespace PlantsVsZombies.Diagnostics
             }
 
             _applyOptions.Invoke(_controller, null);
-            if (!Mathf.Approximately(music.volume, draftMusic))
+            musicReport = _controller.GetMusicOutputReport();
+            if (!Mathf.Approximately(musicReport.savedMusicVolume, draftMusic))
             {
-                Fail("Confirmed options draft was not applied");
+                Fail("Confirmed options draft was not applied; saved=" + musicReport.savedMusicVolume + "; expected=" + draftMusic);
                 yield break;
             }
 
             Click(750, 23);
-            options.HandlePointer(new Vector2(400, 405), EventType.MouseDown);
-            options.HandlePointer(new Vector2(400, 405), EventType.MouseUp);
+            options.HandlePointer(new Vector2(400, 405), PointerPhase.Down);
+            options.HandlePointer(new Vector2(400, 405), PointerPhase.Up);
             if (options.IsOpen || options.CloseResult != OptionsCloseResult.MainMenu)
             {
                 Fail("Options main menu button did not dispatch");
@@ -560,7 +620,7 @@ namespace PlantsVsZombies.Diagnostics
         /// <param name = "x">The x.</param>
         /// <param name = "y">The y.</param>
         /// <param name = "type">The type.</param>
-        private void AlmanacPointer(float x, float y, EventType type)
+        private void AlmanacPointer(float x, float y, PointerPhase type)
         {
             _almanacPointer.Invoke(_controller, new object[] { new Vector2(x, y), type });
         }

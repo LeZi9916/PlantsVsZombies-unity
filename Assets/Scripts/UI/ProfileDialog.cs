@@ -172,7 +172,7 @@ namespace PlantsVsZombies.UI
             }
         }
 
-        /// <summary>Call from OnGUI with the host's 800 by 600 GUI matrix already set.</summary>
+        /// <summary>Submits the retained Canvas elements in the host's logical viewport.</summary>
         public void Draw()
         {
             ThrowIfDisposed();
@@ -182,14 +182,14 @@ namespace PlantsVsZombies.UI
             }
 
             EnsureStyles();
-            var previousColor = GUI.color;
-            var previousContent = GUI.contentColor;
-            var previousEnabled = GUI.enabled;
+            var previousColor = CanvasUI.Color;
+            var previousContent = CanvasUI.ContentColor;
+            var previousEnabled = CanvasUI.Enabled;
             try
             {
-                GUI.enabled = true;
-                GUI.color = Color.white;
-                GUI.contentColor = Color.white;
+                CanvasUI.Enabled = true;
+                CanvasUI.Color = Color.white;
+                CanvasUI.ContentColor = Color.white;
                 Fill(new Rect(0, 0, 800, 600), new Color(0, 0, 0, 0.55f));
                 DrawPanel();
                 Label(new Rect(235, 105, 330, 33), Heading(), 21, TextAnchor.MiddleCenter, new Color(1f, 0.86f, 0.49f), false);
@@ -213,9 +213,9 @@ namespace PlantsVsZombies.UI
             }
             finally
             {
-                GUI.color = previousColor;
-                GUI.contentColor = previousContent;
-                GUI.enabled = previousEnabled;
+                CanvasUI.Color = previousColor;
+                CanvasUI.ContentColor = previousContent;
+                CanvasUI.Enabled = previousEnabled;
             }
         }
 
@@ -768,12 +768,12 @@ namespace PlantsVsZombies.UI
         private void DrawEditor()
         {
             Label(new Rect(252, 212, 296, 28), "请输入你的名字：", 17, TextAnchor.MiddleLeft, Color.white, false);
-            GUI.SetNextControlName(NameControl);
+            CanvasUI.SetNextControlName(NameControl);
             OriginalUiWidgets.EditBox(UiTexture, s_nameField);
-            _editName = GUI.TextField(s_nameField, _editName, _fieldStyle);
-            if (_requestFocus && Event.current != null && Event.current.type == EventType.Repaint)
+            _editName = CanvasUI.TextField(s_nameField, _editName, _fieldStyle);
+            if (_requestFocus)
             {
-                GUI.FocusControl(NameControl);
+                CanvasUI.FocusControl(NameControl);
                 _requestFocus = false;
             }
 
@@ -823,7 +823,7 @@ namespace PlantsVsZombies.UI
         /// <param name = "rect">The rect.</param>
         private void Image(string name, Rect rect)
         {
-            GUI.DrawTexture(rect, _images[name], ScaleMode.StretchToFill, true);
+            CanvasUI.DrawTexture(rect, _images[name], ScaleMode.StretchToFill, true);
         }
 
         /// <summary>Performs fill.</summary>
@@ -831,10 +831,10 @@ namespace PlantsVsZombies.UI
         /// <param name = "color">The color.</param>
         private static void Fill(Rect rect, Color color)
         {
-            var before = GUI.color;
-            GUI.color = color;
-            GUI.DrawTexture(rect, Texture2D.whiteTexture, ScaleMode.StretchToFill, true);
-            GUI.color = before;
+            var before = CanvasUI.Color;
+            CanvasUI.Color = color;
+            CanvasUI.DrawTexture(rect, Texture2D.whiteTexture, ScaleMode.StretchToFill, true);
+            CanvasUI.Color = before;
         }
 
         /// <summary>Performs label.</summary>
@@ -850,7 +850,7 @@ namespace PlantsVsZombies.UI
             _labelStyle.alignment = alignment;
             _labelStyle.wordWrap = wrap;
             _labelStyle.normal.textColor = color;
-            GUI.Label(rect, text, _labelStyle);
+            CanvasUI.Label(rect, text, _labelStyle);
         }
 
         /// <summary>Performs ensure styles.</summary>
@@ -867,8 +867,8 @@ namespace PlantsVsZombies.UI
                 "Noto Sans CJK SC",
                 "Arial Unicode MS"
             }, 18);
-            _labelStyle = new GUIStyle(GUI.skin.label);
-            _fieldStyle = OriginalUiWidgets.TransparentTextField(new GUIStyle(GUI.skin.textField));
+            _labelStyle = new GUIStyle();
+            _fieldStyle = OriginalUiWidgets.TransparentTextField(new GUIStyle());
             if (_font != null)
             {
                 _labelStyle.font = _font;

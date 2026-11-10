@@ -16,12 +16,12 @@ git submodule update --init --recursive
 
 | 目录 | 职责 |
 | --- | --- |
-| `Assets/Scripts/Game` | 游戏入口、界面导航与各模块协调 |
+| `Assets/Scripts/Game` | 游戏生命周期、界面导航与游戏流程协调 |
 | `Assets/Scripts/Simulation` | 模拟状态、游戏规则与模拟主循环 |
 | `Assets/Scripts/Adventure` | 冒险流程、波次、奖励与表现状态 |
 | `Assets/Scripts/Rendering` | URP 相机、对象池、MeshRenderer 和渲染资源生命周期 |
 | `Assets/Scripts/Reanimation` | 原版动画解析、采样与渲染命令生成 |
-| `Assets/Scripts/UI` | 界面交互及位图字体 |
+| `Assets/Scripts/UI` | Canvas 界面、独立输入路由及位图字体 |
 | `Assets/Scripts/Diagnostics` | 显式命令行触发的冒烟验证组件 |
 | `Assets/Scripts/VerifiedData` | 原版静态数据模型、只读目录与可重生成的数据表 |
 | `Assets/Editor` | 场景、构建、资源导入与 URP 配置工具 |
@@ -35,11 +35,13 @@ git submodule update --init --recursive
 
 项目使用 Unity 随附的 **URP 17.3.0**。`Assets/Settings` 内的 Pipeline、Renderer、Global Settings 与 Volume Profile 是 Unity Editor 生成的共享资产；Graphics 与所有 Quality 等级引用相同的 Pipeline。
 
-棋盘图像与动画四边形提交到复用的 `GameObject + MeshFilter + MeshRenderer` 对象，由 URP 相机渲染到纹理。对象池复用网格、顶点缓冲及材质属性，资源随渲染器 `Dispose` 释放。第 31 层 `PvZ Rendering` 专供隔离的渲染相机使用。
+棋盘图像与动画四边形提交到复用的 `GameObject + MeshFilter + MeshRenderer` 对象，由启用的 URP 场景相机直接显示。对象池复用网格、顶点缓冲及材质属性，资源随渲染器 `Dispose` 释放。第 31 层 `PvZ Rendering` 专供游戏渲染相机使用。
 
-原版界面的文字、输入及弹窗继续使用 IMGUI，棋盘结果作为一张纹理合成，以保留现有界面层叠。动画底层不再调用 GL 即时绘制。这次迁移不包含整套 UI Toolkit 界面重写。
+界面图像、文字、输入框、滑块与弹窗由 Canvas 组件显示，`GamePresenter` 提交每帧表现，`PvZGame` 负责生命周期与游戏流程。输入在帧更新时独立采样，使用与相机、Canvas 相同的 800×600 逻辑视口换算；宽屏留边不参与棋盘点击。运行时不再依赖 `OnGUI`、`GUI` 绘制或 `Event.current`。
 
-运行素材实际包含半透明像素，不能将所有对象直接放入不透明队列。完全不透明纹理及不透明 tint 使用深度写入；带透明边缘、渐变和加色的绘制保留透明混合。绘制深度遵循原来的提交顺序。
+原版动画中需要局部合成的特效仍使用有界的 RenderTexture；棋盘不会先渲染成整屏纹理再交给界面显示。界面与世界对象的绘制顺序由各自的场景组件和 Canvas 层级维护。
+
+运行素材实际包含半透明像素，不能将所有对象直接放入不透明队列。场景对象保留透明混合，并与 Canvas 共用有序的图层；局部离屏处理中，完全不透明纹理及不透明 tint 可以使用深度写入。带透明边缘、渐变和加色的绘制保留原有混合规则。
 
 ## 验证
 

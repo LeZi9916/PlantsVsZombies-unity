@@ -11,7 +11,7 @@ namespace PlantsVsZombies.UI
     public static class OriginalUiWidgets
     {
         /// <summary>Stores fonts.</summary>
-        private static readonly Dictionary<string, ImGuiBitmapFont> s_fonts = new Dictionary<string, ImGuiBitmapFont>();
+        private static readonly Dictionary<string, CanvasBitmapFont> s_fonts = new Dictionary<string, CanvasBitmapFont>();
         /// <summary>Stores failed fonts.</summary>
         private static readonly HashSet<string> s_failedFonts = new HashSet<string>();
         /// <summary>Stores stone text.</summary>
@@ -21,7 +21,7 @@ namespace PlantsVsZombies.UI
         /// <returns>The resulting hovered.</returns>
         public static bool Hovered(Rect rect)
         {
-            return Event.current != null && rect.Contains(Event.current.mousePosition);
+            return rect.Contains(CanvasUI.PointerPosition);
         }
 
         /// <summary>Performs pressed.</summary>
@@ -83,12 +83,12 @@ namespace PlantsVsZombies.UI
                 return Vector2.zero;
             }
 
-            var old = GUI.color;
+            var old = CanvasUI.Color;
             try
             {
                 if (!enabled)
                 {
-                    GUI.color = new Color(old.r * .5f, old.g * .5f, old.b * .5f, old.a);
+                    CanvasUI.Color = new Color(old.r * .5f, old.g * .5f, old.b * .5f, old.a);
                 }
 
                 var x = rect.x + (pressed ? 1 : 0);
@@ -98,7 +98,7 @@ namespace PlantsVsZombies.UI
             }
             finally
             {
-                GUI.color = old;
+                CanvasUI.Color = old;
             }
 
             return pressed ? Vector2.one : Vector2.zero;
@@ -122,19 +122,19 @@ namespace PlantsVsZombies.UI
                 image = texture(normal);
             }
 
-            var old = GUI.color;
+            var old = CanvasUI.Color;
             try
             {
                 if (!enabled)
                 {
-                    GUI.color = new Color(old.r * .5f, old.g * .5f, old.b * .5f, old.a);
+                    CanvasUI.Color = new Color(old.r * .5f, old.g * .5f, old.b * .5f, old.a);
                 }
 
                 Image(image, rect);
             }
             finally
             {
-                GUI.color = old;
+                CanvasUI.Color = old;
             }
         }
 
@@ -197,7 +197,7 @@ namespace PlantsVsZombies.UI
                 return true;
             }
 
-            ImGuiBitmapFont bitmap;
+            CanvasBitmapFont bitmap;
             if (!s_fonts.TryGetValue(originalFont, out bitmap))
             {
                 if (s_failedFonts.Contains(originalFont))
@@ -207,7 +207,7 @@ namespace PlantsVsZombies.UI
 
                 try
                 {
-                    bitmap = ImGuiBitmapFont.LoadFromResources(originalFont);
+                    bitmap = CanvasBitmapFont.LoadFromResources(originalFont);
                     s_fonts.Add(originalFont, bitmap);
                 }
                 catch (Exception error)when (error is IOException || error is FormatException)
@@ -242,7 +242,7 @@ namespace PlantsVsZombies.UI
                 return true;
             }
 
-            ImGuiBitmapFont font;
+            CanvasBitmapFont font;
             if (!s_fonts.TryGetValue(originalFont, out font))
             {
                 if (s_failedFonts.Contains(originalFont))
@@ -252,7 +252,7 @@ namespace PlantsVsZombies.UI
 
                 try
                 {
-                    font = ImGuiBitmapFont.LoadFromResources(originalFont);
+                    font = CanvasBitmapFont.LoadFromResources(originalFont);
                     s_fonts.Add(originalFont, font);
                 }
                 catch (Exception e)when (e is IOException || e is FormatException)
@@ -284,7 +284,7 @@ namespace PlantsVsZombies.UI
         public static bool StoneLabel(Rect rect, string text, bool hovered = false, bool pressed = false, bool enabled = true)
         {
             var name = hovered && enabled ? "DwarvenTodcraft18BrightGreenInset" : "DwarvenTodcraft18GreenInset";
-            ImGuiBitmapFont bitmap;
+            CanvasBitmapFont bitmap;
             if (!s_fonts.TryGetValue(name, out bitmap))
             {
                 if (s_failedFonts.Contains(name))
@@ -294,7 +294,7 @@ namespace PlantsVsZombies.UI
 
                 try
                 {
-                    bitmap = ImGuiBitmapFont.LoadFromResources(name);
+                    bitmap = CanvasBitmapFont.LoadFromResources(name);
                     s_fonts.Add(name, bitmap);
                 }
                 catch (Exception e)when (e is IOException || e is FormatException)
@@ -324,7 +324,7 @@ namespace PlantsVsZombies.UI
         {
             if (texture != null && destination.width > 0 && destination.height > 0)
             {
-                GUI.DrawTexture(destination, texture, ScaleMode.StretchToFill, true);
+                CanvasUI.DrawTexture(destination, texture, ScaleMode.StretchToFill, true);
             }
         }
 
@@ -343,7 +343,7 @@ namespace PlantsVsZombies.UI
                 for (var x = destination.x; x < destination.xMax; x += texture.width)
                 {
                     float w = Math.Min(texture.width, destination.xMax - x), h = Math.Min(texture.height, destination.yMax - y);
-                    GUI.DrawTextureWithTexCoords(new Rect(x, y, w, h), texture, new Rect(0, 1 - h / texture.height, w / texture.width, h / texture.height), true);
+                    CanvasUI.DrawTextureWithTexCoords(new Rect(x, y, w, h), texture, new Rect(0, 1 - h / texture.height, w / texture.width, h / texture.height), true);
                 }
             }
         }
@@ -386,7 +386,7 @@ namespace PlantsVsZombies.UI
             {
                 for (var col = 0; col < 3; col++)
                 {
-                    GUI.DrawTextureWithTexCoords(new Rect(dx[col], dy[row], dx[col + 1] - dx[col], dy[row + 1] - dy[row]), image, new Rect(sx[col] / image.width, 1 - sy[row + 1] / image.height, (sx[col + 1] - sx[col]) / image.width, (sy[row + 1] - sy[row]) / image.height), true);
+                    CanvasUI.DrawTextureWithTexCoords(new Rect(dx[col], dy[row], dx[col + 1] - dx[col], dy[row + 1] - dy[row]), image, new Rect(sx[col] / image.width, 1 - sy[row + 1] / image.height, (sx[col + 1] - sx[col]) / image.width, (sy[row + 1] - sy[row]) / image.height), true);
                 }
             }
         }
@@ -394,7 +394,7 @@ namespace PlantsVsZombies.UI
         /// <summary>Performs release fonts.</summary>
         public static void ReleaseFonts()
         {
-            foreach (ImGuiBitmapFont font in s_fonts.Values)
+            foreach (CanvasBitmapFont font in s_fonts.Values)
             {
                 font.Dispose();
             }

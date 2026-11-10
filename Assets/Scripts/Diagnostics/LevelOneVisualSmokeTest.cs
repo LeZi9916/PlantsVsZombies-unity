@@ -38,6 +38,18 @@ namespace PlantsVsZombies.Diagnostics
                 yield break;
             }
 
+            var startupDeadline = Time.realtimeSinceStartup + 60f;
+            while (controller.OriginalLoadingActive && Time.realtimeSinceStartup < startupDeadline)
+            {
+                yield return null;
+            }
+
+            if (controller.OriginalLoadingActive)
+            {
+                Fail("Original startup loading did not complete within 60 seconds");
+                yield break;
+            }
+
             var type = typeof(PvZGame);
             var flags = BindingFlags.NonPublic | BindingFlags.Instance;
             var gameField = type.GetField("_game", flags);

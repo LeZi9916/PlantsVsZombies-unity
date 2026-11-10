@@ -150,7 +150,78 @@ namespace PlantsVsZombies.Tests.Architecture
                 }
             }
 
+            InspectPresentationOwnership(path, root, violations);
             return violations;
+        }
+
+        /// <summary>Rejects runtime IMGUI callbacks and keeps drawing outside the game-flow coordinator.</summary>
+        /// <param name="path">The source path used for diagnostics.</param>
+        /// <param name="root">The parsed source whose declarations and accesses are inspected.</param>
+        /// <param name="violations">The destination for presentation boundary violations.</param>
+        private static void InspectPresentationOwnership(string path, CompilationUnitSyntax root, List<string> violations)
+        {
+            var aliases = root.Usings
+                .Where(directive => directive.Alias != null)
+                .ToDictionary(directive => directive.Alias!.Name.Identifier.ValueText, directive => directive.Name!.ToString(), StringComparer.Ordinal);
+            foreach (var directive in root.Usings)
+            {
+                if (directive.StaticKeyword.IsKind(SyntaxKind.StaticKeyword)
+                    && directive.Name != null
+                    && IsImmediateInterfaceType(directive.Name.ToString(), aliases))
+                {
+                    violations.Add(path + ": runtime IMGUI imports are forbidden; use the scene presenter and Canvas controls.");
+                }
+            }
+
+            foreach (var method in root.DescendantNodes().OfType<MethodDeclarationSyntax>())
+            {
+                if (method.Identifier.ValueText == "OnGUI")
+                {
+                    violations.Add(path + ": runtime OnGUI callbacks are forbidden; sample input and present from the frame lifecycle.");
+                }
+
+                if (method.Ancestors().OfType<ClassDeclarationSyntax>().Any(type => type.Identifier.ValueText == "PvZGame")
+                    && method.Identifier.ValueText.StartsWith("Draw", StringComparison.Ordinal))
+                {
+                    violations.Add(path + ": PvZGame method " + method.Identifier.ValueText + " coordinates game flow and must delegate drawing to its presenter.");
+                }
+            }
+
+            foreach (var access in root.DescendantNodes().OfType<MemberAccessExpressionSyntax>())
+            {
+                var owner = ResolveAlias(access.Expression.ToString(), aliases).Replace("global::", string.Empty, StringComparison.Ordinal);
+                if (IsImmediateInterfaceType(owner, aliases)
+                    || ((owner == "Event" || owner == "UnityEngine.Event") && access.Name.Identifier.ValueText == "current"))
+                {
+                    violations.Add(path + ": runtime IMGUI access " + access + " is forbidden; use Canvas presentation and independent input.");
+                }
+
+                if (access.Ancestors().OfType<ClassDeclarationSyntax>().Any(type => type.Identifier.ValueText == "PvZGame")
+                    && access.Parent is InvocationExpressionSyntax
+                    && access.Name.Identifier.ValueText is "DrawTexture" or "DrawTextureWithTexCoords" or "DrawQuad" or "DrawMesh")
+                {
+                    violations.Add(path + ": PvZGame must not submit drawing commands directly.");
+                }
+            }
+        }
+
+        /// <summary>Identifies Unity's immediate-mode interface APIs without loading engine assemblies.</summary>
+        /// <param name="name">The source type name, including any namespace or alias.</param>
+        /// <param name="aliases">The aliases declared by this source file.</param>
+        /// <returns>Whether the name identifies a runtime IMGUI API.</returns>
+        private static bool IsImmediateInterfaceType(string name, IReadOnlyDictionary<string, string> aliases)
+        {
+            var resolved = ResolveAlias(name, aliases).Replace("global::", string.Empty, StringComparison.Ordinal);
+            return resolved is "GUI" or "UnityEngine.GUI" or "GUILayout" or "UnityEngine.GUILayout" or "GUIUtility" or "UnityEngine.GUIUtility";
+        }
+
+        /// <summary>Resolves a directly named using alias for syntax-only ownership checks.</summary>
+        /// <param name="name">The type name or alias to resolve.</param>
+        /// <param name="aliases">The aliases declared by this source file.</param>
+        /// <returns>The aliased type name, or the original name when no alias exists.</returns>
+        private static string ResolveAlias(string name, IReadOnlyDictionary<string, string> aliases)
+        {
+            return aliases.TryGetValue(name, out var resolved) ? resolved : name;
         }
 
         /// <summary>Checks paired script metadata and unique GUIDs in the production source tree.</summary>

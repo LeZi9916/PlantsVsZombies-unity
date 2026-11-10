@@ -26,7 +26,11 @@ source snapshot and retains its package and import cache. Never run two Unity
 processes against the same isolated directory concurrently.
 
 EditMode tests cover the current and legacy loose resource layouts and load
-the shipped Lawn scene to verify its migrated script binding. PlayMode
+the shipped Lawn scene to verify its migrated script binding. Pointer tests
+exercise aspect-ratio mapping, letterbox rejection, modal capture, dragging,
+closing consumption, and reopening without creating a GUI event. PlayMode
 tests render synthetic textures through the actual URP camera and compare
 colors, transparency, overlap order, transforms, object reuse, and disposal.
+Canvas tests interleave artwork with scene meshes, clip transformed groups,
+retire stale graphics, and retain editable text/focus across presentation frames.
 These checks do not replace scene interaction or target-platform Player tests.

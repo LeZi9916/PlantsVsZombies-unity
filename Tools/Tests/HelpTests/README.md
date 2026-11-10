@@ -1,6 +1,6 @@
 # 主菜单帮助页
 
-这是独立的 `PvZReplica.UI.HelpView`，没有修改主场景，也没有自动接入选择器。
+这是独立的 `PlantsVsZombies.UI.HelpView`，没有修改主场景，也没有自动接入选择器。
 它只实现本地 EXE 的主菜单帮助变体：一张纸条和一个返回主菜单按钮，
 没有发现需要实现的翻页按钮。`PageCount` 固定为 1。
 
@@ -11,14 +11,12 @@
 会清除上次的 `CloseResult` 和鼠标捕获。离开时在 Unity 主线程 `Dispose()`；
 重复释放无害，释放后的操作方法会抛 `ObjectDisposedException`。
 
-宿主在 `OnGUI` 中先绘制其他界面，设置自己的 GUI 矩阵，将左上角原点的
-800x600 逻辑空间映射到视口，然后调用 `Draw()` 并恢复矩阵。`Draw()` 不读
-事件、不导航；关闭时不绘制。素材必须是可通过文件系统读取的真实文件，
-不直接支持打包在 APK 或 URL 中的 StreamingAssets。
-
+表现层在帧更新后调用 `Draw()`，把图像和文字提交到 Canvas 的 800×600
+逻辑坐标。`Draw()` 不读输入事件、不导航；关闭时不绘制。素材必须是可通过
+文件系统读取的真实文件，不直接支持打包在 APK 或 URL 中的 StreamingAssets。
 打开时，将转换为同一逻辑空间的坐标传给
-`HandlePointer(position, eventType)`：鼠标移动以及**主键**按下、拖动、释放
-分别使用 `MouseMove`、`MouseDown`、`MouseDrag`、`MouseUp`。按下必须从按钮
+`HandlePointer(position, phase)`：鼠标移动以及**主键**按下、拖动、释放
+分别使用 `PointerPhase.Move`、`Down`、`Drag`、`Up`。按下必须从按钮
 内开始，释放也在按钮内才返回；拖出后释放取消。即使坐标在画布外，也应继续
 转发拖动和释放。上述事件在打开时均被消费；宿主应阻止这些事件和其他鼠标、
 滚轮、键盘事件落到下层界面。鼠标事件类型与按钮号应由宿主筛选，
@@ -30,42 +28,9 @@ KeypadEnter 也是本实现的便利扩展。宿主也可以调用 `Close()`。�
 宿主应只处理一次返回结果并切换回选择器。`Close()` 不直接切换场景。
 `ReturnButtonBounds`、`IsReturnHovered`、`IsReturnPressed` 可供宿主检查。
 
-示意：下面的 `logicalPointer` 必须由宿主按自己的视口偏移与等比缩放计算，
-`SwitchToSelector` 是宿主自己的导航方法。
-
-```csharp
-// Route this before forwarding the same event to the screen underneath.
-bool wasOpen = help.IsOpen;
-if (wasOpen)
-{
-    Event e = Event.current;
-    bool handled = false;
-    if (e.type == EventType.KeyDown)
-        handled = help.HandleKey(e.keyCode);
-    else if (e.type == EventType.MouseMove ||
-             (e.button == 0 && (e.type == EventType.MouseDown ||
-              e.type == EventType.MouseDrag || e.type == EventType.MouseUp)))
-        handled = help.HandlePointer(logicalPointer, e.type);
-    if (handled) e.Use();
-    // Also suppress all remaining input to the screen underneath while wasOpen.
-    if (!help.IsOpen && help.CloseResult == HelpCloseResult.ReturnToMainMenu)
-        SwitchToSelector();
-}
-
-// After drawing the underlying scene, in OnGUI:
-Matrix4x4 previous = GUI.matrix;
-try
-{
-    GUI.matrix = Matrix4x4.TRS(new Vector3(offsetX, offsetY, 0),
-        Quaternion.identity, new Vector3(scale, scale, 1));
-    help.Draw();
-}
-finally { GUI.matrix = previous; }
-```
-
-不要在 `SwitchToSelector()` 中立即释放 `help` 后又在同一次 `OnGUI` 中调用
-`Draw()`；也可以在导航时跳过该次绘制。
-
+宿主的输入路由器在每帧独立采样鼠标或触摸，并优先转发到当前弹窗。
+帮助页关闭的那次输入也必须被消费，避免同一按下或释放触发新露出的主菜单。
+绘制由表现层单独完成，不需要 `OnGUI`、`Event.current` 或 GUI 矩阵。
 ## 素材
 
 开发时可将 `resourceRoot` 设为本工作区 `extracted_assets/raw`。部署时保持

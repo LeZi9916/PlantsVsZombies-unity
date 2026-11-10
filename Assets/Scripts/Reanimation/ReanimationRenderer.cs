@@ -156,7 +156,7 @@ namespace PlantsVsZombies.Reanimation
         {
             get
             {
-                return _renderingNativeSurface ? _nativeSurfaceMatrix : GUI.matrix;
+                return _renderingNativeSurface ? _nativeSurfaceMatrix : SpriteDrawState.Matrix;
             }
 
             set
@@ -167,7 +167,7 @@ namespace PlantsVsZombies.Reanimation
                 }
                 else
                 {
-                    GUI.matrix = value;
+                    SpriteDrawState.Matrix = value;
                 }
             }
         }
@@ -187,7 +187,7 @@ namespace PlantsVsZombies.Reanimation
             }
         }
 
-        /// <summary>Renders and composites the current screen batch through the Universal Render Pipeline.</summary>
+        /// <summary>Publishes the current sprite batch for the shared direct-display scene camera.</summary>
         public void EndObjectFrame()
         {
             if (CanSubmitObjectFrame && _objectRenderer != null)
@@ -196,8 +196,8 @@ namespace PlantsVsZombies.Reanimation
             }
         }
 
-        /// <summary>Gets whether the current GUI event can submit scene-rendering commands.</summary>
-        private bool CanSubmitObjectFrame => !_disposed && (Event.current == null || Event.current.type == EventType.Repaint);
+        /// <summary>Gets whether this renderer can submit explicit presentation commands.</summary>
+        private bool CanSubmitObjectFrame => !_disposed;
 
         /// <summary>Gets or creates the screen renderer owned by this animation renderer.</summary>
         /// <returns>The reusable pool of scene sprite objects.</returns>
@@ -212,7 +212,7 @@ namespace PlantsVsZombies.Reanimation
         }
 
         /// <summary>Begins a nested draw scope when an animation is drawn outside a board batch.</summary>
-        /// <returns>A scope that composites only after its outermost animation draw completes.</returns>
+        /// <returns>A scope that publishes only after its outermost animation draw completes.</returns>
         private ObjectRenderScope BeginObjectScope()
         {
             if (!CanSubmitObjectFrame || _renderingNativeSurface)
@@ -401,7 +401,7 @@ namespace PlantsVsZombies.Reanimation
             var anchorPose = Interpolate(GetFrame(anchor, bodyTime.Current), GetFrame(anchor, bodyTime.Next), bodyTime.Fraction);
             var attachment = PartMatrix(anchorPose) * inverseBase;
             var originalMatrix = SpriteMatrix;
-            var originalColor = GUI.color;
+            var originalColor = SpriteDrawState.Color;
             var layout = nativePlacement ?? LayoutMatrix(destination, bounds);
             bool drawn;
             try
@@ -412,7 +412,7 @@ namespace PlantsVsZombies.Reanimation
             finally
             {
                 SpriteMatrix = originalMatrix;
-                GUI.color = originalColor;
+                SpriteDrawState.Color = originalColor;
             }
 
             if (!drawn)
@@ -492,7 +492,7 @@ namespace PlantsVsZombies.Reanimation
             var next = relativeFrame + 1 < clip.Count ? current + 1 : (loop ? clip.Start : current);
             var layout = nativePlacement ?? LayoutMatrix(destination, bounds);
             var originalMatrix = SpriteMatrix;
-            var originalColor = GUI.color;
+            var originalColor = SpriteDrawState.Color;
             var drawn = false;
             try
             {
@@ -544,7 +544,7 @@ namespace PlantsVsZombies.Reanimation
 
                         SpriteMatrix = sprite;
                         var alpha = originalColor.a * Math.Max(0f, Math.Min(1f, frame.Alpha));
-                        GUI.color = _nativeCombatZombie == null ? new Color(originalColor.r, originalColor.g, originalColor.b, alpha) : NativeZombieTrackColor(group, alpha);
+                        SpriteDrawState.Color = _nativeCombatZombie == null ? new Color(originalColor.r, originalColor.g, originalColor.b, alpha) : NativeZombieTrackColor(group, alpha);
                         var image = imageOverride != null && TrackIs(track.Name, overrideTrack) ? imageOverride : from.Texture;
                         var nativeImage = NativeZombieImage(asset, track.Name, image);
                         DrawTexturePart(nativeImage, nativeImage == image ? from.Texture.width : nativeImage.width, nativeImage == image ? from.Texture.height : nativeImage.height);
@@ -555,7 +555,7 @@ namespace PlantsVsZombies.Reanimation
             finally
             {
                 SpriteMatrix = originalMatrix;
-                GUI.color = originalColor;
+                SpriteDrawState.Color = originalColor;
             }
 
             if (!drawn)
@@ -651,7 +651,7 @@ namespace PlantsVsZombies.Reanimation
                 "anim_idle"
             };
             var previous = SpriteMatrix;
-            var tint = GUI.color;
+            var tint = SpriteDrawState.Color;
             var drawn = false;
             try
             {
@@ -676,16 +676,15 @@ namespace PlantsVsZombies.Reanimation
             finally
             {
                 SpriteMatrix = previous;
-                GUI.color = tint;
+                SpriteDrawState.Color = tint;
             }
 
             return drawn || Fail("No visible multi-head plant tracks: " + name);
         }
 
         /// <summary>
-        /// Draws source pixels into a bounded offscreen surface. IMGUI's transformed
-        /// sprite matrices do not reliably respect nested GUI groups; the texture itself
-        /// supplies the native crop before it is drawn at the host's viewport scale.
+        /// Draws source pixels into a bounded offscreen surface for native animation cropping.
+        /// The cropped texture is submitted as a scene sprite at the presenter's viewport scale.
         /// </summary>
         public bool DrawNativeClipped(string key, Rect viewport, Func<bool> draw, bool freeze = false, bool grayscale = false, float additive = 0f, float topCrop = -1f)
         {
@@ -698,11 +697,6 @@ namespace PlantsVsZombies.Reanimation
             if (!IsValidDestination(viewport) || draw == null || string.IsNullOrEmpty(key))
             {
                 return Fail("A valid native viewport, cache key and draw callback are required.");
-            }
-
-            if (Event.current != null && Event.current.type != EventType.Repaint)
-            {
-                return true;
             }
 
             if (_nativePortraitMaterial == null)
@@ -741,8 +735,8 @@ namespace PlantsVsZombies.Reanimation
 
             if (!freeze || !surface.Ready)
             {
-                var matrix = GUI.matrix;
-                var color = GUI.color;
+                var matrix = SpriteDrawState.Matrix;
+                var color = SpriteDrawState.Color;
                 var previousCapture = _renderingNativeSurface;
                 var previousSurfaceMatrix = _nativeSurfaceMatrix;
                 var previousAdditive = _nativeSurfaceAdditive;
@@ -751,7 +745,7 @@ namespace PlantsVsZombies.Reanimation
                 surface.Renderer.BeginBatch();
                 try
                 {
-                    GUI.matrix = Matrix4x4.identity;
+                    SpriteDrawState.Matrix = Matrix4x4.identity;
                     _nativeSurfaceMatrix = NativeMatrix(new Vector2(-viewport.x, -viewport.y), 1f);
                     _renderingNativeSurface = true;
                     _nativeObjectRenderer = surface.Renderer;
@@ -767,13 +761,13 @@ namespace PlantsVsZombies.Reanimation
                     _nativeSurfaceAdditive = previousAdditive;
                     _nativeObjectRenderer = previousRenderer;
                     _nativePortraitMaterial.SetFloat("_Grayscale", previousGrayscale);
-                    GUI.matrix = matrix;
-                    GUI.color = color;
+                    SpriteDrawState.Matrix = matrix;
+                    SpriteDrawState.Color = color;
                 }
             }
 
-            var surfaceColor = GUI.color;
-            GUI.color = Color.white;
+            var surfaceColor = SpriteDrawState.Color;
+            SpriteDrawState.Color = Color.white;
             if (topCrop >= 0f)
             {
                 var cropHeight = Math.Min(viewport.height, topCrop);
@@ -784,7 +778,7 @@ namespace PlantsVsZombies.Reanimation
                 DrawNativeSurfaceComposite(surface.Texture, viewport);
             }
 
-            GUI.color = surfaceColor;
+            SpriteDrawState.Color = surfaceColor;
             return surface.Ready;
         }
 
@@ -894,7 +888,7 @@ namespace PlantsVsZombies.Reanimation
             }
 
             var previous = SpriteMatrix;
-            var tint = GUI.color;
+            var tint = SpriteDrawState.Color;
             try
             {
                 Matrix4x4 bodyMatrix, driverMatrix;
@@ -928,7 +922,7 @@ namespace PlantsVsZombies.Reanimation
             finally
             {
                 SpriteMatrix = previous;
-                GUI.color = tint;
+                SpriteDrawState.Color = tint;
             }
         }
 
@@ -1192,7 +1186,7 @@ namespace PlantsVsZombies.Reanimation
                 }
 
                 SpriteMatrix = sprite;
-                GUI.color = new Color(originalColor.r, originalColor.g, originalColor.b, originalColor.a * Math.Max(0f, Math.Min(1f, parentAlpha * frame.Alpha)));
+                SpriteDrawState.Color = new Color(originalColor.r, originalColor.g, originalColor.b, originalColor.a * Math.Max(0f, Math.Min(1f, parentAlpha * frame.Alpha)));
                 DrawTexturePart(from.Texture, from.Texture.width, from.Texture.height);
                 drawn = true;
             }
@@ -1649,7 +1643,7 @@ namespace PlantsVsZombies.Reanimation
 
                     SpriteMatrix = sprite;
                     var alpha = tint.a * Math.Max(0f, Math.Min(1f, frame.Alpha));
-                    GUI.color = _nativeCombatZombie == null ? new Color(tint.r, tint.g, tint.b, alpha) : NativeZombieTrackColor(group, alpha);
+                    SpriteDrawState.Color = _nativeCombatZombie == null ? new Color(tint.r, tint.g, tint.b, alpha) : NativeZombieTrackColor(group, alpha);
                     var image = imageOverride != null && TrackIs(track.Name, overrideTrack) ? imageOverride : from.Texture;
                     var nativeImage = NativeZombieImage(asset, track.Name, image);
                     DrawTexturePart(nativeImage, nativeImage == image ? from.Texture.width : nativeImage.width, nativeImage == image ? from.Texture.height : nativeImage.height);
@@ -2351,7 +2345,7 @@ namespace PlantsVsZombies.Reanimation
             }
 
             var previous = SpriteMatrix;
-            var tint = GUI.color;
+            var tint = SpriteDrawState.Color;
             var layout = previous * CombatPlacement(origin, scale, facingLeft);
             var drawn = false;
             try
@@ -2380,7 +2374,7 @@ namespace PlantsVsZombies.Reanimation
             finally
             {
                 SpriteMatrix = previous;
-                GUI.color = tint;
+                SpriteDrawState.Color = tint;
             }
 
             return drawn;
@@ -2471,7 +2465,7 @@ namespace PlantsVsZombies.Reanimation
             }
 
             var previous = SpriteMatrix;
-            var tint = GUI.color;
+            var tint = SpriteDrawState.Color;
             try
             {
                 var sample = NativeSeconds(clip, seconds, rate < 0 ? asset.Fps : rate, asset.Fps, loop);
@@ -2480,7 +2474,7 @@ namespace PlantsVsZombies.Reanimation
             finally
             {
                 SpriteMatrix = previous;
-                GUI.color = tint;
+                SpriteDrawState.Color = tint;
             }
         }
 
@@ -2593,7 +2587,7 @@ namespace PlantsVsZombies.Reanimation
             offset.m03 = x;
             offset.m13 = y;
             var previous = SpriteMatrix;
-            var color = GUI.color;
+            var color = SpriteDrawState.Color;
             try
             {
                 var placement = previous * CombatPlacement(origin, scale, facingLeft, 60) * PartMatrix(pose) * inverse * offset;
@@ -2602,7 +2596,7 @@ namespace PlantsVsZombies.Reanimation
             finally
             {
                 SpriteMatrix = previous;
-                GUI.color = color;
+                SpriteDrawState.Color = color;
             }
         }
 
@@ -2863,7 +2857,7 @@ namespace PlantsVsZombies.Reanimation
 
             var sample = (float)(Math.Min(clip.Count - 1, frame) / asset.Fps);
             var previous = SpriteMatrix;
-            var tint = GUI.color;
+            var tint = SpriteDrawState.Color;
             var placement = NativeMatrix(origin, 1f);
             placement.m00 = horizontalScale;
             try
@@ -2873,7 +2867,7 @@ namespace PlantsVsZombies.Reanimation
             finally
             {
                 SpriteMatrix = previous;
-                GUI.color = tint;
+                SpriteDrawState.Color = tint;
             }
         }
 
@@ -2925,7 +2919,7 @@ namespace PlantsVsZombies.Reanimation
             var attachment = PartMatrix(Interpolate(GetFrame(anchor, time.Current), GetFrame(anchor, time.Next), time.Fraction)) * inverseBase;
             var phase = glowTime - (float)Math.Floor(glowTime);
             var previous = SpriteMatrix;
-            var tint = GUI.color;
+            var tint = SpriteDrawState.Color;
             try
             {
                 return DrawClipPose(asset, light, phase * (light.Count - 1) / asset.Fps, asset.Fps, false, previous * NativeMatrix(origin, scale) * attachment, tint, null, null, track => TrackIs(track, "anim_glow"));
@@ -2933,7 +2927,7 @@ namespace PlantsVsZombies.Reanimation
             finally
             {
                 SpriteMatrix = previous;
-                GUI.color = tint;
+                SpriteDrawState.Color = tint;
             }
         }
 
@@ -3018,13 +3012,13 @@ namespace PlantsVsZombies.Reanimation
 
             var previous = _nativeCombatZombie;
             var previousBody = _nativeCombatBody;
-            Color previousTint = _nativeCombatTint, previousAdd = _nativeTrackAdditive, color = GUI.color;
+            Color previousTint = _nativeCombatTint, previousAdd = _nativeTrackAdditive, color = SpriteDrawState.Color;
             try
             {
                 _nativeCombatZombie = zombie;
                 _nativeCombatBody = GameSimulation.AdventureZombiePresentationAsset(zombie);
                 _nativeCombatTint = color;
-                GUI.color = Color.white;
+                SpriteDrawState.Color = Color.white;
                 return DrawNativeClipped("native-zombie-combat-" + zombie.Id, viewport, draw);
             }
             finally
@@ -3033,7 +3027,7 @@ namespace PlantsVsZombies.Reanimation
                 _nativeCombatBody = previousBody;
                 _nativeCombatTint = previousTint;
                 _nativeTrackAdditive = previousAdd;
-                GUI.color = color;
+                SpriteDrawState.Color = color;
             }
         }
 
@@ -3192,17 +3186,17 @@ namespace PlantsVsZombies.Reanimation
 
             var origin = zombieOrigin + point * drop.Scale;
             var previousImage = _nativeResourceImageOverride;
-            var previousColor = GUI.color;
+            var previousColor = SpriteDrawState.Color;
             try
             {
                 _nativeResourceImageOverride = drop.Image;
                 if (drop.Hypnotized)
                 {
-                    GUI.color = new Color(128f / 255f, 64f / 255f, 192f / 255f, previousColor.a);
+                    SpriteDrawState.Color = new Color(128f / 255f, 64f / 255f, 192f / 255f, previousColor.a);
                 }
                 else if (drop.Chilled)
                 {
-                    GUI.color = new Color(75f / 255f, 75f / 255f, 1f, previousColor.a);
+                    SpriteDrawState.Color = new Color(75f / 255f, 75f / 255f, 1f, previousColor.a);
                 }
 
                 return particles.Draw("native-arm-" + drop.Id, drop.Mowed ? "MoweredZombieArm" : "ZombieArm", drop.Age + renderRemainder, origin, drop.Seed, drop.Scale);
@@ -3210,7 +3204,7 @@ namespace PlantsVsZombies.Reanimation
             finally
             {
                 _nativeResourceImageOverride = previousImage;
-                GUI.color = previousColor;
+                SpriteDrawState.Color = previousColor;
             }
         }
 
@@ -3255,17 +3249,17 @@ namespace PlantsVsZombies.Reanimation
             }
 
             var previousImage = _nativeResourceImageOverride;
-            var previousColor = GUI.color;
+            var previousColor = SpriteDrawState.Color;
             try
             {
                 _nativeResourceImageOverride = drop.Image;
                 if (drop.Hypnotized)
                 {
-                    GUI.color = new Color(128f / 255f, 64f / 255f, 192f / 255f, previousColor.a);
+                    SpriteDrawState.Color = new Color(128f / 255f, 64f / 255f, 192f / 255f, previousColor.a);
                 }
                 else if (drop.Chilled)
                 {
-                    GUI.color = new Color(75f / 255f, 75f / 255f, 1f, previousColor.a);
+                    SpriteDrawState.Color = new Color(75f / 255f, 75f / 255f, 1f, previousColor.a);
                 }
 
                 // Backup dancer's 1.05 is an absolute particle scale in PC, after ApplyZombieScale.
@@ -3275,7 +3269,7 @@ namespace PlantsVsZombies.Reanimation
             finally
             {
                 _nativeResourceImageOverride = previousImage;
-                GUI.color = previousColor;
+                SpriteDrawState.Color = previousColor;
             }
         }
 
@@ -3307,7 +3301,7 @@ namespace PlantsVsZombies.Reanimation
 
             var sample = SampleFrame(body, NativeSeconds(body, seconds, bodyRate, parent.Fps, true), parent.Fps, false);
             var pose = Interpolate(GetFrame(anchor, sample.Current), GetFrame(anchor, sample.Next), sample.Fraction);
-            return DrawClipPose(child, flag, NativeSeconds(flag, flagSeconds, 15f, child.Fps, true), child.Fps, false, SpriteMatrix * CombatPlacement(origin, scale, backwards, 90f) * PartMatrix(pose) * inverse, GUI.color);
+            return DrawClipPose(child, flag, NativeSeconds(flag, flagSeconds, 15f, child.Fps, true), child.Fps, false, SpriteMatrix * CombatPlacement(origin, scale, backwards, 90f) * PartMatrix(pose) * inverse, SpriteDrawState.Color);
         }
 
         /// <summary>Performs draw native sprite pass.</summary>
@@ -3320,7 +3314,7 @@ namespace PlantsVsZombies.Reanimation
         private void DrawNativeSpritePass(Texture texture, float width, float height, Rect uv, int pass, Matrix4x4 matrix)
         {
             var renderer = _renderingNativeSurface ? _nativeObjectRenderer : GetObjectRenderer();
-            renderer.DrawQuad(texture, width, height, uv, matrix, GUI.color, pass, _renderingNativeSurface ? _nativePortraitMaterial.GetFloat("_Grayscale") : 0f, _nativePortraitMaterial.GetFloat("_ProducerAdditive"), _nativeCombatZombie == null ? _nativeSurfaceAdditive : 0f, _nativeCombatZombie == null ? Color.clear : _nativeTrackAdditive);
+            renderer.DrawQuad(texture, width, height, uv, matrix, SpriteDrawState.Color, pass, _renderingNativeSurface ? _nativePortraitMaterial.GetFloat("_Grayscale") : 0f, _nativePortraitMaterial.GetFloat("_ProducerAdditive"), _nativeCombatZombie == null ? _nativeSurfaceAdditive : 0f, _nativeCombatZombie == null ? Color.clear : _nativeTrackAdditive);
         }
 
         /// <summary>Performs draw native surface composite.</summary>

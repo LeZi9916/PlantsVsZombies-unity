@@ -6,8 +6,8 @@ using UnityEngine;
 
 namespace PlantsVsZombies.UI.BitmapFonts
 {
-    /// <summary>Owns the decoded atlas pages. Load once, draw in OnGUI, and dispose when finished.</summary>
-    public sealed class ImGuiBitmapFont : IDisposable
+    /// <summary>Owns the decoded atlas pages. Load once, submit glyphs to Canvas, and dispose when finished.</summary>
+    public sealed class CanvasBitmapFont : IDisposable
     {
         /// <summary>Stores default resource root.</summary>
         public const string DefaultResourceRoot = "PvZBitmapFonts";
@@ -18,17 +18,17 @@ namespace PlantsVsZombies.UI.BitmapFonts
         /// <summary>Gets or sets data.</summary>
         public BmFontData Data { get; private set; }
 
-        /// <summary>Initializes im gui bitmap font.</summary>
+        /// <summary>Initializes ownership of decoded bitmap atlas pages.</summary>
         /// <param name = "data">The data.</param>
         /// <param name = "textures">The textures.</param>
-        private ImGuiBitmapFont(BmFontData data, Texture2D[] textures)
+        private CanvasBitmapFont(BmFontData data, Texture2D[] textures)
         {
             Data = data;
             _pages = textures;
         }
 
         /// <summary>Loads a converted layer. Bare font names resolve to the __Main layer.</summary>
-        public static ImGuiBitmapFont LoadFromResources(string name, string resourceRoot = DefaultResourceRoot)
+        public static CanvasBitmapFont LoadFromResources(string name, string resourceRoot = DefaultResourceRoot)
         {
             if (string.IsNullOrEmpty(name) || name == "." || name == ".." || name.IndexOfAny(new[] { '/', '\\', ':' }) >= 0)
             {
@@ -110,7 +110,7 @@ namespace PlantsVsZombies.UI.BitmapFonts
                     }
                 }
 
-                return new ImGuiBitmapFont(data, textures);
+                return new CanvasBitmapFont(data, textures);
             }
             catch
             {
@@ -165,20 +165,10 @@ namespace PlantsVsZombies.UI.BitmapFonts
                 layout.ThrowIfMissing();
             }
 
-            if (Event.current == null)
-            {
-                throw new InvalidOperationException("Bitmap fonts must be drawn from OnGUI.");
-            }
-
-            if (Event.current.type != EventType.Repaint)
-            {
-                return;
-            }
-
-            var previous = GUI.color;
+            var previous = CanvasUI.Color;
             try
             {
-                GUI.color = previous * color;
+                CanvasUI.Color = previous * color;
                 foreach (PlacedBitmapGlyph placed in layout.Glyphs)
                 {
                     var glyph = placed.Glyph;
@@ -189,12 +179,12 @@ namespace PlantsVsZombies.UI.BitmapFonts
 
                     var destination = new Rect(x + placed.X, y + placed.Y, placed.Width, placed.Height);
                     var uv = new Rect((float)glyph.X / Data.AtlasWidth, 1f - (float)(glyph.Y + glyph.Height) / Data.AtlasHeight, (float)glyph.Width / Data.AtlasWidth, (float)glyph.Height / Data.AtlasHeight);
-                    GUI.DrawTextureWithTexCoords(destination, _pages[glyph.Page], uv, true);
+                    CanvasUI.DrawTextureWithTexCoords(destination, _pages[glyph.Page], uv, true);
                 }
             }
             finally
             {
-                GUI.color = previous;
+                CanvasUI.Color = previous;
             }
         }
 
@@ -216,7 +206,7 @@ namespace PlantsVsZombies.UI.BitmapFonts
         {
             if (_disposed)
             {
-                throw new ObjectDisposedException("ImGuiBitmapFont");
+                throw new ObjectDisposedException("CanvasBitmapFont");
             }
         }
 

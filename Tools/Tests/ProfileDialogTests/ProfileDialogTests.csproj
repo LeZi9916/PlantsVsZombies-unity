@@ -10,6 +10,7 @@
   <ItemGroup>
     <Compile Include="Program.cs" />
     <Compile Include="UnityStubs.cs" />
+    <Compile Include="CanvasUIFixture.cs" />
     <Compile Include="OriginalUiWidgetsFixture.cs" />
     <Compile Include="CatalogFixture.cs" />
     <Compile Include="../../../Assets/Scripts/UI/ProfileDialog.cs" Link="Runtime/%(Filename)%(Extension)" />

@@ -10,6 +10,7 @@
   <ItemGroup>
     <Compile Include="Program.cs" />
     <Compile Include="UnityStubs.cs" />
+    <Compile Include="CanvasUIFixture.cs" />
     <Compile Include="../../../Assets/Scripts/UI/SelectorAction.cs" Link="Runtime/%(Filename)%(Extension)" />
     <Compile Include="../../../Assets/Scripts/UI/SelectorView.cs" Link="Runtime/%(Filename)%(Extension)" />
   </ItemGroup>

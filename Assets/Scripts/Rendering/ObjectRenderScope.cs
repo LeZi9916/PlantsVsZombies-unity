@@ -15,7 +15,7 @@ namespace PlantsVsZombies.Rendering
             _renderer = renderer;
         }
 
-        /// <summary>Renders and composites the batch when its outermost scope ends.</summary>
+        /// <summary>Publishes the scene objects when the outermost scope ends.</summary>
         public void Dispose()
         {
             _renderer?.EndFrame();
