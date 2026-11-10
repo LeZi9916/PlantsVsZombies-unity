@@ -88,6 +88,8 @@ namespace PlantsVsZombies.UI
         private static int s_fieldCount;
         /// <summary>The order of the most recent Canvas submission in the shared painter sequence.</summary>
         private static int s_previousOrder = -2;
+        /// <summary>The next sibling slot in the current native Canvas layer.</summary>
+        private static int s_siblingIndex;
         /// <summary>The focus identity assigned to the next native editable control.</summary>
         private static string s_nextControlName = string.Empty;
         /// <summary>The focus identity awaiting creation of its native field.</summary>
@@ -122,6 +124,11 @@ namespace PlantsVsZombies.UI
         public static void BeginFrame()
         {
             EnsureRoot();
+            if (s_canvas!.worldCamera == null)
+            {
+                s_canvas.worldCamera = ObjectSpriteRenderer.SceneCamera;
+            }
+
             s_layerCount = 0;
             s_imageCount = 0;
             s_labelCount = 0;
@@ -236,7 +243,7 @@ namespace PlantsVsZombies.UI
             }
 
             var graphic = s_images[s_imageCount++];
-            PrepareGraphic(graphic.rectTransform, layer.transform);
+            PrepareGraphic(graphic.rectTransform, layer.transform, true);
             graphic.Configure(texture, destination, uv, Matrix, Color, SpriteDrawState.Clip);
         }
 
@@ -259,7 +266,7 @@ namespace PlantsVsZombies.UI
             }
 
             var graphic = s_labels[s_labelCount++];
-            PrepareGraphic(graphic.rectTransform, layer.transform);
+            PrepareGraphic(graphic.rectTransform, layer.transform, false);
             graphic.Configure(destination, text, style, Matrix, Color * ContentColor * style.normal.textColor, SpriteDrawState.Clip);
         }
 
@@ -469,7 +476,6 @@ namespace PlantsVsZombies.UI
         {
             if (s_canvas != null)
             {
-                s_canvas.worldCamera = ObjectSpriteRenderer.SceneCamera;
                 return;
             }
 
@@ -513,9 +519,14 @@ namespace PlantsVsZombies.UI
                 }
 
                 s_currentLayer = s_layers[s_layerCount++];
-                s_currentLayer.gameObject.SetActive(true);
+                if (!s_currentLayer.gameObject.activeSelf)
+                {
+                    s_currentLayer.gameObject.SetActive(true);
+                }
+
                 s_currentLayer.sortingOrder = order;
                 LayoutAtTopLeft(s_currentLayer.transform as RectTransform);
+                s_siblingIndex = 0;
             }
 
             s_previousOrder = order;
@@ -541,16 +552,33 @@ namespace PlantsVsZombies.UI
         /// <summary>Reparents and activates a graphic while preserving its current painter order.</summary>
         /// <param name="transform">The retained graphic transform.</param>
         /// <param name="parent">The layer receiving this frame's submission.</param>
-        private static void PrepareGraphic(RectTransform transform, Transform parent)
+        /// <param name="sizeToScreen">Whether this graphic uses physical screen-sized local bounds.</param>
+        private static void PrepareGraphic(RectTransform transform, Transform parent, bool sizeToScreen)
         {
             if (transform.parent != parent)
             {
                 transform.SetParent(parent, false);
             }
 
-            transform.SetAsLastSibling();
-            transform.gameObject.SetActive(true);
-            LayoutAtTopLeft(transform);
+            if (transform.GetSiblingIndex() != s_siblingIndex)
+            {
+                transform.SetSiblingIndex(s_siblingIndex);
+            }
+
+            s_siblingIndex++;
+            if (!transform.gameObject.activeSelf)
+            {
+                transform.gameObject.SetActive(true);
+            }
+
+            if (sizeToScreen)
+            {
+                var size = new Vector2(Screen.width, Screen.height);
+                if (transform.sizeDelta != size)
+                {
+                    transform.sizeDelta = size;
+                }
+            }
         }
 
         /// <summary>Anchors a native transform at the physical screen's top-left corner.</summary>
@@ -562,13 +590,42 @@ namespace PlantsVsZombies.UI
                 return;
             }
 
-            transform.anchorMin = new Vector2(0f, 1f);
-            transform.anchorMax = new Vector2(0f, 1f);
-            transform.pivot = new Vector2(0f, 1f);
-            transform.anchoredPosition = Vector2.zero;
-            transform.sizeDelta = new Vector2(Screen.width, Screen.height);
-            transform.localScale = Vector3.one;
-            transform.localRotation = Quaternion.identity;
+            var topLeft = new Vector2(0f, 1f);
+            if (transform.anchorMin != topLeft)
+            {
+                transform.anchorMin = topLeft;
+            }
+
+            if (transform.anchorMax != topLeft)
+            {
+                transform.anchorMax = topLeft;
+            }
+
+            if (transform.pivot != topLeft)
+            {
+                transform.pivot = topLeft;
+            }
+
+            if (transform.anchoredPosition != Vector2.zero)
+            {
+                transform.anchoredPosition = Vector2.zero;
+            }
+
+            var size = new Vector2(Screen.width, Screen.height);
+            if (transform.sizeDelta != size)
+            {
+                transform.sizeDelta = size;
+            }
+
+            if (transform.localScale != Vector3.one)
+            {
+                transform.localScale = Vector3.one;
+            }
+
+            if (transform.localRotation != Quaternion.identity)
+            {
+                transform.localRotation = Quaternion.identity;
+            }
         }
 
         /// <summary>Transforms a native button or editable field into its screen rectangle.</summary>
@@ -582,7 +639,7 @@ namespace PlantsVsZombies.UI
                 return;
             }
 
-            PrepareGraphic(transform, parent);
+            PrepareGraphic(transform, parent, false);
             var origin = Matrix.MultiplyPoint3x4(new Vector3(bounds.x, bounds.y));
             var horizontal = Matrix.MultiplyVector(Vector3.right);
             var vertical = Matrix.MultiplyVector(Vector3.up);

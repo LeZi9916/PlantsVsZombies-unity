@@ -2,6 +2,8 @@
 using System.Collections;
 using NUnit.Framework;
 using PlantsVsZombies.Rendering;
+using PlantsVsZombies.Reanimation;
+using PlantsVsZombies.Simulation;
 using PlantsVsZombies.UI;
 using PlantsVsZombies.UI.BitmapFonts;
 using UnityEngine;
@@ -93,6 +95,51 @@ namespace PlantsVsZombies.Tests.PlayMode
             AssertColor(Pixel(25, 35), Color.red);
             AssertColor(Pixel(35, 45), Color.blue);
             AssertColor(Pixel(45, 55), Color.red);
+        }
+
+        /// <summary>Preserves overlapping source alpha and local clipping when neutral actors skip capture cameras.</summary>
+        /// <returns>Frame boundaries publishing the direct and captured versions of the same synthetic pose.</returns>
+        [UnityTest]
+        public IEnumerator NeutralZombieDirectDrawMatchesCapturedAlphaAndClipping()
+        {
+            using var animations = new ReanimationRenderer(System.IO.Path.GetTempPath());
+            var zombie = new Zombie { Kind = ZombieKind.Normal, Health = 100f };
+            var viewport = new Rect(30f, 30f, 40f, 40f);
+            System.Func<bool> draw = () =>
+            {
+                var color = SpriteDrawState.Color;
+                SpriteDrawState.Color = new Color(1f, 0f, 0f, .5f);
+                var drawn = animations.DrawNativeImage(Texture2D.whiteTexture, new Rect(20f, 20f, 40f, 40f), new Rect(0f, 0f, 1f, 1f));
+                SpriteDrawState.Color = new Color(0f, 1f, 0f, .5f);
+                drawn |= animations.DrawNativeImage(Texture2D.whiteTexture, new Rect(40f, 40f, 40f, 40f), new Rect(0f, 0f, 1f, 1f));
+                SpriteDrawState.Color = color;
+                return drawn;
+            };
+            ObjectSpriteRenderer.BeginSceneFrame();
+            Assert.That(animations.DrawNativeZombieCombat(zombie, viewport, draw), Is.True);
+            Assert.That(animations.NativeSurfaceCount, Is.Zero, "Neutral actors must not create a local camera or texture.");
+            yield return null;
+            yield return null;
+            ReadPixels();
+            var red = Pixel(35, 35);
+            var overlap = Pixel(45, 45);
+            var green = Pixel(65, 65);
+            AssertColor(Pixel(25, 35), Color.black);
+            AssertColor(Pixel(75, 65), Color.black);
+            Assert.That(red.r, Is.GreaterThan(.4f));
+            Assert.That(overlap.g, Is.GreaterThan(.4f));
+
+            ObjectSpriteRenderer.BeginSceneFrame();
+            Assert.That(animations.DrawNativeClipped("captured-comparison", viewport, draw), Is.True);
+            Assert.That(animations.NativeSurfaceCount, Is.EqualTo(1));
+            yield return null;
+            yield return null;
+            ReadPixels();
+            AssertColor(Pixel(35, 35), red);
+            AssertColor(Pixel(45, 45), overlap);
+            AssertColor(Pixel(65, 65), green);
+            AssertColor(Pixel(25, 35), Color.black);
+            AssertColor(Pixel(75, 65), Color.black);
         }
 
         /// <summary>Renders bundled Chinese bitmap glyphs through Canvas with their original atlas opacity and tint.</summary>
@@ -200,6 +247,53 @@ namespace PlantsVsZombies.Tests.PlayMode
             CanvasUI.Dispose();
             yield return null;
             Assert.That(OwnedGraphics(), Is.Empty);
+        }
+
+        /// <summary>Retains hierarchy order, text bounds, and mesh state when the visible interface has not changed.</summary>
+        [Test]
+        public void UnchangedInterfaceDoesNotDirtyRetainedGraphics()
+        {
+            var style = new GUIStyle
+            {
+                font = CanvasUI.DefaultFont,
+                fontSize = 18,
+                alignment = TextAnchor.MiddleCenter
+            };
+            ObjectSpriteRenderer.BeginSceneFrame();
+            CanvasUI.BeginFrame();
+            CanvasUI.DrawTexture(new Rect(10f, 10f, 80f, 40f), Texture2D.whiteTexture);
+            CanvasUI.Label(new Rect(10f, 10f, 80f, 40f), "Stable", style);
+            CanvasUI.DrawTexture(new Rect(100f, 10f, 80f, 40f), Texture2D.whiteTexture);
+            CanvasUI.EndFrame();
+            Canvas.ForceUpdateCanvases();
+            var images = OwnedGraphics();
+            var label = System.Array.Find(Resources.FindObjectsOfTypeAll<CanvasTextGraphic>(),
+                item => item != null && item.transform.root.name == "PvZ Canvas UI");
+            Assert.That(label, Is.Not.Null);
+            var dirty = 0;
+            foreach (var image in images)
+            {
+                image.RegisterDirtyVerticesCallback(() => dirty++);
+                image.RegisterDirtyMaterialCallback(() => dirty++);
+                image.RegisterDirtyLayoutCallback(() => dirty++);
+            }
+
+            label!.RegisterDirtyVerticesCallback(() => dirty++);
+            label.RegisterDirtyMaterialCallback(() => dirty++);
+            label.RegisterDirtyLayoutCallback(() => dirty++);
+            var firstImage = images[0].transform.GetSiblingIndex();
+            var secondImage = images[1].transform.GetSiblingIndex();
+            var textIndex = label.transform.GetSiblingIndex();
+            ObjectSpriteRenderer.BeginSceneFrame();
+            CanvasUI.BeginFrame();
+            CanvasUI.DrawTexture(new Rect(10f, 10f, 80f, 40f), Texture2D.whiteTexture);
+            CanvasUI.Label(new Rect(10f, 10f, 80f, 40f), "Stable", style);
+            CanvasUI.DrawTexture(new Rect(100f, 10f, 80f, 40f), Texture2D.whiteTexture);
+            CanvasUI.EndFrame();
+            Assert.That(dirty, Is.Zero, "An unchanged presentation must preserve the retained Canvas meshes and layout.");
+            Assert.That(images[0].transform.GetSiblingIndex(), Is.EqualTo(firstImage));
+            Assert.That(images[1].transform.GetSiblingIndex(), Is.EqualTo(secondImage));
+            Assert.That(label.transform.GetSiblingIndex(), Is.EqualTo(textIndex));
         }
 
         /// <summary>Retains native edit state and keyboard focus across presentation traversals.</summary>

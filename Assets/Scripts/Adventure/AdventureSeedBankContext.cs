@@ -15,5 +15,30 @@ namespace PlantsVsZombies.Adventure
         public int CutsceneDarken = 255, SlotMachineCountdown;
         /// <summary>Stores can afford, planting requirements met, easy planting cheat, conveyor, slot machine.</summary>
         public bool CanAfford = true, PlantingRequirementsMet = true, EasyPlantingCheat, Conveyor, SlotMachine;
+
+        /// <summary>Restores construction defaults before this context is filled for another packet.</summary>
+        internal void Reset()
+        {
+            PacketKind = -1;
+            ImitaterKind = -1;
+            Active = true;
+            Refreshing = false;
+            Playing = true;
+            Paused = false;
+            Picked = false;
+            RefreshCounter = 0;
+            RefreshTime = 0;
+            MainCounter = 0;
+            NativeMode = 0;
+            TutorialState = 0;
+            TutorialTimer = 0;
+            CutsceneDarken = 255;
+            SlotMachineCountdown = 0;
+            CanAfford = true;
+            PlantingRequirementsMet = true;
+            EasyPlantingCheat = false;
+            Conveyor = false;
+            SlotMachine = false;
+        }
     }
 }

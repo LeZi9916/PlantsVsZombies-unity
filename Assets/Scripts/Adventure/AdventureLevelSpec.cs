@@ -25,12 +25,14 @@ namespace PlantsVsZombies.Adventure
 
         /// <summary>Stores purchased slots.</summary>
         private int _purchasedSlots = 6;
+        /// <summary>The retained label for this immutable level number.</summary>
+        private string? _label;
         /// <summary>Gets or sets label.</summary>
         public string Label
         {
             get
             {
-                return ((Number - 1) / 10 + 1) + "-" + ((Number - 1) % 10 + 1);
+                return _label ??= ((Number - 1) / 10 + 1) + "-" + ((Number - 1) % 10 + 1);
             }
         }
 

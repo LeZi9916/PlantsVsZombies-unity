@@ -25,13 +25,19 @@ namespace PlantsVsZombies.Simulation
         /// <summary>Stores zombies.</summary>
         public readonly List<Zombie> Zombies = new List<Zombie>();
         /// <summary>Stores peas.</summary>
-        public readonly List<Pea> Peas = new List<Pea>();
+        public readonly List<Pea> Peas = new List<Pea>(64);
         /// <summary>Stores suns.</summary>
-        public readonly List<global::PlantsVsZombies.Simulation.Sun> Suns = new List<global::PlantsVsZombies.Simulation.Sun>();
+        public readonly List<global::PlantsVsZombies.Simulation.Sun> Suns = new List<global::PlantsVsZombies.Simulation.Sun>(16);
         /// <summary>Stores mowers.</summary>
         public readonly List<Mower> Mowers = new List<Mower>();
         /// <summary>Stores flames.</summary>
-        public readonly List<LaneFlame> Flames = new List<LaneFlame>();
+        public readonly List<LaneFlame> Flames = new List<LaneFlame>(5);
+        /// <summary>Retains reusable projectiles and their piercing-hit buffers for this match.</summary>
+        private readonly SimulationObjectPool<Pea> _peaPool = new SimulationObjectPool<Pea>(64, 256);
+        /// <summary>Retains reusable normal and native-motion suns for this match.</summary>
+        private readonly SimulationObjectPool<global::PlantsVsZombies.Simulation.Sun> _sunPool = new SimulationObjectPool<global::PlantsVsZombies.Simulation.Sun>(16, 128);
+        /// <summary>Retains short-lived lane flames for this match.</summary>
+        private readonly SimulationObjectPool<LaneFlame> _flamePool = new SimulationObjectPool<LaneFlame>(5, 16);
         /// <summary>Stores rules.</summary>
         public readonly GameRules Rules;
         /// <summary>Gets or sets state.</summary>
@@ -51,6 +57,10 @@ namespace PlantsVsZombies.Simulation
 
         /// <summary>Stores event raised.</summary>
         public Action<GameEvent> EventRaised;
+        /// <summary>Reuses the synchronous native reward animation callback.</summary>
+        private readonly Action _rewardPresentationTick;
+        /// <summary>Reuses the immediately consumed packet-ready feedback context.</summary>
+        private readonly AdventureSeedBankContext _packetFeedbackContext = new AdventureSeedBankContext();
         /// <summary>Stores random.</summary>
         private readonly Random _random;
         /// <summary>Stores seed cooldown ticks.</summary>
@@ -70,6 +80,7 @@ namespace PlantsVsZombies.Simulation
         /// <exception cref = "InvalidOperationException">The operation cannot satisfy its preconditions.</exception>
         public GameSimulation(GameRules rules = null, int randomSeed = 12345)
         {
+            _rewardPresentationTick = AdvanceAdventureRewardTick;
             Rules = rules ?? new GameRules();
             IsExperimentalLevelOne = Rules.EnableExperimentalLevelOne;
             IsAdventure = Rules.AdventureLevel != 0;
@@ -132,7 +143,7 @@ namespace PlantsVsZombies.Simulation
         private static PlantDefinition DefinitionFor(PlantKind kind)
         {
             PlantDefinition definition;
-            if (!Enum.IsDefined(typeof(PlantKind), kind) || !VerifiedDataCatalog.TryGetPlant((int)kind, out definition))
+            if ((int)kind < (int)PlantKind.Peashooter || (int)kind > (int)PlantKind.ExplodeONut || !VerifiedDataCatalog.TryGetPlant((int)kind, out definition))
             {
                 throw new ArgumentOutOfRangeException(nameof(kind));
             }
@@ -155,7 +166,16 @@ namespace PlantsVsZombies.Simulation
         /// <returns>The resulting plant at.</returns>
         public Plant PlantAt(int row, int column)
         {
-            return Plants.FindLast(p => p.Row == row && p.Column <= column && column < p.Column + p.ColumnSpan);
+            for (var i = Plants.Count - 1; i >= 0; i--)
+            {
+                var plant = Plants[i];
+                if (plant.Row == row && plant.Column <= column && column < plant.Column + plant.ColumnSpan)
+                {
+                    return plant;
+                }
+            }
+
+            return null!;
         }
 
         /// <summary>Performs try plant.</summary>
@@ -179,7 +199,7 @@ namespace PlantsVsZombies.Simulation
             }
 
             var index = (int)kind;
-            if (index < 0 || index >= _seedCooldownTicks.Length || !Enum.IsDefined(typeof(PlantKind), kind) || State != MatchState.Playing || row < 0 || row >= Rows || column < 0 || column >= Columns || SunAmount < Cost(kind) || _seedCooldownTicks[index] > 0 || PlantAt(row, column) != null)
+            if (index < 0 || index >= _seedCooldownTicks.Length || State != MatchState.Playing || row < 0 || row >= Rows || column < 0 || column >= Columns || SunAmount < Cost(kind) || _seedCooldownTicks[index] > 0 || PlantAt(row, column) != null)
             {
                 return false;
             }
@@ -286,6 +306,7 @@ namespace PlantsVsZombies.Simulation
             }
 
             Raise(GameEvent.SunCollected);
+            _sunPool.Return(sun);
             return true;
         }
 
@@ -392,7 +413,7 @@ namespace PlantsVsZombies.Simulation
 
                         if (!handled)
                         {
-                            Suns.Add(new global::PlantsVsZombies.Simulation.Sun { X = 0.4f + (float)_random.NextDouble() * 8.2f, Y = -1f, TargetY = 0.5f + (float)_random.NextDouble() * 3.8f });
+                            Suns.Add(CreateSun(0.4f + (float)_random.NextDouble() * 8.2f, -1f, 0.5f + (float)_random.NextDouble() * 3.8f));
                         }
 
                         _nextSkySun += Rules.SkySunInterval;
@@ -424,7 +445,7 @@ namespace PlantsVsZombies.Simulation
                 Flames[i].Age += dt;
                 if (Flames[i].Age >= 1f)
                 {
-                    Flames.RemoveAt(i);
+                    RemoveFlameAt(i);
                 }
             }
 
@@ -456,6 +477,92 @@ namespace PlantsVsZombies.Simulation
             });
         }
 
+        /// <summary>Takes a projectile with clean gameplay and presentation state.</summary>
+        /// <returns>A reusable projectile with the same defaults as a newly constructed entry.</returns>
+        private Pea RentPea()
+        {
+            var pea = _peaPool.Rent();
+            pea.Reset();
+            return pea;
+        }
+
+        /// <summary>Takes a sun with clean pickup, motion, and lifetime state.</summary>
+        /// <param name="x">The initial board x coordinate.</param>
+        /// <param name="y">The initial board y coordinate.</param>
+        /// <param name="targetY">The landing y coordinate.</param>
+        /// <param name="value">The credited sunlight value.</param>
+        /// <returns>A reusable sun initialized for its next appearance.</returns>
+        private global::PlantsVsZombies.Simulation.Sun CreateSun(float x, float y, float targetY, int value = 25)
+        {
+            var sun = _sunPool.Rent();
+            sun.Reset();
+            sun.X = x;
+            sun.Y = y;
+            sun.TargetY = targetY;
+            sun.Value = value;
+            return sun;
+        }
+
+        /// <summary>Retires a projectile after detaching its active snow trail.</summary>
+        /// <param name="index">The index of the active projectile to retire.</param>
+        private void RemovePeaAt(int index)
+        {
+            var pea = Peas[index];
+            if (IsAdventure)
+            {
+                StopAdventureSnowTrail(pea);
+            }
+
+            Peas.RemoveAt(index);
+            pea.PresentationSnowTrail = null!;
+            _peaPool.Return(pea);
+        }
+
+        /// <summary>Returns all active projectiles before a mode or stage clears its board.</summary>
+        private void ClearPeas()
+        {
+            for (var i = Peas.Count - 1; i >= 0; i--)
+            {
+                RemovePeaAt(i);
+            }
+        }
+
+        /// <summary>Retires a sun after its collection or disappearance finishes.</summary>
+        /// <param name="index">The index of the active sun to retire.</param>
+        private void RemoveSunAt(int index)
+        {
+            var sun = Suns[index];
+            Suns.RemoveAt(index);
+            _sunPool.Return(sun);
+        }
+
+        /// <summary>Returns all active suns before a mode or stage clears its board.</summary>
+        private void ClearSuns()
+        {
+            for (var i = Suns.Count - 1; i >= 0; i--)
+            {
+                RemoveSunAt(i);
+            }
+        }
+
+        /// <summary>Retires an expired lane flame.</summary>
+        /// <param name="index">The index of the active flame to retire.</param>
+        private void RemoveFlameAt(int index)
+        {
+            var flame = Flames[index];
+            Flames.RemoveAt(index);
+            _flamePool.Return(flame);
+        }
+
+        /// <summary>Returns all active flames before a mode or stage clears its board.</summary>
+        private void ClearFlames()
+        {
+            for (var i = Flames.Count - 1; i >= 0; i--)
+            {
+                RemoveFlameAt(i);
+            }
+        }
+
         /// <summary>Performs update suns.</summary>
         /// <param name = "dt">The dt.</param>
         private void UpdateSuns(float dt)
@@ -478,7 +585,7 @@ namespace PlantsVsZombies.Simulation
                 sun.Y = Math.Min(sun.TargetY, sun.Y + dt * 0.75f);
                 if (sun.Age > 14f)
                 {
-                    Suns.RemoveAt(i);
+                    RemoveSunAt(i);
                 }
             }
         }
@@ -545,12 +652,143 @@ namespace PlantsVsZombies.Simulation
             return kind == PlantKind.Peashooter || kind == PlantKind.SnowPea || kind == PlantKind.Repeater || kind == PlantKind.Sunflower;
         }
 
+        /// <summary>Checks for a nearby zombie without allocating a captured predicate.</summary>
+        /// <param name="row">The center lane.</param>
+        /// <param name="x">The center board x coordinate.</param>
+        /// <param name="rowRange">The maximum lane difference.</param>
+        /// <param name="distance">The horizontal distance threshold.</param>
+        /// <param name="hostileOnly">Whether to exclude hypnotized zombies and use a strict distance threshold.</param>
+        /// <returns>True when a matching zombie is present.</returns>
+        private bool HasZombieNear(int row, float x, int rowRange, float distance, bool hostileOnly)
+        {
+            foreach (var zombie in Zombies)
+            {
+                var separation = Math.Abs(zombie.X - x);
+                if ((!hostileOnly || !zombie.Hypnotized) && Math.Abs(zombie.Row - row) <= rowRange && (hostileOnly ? separation < distance : separation <= distance))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>Finds a living plant by its per-match identifier without creating a predicate.</summary>
+        /// <param name="id">The plant identifier to locate.</param>
+        /// <returns>The matching plant, or null when it is no longer active.</returns>
+        private Plant? FindPlantById(int id)
+        {
+            foreach (var plant in Plants)
+            {
+                if (plant.Id == id)
+                {
+                    return plant;
+                }
+            }
+
+            return null;
+        }
+
+        /// <summary>Checks whether a plant kind occupies a specific cell origin.</summary>
+        /// <param name="kind">The plant kind to locate.</param>
+        /// <param name="row">The requested lane.</param>
+        /// <param name="column">The requested origin column.</param>
+        /// <returns>True when a matching plant is active.</returns>
+        private bool HasPlantKindAt(PlantKind kind, int row, int column)
+        {
+            foreach (var plant in Plants)
+            {
+                if (plant.Kind == kind && plant.Row == row && plant.Column == column)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>Checks an upgraded plant's existing area-target rules without a captured delegate.</summary>
+        /// <param name="plant">The upgraded plant testing its attack range.</param>
+        /// <returns>True when an eligible zombie is in range.</returns>
+        private bool HasUpgradeAreaTarget(Plant plant)
+        {
+            foreach (var zombie in Zombies)
+            {
+                if (IsUpgradeAreaTarget(zombie, plant))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>Checks whether an umbrella protects a cell.</summary>
+        /// <param name="row">The protected lane.</param>
+        /// <param name="column">The protected column.</param>
+        /// <returns>True when an umbrella is within one row and column.</returns>
+        private bool HasUmbrellaNear(int row, int column)
+        {
+            foreach (var plant in Plants)
+            {
+                if (plant.Kind == PlantKind.UmbrellaLeaf && Math.Abs(plant.Row - row) <= 1 && Math.Abs(plant.Column - column) <= 1)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>Checks whether a dancer already occupies its intended summon position.</summary>
+        /// <param name="row">The summon lane.</param>
+        /// <param name="x">The summon board x coordinate.</param>
+        /// <returns>True when a backup dancer is nearby.</returns>
+        private bool HasBackupDancerNear(int row, float x)
+        {
+            foreach (var zombie in Zombies)
+            {
+                if (zombie.Kind == ZombieKind.BackupDancer && zombie.Row == row && Math.Abs(zombie.X - x) < 1.2f)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>Checks whether a timer list contains a specific board cell.</summary>
+        /// <param name="timers">The timers to inspect.</param>
+        /// <param name="row">The requested lane.</param>
+        /// <param name="column">The requested column.</param>
+        /// <returns>True when the cell is already represented.</returns>
+        private static bool HasCellTimer(List<AdventureCellTimer> timers, int row, int column)
+        {
+            foreach (var timer in timers)
+            {
+                if (timer.Row == row && timer.Column == column)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
         /// <summary>Performs update timed plant.</summary>
         /// <param name = "plant">The plant.</param>
         private void UpdateTimedPlant(Plant plant)
         {
             var state = plant.Timing.Value;
-            var target = Zombies.Exists(z => z.Row == plant.Row && z.X > plant.Column + 0.4f);
+            var target = false;
+            foreach (var zombie in Zombies)
+            {
+                if (zombie.Row == plant.Row && zombie.X > plant.Column + 0.4f)
+                {
+                    target = true;
+                    break;
+                }
+            }
             var input = new global::PlantsVsZombies.Timing.PlantTimingInput(true, true, true, true, target, global::PlantsVsZombies.Timing.ShootingTrack.Head, true, 0);
             var bound = global::PlantsVsZombies.Timing.PlantTiming.RequiredRandomBound(state, input);
             if (bound > 0)
@@ -567,17 +805,17 @@ namespace PlantsVsZombies.Simulation
 
             if (result.SunCreated)
             {
-                Suns.Add(new global::PlantsVsZombies.Simulation.Sun { X = plant.Column + 0.5f, Y = plant.Row + 0.45f, TargetY = plant.Row + 0.7f });
+                Suns.Add(CreateSun(plant.Column + 0.5f, plant.Row + 0.45f, plant.Row + 0.7f));
             }
 
             for (var i = 0; i < result.ProjectilesCreated; i++)
             {
-                Peas.Add(new Pea {
-                    SourceKind = plant.Kind,
-                    Row = plant.Row,
-                    X = plant.Column + 0.85f,
-                    IsSnow = plant.Kind == PlantKind.SnowPea
-                });
+                var shot = RentPea();
+                shot.SourceKind = plant.Kind;
+                shot.Row = plant.Row;
+                shot.X = plant.Column + 0.85f;
+                shot.IsSnow = plant.Kind == PlantKind.SnowPea;
+                Peas.Add(shot);
                 Raise(GameEvent.Shoot);
             }
         }
@@ -598,7 +836,7 @@ namespace PlantsVsZombies.Simulation
                 mine.MinePhase = MinePhase.Armed;
                 mine.PhaseAge = 0f;
             }
-            else if (mine.MinePhase == MinePhase.Armed && Zombies.Exists(z => z.Row == mine.Row && Math.Abs(z.X - (mine.Column + 0.5f)) <= 0.75f))
+            else if (mine.MinePhase == MinePhase.Armed && HasZombieNear(mine.Row, mine.Column + 0.5f, 0, 0.75f, false))
             {
                 for (var z = Zombies.Count - 1; z >= 0; z--)
                 {
@@ -637,11 +875,11 @@ namespace PlantsVsZombies.Simulation
                 if (hit >= 0)
                 {
                     DamageZombie(hit, 20f, pea.IsSnow);
-                    Peas.RemoveAt(i);
+                    RemovePeaAt(i);
                 }
                 else if (pea.X > 10f)
                 {
-                    Peas.RemoveAt(i);
+                    RemovePeaAt(i);
                 }
             }
         }
@@ -759,7 +997,10 @@ namespace PlantsVsZombies.Simulation
         /// <param name = "row">The row.</param>
         private void EmitLaneFlame(int row)
         {
-            Flames.Add(new LaneFlame { Row = row });
+            var flame = _flamePool.Rent();
+            flame.Row = row;
+            flame.Age = 0f;
+            Flames.Add(flame);
         }
 
         /// <summary>Performs raise.</summary>
@@ -1254,7 +1495,24 @@ namespace PlantsVsZombies.Simulation
             }
 
             // anim_done has ten frames; PlayOnceFullLastFrame at the PC's fixed 15 fps.
-            Presentation.JalapenoFires.RemoveAll(f => f.Flames.TrueForAll(p => p.DoneTick >= 0 && (f.Ticks - p.DoneTick) * .01f >= 10f / 15f));
+            for (var i = Presentation.JalapenoFires.Count - 1; i >= 0; i--)
+            {
+                var fire = Presentation.JalapenoFires[i];
+                var finished = true;
+                foreach (var flame in fire.Flames)
+                {
+                    if (flame.DoneTick < 0 || (fire.Ticks - flame.DoneTick) * .01f < 10f / 15f)
+                    {
+                        finished = false;
+                        break;
+                    }
+                }
+
+                if (finished)
+                {
+                    Presentation.JalapenoFires.RemoveAt(i);
+                }
+            }
         }
 
         /// <summary>Performs hit adventure explosion zombie.</summary>
@@ -1607,7 +1865,7 @@ namespace PlantsVsZombies.Simulation
                 {
                     for (var i = 0; i < 3; i++)
                     {
-                        Suns.Add(new global::PlantsVsZombies.Simulation.Sun { X = x - i * .25f, Y = z.Row, TargetY = z.Row + .3f });
+                        Suns.Add(CreateSun(x - i * .25f, z.Row, z.Row + .3f));
                     }
 
                     return;
@@ -1939,7 +2197,15 @@ namespace PlantsVsZombies.Simulation
         /// <returns>The resulting adventure plant at.</returns>
         public Plant AdventurePlantAt(int row, int column, PlantLayer layer)
         {
-            return Plants.Find(p => p.Row == row && p.Column <= column && column < p.Column + p.ColumnSpan && p.Layer == layer);
+            foreach (var plant in Plants)
+            {
+                if (plant.Row == row && plant.Column <= column && column < plant.Column + plant.ColumnSpan && plant.Layer == layer)
+                {
+                    return plant;
+                }
+            }
+
+            return null!;
         }
 
         /// <summary>Performs plant adventure.</summary>
@@ -2041,7 +2307,7 @@ namespace PlantsVsZombies.Simulation
                 return AdventurePlantingFailure.NotPlaying;
             }
 
-            if (!l.IsLawnRow(row) || column < 0 || column >= Columns || !Enum.IsDefined(typeof(PlantKind), kind))
+            if (!l.IsLawnRow(row) || column < 0 || column >= Columns || kind < PlantKind.Peashooter || kind > PlantKind.ExplodeONut)
             {
                 return AdventurePlantingFailure.InvalidCell;
             }
@@ -2299,7 +2565,7 @@ namespace PlantsVsZombies.Simulation
                 Plants.RemoveAll(x => x.Row == p.Row && x.Column <= p.Column && p.Column < x.Column + x.ColumnSpan);
             }
 
-            if (Adventure.SelectedCobCannonId.HasValue && !Plants.Exists(x => x.Id == Adventure.SelectedCobCannonId.Value))
+            if (Adventure.SelectedCobCannonId.HasValue && FindPlantById(Adventure.SelectedCobCannonId.Value) == null)
             {
                 Adventure.SelectedCobCannonId = null;
             }
@@ -2326,14 +2592,22 @@ namespace PlantsVsZombies.Simulation
                 return true;
             }
 
-            return Plants.Exists(p => p.Kind == PlantKind.Plantern && Math.Abs(p.Row - row) <= 1 && Math.Abs(p.Column - column) <= 2);
+            foreach (var plant in Plants)
+            {
+                if (plant.Kind == PlantKind.Plantern && Math.Abs(plant.Row - row) <= 1 && Math.Abs(plant.Column - column) <= 2)
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         /// <summary>Performs advance adventure plants.</summary>
         /// <param name = "dt">The dt.</param>
         private void AdvanceAdventurePlants(float dt)
         {
-            foreach (Plant p in Plants.ToArray())
+            foreach (Plant p in new PooledSnapshot<Plant>(Plants))
             {
                 var producerAdvanced = false;
                 int producerSunCount = Suns.Count, producerActions = p.ActionCount;
@@ -2414,8 +2688,21 @@ namespace PlantsVsZombies.Simulation
                             break;
                         case PlantKind.Jalapeno:
                             BlastAdventure(4.5f, p.Row, 20f, 0, 1800f, true);
-                            Adventure._ice.RemoveAll(c => c.Row == p.Row);
-                            Adventure._balls.RemoveAll(b => b.Row == p.Row && b.IsIce);
+                            for (var i = Adventure._ice.Count - 1; i >= 0; i--)
+                            {
+                                if (Adventure._ice[i].Row == p.Row)
+                                {
+                                    Adventure._ice.RemoveAt(i);
+                                }
+                            }
+
+                            for (var i = Adventure._balls.Count - 1; i >= 0; i--)
+                            {
+                                if (Adventure._balls[i].Row == p.Row && Adventure._balls[i].IsIce)
+                                {
+                                    Adventure._balls.RemoveAt(i);
+                                }
+                            }
                             if (Adventure.BossHeadVulnerable)
                             {
                                 DamageAdventureBoss(1800f);
@@ -2427,7 +2714,7 @@ namespace PlantsVsZombies.Simulation
                             break;
                         case PlantKind.IceShroom:
                             NotifyAdventureIceTrap();
-                            foreach (Zombie z in Zombies.ToArray())
+                            foreach (Zombie z in new PooledSnapshot<Zombie>(Zombies))
                             {
                                 ApplyAdventureIceTrap(z);
                             }
@@ -2448,7 +2735,14 @@ namespace PlantsVsZombies.Simulation
                             Raise(GameEvent.Explosion);
                             break;
                         case PlantKind.GraveBuster:
-                            Adventure._graves.RemoveAll(g => g.Row == p.Row && g.Column == p.Column);
+                            for (var i = Adventure._graves.Count - 1; i >= 0; i--)
+                            {
+                                var grave = Adventure._graves[i];
+                                if (grave.Row == p.Row && grave.Column == p.Column)
+                                {
+                                    Adventure._graves.RemoveAt(i);
+                                }
+                            }
                             RemoveAdventurePlantAndStack(p);
                             break;
                         case PlantKind.Blover:
@@ -2508,7 +2802,7 @@ namespace PlantsVsZombies.Simulation
 
                             break;
                         case PlantKind.Spikeweed:
-                            foreach (Zombie z in Zombies.ToArray())
+                            foreach (Zombie z in new PooledSnapshot<Zombie>(Zombies))
                             {
                                 if (!z.Airborne && !z.Hypnotized && z.Row == p.Row && Math.Abs(z.X - x) < 0.6f)
                                 {
@@ -2526,7 +2820,15 @@ namespace PlantsVsZombies.Simulation
                             p.ActionTimer = 1f;
                             break;
                         case PlantKind.MagnetShroom:
-                            var metal = Zombies.Find(z => !z.Hypnotized && Math.Abs(z.Row - p.Row) <= 2 && Math.Abs(z.X - x) <= 3f && (z.ArmorHealth > 0f && (z.Kind == ZombieKind.Buckethead || z.Kind == ZombieKind.Football || z.Kind == ZombieKind.Digger) || (z.Kind == ZombieKind.ScreenDoor || z.Kind == ZombieKind.Ladder) && z.ShieldHealth > 0f || (z.Kind == ZombieKind.Pogo || z.Kind == ZombieKind.Ladder || z.Kind == ZombieKind.Digger || z.Kind == ZombieKind.JackInTheBox) && !z.UsedAbility));
+                            Zombie? metal = null;
+                            foreach (var zombie in Zombies)
+                            {
+                                if (!zombie.Hypnotized && Math.Abs(zombie.Row - p.Row) <= 2 && Math.Abs(zombie.X - x) <= 3f && (zombie.ArmorHealth > 0f && (zombie.Kind == ZombieKind.Buckethead || zombie.Kind == ZombieKind.Football || zombie.Kind == ZombieKind.Digger) || (zombie.Kind == ZombieKind.ScreenDoor || zombie.Kind == ZombieKind.Ladder) && zombie.ShieldHealth > 0f || (zombie.Kind == ZombieKind.Pogo || zombie.Kind == ZombieKind.Ladder || zombie.Kind == ZombieKind.Digger || zombie.Kind == ZombieKind.JackInTheBox) && !zombie.UsedAbility))
+                                {
+                                    metal = zombie;
+                                    break;
+                                }
+                            }
                             if (metal != null)
                             {
                                 metal.ArmorHealth = 0;
@@ -2561,7 +2863,7 @@ namespace PlantsVsZombies.Simulation
                         case PlantKind.MelonPult:
                             var range = p.Kind == PlantKind.PuffShroom || p.Kind == PlantKind.SeaShroom ? 3f : p.Kind == PlantKind.FumeShroom ? 4f : 20f;
                             var air = p.Kind == PlantKind.Cactus;
-                            if (p.Kind == PlantKind.ScaredyShroom && Zombies.Exists(z => !z.Hypnotized && Math.Abs(z.Row - p.Row) <= 1 && Math.Abs(z.X - x) < 1.5f))
+                            if (p.Kind == PlantKind.ScaredyShroom && HasZombieNear(p.Row, x, 1, 1.5f, true))
                             {
                                 break;
                             }
@@ -2691,18 +2993,16 @@ namespace PlantsVsZombies.Simulation
         /// <returns>The resulting fire adventure pea.</returns>
         private Pea FireAdventurePea(Plant p, int row, bool back, float damage)
         {
-            var shot = new Pea
-            {
-                SourceKind = p.Kind,
-                SourceIsImitated = p.IsImitated,
-                Row = row,
-                FlightRow = row,
-                X = p.Column + (back ? 0.15f : 0.85f),
-                StartX = p.Column + 0.5f,
-                VelocityX = back ? -4.5f : 4.5f,
-                Damage = damage,
-                Backward = back
-            };
+            var shot = RentPea();
+            shot.SourceKind = p.Kind;
+            shot.SourceIsImitated = p.IsImitated;
+            shot.Row = row;
+            shot.FlightRow = row;
+            shot.X = p.Column + (back ? 0.15f : 0.85f);
+            shot.StartX = p.Column + 0.5f;
+            shot.VelocityX = back ? -4.5f : 4.5f;
+            shot.Damage = damage;
+            shot.Backward = back;
             Peas.Add(shot);
             AdventurePresentationShot(p, shot);
             p.ShootAge = 0;
@@ -2753,7 +3053,7 @@ namespace PlantsVsZombies.Simulation
         /// <param name = "damageFlags">The damage flags.</param>
         private void BlastAdventure(float x, int row, float width, int rows, float damage, bool burned = false, uint damageFlags = 0)
         {
-            foreach (Zombie z in Zombies.ToArray())
+            foreach (Zombie z in new PooledSnapshot<Zombie>(Zombies))
             {
                 if (!z.Hypnotized && Math.Abs(z.Row - row) <= rows && Math.Abs(z.X - x) <= width)
                 {
@@ -2777,7 +3077,15 @@ namespace PlantsVsZombies.Simulation
                 p.Row = (int)Math.Round(p.FlightRow);
                 if (!p.Lobbed && !p.Homing && p.VelocityY == 0)
                 {
-                    var torch = Plants.Find(t => t.Kind == PlantKind.Torchwood && t.Row == p.Row && t.Column != p.LastTorchColumn && Math.Abs(p.X - (t.Column + 0.5f)) < 0.2f);
+                    Plant? torch = null;
+                    foreach (var plant in Plants)
+                    {
+                        if (plant.Kind == PlantKind.Torchwood && plant.Row == p.Row && plant.Column != p.LastTorchColumn && Math.Abs(p.X - (plant.Column + 0.5f)) < 0.2f)
+                        {
+                            torch = plant;
+                            break;
+                        }
+                    }
                     if (torch != null)
                     {
                         p.LastTorchColumn = torch.Column;
@@ -2827,7 +3135,7 @@ namespace PlantsVsZombies.Simulation
                     HitAdventureZombie(hit, p.Damage, p.PiercesShield);
                     if (p.Splash)
                     {
-                        foreach (Zombie other in Zombies.ToArray())
+                        foreach (Zombie other in new PooledSnapshot<Zombie>(Zombies))
                         {
                             if (other != hit && !other.Hypnotized && !other.Airborne && Math.Abs(other.Row - hit.Row) <= (p.Fire ? 0 : 1) && Math.Abs(other.X - hit.X) <= (p.Fire ? 0.5f : 1f))
                             {
@@ -2853,8 +3161,7 @@ namespace PlantsVsZombies.Simulation
 
                 if (remove || p.X > 12f || p.X < -2f || p.FlightRow < -1f || p.FlightRow > RowCount || Math.Abs(p.X - p.StartX) > p.Range)
                 {
-                    StopAdventureSnowTrail(p);
-                    Peas.RemoveAt(i);
+                    RemovePeaAt(i);
                 }
             }
         }
@@ -3267,7 +3574,15 @@ namespace PlantsVsZombies.Simulation
                 case PlantKind.WinterMelon:
                 case PlantKind.Cactus:
                 case PlantKind.Starfruit:
-                    return Zombies.Exists(z => !z.Hypnotized && global::PlantsVsZombies.Adventure.AdventureZombieTargetingRules.CanBeAutoTargeted(z, plant.Kind) && (!z.Airborne || plant.Kind == PlantKind.Cactus) && (plant.Kind == PlantKind.Threepeater ? Math.Abs(z.Row - plant.Row) <= 1 : z.Row == plant.Row) && (z.X > plant.Column || plant.Kind == PlantKind.SplitPea));
+                    foreach (var zombie in Zombies)
+                    {
+                        if (!zombie.Hypnotized && AdventureZombieTargetingRules.CanBeAutoTargeted(zombie, plant.Kind) && (!zombie.Airborne || plant.Kind == PlantKind.Cactus) && (plant.Kind == PlantKind.Threepeater ? Math.Abs(zombie.Row - plant.Row) <= 1 : zombie.Row == plant.Row) && (zombie.X > plant.Column || plant.Kind == PlantKind.SplitPea))
+                        {
+                            return true;
+                        }
+                    }
+
+                    return false;
                 default:
                     return false;
             }
@@ -3460,7 +3775,7 @@ namespace PlantsVsZombies.Simulation
                     var pitch = Adventure.Level.HasPool || Adventure.Level.HasRoof ? 85f : 100f;
                     var launchOffset = shot.SourceKind == PlantKind.KernelPult ? shot.Butter ? -56f : -37f : shot.Splash ? -46f : -12f;
                     var launchY = 80 + shot.PresentationLaunchRow * pitch + (Adventure.Level.HasRoof ? Math.Max(0, 5 - shot.PresentationLaunchColumn) * 20 - 10 : 0) + launchOffset;
-                    if (Plants.Exists(p => p.Kind == PlantKind.FlowerPot && p.Column == shot.PresentationLaunchColumn && p.Row == shot.PresentationLaunchRow))
+                    if (HasPlantKindAt(PlantKind.FlowerPot, shot.PresentationLaunchRow, shot.PresentationLaunchColumn))
                     {
                         launchY -= 5;
                     }
@@ -3507,10 +3822,7 @@ namespace PlantsVsZombies.Simulation
         /// <returns>The resulting create adventure presentation sun.</returns>
         private global::PlantsVsZombies.Simulation.Sun CreateAdventurePresentationSun(Plant producer, int value = 25)
         {
-            global::PlantsVsZombies.Simulation.Sun sun = new global::PlantsVsZombies.Simulation.Sun
-            {
-                Value = value
-            };
+            var sun = CreateSun(0f, 0f, 0f, value);
             AdventurePresentationSunSpawn(sun, producer);
             return sun;
         }
@@ -3553,10 +3865,7 @@ namespace PlantsVsZombies.Simulation
         /// <returns>The resulting create adventure presentation sun from point.</returns>
         private global::PlantsVsZombies.Simulation.Sun CreateAdventurePresentationSunFromPoint(float nativeX, float nativeY, int value = 25)
         {
-            global::PlantsVsZombies.Simulation.Sun sun = new global::PlantsVsZombies.Simulation.Sun
-            {
-                Value = value
-            };
+            var sun = CreateSun(0f, 0f, 0f, value);
             InitializeAdventurePresentationPlantSunAtPoint(sun, nativeX, nativeY);
             return sun;
         }
@@ -3617,13 +3926,7 @@ namespace PlantsVsZombies.Simulation
         /// <returns>The resulting create adventure presentation dropped sun.</returns>
         private global::PlantsVsZombies.Simulation.Sun CreateAdventurePresentationDroppedSun(float x, float row, int value = 25)
         {
-            global::PlantsVsZombies.Simulation.Sun sun = new global::PlantsVsZombies.Simulation.Sun
-            {
-                X = x,
-                Y = row,
-                TargetY = row,
-                Value = value
-            };
+            global::PlantsVsZombies.Simulation.Sun sun = CreateSun(x, row, row, value);
             InitializeAdventurePresentationDroppedSun(sun);
             return sun;
         }
@@ -3735,7 +4038,7 @@ namespace PlantsVsZombies.Simulation
 
                 if (tick.State.Dead)
                 {
-                    Suns.RemoveAt(i);
+                    RemoveSunAt(i);
                 }
             }
         }
@@ -3988,24 +4291,27 @@ namespace PlantsVsZombies.Simulation
                 return;
             }
 
-            Adventure.RewardPresentation.Update(delta, () =>
-            {
-                Elapsed += .01f;
-                AdventurePresentationTick(.01f);
-                AdvanceAdventurePresentationSuns(.01f);
-                foreach (Plant plant in Plants)
-                {
-                    plant.Age += .01f;
-                    if (AdventureProducerGlow.HasNativeProductionHint(plant.Kind))
-                    {
-                        AdventureProducerGlow.Tick(plant, false, 0, false);
-                    }
-                }
-            });
+            Adventure.RewardPresentation.Update(delta, _rewardPresentationTick);
             if (!Adventure._rewardLightfillPlayed && Adventure.RewardPresentation.NativeType != 15 && Adventure.RewardPresentation.CollectionTicks >= 300)
             {
                 Adventure._rewardLightfillPlayed = true;
                 Adventure.Notice(AdventureNoticeKind.RewardFade);
+            }
+        }
+
+        /// <summary>Advances the existing board artwork for one native reward-presentation tick.</summary>
+        private void AdvanceAdventureRewardTick()
+        {
+            Elapsed += .01f;
+            AdventurePresentationTick(.01f);
+            AdvanceAdventurePresentationSuns(.01f);
+            foreach (var plant in Plants)
+            {
+                plant.Age += .01f;
+                if (AdventureProducerGlow.HasNativeProductionHint(plant.Kind))
+                {
+                    AdventureProducerGlow.Tick(plant, false, 0, false);
+                }
             }
         }
 
@@ -4124,7 +4430,7 @@ namespace PlantsVsZombies.Simulation
                 return false;
             }
 
-            foreach (var coin in Adventure._coins.ToArray())
+            foreach (var coin in new PooledSnapshot<AdventureCoin>(Adventure._coins))
             {
                 if (!FinishAdventureCoin(coin))
                 {
@@ -4140,29 +4446,30 @@ namespace PlantsVsZombies.Simulation
         /// <param name = "playing">The playing.</param>
         /// <param name = "darken">The darken.</param>
         /// <param name = "anticipatedSun">The anticipated sun.</param>
-        /// <returns>The resulting adventure packet context.</returns>
-        public AdventureSeedBankContext AdventurePacketContext(PlantKind kind, bool playing = true, int darken = 255, int anticipatedSun = -1)
+        /// <param name="destination">An optional immediately consumed context to overwrite; null creates an independent snapshot.</param>
+        /// <returns>The supplied destination or a newly allocated snapshot of the current packet state.</returns>
+        public AdventureSeedBankContext AdventurePacketContext(PlantKind kind, bool playing = true, int darken = 255, int anticipatedSun = -1, AdventureSeedBankContext? destination = null)
         {
             int left = _seedCooldownTicks[(int)kind], duration = DefinitionFor(ResolveAdventureSeed(kind)).RechargeThresholdRaw;
-            return new AdventureSeedBankContext
-            {
-                PacketKind = (int)kind,
-                ImitaterKind = kind == PlantKind.Imitater && Adventure.ImitaterTarget.HasValue ? (int)Adventure.ImitaterTarget.Value : -1,
-                Active = left <= 0,
-                Refreshing = left > 0,
-                RefreshTime = duration,
-                RefreshCounter = left > 0 ? Math.Max(0, duration + 1 - left) : 0,
-                Playing = playing && State == MatchState.Playing && Adventure.Phase == AdventurePhase.Playing,
-                Paused = State == MatchState.Paused,
-                TutorialState = Adventure.Tutorial == AdventureTutorial.ChooseSeed ? 1 : Adventure.Tutorial == AdventureTutorial.PlantSunflower ? 5 : Adventure.Tutorial == AdventureTutorial.RechargeSunflower ? 9 : 0,
-                TutorialTimer = -1,
-                MainCounter = Adventure._ticks,
-                CutsceneDarken = darken,
-                NativeMode = ModeSession == null ? 0 : ModeSession.Definition.Id,
-                CanAfford = (anticipatedSun >= 0 ? anticipatedSun : AdventureSunAvailable) >= AdventureSeedCost(kind),
-                Conveyor = UsesNativeAdventureConveyor,
-                PlantingRequirementsMet = AdventurePacketRequirements(kind)
-            };
+            var context = destination ?? new AdventureSeedBankContext();
+            context.Reset();
+            context.PacketKind = (int)kind;
+            context.ImitaterKind = kind == PlantKind.Imitater && Adventure.ImitaterTarget.HasValue ? (int)Adventure.ImitaterTarget.Value : -1;
+            context.Active = left <= 0;
+            context.Refreshing = left > 0;
+            context.RefreshTime = duration;
+            context.RefreshCounter = left > 0 ? Math.Max(0, duration + 1 - left) : 0;
+            context.Playing = playing && State == MatchState.Playing && Adventure.Phase == AdventurePhase.Playing;
+            context.Paused = State == MatchState.Paused;
+            context.TutorialState = Adventure.Tutorial == AdventureTutorial.ChooseSeed ? 1 : Adventure.Tutorial == AdventureTutorial.PlantSunflower ? 5 : Adventure.Tutorial == AdventureTutorial.RechargeSunflower ? 9 : 0;
+            context.TutorialTimer = -1;
+            context.MainCounter = Adventure._ticks;
+            context.CutsceneDarken = darken;
+            context.NativeMode = ModeSession == null ? 0 : ModeSession.Definition.Id;
+            context.CanAfford = (anticipatedSun >= 0 ? anticipatedSun : AdventureSunAvailable) >= AdventureSeedCost(kind);
+            context.Conveyor = UsesNativeAdventureConveyor;
+            context.PlantingRequirementsMet = AdventurePacketRequirements(kind);
+            return context;
         }
 
         /// <summary>Performs adventure packet requirements.</summary>
@@ -4194,7 +4501,7 @@ namespace PlantsVsZombies.Simulation
 
             foreach (Plant p in Plants)
             {
-                if (p.Kind == prerequisite.Value && (resolved != PlantKind.CobCannon || Plants.Exists(other => other.Row == p.Row && other.Column == p.Column + 1 && other.Kind == PlantKind.KernelPult)))
+                if (p.Kind == prerequisite.Value && (resolved != PlantKind.CobCannon || HasPlantKindAt(PlantKind.KernelPult, p.Row, p.Column + 1)))
                 {
                     return true;
                 }
@@ -4236,7 +4543,7 @@ namespace PlantsVsZombies.Simulation
                 return;
             }
 
-            var flash = AdventureSeedBankPresentation.ReadyCheck(AdventurePacketContext(kind, anticipatedSun: anticipatedSun), 0, 0, 0, 0);
+            var flash = AdventureSeedBankPresentation.ReadyCheck(AdventurePacketContext(kind, anticipatedSun: anticipatedSun, destination: _packetFeedbackContext), 0, 0, 0, 0);
             if (flash.Spawn)
             {
                 Adventure.SeedFlashes.Add(new AdventureSeedFlashState { Id = ++Adventure._seedFlashId, Kind = kind });
@@ -4550,7 +4857,7 @@ namespace PlantsVsZombies.Simulation
                 Flames[i].Age += dt;
                 if (Flames[i].Age >= 1f)
                 {
-                    Flames.RemoveAt(i);
+                    RemoveFlameAt(i);
                 }
             }
 
@@ -4894,8 +5201,8 @@ namespace PlantsVsZombies.Simulation
             Adventure._packets.Clear();
             Adventure._vases.Clear();
             Plants.Clear();
-            Peas.Clear();
-            Suns.Clear();
+            ClearPeas();
+            ClearSuns();
             var stage = Adventure.VaseStage;
             var contents = new List<AdventureVase>();
             AddVaseSeeds(contents, PlantKind.Peashooter, stage == 1 ? 4 : 5);
@@ -5056,7 +5363,7 @@ namespace PlantsVsZombies.Simulation
                 else if (a._bossCycle % 5 == 0)
                 {
                     int row = _random.Next(4), col = _random.Next(2, 7);
-                    foreach (Plant p in Plants.ToArray())
+                    foreach (Plant p in new PooledSnapshot<Plant>(Plants))
                     {
                         if (Math.Abs(p.Row - row) <= 1 && Math.Abs(p.Column - col) <= 1)
                         {
@@ -5085,7 +5392,7 @@ namespace PlantsVsZombies.Simulation
             {
                 var ball = a._balls[i];
                 ball.X -= 1.25f * dt;
-                foreach (Plant p in Plants.ToArray())
+                foreach (Plant p in new PooledSnapshot<Plant>(Plants))
                 {
                     if (p.Row == ball.Row && Math.Abs(p.Column + 0.5f - ball.X) < 0.4f)
                     {
@@ -5444,7 +5751,7 @@ namespace PlantsVsZombies.Simulation
                     }
                     else if (p.Kind == PlantKind.GloomShroom && (tick == 126 || tick == 98 || tick == 70 || tick == 42))
                     {
-                        foreach (Zombie z in Zombies.ToArray())
+                        foreach (Zombie z in new PooledSnapshot<Zombie>(Zombies))
                         {
                             if (IsUpgradeAreaTarget(z, p))
                             {
@@ -5471,7 +5778,7 @@ namespace PlantsVsZombies.Simulation
                 if (p.ActionTimer <= 0.000001f)
                 {
                     p.ActionTimer = (DefinitionFor(p.Kind).ActionPeriodRaw - _random.Next(15)) * 0.01f;
-                    var target = p.Kind == PlantKind.GatlingPea ? FindAdventureTarget(p.Row, p.Column + 0.4f, 20f, false) != null : p.Kind == PlantKind.Cattail ? FindAdventureCattailTarget(p.Column + 0.5f, p.Row) != null : Zombies.Exists(z => IsUpgradeAreaTarget(z, p));
+                    var target = p.Kind == PlantKind.GatlingPea ? FindAdventureTarget(p.Row, p.Column + 0.4f, 20f, false) != null : p.Kind == PlantKind.Cattail ? FindAdventureCattailTarget(p.Column + 0.5f, p.Row) != null : HasUpgradeAreaTarget(p);
                     if (target)
                     {
                         p.UpgradeBurstTicks = p.Kind == PlantKind.GloomShroom ? 200 : p.Kind == PlantKind.GatlingPea ? 100 : 50;
@@ -5515,7 +5822,7 @@ namespace PlantsVsZombies.Simulation
             {
                 if (p.ActionTimer <= 0.000001f)
                 {
-                    foreach (Zombie z in Zombies.ToArray())
+                    foreach (Zombie z in new PooledSnapshot<Zombie>(Zombies))
                     {
                         if (!z.Hypnotized && !z.Airborne && !z.Submerged && z.DropRemaining <= 0 && z.Kind != ZombieKind.Bungee && z.Row == p.Row && Math.Abs(z.X - (p.Column + 0.5f)) < 0.6f)
                         {
@@ -5556,7 +5863,19 @@ namespace PlantsVsZombies.Simulation
                         }
                     }
 
-                    choices.Sort((a, b) => CoinDistance(a, p).CompareTo(CoinDistance(b, p)));
+                    for (var i = 1; i < choices.Count; i++)
+                    {
+                        var coin = choices[i];
+                        var distance = CoinDistance(coin, p);
+                        var index = i - 1;
+                        while (index >= 0 && CoinDistance(choices[index], p) > distance)
+                        {
+                            choices[index + 1] = choices[index];
+                            index--;
+                        }
+
+                        choices[index + 1] = coin;
+                    }
                     var count = Math.Min(5, choices.Count);
                     for (var i = 0; i < count; i++)
                     {
@@ -5637,7 +5956,15 @@ namespace PlantsVsZombies.Simulation
                 return;
             }
 
-            var target = Zombies.Find(z => z.Id == p.TargetZombieId && !z.Hypnotized && AdventureZombieTargetingRules.CanBeAutoTargeted(z, PlantKind.Cattail) && !z.Submerged && z.DropRemaining <= 0);
+            Zombie? target = null;
+            foreach (var zombie in Zombies)
+            {
+                if (zombie.Id == p.TargetZombieId && !zombie.Hypnotized && AdventureZombieTargetingRules.CanBeAutoTargeted(zombie, PlantKind.Cattail) && !zombie.Submerged && zombie.DropRemaining <= 0)
+                {
+                    target = zombie;
+                    break;
+                }
+            }
             if (target == null)
             {
                 target = FindAdventureCattailTarget(p.X, p.FlightRow);
@@ -5881,7 +6208,7 @@ namespace PlantsVsZombies.Simulation
         /// <param name = "dt">The dt.</param>
         private void AdvanceAdventureUpgradeWorld(float dt)
         {
-            if (Adventure.SelectedCobCannonId.HasValue && !Plants.Exists(p => p.Id == Adventure.SelectedCobCannonId.Value))
+            if (Adventure.SelectedCobCannonId.HasValue && FindPlantById(Adventure.SelectedCobCannonId.Value) == null)
             {
                 Adventure.SelectedCobCannonId = null;
             }
@@ -5892,8 +6219,8 @@ namespace PlantsVsZombies.Simulation
                 coin.Age += dt;
                 if (coin.IsBeingCollected)
                 {
-                    var collector = Plants.Find(p => p.Id == coin.CollectorPlantId && p.Kind == PlantKind.GoldMagnet);
-                    if (collector == null)
+                    var collector = FindPlantById(coin.CollectorPlantId);
+                    if (collector == null || collector.Kind != PlantKind.GoldMagnet)
                     {
                         coin.IsBeingCollected = false;
                         coin.CollectorPlantId = 0;
@@ -5995,7 +6322,7 @@ namespace PlantsVsZombies.Simulation
 
             if (p.Kind == PlantKind.Spikeweed || p.Kind == PlantKind.Spikerock)
             {
-                return z.Kind == ZombieKind.Gargantuar || z.Kind == ZombieKind.Zomboni || Adventure.Level.IsWaterRow(p.Row) || Plants.Exists(q => q.Row == p.Row && q.Column == p.Column && q.Kind == PlantKind.FlowerPot);
+                return z.Kind == ZombieKind.Gargantuar || z.Kind == ZombieKind.Zomboni || Adventure.Level.IsWaterRow(p.Row) || HasPlantKindAt(PlantKind.FlowerPot, p.Row, p.Column);
             }
 
             if (attack == global::PlantsVsZombies.Adventure.AdventureBiteAttack.DriveOver)
@@ -6652,14 +6979,31 @@ namespace PlantsVsZombies.Simulation
             return 0;
         }
 
+        /// <summary>Stores normalized immutable catalog asset names for every supported zombie identifier.</summary>
+        private static readonly string[] s_zombiePresentationAssets = CreateZombiePresentationAssets();
+
+        /// <summary>Normalizes catalog paths once before any per-zombie simulation updates.</summary>
+        /// <returns>Asset basenames indexed by the original zombie identifier.</returns>
+        private static string[] CreateZombiePresentationAssets()
+        {
+            var assets = new string[VerifiedDataCatalog.Zombies.Count];
+            for (var i = 0; i < assets.Length; i++)
+            {
+                assets[i] = VerifiedDataCatalog.TryGetReanimation(VerifiedDataCatalog.Zombies[i].ReanimationId, out var definition)
+                    ? Path.GetFileNameWithoutExtension(definition.Path.Replace('\\', '/'))
+                    : "Zombie";
+            }
+
+            return assets;
+        }
+
         /// <summary>Performs adventure zombie presentation asset.</summary>
         /// <param name = "z">The z.</param>
         /// <returns>The resulting adventure zombie presentation asset.</returns>
         public static string AdventureZombiePresentationAsset(Zombie z)
         {
-            ReanimationDefinition definition;
             var kind = (int)z.Kind;
-            return kind >= 0 && kind < VerifiedDataCatalog.Zombies.Count && VerifiedDataCatalog.TryGetReanimation(VerifiedDataCatalog.Zombies[kind].ReanimationId, out definition) ? Path.GetFileNameWithoutExtension(definition.Path.Replace('\\', '/')) : "Zombie";
+            return kind >= 0 && kind < s_zombiePresentationAssets.Length ? s_zombiePresentationAssets[kind] : "Zombie";
         }
 
         /// <summary>Performs adventure presentation zombie animation.</summary>
@@ -7028,7 +7372,7 @@ namespace PlantsVsZombies.Simulation
         /// <param name = "wave">The wave.</param>
         private void DropAdventureZombie(ZombieKind kind, int row, int column, int wave)
         {
-            if (Plants.Exists(p => p.Kind == PlantKind.UmbrellaLeaf && Math.Abs(p.Row - row) <= 1 && Math.Abs(p.Column - column) <= 1))
+            if (HasUmbrellaNear(row, column))
             {
                 return;
             }
@@ -7049,7 +7393,7 @@ namespace PlantsVsZombies.Simulation
         private void AdvanceAdventureZombies(float dt)
         {
             AdvanceAdventurePlantHitCounters(dt);
-            foreach (Zombie z in Zombies.ToArray())
+            foreach (Zombie z in new PooledSnapshot<Zombie>(Zombies))
             {
                 if (!Zombies.Contains(z))
                 {
@@ -7104,9 +7448,17 @@ namespace PlantsVsZombies.Simulation
                 z.AbilityTimer -= dt * slow;
                 if (z.Kind == ZombieKind.Bungee)
                 {
-                    if (Plants.Exists(p => p.Kind == PlantKind.UmbrellaLeaf && Math.Abs(p.Row - z.Row) <= 1 && Math.Abs(p.Column - z.TargetColumn) <= 1))
+                    if (HasUmbrellaNear(z.Row, z.TargetColumn))
                     {
-                        var passenger = Zombies.Find(other => other.Id == z.LinkedZombieId);
+                        Zombie? passenger = null;
+                        foreach (var other in Zombies)
+                        {
+                            if (other.Id == z.LinkedZombieId)
+                            {
+                                passenger = other;
+                                break;
+                            }
+                        }
                         if (passenger != null)
                         {
                             passenger.PresentationDeath = AdventureZombieDeathPresentation.Removed;
@@ -7138,7 +7490,7 @@ namespace PlantsVsZombies.Simulation
 
                 if (z.Kind == ZombieKind.JackInTheBox && z.AbilityTimer <= 0)
                 {
-                    foreach (Plant p in Plants.ToArray())
+                    foreach (Plant p in new PooledSnapshot<Plant>(Plants))
                     {
                         if (Math.Abs(p.Row - z.Row) <= 1 && Math.Abs(p.Column + 0.5f - z.X) < 1.5f)
                         {
@@ -7161,7 +7513,7 @@ namespace PlantsVsZombies.Simulation
                             {
                                 var row = z.Row + dr;
                                 var x = z.X + dx * 0.9f;
-                                if (Adventure.Level.IsLawnRow(row) && !Adventure.Level.IsWaterRow(row) && x > 0.5f && !Zombies.Exists(b => b.Kind == ZombieKind.BackupDancer && b.Row == row && Math.Abs(b.X - x) < 1.2f))
+                                if (Adventure.Level.IsLawnRow(row) && !Adventure.Level.IsWaterRow(row) && x > 0.5f && !HasBackupDancerNear(row, x))
                                 {
                                     SpawnAdventureZombie(ZombieKind.BackupDancer, row, x, z.Wave);
                                 }
@@ -7223,7 +7575,7 @@ namespace PlantsVsZombies.Simulation
                             }
                         }
 
-                        if (victim != null && !Plants.Exists(p => p.Kind == PlantKind.UmbrellaLeaf && Math.Abs(p.Row - victim.Row) <= 1 && Math.Abs(p.Column - victim.Column) <= 1))
+                        if (victim != null && !HasUmbrellaNear(victim.Row, victim.Column))
                         {
                             victim.Health -= 80f;
                             RecordAdventurePlantHit(victim);
@@ -7243,13 +7595,21 @@ namespace PlantsVsZombies.Simulation
                 if (z.Kind == ZombieKind.Zomboni)
                 {
                     var col = (int)Math.Floor(z.X);
-                    if (col >= 0 && col < 9 && !Adventure._ice.Exists(c => c.Row == z.Row && c.Column == col))
+                    if (col >= 0 && col < 9 && !HasCellTimer(Adventure._ice, z.Row, col))
                     {
                         Adventure._ice.Add(new AdventureCellTimer { Row = z.Row, Column = col, Remaining = 30f });
                     }
                 }
 
-                var opponent = Zombies.Find(other => other != z && other.Row == z.Row && other.Hypnotized != z.Hypnotized && !other.Airborne && Math.Abs(other.X - z.X) < 0.5f);
+                Zombie? opponent = null;
+                foreach (var other in Zombies)
+                {
+                    if (other != z && other.Row == z.Row && other.Hypnotized != z.Hypnotized && !other.Airborne && Math.Abs(other.X - z.X) < 0.5f)
+                    {
+                        opponent = other;
+                        break;
+                    }
+                }
                 if (opponent != null && (z.Hypnotized || opponent.Hypnotized) && !z.Headless)
                 {
                     if (AdvanceAdventureNativeEating(z, null, dt, true))
@@ -7442,7 +7802,7 @@ namespace PlantsVsZombies.Simulation
                 }
 
                 m.X += 5f * dt;
-                foreach (Zombie z in Zombies.ToArray())
+                foreach (Zombie z in new PooledSnapshot<Zombie>(Zombies))
                 {
                     if (!z.Hypnotized && z.Row == m.Row && Math.Abs(z.X - m.X) < 0.7f)
                     {
@@ -7944,12 +8304,7 @@ namespace PlantsVsZombies.Simulation
         /// <exception cref = "InvalidOperationException">The operation cannot satisfy its preconditions.</exception>
         private void SpawnExperimentalLevelOneSkySun(ref bool handled)
         {
-            var sun = _levelOneSkySunFactory == null ? new global::PlantsVsZombies.Simulation.Sun
-            {
-                X = 0.4f + (float)_random.NextDouble() * 8.2f,
-                Y = -1f,
-                TargetY = _levelOneSkySunTargetY
-            }
+            var sun = _levelOneSkySunFactory == null ? CreateSun(0.4f + (float)_random.NextDouble() * 8.2f, -1f, _levelOneSkySunTargetY)
 
             : _levelOneSkySunFactory(this, _random);
             if (sun == null || !Finite(sun.X) || !Finite(sun.Y) || !Finite(sun.TargetY) || !Finite(sun.Age))
@@ -8288,7 +8643,7 @@ namespace PlantsVsZombies.Simulation
             var suns = Math.Max(groups, Math.Min(groups * 5, matched.Count - groups * 2));
             for (var i = 0; i < suns; i++)
             {
-                Suns.Add(new global::PlantsVsZombies.Simulation.Sun { X = 2.5f + (float)_random.NextDouble() * 3f, Y = 1f, TargetY = 1.5f + (float)_random.NextDouble() * 2f });
+                Suns.Add(CreateSun(2.5f + (float)_random.NextDouble() * 3f, 1f, 1.5f + (float)_random.NextDouble() * 2f));
             }
 
             for (var c = 0; c < 8; c++)
@@ -8398,7 +8753,7 @@ namespace PlantsVsZombies.Simulation
                     PlantKind.FumeShroom,
                     PlantKind.TallNut
                 };
-                foreach (var p in Plants.ToArray())
+                foreach (var p in new PooledSnapshot<Plant>(Plants))
                 {
                     if (p.Kind == from[action])
                     {
@@ -8409,7 +8764,7 @@ namespace PlantsVsZombies.Simulation
             }
             else if (action == 3)
             {
-                foreach (var p in Plants.ToArray())
+                foreach (var p in new PooledSnapshot<Plant>(Plants))
                 {
                     if (p.Column < 8)
                     {
@@ -8444,7 +8799,7 @@ namespace PlantsVsZombies.Simulation
         private void TickModeBowling(float dt)
         {
             var s = ModeSession;
-            foreach (var nut in Adventure._nuts.ToArray())
+            foreach (var nut in new PooledSnapshot<AdventureBowlingNut>(Adventure._nuts))
             {
                 var giant = s._giantNuts.Contains(nut);
                 if (AdvanceAdventureBowlingNative(nut, dt, giant))
@@ -8646,7 +9001,7 @@ namespace PlantsVsZombies.Simulation
         {
             var s = ModeSession;
             var m = s.Definition.Mechanic;
-            foreach (var rain in s.RainPackets.ToArray())
+            foreach (var rain in new PooledSnapshot<ModeRainPacket>(s.RainPackets))
             {
                 rain.Y = Math.Min(rain.TargetY, rain.Y + 45f * dt);
                 if (rain.Y >= rain.TargetY)
@@ -8669,7 +9024,7 @@ namespace PlantsVsZombies.Simulation
 
             if (m == ModeMechanic.Vases || m == ModeMechanic.Slots)
             {
-                foreach (var expiring in Adventure._packets.ToArray())
+                foreach (var expiring in new PooledSnapshot<AdventurePacket>(Adventure._packets))
                 {
                     if (m == ModeMechanic.Vases)
                     {
@@ -9001,7 +9356,7 @@ namespace PlantsVsZombies.Simulation
                 var count = matches == 3 ? 20 : 4;
                 for (var i = 0; i < count; i++)
                 {
-                    Suns.Add(new global::PlantsVsZombies.Simulation.Sun { X = 3.5f + i * 0.025f, Y = 0f, TargetY = 0.6f });
+                    Suns.Add(CreateSun(3.5f + i * 0.025f, 0f, 0.6f));
                 }
 
                 s.Advice = "阳光组合！";
@@ -9090,7 +9445,7 @@ namespace PlantsVsZombies.Simulation
         private void TickModeAquarium(float dt)
         {
             var s = ModeSession;
-            foreach (var food in s.Food.ToArray())
+            foreach (var food in new PooledSnapshot<ModeFood>(s.Food))
             {
                 food.Age += dt;
                 food.Y += 15f * dt;
@@ -9100,7 +9455,7 @@ namespace PlantsVsZombies.Simulation
                 }
             }
 
-            foreach (var fish in s.Fish.ToArray())
+            foreach (var fish in new PooledSnapshot<ModeFish>(s.Fish))
             {
                 fish.Hunger -= dt;
                 fish.SunTimer -= dt;
@@ -9187,11 +9542,7 @@ namespace PlantsVsZombies.Simulation
                 fish.Y += vy * fish.Speed * dt;
                 if (fish.SunTimer <= 0)
                 {
-                    Suns.Add(new global::PlantsVsZombies.Simulation.Sun {
-                        X = (fish.X - 40f) / 80f,
-                        Y = (fish.Y - 80f) / (Adventure.Level.HasPool || Adventure.Level.HasRoof ? 85f : 100f),
-                        TargetY = (fish.Y - 80f) / (Adventure.Level.HasPool || Adventure.Level.HasRoof ? 85f : 100f)
-                    });
+                    Suns.Add(CreateSun((fish.X - 40f) / 80f, (fish.Y - 80f) / (Adventure.Level.HasPool || Adventure.Level.HasRoof ? 85f : 100f), (fish.Y - 80f) / (Adventure.Level.HasPool || Adventure.Level.HasRoof ? 85f : 100f)));
                     fish.SunTimer = 10f + (float)_random.NextDouble() * 5f;
                 }
             }
@@ -9307,7 +9658,7 @@ namespace PlantsVsZombies.Simulation
         private void TickModeSpecialZombies(float dt)
         {
             var s = ModeSession;
-            foreach (var z in Zombies.ToArray())
+            foreach (var z in new PooledSnapshot<Zombie>(Zombies))
             {
                 var raw = (int)z.Kind;
                 if (raw >= 26 && z.ModeHead < 0)
@@ -9379,7 +9730,7 @@ namespace PlantsVsZombies.Simulation
                 }
                 else if (z.ModeHead == 28 && z._modeHeadTimer <= 0)
                 {
-                    foreach (var p in Plants.ToArray())
+                    foreach (var p in new PooledSnapshot<Plant>(Plants))
                     {
                         if (p.Row == z.Row)
                         {
@@ -9393,7 +9744,7 @@ namespace PlantsVsZombies.Simulation
                 }
                 else if (z.ModeHead == 30 && Plants.Exists(p => p.Row == z.Row && Math.Abs(p.Column + 0.5f - z.X) < 0.8f))
                 {
-                    foreach (var p in Plants.ToArray())
+                    foreach (var p in new PooledSnapshot<Plant>(Plants))
                     {
                         if (p.Row == z.Row && Math.Abs(p.Column + 0.5f - z.X) < 1f)
                         {
@@ -9406,7 +9757,7 @@ namespace PlantsVsZombies.Simulation
                 }
             }
 
-            foreach (var shot in s.HeadShots.ToArray())
+            foreach (var shot in new PooledSnapshot<ModeHeadShot>(s.HeadShots))
             {
                 if (shot.Hypnotized)
                 {
@@ -9494,9 +9845,9 @@ namespace PlantsVsZombies.Simulation
             Rules.AdventureDisableLoot = d.Mechanic == ModeMechanic.IZombie;
             Plants.Clear();
             Zombies.Clear();
-            Peas.Clear();
-            Suns.Clear();
-            Flames.Clear();
+            ClearPeas();
+            ClearSuns();
+            ClearFlames();
             _adventureSunReservation = 0;
             a.ConveyorTicks = 0;
             a._packets.Clear();
@@ -9981,7 +10332,7 @@ namespace PlantsVsZombies.Simulation
                 Flames[i].Age += dt;
                 if (Flames[i].Age >= 1f)
                 {
-                    Flames.RemoveAt(i);
+                    RemoveFlameAt(i);
                 }
             }
 
@@ -10074,8 +10425,8 @@ namespace PlantsVsZombies.Simulation
             State = MatchState.Playing;
             Adventure.Phase = AdventurePhase.Playing;
             Zombies.Clear();
-            Peas.Clear();
-            Flames.Clear();
+            ClearPeas();
+            ClearFlames();
             Adventure._nuts.Clear();
             Adventure._balls.Clear();
             Adventure._packets.Clear();
@@ -10095,7 +10446,7 @@ namespace PlantsVsZombies.Simulation
             if (s.Definition.Mechanic == ModeMechanic.Vases)
             {
                 Plants.Clear();
-                Suns.Clear();
+                ClearSuns();
                 InitializeModeVases();
                 s.Phase = ModePhase.Playing;
             }
@@ -11354,7 +11705,7 @@ namespace PlantsVsZombies.Simulation
                 }
             }
 
-            foreach (var z in Zombies.ToArray())
+            foreach (var z in new PooledSnapshot<Zombie>(Zombies))
             {
                 if (!z.Hypnotized && !z.Headless && z.Kind != ZombieKind.Bungee && !(z.Kind == ZombieKind.Digger && z.AbilityPhase == 2) && z.X < 0.2f)
                 {
@@ -11389,7 +11740,7 @@ namespace PlantsVsZombies.Simulation
                 var old = s._sunflowerDrops[id];
                 for (var i = old; i < drops; i++)
                 {
-                    Suns.Add(new global::PlantsVsZombies.Simulation.Sun { X = p == null ? 1f : p.Column + 0.5f, Y = p == null ? 2f : p.Row + 0.5f, TargetY = p == null ? 2f : p.Row + 0.7f });
+                    Suns.Add(CreateSun(p == null ? 1f : p.Column + 0.5f, p == null ? 2f : p.Row + 0.5f, p == null ? 2f : p.Row + 0.7f));
                 }
 
                 s._sunflowerDrops[id] = drops;

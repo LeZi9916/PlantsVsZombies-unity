@@ -14,6 +14,10 @@ namespace PlantsVsZombies.UI
         private static readonly Dictionary<string, CanvasBitmapFont> s_fonts = new Dictionary<string, CanvasBitmapFont>();
         /// <summary>Stores failed fonts.</summary>
         private static readonly HashSet<string> s_failedFonts = new HashSet<string>();
+        /// <summary>Bounds retained text, font, and wrap-width combinations across changing UI captions.</summary>
+        private const int LayoutCacheCapacity = 512;
+        /// <summary>Reuses immutable glyph placements without mixing fonts or wrapping widths.</summary>
+        private static readonly Dictionary<(CanvasBitmapFont Font, string Text, float Width), BitmapTextLayout> s_layouts = new Dictionary<(CanvasBitmapFont, string, float), BitmapTextLayout>();
         /// <summary>Stores stone text.</summary>
         public static readonly Color StoneText = new Color(21f / 255f, 175f / 255f, 0f, 1f);
         /// <summary>Performs hovered.</summary>
@@ -39,8 +43,9 @@ namespace PlantsVsZombies.UI
         /// <param name = "header">The header.</param>
         public static void DialogFrame(Func<string, Texture2D> texture, Rect rect, bool tallBottom = true, bool header = true)
         {
-            var bottom = tallBottom ? "dialog_bigbottom" : "dialog_bottom";
-            Texture2D tl = texture("dialog_topleft.png"), tr = texture("dialog_topright.png"), bl = texture(bottom + "left.png"), br = texture(bottom + "right.png");
+            Texture2D tl = texture("dialog_topleft.png"), tr = texture("dialog_topright.png"),
+                bl = texture(tallBottom ? "dialog_bigbottomleft.png" : "dialog_bottomleft.png"),
+                br = texture(tallBottom ? "dialog_bigbottomright.png" : "dialog_bottomright.png");
             if (tl == null || tr == null || bl == null || br == null)
             {
                 return;
@@ -55,7 +60,7 @@ namespace PlantsVsZombies.UI
             Tile(texture("dialog_centermiddle.png"), new Rect(rect.x + tl.width, rect.y + tr.height, centerWidth, middleHeight));
             Tile(texture("dialog_centerright.png"), new Rect(rect.xMax - tr.width, rect.y + tr.height, tr.width, middleHeight));
             Image(bl, new Rect(rect.x, rect.yMax - bl.height, bl.width, bl.height));
-            Tile(texture(bottom + "middle.png"), new Rect(rect.x + bl.width, rect.yMax - bl.height, Math.Max(0, rect.width - bl.width - br.width), bl.height));
+            Tile(texture(tallBottom ? "dialog_bigbottommiddle.png" : "dialog_bottommiddle.png"), new Rect(rect.x + bl.width, rect.yMax - bl.height, Math.Max(0, rect.width - bl.width - br.width), bl.height));
             Image(br, new Rect(rect.xMax - br.width, rect.yMax - br.height, br.width, br.height));
             var cap = header ? texture("dialog_header.png") : null;
             if (cap != null)
@@ -76,8 +81,9 @@ namespace PlantsVsZombies.UI
         public static Vector2 StoneButton(Func<string, Texture2D> texture, Rect rect, bool hovered = false, bool pressed = false, bool enabled = true)
         {
             pressed &= enabled;
-            var stem = pressed ? "button_down_" : "button_";
-            Texture2D left = texture(stem + "left.png"), middle = texture(stem + "middle.png"), right = texture(stem + "right.png");
+            Texture2D left = texture(pressed ? "button_down_left.png" : "button_left.png"),
+                middle = texture(pressed ? "button_down_middle.png" : "button_middle.png"),
+                right = texture(pressed ? "button_down_right.png" : "button_right.png");
             if (left == null || middle == null || right == null)
             {
                 return Vector2.zero;
@@ -217,7 +223,7 @@ namespace PlantsVsZombies.UI
                 }
             }
 
-            var layout = bitmap.Layout(text);
+            var layout = GetLayout(bitmap, text);
             if (layout.MissingGlyphs.Count != 0 || layout.LineCount != 1 || layout.Width > maxWidth)
             {
                 return false;
@@ -262,7 +268,7 @@ namespace PlantsVsZombies.UI
                 }
             }
 
-            var layout = font.Layout(text, 1f, wrap ? rect.width : float.PositiveInfinity);
+            var layout = GetLayout(font, text, wrap ? rect.width : float.PositiveInfinity);
             if (layout.MissingGlyphs.Count != 0)
             {
                 return false;
@@ -304,7 +310,7 @@ namespace PlantsVsZombies.UI
                 }
             }
 
-            var layout = bitmap.Layout(text ?? "");
+            var layout = GetLayout(bitmap, text ?? "");
             if (layout.MissingGlyphs.Count != 0)
             {
                 return false;
@@ -315,6 +321,30 @@ namespace PlantsVsZombies.UI
             var x = rect.x + (int)((rect.width - layout.Width) / 2f) + 1 + (pressed ? 1 : 0);
             bitmap.Draw(layout, x, baseline - bitmap.Data.Base, enabled ? Color.white : new Color(.5f, .5f, .5f));
             return true;
+        }
+
+        /// <summary>Reuses immutable text placements while bounding retained captions.</summary>
+        /// <param name="font">The owning font and atlas identity.</param>
+        /// <param name="text">The exact caption to lay out.</param>
+        /// <param name="maxWidth">The character-wrapping width, or infinity for an unwrapped caption.</param>
+        /// <returns>The existing layout or a newly cached layout with the same rendering semantics.</returns>
+        /// <exception cref="ArgumentException">The caption contains an unpaired UTF-16 surrogate.</exception>
+        /// <exception cref="ArgumentOutOfRangeException">The wrapping width is NaN or not positive.</exception>
+        private static BitmapTextLayout GetLayout(CanvasBitmapFont font, string text, float maxWidth = float.PositiveInfinity)
+        {
+            var key = (font, text, maxWidth);
+            if (!s_layouts.TryGetValue(key, out var layout))
+            {
+                if (s_layouts.Count >= LayoutCacheCapacity)
+                {
+                    s_layouts.Clear();
+                }
+
+                layout = font.Layout(text, 1f, maxWidth);
+                s_layouts.Add(key, layout);
+            }
+
+            return layout;
         }
 
         /// <summary>Performs image.</summary>
@@ -355,45 +385,47 @@ namespace PlantsVsZombies.UI
         /// <param name = "borderY">The border y.</param>
         public static void NineSlice(Texture2D image, Rect rect, int borderX, int borderY)
         {
-            float[] sx =
-            {
-                0,
-                borderX,
-                image.width - borderX,
-                image.width
-            }, sy =
-            {
-                0,
-                borderY,
-                image.height - borderY,
-                image.height
-            };
+            float imageWidth = image.width, imageHeight = image.height;
             float bx = Math.Min(borderX, rect.width / 2), by = Math.Min(borderY, rect.height / 2);
-            float[] dx =
-            {
-                rect.x,
-                rect.x + bx,
-                rect.xMax - bx,
-                rect.xMax
-            }, dy =
-            {
-                rect.y,
-                rect.y + by,
-                rect.yMax - by,
-                rect.yMax
-            };
             for (var row = 0; row < 3; row++)
             {
+                var sourceTop = SliceEdge(row, 0f, imageHeight, borderY);
+                var sourceBottom = SliceEdge(row + 1, 0f, imageHeight, borderY);
+                var top = SliceEdge(row, rect.y, rect.height, by);
+                var bottom = SliceEdge(row + 1, rect.y, rect.height, by);
                 for (var col = 0; col < 3; col++)
                 {
-                    CanvasUI.DrawTextureWithTexCoords(new Rect(dx[col], dy[row], dx[col + 1] - dx[col], dy[row + 1] - dy[row]), image, new Rect(sx[col] / image.width, 1 - sy[row + 1] / image.height, (sx[col + 1] - sx[col]) / image.width, (sy[row + 1] - sy[row]) / image.height), true);
+                    var sourceLeft = SliceEdge(col, 0f, imageWidth, borderX);
+                    var sourceRight = SliceEdge(col + 1, 0f, imageWidth, borderX);
+                    var left = SliceEdge(col, rect.x, rect.width, bx);
+                    var right = SliceEdge(col + 1, rect.x, rect.width, bx);
+                    CanvasUI.DrawTextureWithTexCoords(new Rect(left, top, right - left, bottom - top), image,
+                        new Rect(sourceLeft / imageWidth, 1f - sourceBottom / imageHeight, (sourceRight - sourceLeft) / imageWidth, (sourceBottom - sourceTop) / imageHeight), true);
                 }
             }
+        }
+
+        /// <summary>Computes one of the four edges of a three-part image axis without a temporary array.</summary>
+        /// <param name="index">The zero-based edge, from zero through three.</param>
+        /// <param name="origin">The beginning of the axis.</param>
+        /// <param name="length">The complete source or destination length.</param>
+        /// <param name="border">The border retained at each end of the axis.</param>
+        /// <returns>The requested source or destination edge coordinate.</returns>
+        private static float SliceEdge(int index, float origin, float length, float border)
+        {
+            return index switch
+            {
+                0 => origin,
+                1 => origin + border,
+                2 => origin + length - border,
+                _ => origin + length
+            };
         }
 
         /// <summary>Performs release fonts.</summary>
         public static void ReleaseFonts()
         {
+            s_layouts.Clear();
             foreach (CanvasBitmapFont font in s_fonts.Values)
             {
                 font.Dispose();

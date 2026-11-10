@@ -33,6 +33,8 @@ namespace PlantsVsZombies.UI
         /// <param name="clip">The group clipping rectangle in top-left screen pixels.</param>
         internal void Configure(Texture texture, Rect destination, Rect uv, Matrix4x4 matrix, Color tint, Rect clip)
         {
+            var textureChanged = _texture != texture;
+            var geometryChanged = !_destination.Equals(destination) || !_uv.Equals(uv) || !_matrix.Equals(matrix) || !_clip.Equals(clip);
             _texture = texture;
             _destination = destination;
             _uv = uv;
@@ -40,7 +42,15 @@ namespace PlantsVsZombies.UI
             _clip = clip;
             color = tint;
             raycastTarget = false;
-            SetAllDirty();
+            if (textureChanged)
+            {
+                SetMaterialDirty();
+            }
+
+            if (geometryChanged)
+            {
+                SetVerticesDirty();
+            }
         }
 
         /// <summary>Builds the native Canvas mesh after applying the current transform and clip.</summary>

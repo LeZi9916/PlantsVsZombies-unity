@@ -25,5 +25,26 @@ namespace PlantsVsZombies.Simulation
         public float TargetY;
         /// <summary>Stores age.</summary>
         public float Age;
+
+        /// <summary>Restores construction defaults before a retired sun is spawned again.</summary>
+        internal void Reset()
+        {
+            PresentationNative = false;
+            PresentationFromPlant = false;
+            PresentationSpecialExpansion = false;
+            PresentationMotion = default;
+            PresentationPickup = default;
+            PresentationPreviousX = 0f;
+            PresentationPreviousY = 0f;
+            PresentationScale = 1f;
+            PresentationVelocityX = 0f;
+            PresentationVelocityY = 0f;
+            PresentationLandingY = 0f;
+            Value = 25;
+            X = 0f;
+            Y = 0f;
+            TargetY = 0f;
+            Age = 0f;
+        }
     }
 }

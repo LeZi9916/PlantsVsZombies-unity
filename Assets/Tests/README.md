@@ -34,3 +34,23 @@ colors, transparency, overlap order, transforms, object reuse, and disposal.
 Canvas tests interleave artwork with scene meshes, clip transformed groups,
 retire stale graphics, and retain editable text/focus across presentation frames.
 These checks do not replace scene interaction or target-platform Player tests.
+
+Performance regressions use `GC.GetAllocatedBytesForCurrentThread` after warming
+reusable buffers. `SimulationPoolingTests` exercises projectile/sun reuse, full
+state reset, mutation-safe nested snapshots, and steady simulation queries.
+`AdventureIntroPerformanceTests` checks cached chooser frames.
+`ReanimationHotPathTests` checks clip/texture lookups, sampled track counts,
+particle recycling, and multi-head cursor drawing. PlayMode tests cover pooled
+audio admission/pause/completion, retained Canvas dirty state, direct/captured
+zombie alpha and clipping, and reusable actor callbacks. The real `PvZGame.Update`
+allocation test uses synthetic assets with audio and persistent progress loading
+disabled; it does not measure a complete loaded Player.
+
+Audio prewarms 64 shared pitched voices and preserves the native eight-voice
+Foley limit per category. A full pool drops the new sound while existing sounds
+finish. Simulation pools grow with concurrent demand and bound retained inactive
+entries; new assets, changed labels, larger bursts, special feedback captures,
+and startup can still allocate. Synthetic steady-state zero-allocation checks
+are not a claim of zero allocation or a CPU-time target for an entire match.
+Re-profile a loaded Player's chooser and combat on each target platform to
+compare frame time with the original capture.

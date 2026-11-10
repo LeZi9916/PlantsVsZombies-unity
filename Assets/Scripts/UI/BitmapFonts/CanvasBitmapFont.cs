@@ -169,8 +169,10 @@ namespace PlantsVsZombies.UI.BitmapFonts
             try
             {
                 CanvasUI.Color = previous * color;
-                foreach (PlacedBitmapGlyph placed in layout.Glyphs)
+                var glyphs = layout.Glyphs;
+                for (var i = 0; i < glyphs.Count; i++)
                 {
+                    var placed = glyphs[i];
                     var glyph = placed.Glyph;
                     if (glyph.Width == 0 || glyph.Height == 0)
                     {

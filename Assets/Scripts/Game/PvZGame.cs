@@ -179,6 +179,7 @@ namespace PlantsVsZombies.Game
         private void Awake()
         {
             _presenter = new GamePresenter(this);
+            _adventureIntroEventHandler = HandleAdventureIntroEvent;
             Application.targetFrameRate = 60;
             Application.wantsToQuit += CanQuit;
             var arguments = Environment.GetCommandLineArgs();
@@ -202,6 +203,7 @@ namespace PlantsVsZombies.Game
             _soundVolume = Mathf.Clamp01(PlayerPrefs.GetFloat("PvZReplica.Sound", 0.7f));
             _musicSource.volume = _musicVolume;
             _audioSource.volume = _soundVolume;
+            _soundVoices = new AudioVoicePool(gameObject, _audioSource, 64);
             _font = Font.CreateDynamicFontFromOSFont(new[] { "Microsoft YaHei", "Arial" }, 16);
             _modeView = new ModeSelectionView(_root, Texture, _font);
             InitializeModes();
@@ -1275,8 +1277,8 @@ namespace PlantsVsZombies.Game
             return texture;
         }
 
-        /// <summary>Stores adventure cherry juicy voices.</summary>
-        private readonly List<AudioSource> _adventureCherryJuicyVoices = new List<AudioSource>();
+        /// <summary>Reuses bounded sound voices for pitched explosions and zombie Foley.</summary>
+        private AudioVoicePool _soundVoices = null!;
 
         // Called synchronously by PlaySound for the existing simulation event. Returning
         // true suppresses the old Explosion->cherrybomb mapping for this Cherry only.
@@ -1308,33 +1310,9 @@ namespace PlantsVsZombies.Game
                     continue;
                 }
 
-                AudioSource voice = null;
-                foreach (var candidate in _adventureCherryJuicyVoices)
-                {
-                    if (candidate != null && !candidate.isPlaying)
-                    {
-                        voice = candidate;
-                        break;
-                    }
-                }
-
-                if (voice == null)
-                {
-                    voice = gameObject.AddComponent<AudioSource>();
-                    voice.playOnAwake = false;
-                    voice.loop = false;
-                    voice.spatialBlend = 0f;
-                    voice.outputAudioMixerGroup = _audioSource.outputAudioMixerGroup;
-                    voice.ignoreListenerPause = _audioSource.ignoreListenerPause;
-                    _adventureCherryJuicyVoices.Add(voice);
-                }
-
-                voice.volume = _audioSource.volume * .7f;
                 // PC 63E850 applies integer DirectSound frequency after semitone scaling.
                 var frequency = Math.Max(100.0, Math.Min(100000.0, clip.frequency * Math.Pow(1.0594630943592953, sound.JuicyPitchSteps)));
-                voice.pitch = (float)((int)frequency / (double)clip.frequency);
-                voice.clip = clip;
-                voice.Play();
+                _soundVoices.TryPlay(clip, _audioSource.volume * .7f, (float)((int)frequency / (double)clip.frequency), group: -1);
             }
 
             return trigger == GameEvent.Explosion && detonation;
@@ -1348,28 +1326,14 @@ namespace PlantsVsZombies.Game
             PlayAdventureCherryBombSounds(GameEvent.Planted);
             if (_audioSource != null)
             {
-                foreach (var voice in _adventureCherryJuicyVoices)
-                {
-                    if (voice != null)
-                    {
-                        voice.volume = _audioSource.volume * .7f;
-                    }
-                }
+                _soundVoices?.SetVolume(_audioSource.volume * .7f, -1);
             }
         }
 
-        /// <summary>Performs dispose adventure cherry bomb audio.</summary>
+        /// <summary>Releases the prewarmed sound voices owned by this session.</summary>
         private void DisposeAdventureCherryBombAudio()
         {
-            foreach (var voice in _adventureCherryJuicyVoices)
-            {
-                if (voice != null)
-                {
-                    Destroy(voice);
-                }
-            }
-
-            _adventureCherryJuicyVoices.Clear();
+            _soundVoices?.Dispose();
         }
 
         /// <summary>Stores native conveyor clip.</summary>
@@ -1477,6 +1441,8 @@ namespace PlantsVsZombies.Game
             _adventurePreview.Sort((a, b) => a.RenderOrder.CompareTo(b.RenderOrder));
         }
 
+        /// <summary>Reuses the intro event callback across native simulation ticks.</summary>
+        private Action<AdventureIntroEvent> _adventureIntroEventHandler = null!;
         /// <summary>Performs update adventure opening.</summary>
         /// <param name = "dt">The dt.</param>
         /// <returns>The resulting update adventure opening.</returns>
@@ -1502,7 +1468,7 @@ namespace PlantsVsZombies.Game
             {
                 _adventureIntroRemainder -= (double).01f;
                 _adventureIntroVisualAge += .01f;
-                _adventureIntro.Tick(emit: HandleAdventureIntroEvent);
+                _adventureIntro.Tick(emit: _adventureIntroEventHandler);
                 _adventureIntroFrame = _adventureIntro.Frame;
             }
 
@@ -1555,8 +1521,10 @@ namespace PlantsVsZombies.Game
             if (_adventureIntro == null)
             {
                 var index = 0;
-                foreach (PlantKind kind in _game.Adventure.AvailableSeeds)
+                var availableSeeds = _game.Adventure.AvailableSeeds;
+                for (var seedIndex = 0; seedIndex < availableSeeds.Count; seedIndex++)
                 {
+                    var kind = availableSeeds[seedIndex];
                     if (kind == seed)
                     {
                         break;
@@ -1575,8 +1543,10 @@ namespace PlantsVsZombies.Game
             }
 
             var upgrades = _game.Adventure.Level.IsReplay;
-            foreach (PlantKind kind in _game.Adventure.AvailableSeeds)
+            var chooserSeeds = _game.Adventure.AvailableSeeds;
+            for (var seedIndex = 0; seedIndex < chooserSeeds.Count; seedIndex++)
             {
+                var kind = chooserSeeds[seedIndex];
                 if ((int)kind >= 40 && (int)kind < 48)
                 {
                     upgrades = true;
@@ -1627,7 +1597,7 @@ namespace PlantsVsZombies.Game
         /// <summary>Stores adventure grid y.</summary>
         internal const float AdventureGridY = 80f;
         /// <summary>Stores adventure clips.</summary>
-        private readonly Dictionary<string, bool> _adventureClips = new Dictionary<string, bool>();
+        private readonly Dictionary<(string Asset, string Clip), bool> _adventureClips = new Dictionary<(string, string), bool>();
         /// <summary>Gets or sets adventure pitch.</summary>
         internal float AdventurePitch
         {
@@ -1689,7 +1659,7 @@ namespace PlantsVsZombies.Game
         /// <returns>The resulting adventure clip exists.</returns>
         internal bool AdventureClipExists(string name, string clip)
         {
-            var key = name + ":" + clip;
+            var key = (name, clip);
             bool exists;
             if (!_adventureClips.TryGetValue(key, out exists))
             {
@@ -1701,13 +1671,21 @@ namespace PlantsVsZombies.Game
             return exists;
         }
 
+        /// <summary>Caches immutable catalog animation paths for zombie kinds.</summary>
+        private static readonly Dictionary<ZombieKind, string> s_zombieAnimationNames = new Dictionary<ZombieKind, string>();
         /// <summary>Performs adventure zombie animation.</summary>
         /// <param name = "kind">The kind.</param>
         /// <returns>The resulting adventure zombie animation.</returns>
         internal static string AdventureZombieAnimation(ZombieKind kind)
         {
-            ReanimationDefinition definition;
-            return VerifiedDataCatalog.TryGetReanimation(VerifiedDataCatalog.Zombies[(int)kind].ReanimationId, out definition) ? Path.GetFileNameWithoutExtension(definition.Path.Replace('\\', '/')) : "Zombie";
+            if (!s_zombieAnimationNames.TryGetValue(kind, out var name))
+            {
+                ReanimationDefinition definition;
+                name = VerifiedDataCatalog.TryGetReanimation(VerifiedDataCatalog.Zombies[(int)kind].ReanimationId, out definition) ? Path.GetFileNameWithoutExtension(definition.Path.Replace('\\', '/')) : "Zombie";
+                s_zombieAnimationNames.Add(kind, name);
+            }
+
+            return name;
         }
         /// <summary>Stores award introduction audio.</summary>
         private AdventureRewardPresentation _awardIntroductionAudio;
@@ -5041,9 +5019,7 @@ namespace PlantsVsZombies.Game
         /// <summary>Stores zombie foley random.</summary>
         private readonly System.Random _zombieFoleyRandom = new global::PlantsVsZombies.Randomness.OriginalRandomAdapter(12345U);
         /// <summary>Stores zombie foley last tick.</summary>
-        private readonly Dictionary<int, int> _zombieFoleyLastTick = new Dictionary<int, int>();
-        /// <summary>Stores zombie foley instances.</summary>
-        private readonly Dictionary<int, List<AudioSource>> _zombieFoleyInstances = new Dictionary<int, List<AudioSource>>();
+        private readonly Dictionary<int, int> _zombieFoleyLastTick = new Dictionary<int, int>(AdventureZombieFoleyData.Definitions.Count);
 
         /// <summary>Performs update adventure zombie part audio.</summary>
         internal void UpdateAdventureZombiePartAudio()
@@ -5107,28 +5083,9 @@ namespace PlantsVsZombies.Game
                 return;
             }
 
-            List<AudioSource> sources;
-            if (!_zombieFoleyInstances.TryGetValue(evt.Foley, out sources))
+            if (!_soundVoices.CanPlay(evt.Foley, 8))
             {
-                _zombieFoleyInstances[evt.Foley] = sources = new List<AudioSource>();
-            }
-
-            var source = sources.Find(s => s != null && !s.isPlaying);
-            if (source == null)
-            {
-                if (sources.Count >= 8)
-                {
-                    return;
-                }
-
-                var child = new GameObject("Original Zombie Foley " + evt.Foley);
-                child.transform.SetParent(transform, false);
-                source = child.AddComponent<AudioSource>();
-                source.playOnAwake = false;
-                source.loop = false;
-                source.spatialBlend = 0f;
-                source.outputAudioMixerGroup = _audioSource.outputAudioMixerGroup;
-                sources.Add(source);
+                return;
             }
 
             // PC table 0x74B3B8: preserve duplicate entries as variation weights.
@@ -5142,11 +5099,10 @@ namespace PlantsVsZombies.Game
 
             // PC DSoundInstance::AdjustPitch 0x63E850, including native frequency limits.
             var frequency = Math.Max(100d, Math.Min(100000d, clip.frequency * Math.Pow(1.059463094359295d, semitones)));
-            source.clip = clip;
-            source.pitch = (float)(frequency / clip.frequency);
-            source.volume = _soundVolume;
-            _zombieFoleyLastTick[evt.Foley] = evt.Tick;
-            source.Play();
+            if (_soundVoices.TryPlay(clip, _soundVolume, (float)(frequency / clip.frequency), evt.Foley, 8))
+            {
+                _zombieFoleyLastTick[evt.Foley] = evt.Tick;
+            }
         }
 
         /// <summary>Performs load adventure zombie part audio.</summary>

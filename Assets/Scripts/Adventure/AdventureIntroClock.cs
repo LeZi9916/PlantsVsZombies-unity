@@ -12,6 +12,12 @@ namespace PlantsVsZombies.Adventure
         public int NativeTime { get; private set; }
         /// <summary>Gets or sets waiting for seeds.</summary>
         public bool WaitingForSeeds { get; private set; }
+        /// <summary>The last sampled immutable-in-use frame for the current clock state.</summary>
+        private AdventureIntroFrame? _frame;
+        /// <summary>The native time used to create the cached frame.</summary>
+        private int _frameNativeTime = -1;
+        /// <summary>The chooser waiting state used to create the cached frame.</summary>
+        private bool _frameWaitingForSeeds;
 
         /// <summary>Gets or sets complete.</summary>
         public bool Complete
@@ -33,12 +39,20 @@ namespace PlantsVsZombies.Adventure
             }
         }
 
-        /// <summary>Gets or sets frame.</summary>
+        /// <summary>Gets the current presentation snapshot, shared until the clock state changes.</summary>
+        /// <remarks>The plan and returned frames are read-only inputs to the running presentation.</remarks>
         public AdventureIntroFrame Frame
         {
             get
             {
-                return AdventureIntroPresentation.Sample(Plan, NativeTime, WaitingForSeeds);
+                if (_frame == null || _frameNativeTime != NativeTime || _frameWaitingForSeeds != WaitingForSeeds)
+                {
+                    _frame = AdventureIntroPresentation.Sample(Plan, NativeTime, WaitingForSeeds);
+                    _frameNativeTime = NativeTime;
+                    _frameWaitingForSeeds = WaitingForSeeds;
+                }
+
+                return _frame;
             }
         }
 

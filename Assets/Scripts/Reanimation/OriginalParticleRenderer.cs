@@ -14,6 +14,8 @@ namespace PlantsVsZombies.Reanimation
     /// <summary>Evaluates imported original particle emitters. No effect is defined by this renderer.</summary>
     public sealed class OriginalParticleRenderer
     {
+        /// <summary>Limits retained particles per immutable emitter definition after bursts have ended.</summary>
+        private const int MaximumRetainedParticles = 256;
         /// <summary>Defines node.</summary>
         private sealed class Node
         {
@@ -175,6 +177,8 @@ namespace PlantsVsZombies.Reanimation
             public readonly List<Field> Fields = new List<Field>();
             /// <summary>Stores system fields.</summary>
             public readonly List<Field> SystemFields = new List<Field>();
+            /// <summary>Reuses particles and their random buffers after expiry or system retirement.</summary>
+            public readonly Stack<Particle> InactiveParticles = new Stack<Particle>();
             /// <summary>Performs track.</summary>
             /// <param name = "name">The name.</param>
             /// <param name = "fallback">The fallback.</param>
@@ -247,10 +251,14 @@ namespace PlantsVsZombies.Reanimation
         private readonly Dictionary<string, List<EmitterDefinition>> _definitions = new Dictionary<string, List<EmitterDefinition>>(StringComparer.OrdinalIgnoreCase);
         /// <summary>Stores systems.</summary>
         private readonly Dictionary<string, SystemInstance> _systems = new Dictionary<string, SystemInstance>();
+        /// <summary>Reuses the keys collected while retiring systems after a presentation frame.</summary>
+        private readonly List<string> _expiredSystems = new List<string>();
         /// <summary>Stores frame.</summary>
         private int _frame;
         /// <summary>Gets or sets last error.</summary>
         public string LastError { get; private set; }
+        /// <summary>Gets the number of particle objects created before reuse could satisfy a spawn.</summary>
+        internal int CreatedParticleCount { get; private set; }
 
         /// <summary>Initializes original particle renderer.</summary>
         /// <param name = "assetRoot">The asset root.</param>
@@ -304,24 +312,32 @@ namespace PlantsVsZombies.Reanimation
         /// <summary>Performs end frame.</summary>
         public void EndFrame()
         {
-            var expired = new List<string>();
+            _expiredSystems.Clear();
             foreach (var pair in _systems)
             {
                 if (pair.Value.Seen != _frame)
                 {
-                    expired.Add(pair.Key);
+                    _expiredSystems.Add(pair.Key);
                 }
             }
 
-            foreach (string key in expired)
+            foreach (var key in _expiredSystems)
             {
+                ReleaseSystemParticles(_systems[key]);
                 _systems.Remove(key);
             }
+
+            _expiredSystems.Clear();
         }
 
         /// <summary>Performs clear.</summary>
         public void Clear()
         {
+            foreach (var system in _systems.Values)
+            {
+                ReleaseSystemParticles(system);
+            }
+
             _systems.Clear();
         }
 
@@ -568,14 +584,26 @@ namespace PlantsVsZombies.Reanimation
         /// <summary>Performs spawn.</summary>
         /// <param name = "system">The system.</param>
         /// <param name = "emitter">The emitter.</param>
-        private static void Spawn(SystemInstance system, Emitter emitter)
+        private void Spawn(SystemInstance system, Emitter emitter)
         {
             var definition = emitter.Definition;
-            var particle = new Particle
+            Particle particle;
+            if (definition.InactiveParticles.Count > 0)
             {
-                Random = new float[8],
-                FieldRandom = new float[definition.Fields.Count, 2]
-            };
+                particle = definition.InactiveParticles.Pop();
+            }
+            else
+            {
+                particle = new Particle
+                {
+                    Random = new float[8],
+                    FieldRandom = new float[definition.Fields.Count, 2]
+                };
+                CreatedParticleCount++;
+            }
+
+            particle.Age = 0f;
+            particle.SpinVelocity = 0f;
             for (var i = 0; i < particle.Random.Length; i++)
             {
                 particle.Random[i] = Random01(system);
@@ -628,7 +656,7 @@ namespace PlantsVsZombies.Reanimation
 
         /// <summary>Performs step.</summary>
         /// <param name = "system">The system.</param>
-        private static void Step(SystemInstance system)
+        private void Step(SystemInstance system)
         {
             foreach (Emitter emitter in system.Emitters)
             {
@@ -637,7 +665,7 @@ namespace PlantsVsZombies.Reanimation
                 var fading = stopped && system.FadeOut != null && system.Tick - system.StopTick < system.FadeDuration;
                 if (stopped && !fading)
                 {
-                    emitter.Particles.Clear();
+                    ReleaseEmitterParticles(emitter);
                     continue;
                 }
 
@@ -657,6 +685,7 @@ namespace PlantsVsZombies.Reanimation
                         else
                         {
                             emitter.Particles.RemoveAt(index);
+                            ReturnParticle(definition, particle);
                             continue;
                         }
                     }
@@ -736,6 +765,39 @@ namespace PlantsVsZombies.Reanimation
                 {
                     emitter.Age = 0;
                 }
+            }
+        }
+
+        /// <summary>Returns the particles owned by every emitter of a retired effect system.</summary>
+        /// <param name="system">The system omitted by presentation or explicitly cleared.</param>
+        private static void ReleaseSystemParticles(SystemInstance system)
+        {
+            foreach (var emitter in system.Emitters)
+            {
+                ReleaseEmitterParticles(emitter);
+            }
+        }
+
+        /// <summary>Retires active particles while retaining the emitter list's reusable capacity.</summary>
+        /// <param name="emitter">The emitter whose particles are no longer displayed.</param>
+        private static void ReleaseEmitterParticles(Emitter emitter)
+        {
+            foreach (var particle in emitter.Particles)
+            {
+                ReturnParticle(emitter.Definition, particle);
+            }
+
+            emitter.Particles.Clear();
+        }
+
+        /// <summary>Retains a bounded particle buffer for a later spawn using the same immutable field layout.</summary>
+        /// <param name="definition">The definition owning the particle's fixed random-buffer dimensions.</param>
+        /// <param name="particle">The expired particle to make available for reuse.</param>
+        private static void ReturnParticle(EmitterDefinition definition, Particle particle)
+        {
+            if (definition.InactiveParticles.Count < MaximumRetainedParticles)
+            {
+                definition.InactiveParticles.Push(particle);
             }
         }
     }

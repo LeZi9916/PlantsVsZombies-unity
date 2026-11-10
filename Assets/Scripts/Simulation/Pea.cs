@@ -65,7 +65,7 @@ namespace PlantsVsZombies.Simulation
         /// <summary>Stores last torch column.</summary>
         public int LastTorchColumn = -1;
         /// <summary>Stores hit ids.</summary>
-        public readonly HashSet<int> HitIds = new HashSet<int>();
+        public readonly HashSet<int> HitIds = new HashSet<int>(4);
         /// <summary>Stores homing.</summary>
         public bool Homing;
         /// <summary>Stores target zombie id.</summary>
@@ -83,5 +83,52 @@ namespace PlantsVsZombies.Simulation
         public float X;
         /// <summary>Stores is snow.</summary>
         public bool IsSnow;
+
+        /// <summary>Restores construction defaults while retaining the piercing-hit set's storage.</summary>
+        internal void Reset()
+        {
+            PresentationSnowTrail = null!;
+            PresentationPlantId = 0;
+            PresentationAge = 0f;
+            PresentationLaunchRow = 0;
+            PresentationLaunchColumn = 0;
+            PresentationLobVelocity = -7f;
+            PresentationPreviousX = 0f;
+            PresentationPreviousRow = 0f;
+            PresentationRotation = 0f;
+            PresentationSpin = 0f;
+            PresentationNativeAge = 0f;
+            PresentationLobHeight = 0f;
+            PresentationPreviousLobHeight = 0f;
+            PresentationLobInitialVelocity = -7f;
+            PresentationLobX = 0f;
+            PresentationLaunchY = 0f;
+            PresentationMotionInitialized = false;
+            PresentationInitialized = false;
+            Damage = 20f;
+            VelocityX = 4.5f;
+            VelocityY = 0f;
+            FlightRow = 0f;
+            StartX = 0f;
+            Range = 20f;
+            Lobbed = false;
+            PiercesShield = false;
+            PiercesZombies = false;
+            Splash = false;
+            Butter = false;
+            Fire = false;
+            HitsAir = false;
+            Backward = false;
+            LastTorchColumn = -1;
+            HitIds.Clear();
+            Homing = false;
+            TargetZombieId = 0;
+            ChillSplash = false;
+            SourceKind = PlantKind.Peashooter;
+            SourceIsImitated = false;
+            Row = 0;
+            X = 0f;
+            IsSnow = false;
+        }
     }
 }
