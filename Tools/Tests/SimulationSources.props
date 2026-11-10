@@ -1,0 +1,18 @@
+<Project>
+  <!-- Shared source boundary for the Unity-independent simulation regression suites. -->
+  <ItemGroup>
+    <Compile Include="$(MSBuildThisFileDirectory)../../Assets/Scripts/Simulation/**/*.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)../../Assets/Scripts/Adventure/**/*.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)../../Assets/Scripts/BoardUI/**/*.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)../../Assets/Scripts/Levels/**/*.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)../../Assets/Scripts/Modes/**/*.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)../../Assets/Scripts/Plants/**/*.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)../../Assets/Scripts/Profiles/**/*.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)../../Assets/Scripts/Progression/**/*.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)../../Assets/Scripts/Randomness/**/*.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)../../Assets/Scripts/Sun/**/*.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)../../Assets/Scripts/Timing/**/*.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)../../Assets/Scripts/VerifiedData/**/*.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)../../Assets/Scripts/Waves/**/*.cs" />
+  </ItemGroup>
+</Project>

@@ -98,7 +98,7 @@ named `Survival`, Puzzle on `Challenges`, and Survival on `Vasebreaker`.
 ## Verification
 
 ```powershell
-dotnet run --project PvZUnity/tests/SelectorTests/SelectorTests.csproj -c Release
+dotnet run --project PvZUnity/Tools/Tests/SelectorTests/SelectorTests.csproj -c Release
 ```
 
 The standalone tests exercise hit intents, boundaries, cache behavior, mask

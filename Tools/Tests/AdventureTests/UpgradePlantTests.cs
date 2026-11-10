@@ -3,8 +3,8 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Collections.Generic;
-using PvZReplica;
-using PvZReplica.Adventure;
+using PlantsVsZombies.Simulation;
+using PlantsVsZombies.Adventure;
 
 internal static class UpgradePlantTests
 {
@@ -16,7 +16,7 @@ internal static class UpgradePlantTests
         var g=new GameSimulation(new GameRules{AdventureLevel=level,AdventureSeedAccess=AdventureSeedAccess.DevelopmentAll(target)},3967);
         var deck=wanted.ToList();foreach(var k in g.Adventure.AvailableSeeds)if(deck.Count<6 && !deck.Contains(k))deck.Add(k);
         Check(g.ChooseAdventureSeeds(deck),"fixture selects six earned/explicitly granted seeds");
-        g.Adventure.CurrentWave=g.Adventure.Waves.Count;g.Adventure.FinalAmbush=false;g.Adventure.NextSkySun=float.MaxValue;
+        g.Adventure.CurrentWave=g.Adventure.Waves.Count;g.Adventure._finalAmbush=false;g.Adventure._nextSkySun=float.MaxValue;
         var sun=new Sun{Value=9990};g.Suns.Add(sun);Check(g.CollectSun(sun),"isolated unit fixture credit");return g;
     }
     private static Zombie Spawn(GameSimulation g,ZombieKind kind,int row,float x)

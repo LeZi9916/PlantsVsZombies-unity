@@ -1,184 +1,222 @@
+#nullable enable
 using System;
 using System.Collections.Generic;
 
-namespace PvZReplica.Adventure
+namespace PlantsVsZombies.Adventure
 {
-    // Isolated PC cutscene presentation. No game objects, Unity or music dependency.
-    public enum AdventureIntroStage { Home, PanToStreet, Street, ChoosingSeeds, ReturnToLawn, LawnSetup, ReadySetPlant, Complete }
-    public enum AdventureIntroEvent { SeedChooserOpened, PlaceLawnItems, SodStarted, SodFinished, GraveStonesEnabled, ReadySetPlantStarted, IntroFinished }
-    public sealed class AdventureIntroContext
-    {
-        public int Level = 1, NativeMode, NativeBackground;
-        public bool FirstAdventure = true, HasBoard = true, SurvivalRepick, HasGraveStones;
-        public bool IsStormyNight, IsFinalBoss, IsLittleTrouble, CanShowAlmanacOrStore;
-        public bool IsConveyor, EasyPlantingCheat, HasCrazyDaveDialog;
-        public int CrazyDaveTimeOverride = -1;
-        public bool? ChooseSeedsOverride, NonScrollingOverride;
-        public int LogicalWidth = 800, SeedBankImageHeight = 87, SeedBankStartX;
-        // Native predicates outside the presentation helper remain owned by the host.
-        public bool IsShovel { get { return HasBoard && (NativeMode == 17 || NativeMode == 33 || NativeMode == 0 && Level == 5); } }
-        public bool IsWhack { get { return HasBoard && (NativeMode == 30 || NativeMode == 0 && Level == 15); } }
-        public bool IsBowling { get { return HasBoard && NativeMode == 49; } }
-        public bool IsIZombie { get { return HasBoard && NativeMode >= 61 && NativeMode <= 70; } }
-        public bool IsVase { get { return NativeMode >= 51 && NativeMode <= 60 || NativeMode == 0 && Level == 35; } }
-        public bool HasPool { get { return NativeBackground == 2 || NativeBackground == 3; } }
-        public bool HasRoof { get { return NativeBackground == 4 || NativeBackground == 5; } }
-    }
-    public sealed class AdventureIntroPlan
-    {
-        public AdventureIntroContext Context;
-        public bool ChooseSeeds, NonScrolling, ScrolledLeftAtStart, DrawSeedBank;
-        public int SodTime, GraveStoneTime, ReadyTime, LawnMowerTime, DaveTime, FogTime, BossTime;
-        public int PanRightStart { get { return 1500 + DaveTime; } }
-        public int PanRightEnd { get { return 3500 + DaveTime; } }
-        public int ChooserOnStart { get { return 4000 + DaveTime; } }
-        public int ChooserOnEnd { get { return 4250 + DaveTime; } }
-        public int ChooserOffStart { get { return 4500 + DaveTime; } }
-        public int ChooserOffEnd { get { return 4750 + DaveTime; } }
-        public int PanLeftEnd { get { return 6000 + DaveTime; } }
-        public int SodStart { get { return 6000 + DaveTime; } }
-        public int SodEnd { get { return SodStart + SodTime; } }
-        public int GraveStoneStart { get { return 6000 + DaveTime + SodTime; } }
-        public int BankOnStart { get { return 4000 + DaveTime + (ChooseSeeds ? 0 : 2000 + SodTime + GraveStoneTime + FogTime + BossTime); } }
-        public int BankOnEnd { get { return BankOnStart + 250; } }
-        public int ReadyStart { get { return 6000 + DaveTime + LawnMowerTime + SodTime + GraveStoneTime + FogTime + BossTime; } }
-        public int End { get { return ReadyStart + ReadyTime; } }
-    }
-    public readonly struct AdventureIntroBlit
-    {
-        public readonly string Resource;
-        public readonly int SourceX, SourceY, Width, Height, X, Y;
-        public AdventureIntroBlit(string resource, int sx, int sy, int width, int height, int x, int y)
-        { Resource = resource; SourceX = sx; SourceY = sy; Width = width; Height = height; X = x; Y = y; }
-    }
-    public readonly struct AdventureIntroAnimation
-    {
-        public readonly string Asset;
-        public readonly float X, Y, Seconds, Rate;
-        public readonly int FrameCount, RenderOrder;
-        // Both assets use their ENTIRE original definition, not a guessed anim_ clip.
-        public AdventureIntroAnimation(string asset, float x, float y, float seconds, float rate, int count, int order)
-        { Asset = asset; X = x; Y = y; Seconds = seconds; Rate = rate; FrameCount = count; RenderOrder = order; }
-    }
-    public readonly struct AdventureIntroParticle
-    {
-        public readonly string Asset;
-        public readonly float X, Y, Seconds;
-        public readonly int RenderOrder;
-        public AdventureIntroParticle(string asset, float x, float y, float seconds, int order)
-        { Asset = asset; X = x; Y = y; Seconds = seconds; RenderOrder = order; }
-    }
-    public sealed class AdventureIntroFrame
-    {
-        public AdventureIntroStage Stage;
-        public int NativeTime, BoardX, BoardY, SeedBankX, SeedBankY, SeedBankDarken, ChooserY, SodPosition;
-        public bool WorldInputEnabled, MenuVisible, ChooserVisible, PreviewVisible;
-        public readonly List<AdventureIntroBlit> SodBlits = new List<AdventureIntroBlit>();
-        public readonly List<AdventureIntroAnimation> Animations = new List<AdventureIntroAnimation>();
-        public readonly List<AdventureIntroParticle> Particles = new List<AdventureIntroParticle>();
-        public readonly int[] MowerX = { -80, -80, -80, -80, -80, -80 };
-    }
-    public sealed class AdventureIntroPreviewZombie
-    {
-        public int NativeKind, GridX, GridY, Row, RenderOrder;
-        public float WorldX, WorldY, Scale = 1f, Altitude, AnimationRate, InitialPhase;
-        public string Animation;
-        public bool Loop = true, ShowDuckyTube;
-    }
+    /// <summary>Defines adventure intro presentation.</summary>
     public static class AdventureIntroPresentation
     {
+        /// <summary>Stores native update.</summary>
         public const int NativeUpdate = 10;
+        /// <summary>Stores evidence.</summary>
         public const string Evidence = "PC 0x446520/0x4473C0/0x447E30; 0x444D20..0x4462C9; 0x4217DB..0x421A0F; local original reanim";
+        /// <summary>Performs create plan.</summary>
+        /// <param name = "context">The context.</param>
+        /// <returns>The resulting create plan.</returns>
+        /// <exception cref = "ArgumentNullException">The operation cannot satisfy its preconditions.</exception>
         public static AdventureIntroPlan CreatePlan(AdventureIntroContext context)
         {
-            if (context == null) throw new ArgumentNullException(nameof(context));
-            int mode = context.NativeMode;
-            bool restrictedBank = mode == 19 || mode == 71 || mode == 72 || context.IsWhack || context.IsBowling || context.IsVase || mode == 43 || mode == 50;
-            bool nonScrolling = mode == 42 || mode == 71 || mode == 43 || mode == 50 || mode == 23 || context.IsVase || context.IsIZombie || context.IsWhack || context.IsShovel || context.IsBowling || context.HasBoard && mode == 46;
-            bool choose = !restrictedBank && !context.IsConveyor && mode != 42 && mode != 20 && mode != 24 && mode != 23 &&
-                !context.IsIZombie && !context.IsBowling && !(context.HasBoard && mode == 18) && !(mode == 0 && context.FirstAdventure && context.Level <= 7);
-            var p = new AdventureIntroPlan { Context = context, ChooseSeeds = context.ChooseSeedsOverride ?? choose,
-                NonScrolling = context.NonScrollingOverride ?? nonScrolling, DrawSeedBank = !restrictedBank };
+            if (context == null)
+            {
+                throw new ArgumentNullException(nameof(context));
+            }
+
+            var mode = context.NativeMode;
+            var restrictedBank = mode == 19 || mode == 71 || mode == 72 || context.IsWhack || context.IsBowling || context.IsVase || mode == 43 || mode == 50;
+            var nonScrolling = mode == 42 || mode == 71 || mode == 43 || mode == 50 || mode == 23 || context.IsVase || context.IsIZombie || context.IsWhack || context.IsShovel || context.IsBowling || context.HasBoard && mode == 46;
+            var choose = !restrictedBank && !context.IsConveyor && mode != 42 && mode != 20 && mode != 24 && mode != 23 && !context.IsIZombie && !context.IsBowling && !(context.HasBoard && mode == 18) && !(mode == 0 && context.FirstAdventure && context.Level <= 7);
+            var p = new AdventureIntroPlan
+            {
+                Context = context,
+                ChooseSeeds = context.ChooseSeedsOverride ?? choose,
+                NonScrolling = context.NonScrollingOverride ?? nonScrolling,
+                DrawSeedBank = !restrictedBank
+            };
             p.ScrolledLeftAtStart = !context.SurvivalRepick && !(context.HasBoard && (mode == 46 || mode == 49)) && !context.IsShovel && !p.NonScrolling;
             p.SodTime = mode == 0 && context.FirstAdventure && (context.Level == 1 || context.Level == 2 || context.Level == 4) ? 2000 : 0;
             p.GraveStoneTime = context.HasGraveStones && !context.IsWhack && !context.SurvivalRepick ? 1000 : 0;
-            p.ReadyTime = mode == 0 && context.FirstAdventure && context.Level <= 2 || context.HasBoard && (mode == 46 || mode == 49) ||
-                context.IsShovel || mode == 23 || mode == 31 || mode == 50 || context.IsIZombie || context.IsWhack || context.IsVase ? 0 : 1830;
+            p.ReadyTime = mode == 0 && context.FirstAdventure && context.Level <= 2 || context.HasBoard && (mode == 46 || mode == 49) || context.IsShovel || mode == 23 || mode == 31 || mode == 50 || context.IsIZombie || context.IsWhack || context.IsVase ? 0 : 1830;
             p.LawnMowerTime = context.SurvivalRepick ? 0 : 550;
             p.DaveTime = context.CrazyDaveTimeOverride >= 0 ? context.CrazyDaveTimeOverride : context.HasCrazyDaveDialog ? 2500 + (context.IsFinalBoss && mode == 0 ? 4000 : 0) : 0;
             p.FogTime = context.NativeBackground == 3 && !context.IsStormyNight && mode != 21 ? 1950 - p.SodTime - p.LawnMowerTime : 0;
             p.BossTime = context.IsFinalBoss ? 4000 : 0;
             return p;
         }
+
         // Literal PC curve IDs 1(linear),3(invquad),4(S(S(t))) and native signed nearest rounding.
+        /// <summary>Performs curve.</summary>
+        /// <param name = "start">The start.</param>
+        /// <param name = "end">The end.</param>
+        /// <param name = "time">The time.</param>
+        /// <param name = "from">The from.</param>
+        /// <param name = "to">The to.</param>
+        /// <param name = "curve">The curve.</param>
+        /// <returns>The resulting curve.</returns>
+        /// <exception cref = "ArgumentOutOfRangeException">The operation cannot satisfy its preconditions.</exception>
         public static int Curve(int start, int end, int time, int from, int to, int curve)
         {
-            if (time <= start) return from;
-            if (time >= end) return to;
-            float t = (float)((double)(time - start) / (end - start));
-            if (curve == 3) t = t + t - t * t;
-            else if (curve == 4) { t = Smooth(t); t = Smooth(t); }
-            else if (curve != 1) throw new ArgumentOutOfRangeException(nameof(curve));
-            float value = (to - (float)from) * t + from;
+            if (time <= start)
+            {
+                return from;
+            }
+
+            if (time >= end)
+            {
+                return to;
+            }
+
+            var t = (float)((double)(time - start) / (end - start));
+            if (curve == 3)
+            {
+                t = t + t - t * t;
+            }
+            else if (curve == 4)
+            {
+                t = Smooth(t);
+                t = Smooth(t);
+            }
+            else if (curve != 1)
+            {
+                throw new ArgumentOutOfRangeException(nameof(curve));
+            }
+
+            var value = (to - (float)from) * t + from;
             return (int)(value > 0 ? value + .5f : value - .5f);
         }
-        private static float Smooth(float t) { return 3f * t * t - 2f * t * t * t; }
+
+        /// <summary>Performs smooth.</summary>
+        /// <param name = "t">The t.</param>
+        /// <returns>The resulting smooth.</returns>
+        private static float Smooth(float t)
+        {
+            return 3f * t * t - 2f * t * t * t;
+        }
+
+        /// <summary>Performs sample.</summary>
+        /// <param name = "p">The p.</param>
+        /// <param name = "time">The time.</param>
+        /// <param name = "choosingSeeds">The choosing seeds.</param>
+        /// <returns>The resulting sample.</returns>
+        /// <exception cref = "ArgumentNullException">The operation cannot satisfy its preconditions.</exception>
         public static AdventureIntroFrame Sample(AdventureIntroPlan p, int time, bool choosingSeeds = false)
         {
-            if (p == null) throw new ArgumentNullException(nameof(p));
+            if (p == null)
+            {
+                throw new ArgumentNullException(nameof(p));
+            }
+
             time = Math.Max(0, time);
-            var f = new AdventureIntroFrame { NativeTime = time, ChooserY = 516, SeedBankX = p.Context.SeedBankStartX,
-                SeedBankY = -p.Context.SeedBankImageHeight, SeedBankDarken = 255,
-                SodPosition = p.SodTime > 0 ? Curve(p.SodStart, p.SodEnd, time, 0, 1000, 1) : 1000 };
+            var f = new AdventureIntroFrame
+            {
+                NativeTime = time,
+                ChooserY = 516,
+                SeedBankX = p.Context.SeedBankStartX,
+                SeedBankY = -p.Context.SeedBankImageHeight,
+                SeedBankDarken = 255,
+                SodPosition = p.SodTime > 0 ? Curve(p.SodStart, p.SodEnd, time, 0, 1000, 1) : 1000
+            };
             int initialX = p.ScrolledLeftAtStart ? 220 : 0, streetX = p.Context.LogicalWidth - 1180;
-            f.BoardX = time <= p.PanRightStart ? initialX : time <= p.PanRightEnd ?
-                -Curve(p.PanRightStart, p.PanRightEnd, time, -initialX, -streetX, 4) : streetX;
-            if (time > p.ChooserOffStart) f.BoardX = -Curve(p.ChooserOffStart, p.PanLeftEnd, time, -streetX, 0, 4);
+            f.BoardX = time <= p.PanRightStart ? initialX : time <= p.PanRightEnd ? -Curve(p.PanRightStart, p.PanRightEnd, time, -initialX, -streetX, 4) : streetX;
+            if (time > p.ChooserOffStart)
+            {
+                f.BoardX = -Curve(p.ChooserOffStart, p.PanLeftEnd, time, -streetX, 0, 4);
+            }
+
             if (p.ChooseSeeds)
             {
-                if (time > p.ChooserOnStart) f.ChooserY = Curve(p.ChooserOnStart, p.ChooserOnEnd, time, 516, 0, 4);
-                if (time > p.ChooserOffStart) f.ChooserY = Curve(p.ChooserOffStart, p.ChooserOffEnd, time, 0, 516, 4);
+                if (time > p.ChooserOnStart)
+                {
+                    f.ChooserY = Curve(p.ChooserOnStart, p.ChooserOnEnd, time, 516, 0, 4);
+                }
+
+                if (time > p.ChooserOffStart)
+                {
+                    f.ChooserY = Curve(p.ChooserOffStart, p.ChooserOffEnd, time, 0, 516, 4);
+                }
             }
-            if (p.DrawSeedBank && time > p.BankOnStart) f.SeedBankY = Curve(p.BankOnStart, p.BankOnEnd, time, -p.Context.SeedBankImageHeight, 0, 4);
+
+            if (p.DrawSeedBank && time > p.BankOnStart)
+            {
+                f.SeedBankY = Curve(p.BankOnStart, p.BankOnEnd, time, -p.Context.SeedBankImageHeight, 0, 4);
+            }
+
             if (time > p.ChooserOffEnd)
             {
                 f.SeedBankX = Curve(p.ChooserOffEnd, p.PanLeftEnd, time, p.Context.SeedBankStartX, 10, 4);
                 f.SeedBankDarken = Curve(p.ChooserOffEnd, p.PanLeftEnd, time, 255, 128, 3);
             }
-            for (int row = 0; row < 6; row++)
+
+            for (var row = 0; row < 6; row++)
             {
-                int start = 6000 + 300 - row * 50 + p.DaveTime + p.SodTime + p.GraveStoneTime;
-                if (p.LawnMowerTime > 0 && time > start) f.MowerX[row] = Curve(start, start + 250, time, -80, -21, 4);
+                var start = 6000 + 300 - row * 50 + p.DaveTime + p.SodTime + p.GraveStoneTime;
+                if (p.LawnMowerTime > 0 && time > start)
+                {
+                    f.MowerX[row] = Curve(start, start + 250, time, -80, -21, 4);
+                }
             }
+
             AddSodBlits(p.Context, f);
             if (p.SodTime > 0 && time >= p.SodStart && time < p.SodEnd)
             {
-                float age = (time - p.SodStart) * .001f;
-                if (p.Context.Level == 1) AddRoll(f, 0, 0, 35, 348, age);
-                else if (p.Context.Level == 2) { AddRoll(f, 0, -102, 35, 246, age); AddRoll(f, 0, 111, 35, 459, age); }
-                else if (p.Context.Level == 4) { AddRoll(f, -3, -198, 32, 150, age); AddRoll(f, -3, 203, 32, 551, age); }
+                var age = (time - p.SodStart) * .001f;
+                if (p.Context.Level == 1)
+                {
+                    AddRoll(f, 0, 0, 35, 348, age);
+                }
+                else if (p.Context.Level == 2)
+                {
+                    AddRoll(f, 0, -102, 35, 246, age);
+                    AddRoll(f, 0, 111, 35, 459, age);
+                }
+                else if (p.Context.Level == 4)
+                {
+                    AddRoll(f, -3, -198, 32, 150, age);
+                    AddRoll(f, -3, 203, 32, 551, age);
+                }
             }
-            bool ready = p.ReadyTime > 0 && time >= p.ReadyStart && time < p.End;
-            if (ready) f.Animations.Add(new AdventureIntroAnimation("StartReadySetPlant", 400, 324, (time - p.ReadyStart) * .001f, 12, 22, 900000));
-            f.Stage = time >= p.End ? AdventureIntroStage.Complete : ready ? AdventureIntroStage.ReadySetPlant :
-                choosingSeeds ? AdventureIntroStage.ChoosingSeeds : time > p.ChooserOffStart && time < p.PanLeftEnd ? AdventureIntroStage.ReturnToLawn :
-                time >= p.PanLeftEnd ? AdventureIntroStage.LawnSetup : time > p.PanRightEnd ? AdventureIntroStage.Street :
-                time > p.PanRightStart ? AdventureIntroStage.PanToStreet : AdventureIntroStage.Home;
+
+            var ready = p.ReadyTime > 0 && time >= p.ReadyStart && time < p.End;
+            if (ready)
+            {
+                f.Animations.Add(new AdventureIntroAnimation("StartReadySetPlant", 400, 324, (time - p.ReadyStart) * .001f, 12, 22, 900000));
+            }
+
+            f.Stage = time >= p.End ? AdventureIntroStage.Complete : ready ? AdventureIntroStage.ReadySetPlant : choosingSeeds ? AdventureIntroStage.ChoosingSeeds : time > p.ChooserOffStart && time < p.PanLeftEnd ? AdventureIntroStage.ReturnToLawn : time >= p.PanLeftEnd ? AdventureIntroStage.LawnSetup : time > p.PanRightEnd ? AdventureIntroStage.Street : time > p.PanRightStart ? AdventureIntroStage.PanToStreet : AdventureIntroStage.Home;
             f.WorldInputEnabled = time >= p.End;
             f.MenuVisible = time >= p.End;
             f.ChooserVisible = p.ChooseSeeds && time > p.ChooserOnStart && time < p.ChooserOffEnd;
             f.PreviewVisible = time < p.End;
             return f;
         }
+
+        /// <summary>Performs add roll.</summary>
+        /// <param name = "f">The f.</param>
+        /// <param name = "x">The x.</param>
+        /// <param name = "y">The y.</param>
+        /// <param name = "px">The px.</param>
+        /// <param name = "py">The py.</param>
+        /// <param name = "age">The age.</param>
         private static void AddRoll(AdventureIntroFrame f, int x, int y, int px, int py, float age)
         {
             f.Animations.Add(new AdventureIntroAnimation("SodRoll", x, y, age, 24, 48, 400000));
             f.Particles.Add(new AdventureIntroParticle("SodRoll", px, py, age, 400001));
         }
+
+        /// <summary>Performs add sod blits.</summary>
+        /// <param name = "c">The c.</param>
+        /// <param name = "f">The f.</param>
         private static void AddSodBlits(AdventureIntroContext c, AdventureIntroFrame f)
         {
-            if (c.NativeMode != 0 || !c.FirstAdventure || c.Level > 4) return;
-            if (c.Level == 1) f.SodBlits.Add(new AdventureIntroBlit("sod1row", 0, 0, Curve(0, 1000, f.SodPosition, 0, 771, 1), 127, 19, 265));
+            if (c.NativeMode != 0 || !c.FirstAdventure || c.Level > 4)
+            {
+                return;
+            }
+
+            if (c.Level == 1)
+            {
+                f.SodBlits.Add(new AdventureIntroBlit("sod1row", 0, 0, Curve(0, 1000, f.SodPosition, 0, 771, 1), 127, 19, 265));
+            }
             else if (c.Level <= 3)
             {
                 f.SodBlits.Add(new AdventureIntroBlit("sod1row", 0, 0, 771, 127, 19, 265));
@@ -191,121 +229,354 @@ namespace PvZReplica.Adventure
                 f.SodBlits.Add(new AdventureIntroBlit("background1", 232, 0, Curve(0, 1000, f.SodPosition, 0, 773, 1), 600, 12, 0));
             }
         }
+
+        /// <summary>Performs events between.</summary>
+        /// <param name = "p">The p.</param>
+        /// <param name = "previous">The previous.</param>
+        /// <param name = "current">The current.</param>
+        /// <param name = "emit">The emit.</param>
         public static void EventsBetween(AdventureIntroPlan p, int previous, int current, Action<AdventureIntroEvent> emit)
         {
-            if (emit == null || current <= previous) return;
-            if (p.ChooseSeeds && Crossed(previous, current, p.ChooserOnEnd)) emit(AdventureIntroEvent.SeedChooserOpened);
-            if (Crossed(previous, current, p.ChooserOffStart)) emit(AdventureIntroEvent.PlaceLawnItems);
-            if (p.SodTime > 0 && Crossed(previous, current, p.SodStart)) emit(AdventureIntroEvent.SodStarted);
-            if (p.SodTime > 0 && Crossed(previous, current, p.SodEnd)) emit(AdventureIntroEvent.SodFinished);
-            if (p.GraveStoneTime > 0 && Crossed(previous, current, p.GraveStoneStart)) emit(AdventureIntroEvent.GraveStonesEnabled);
-            if (p.ReadyTime > 0 && Crossed(previous, current, p.ReadyStart)) emit(AdventureIntroEvent.ReadySetPlantStarted);
-            if (Crossed(previous, current, p.End)) emit(AdventureIntroEvent.IntroFinished);
+            if (emit == null || current <= previous)
+            {
+                return;
+            }
+
+            if (p.ChooseSeeds && Crossed(previous, current, p.ChooserOnEnd))
+            {
+                emit(AdventureIntroEvent.SeedChooserOpened);
+            }
+
+            if (Crossed(previous, current, p.ChooserOffStart))
+            {
+                emit(AdventureIntroEvent.PlaceLawnItems);
+            }
+
+            if (p.SodTime > 0 && Crossed(previous, current, p.SodStart))
+            {
+                emit(AdventureIntroEvent.SodStarted);
+            }
+
+            if (p.SodTime > 0 && Crossed(previous, current, p.SodEnd))
+            {
+                emit(AdventureIntroEvent.SodFinished);
+            }
+
+            if (p.GraveStoneTime > 0 && Crossed(previous, current, p.GraveStoneStart))
+            {
+                emit(AdventureIntroEvent.GraveStonesEnabled);
+            }
+
+            if (p.ReadyTime > 0 && Crossed(previous, current, p.ReadyStart))
+            {
+                emit(AdventureIntroEvent.ReadySetPlantStarted);
+            }
+
+            if (Crossed(previous, current, p.End))
+            {
+                emit(AdventureIntroEvent.IntroFinished);
+            }
         }
-        private static bool Crossed(int previous, int current, int point) { return previous < point && current >= point; }
-        public static AdventureIntroPreviewZombie PlaceStreetZombie(AdventureIntroContext c, int kind, int gx, int gy,
-            Func<int, int> next, Func<float, float> nextFloat, Func<int, string, bool> trackExists)
+
+        /// <summary>Performs crossed.</summary>
+        /// <param name = "previous">The previous.</param>
+        /// <param name = "current">The current.</param>
+        /// <param name = "point">The point.</param>
+        /// <returns>The resulting crossed.</returns>
+        private static bool Crossed(int previous, int current, int point)
         {
-            if (next == null || nextFloat == null || trackExists == null) throw new ArgumentNullException("Original random/track queries are required.");
-            var z = new AdventureIntroPreviewZombie { NativeKind = kind, GridX = gx, GridY = gy,
-                WorldX = 830 + 56 * gx, WorldY = 70 + 90 * gy + (gx % 2 == 1 ? 30 : 0),
-                RenderOrder = 300000 + 2 * (2 * gy + gx % 2), Scale = c.IsLittleTrouble ? .5f : 1f };
-            if (kind == 10 && c.NativeMode == 32) { z.NativeKind = kind = 26; z.ShowDuckyTube = true; }
+            return previous < point && current >= point;
+        }
+
+        /// <summary>Performs place street zombie.</summary>
+        /// <param name = "c">The c.</param>
+        /// <param name = "kind">The kind.</param>
+        /// <param name = "gx">The gx.</param>
+        /// <param name = "gy">The gy.</param>
+        /// <param name = "next">The next.</param>
+        /// <param name = "nextFloat">The next float.</param>
+        /// <param name = "trackExists">The track exists.</param>
+        /// <returns>The resulting place street zombie.</returns>
+        /// <exception cref = "ArgumentNullException">The operation cannot satisfy its preconditions.</exception>
+        public static AdventureIntroPreviewZombie PlaceStreetZombie(AdventureIntroContext c, int kind, int gx, int gy, Func<int, int> next, Func<float, float> nextFloat, Func<int, string, bool> trackExists)
+        {
+            if (next == null || nextFloat == null || trackExists == null)
+            {
+                throw new ArgumentNullException("Original random/track queries are required.");
+            }
+
+            var z = new AdventureIntroPreviewZombie
+            {
+                NativeKind = kind,
+                GridX = gx,
+                GridY = gy,
+                WorldX = 830 + 56 * gx,
+                WorldY = 70 + 90 * gy + (gx % 2 == 1 ? 30 : 0),
+                RenderOrder = 300000 + 2 * (2 * gy + gx % 2),
+                Scale = c.IsLittleTrouble ? .5f : 1f
+            };
+            if (kind == 10 && c.NativeMode == 32)
+            {
+                z.NativeKind = kind = 26;
+                z.ShowDuckyTube = true;
+            }
+
             // PC LoadReanim0x53FF50: preview/UI are -2/-3, select idle2 with R(4)>0.
-            if (next(4) > 0 && trackExists(kind, "anim_idle2")) { z.Animation = "anim_idle2"; z.AnimationRate = 12f + nextFloat(12f); }
-            else if (trackExists(kind, "anim_idle")) { z.Animation = "anim_idle"; z.AnimationRate = 12f + nextFloat(6f); }
+            if (next(4) > 0 && trackExists(kind, "anim_idle2"))
+            {
+                z.Animation = "anim_idle2";
+                z.AnimationRate = 12f + nextFloat(12f);
+            }
+            else if (trackExists(kind, "anim_idle"))
+            {
+                z.Animation = "anim_idle";
+                z.AnimationRate = 12f + nextFloat(6f);
+            }
+
             z.InitialPhase = nextFloat(.99f);
-            if (kind == 12) { z.Animation = "anim_drive"; z.AnimationRate = 12; z.InitialPhase = 0; }
-            else if (kind == 22) { z.Animation = "anim_idle"; z.AnimationRate = 8; z.InitialPhase = 0; }
-            else if (kind == 13) { z.Animation = "anim_jump"; z.AnimationRate = 20; z.InitialPhase = 1; z.Loop = false; z.Altitude = 18; }
-            else if (kind == 18) { z.Animation = "anim_pogo"; z.AnimationRate = 40; z.InitialPhase = 1; z.Loop = false; }
-            if (c.HasRoof) { z.WorldY -= 2 * gy + 30 - 7 * gx; z.WorldX -= 5; }
-            if (kind == 12) { z.WorldY -= 10; z.WorldX -= 30; }
-            else if (c.IsLittleTrouble) { z.WorldY += next(50) - 25; z.WorldX += next(50) - 25; }
-            else if (kind == 23 || kind == 32) z.WorldX += next(15) - 20;
-            else if (gy == 4 && c.CanShowAlmanacOrStore) z.WorldX += next(15);
-            else { z.WorldY += next(15); z.WorldX += next(15); }
-            if (kind == 20) { z.RenderOrder = 200000; z.WorldX = 950 + gx * 50; z.WorldY = 50; }
-            else if (kind == 13) { z.RenderOrder = 301000; z.WorldX = 1105; z.WorldY = 480; }
+            if (kind == 12)
+            {
+                z.Animation = "anim_drive";
+                z.AnimationRate = 12;
+                z.InitialPhase = 0;
+            }
+            else if (kind == 22)
+            {
+                z.Animation = "anim_idle";
+                z.AnimationRate = 8;
+                z.InitialPhase = 0;
+            }
+            else if (kind == 13)
+            {
+                z.Animation = "anim_jump";
+                z.AnimationRate = 20;
+                z.InitialPhase = 1;
+                z.Loop = false;
+                z.Altitude = 18;
+            }
+            else if (kind == 18)
+            {
+                z.Animation = "anim_pogo";
+                z.AnimationRate = 40;
+                z.InitialPhase = 1;
+                z.Loop = false;
+            }
+
+            if (c.HasRoof)
+            {
+                z.WorldY -= 2 * gy + 30 - 7 * gx;
+                z.WorldX -= 5;
+            }
+
+            if (kind == 12)
+            {
+                z.WorldY -= 10;
+                z.WorldX -= 30;
+            }
+            else if (c.IsLittleTrouble)
+            {
+                z.WorldY += next(50) - 25;
+                z.WorldX += next(50) - 25;
+            }
+            else if (kind == 23 || kind == 32)
+            {
+                z.WorldX += next(15) - 20;
+            }
+            else if (gy == 4 && c.CanShowAlmanacOrStore)
+            {
+                z.WorldX += next(15);
+            }
+            else
+            {
+                z.WorldY += next(15);
+                z.WorldX += next(15);
+            }
+
+            if (kind == 20)
+            {
+                z.RenderOrder = 200000;
+                z.WorldX = 950 + gx * 50;
+                z.WorldY = 50;
+            }
+            else if (kind == 13)
+            {
+                z.RenderOrder = 301000;
+                z.WorldX = 1105;
+                z.WorldY = 480;
+            }
+
             return z;
         }
-        public static bool CanUsePreviewCell(AdventureIntroContext c, int kind, int x, int y, bool[,] occupied)
+
+        /// <summary>Performs can use preview cell.</summary>
+        /// <param name = "c">The c.</param>
+        /// <param name = "kind">The kind.</param>
+        /// <param name = "x">The x.</param>
+        /// <param name = "y">The y.</param>
+        /// <param name = "occupied">The occupied.</param>
+        /// <returns>The resulting can use preview cell.</returns>
+        public static bool CanUsePreviewCell(AdventureIntroContext c, int kind, int x, int y, bool[, ] occupied)
         {
-            if (occupied[x, y]) return false;
-            if ((kind == 23 || kind == 32) && (x == 0 || y == 0 || occupied[x - 1, y] || occupied[x, y - 1] || occupied[x - 1, y - 1])) return false;
-            if (x == 4) { if (y == 0) return false; } else if (kind == 12 || x == 0 && c.HasPool) return false;
-            if (c.HasRoof && x == 0 && y == 0 || x == 4 && c.NativeBackground == 3 && kind == 16) return false;
+            if (occupied[x, y])
+            {
+                return false;
+            }
+
+            if ((kind == 23 || kind == 32) && (x == 0 || y == 0 || occupied[x - 1, y] || occupied[x, y - 1] || occupied[x - 1, y - 1]))
+            {
+                return false;
+            }
+
+            if (x == 4)
+            {
+                if (y == 0)
+                {
+                    return false;
+                }
+            }
+            else if (kind == 12 || x == 0 && c.HasPool)
+            {
+                return false;
+            }
+
+            if (c.HasRoof && x == 0 && y == 0 || x == 4 && c.NativeBackground == 3 && kind == 16)
+            {
+                return false;
+            }
+
             return kind != 23 && kind != 32 && kind != 12 && kind != 13 && kind != 3 || x != 0 && (x != 1 || !c.HasPool && y != 0);
         }
-        public static List<AdventureIntroPreviewZombie> CreateStreetPreview(AdventureIntroContext c, IEnumerable<int[]> waves,
-            Func<int, int> next, Func<float, float> nextFloat, Func<int, string, bool> trackExists, bool[] allowed = null)
+
+        /// <summary>Performs create street preview.</summary>
+        /// <param name = "c">The c.</param>
+        /// <param name = "waves">The waves.</param>
+        /// <param name = "next">The next.</param>
+        /// <param name = "nextFloat">The next float.</param>
+        /// <param name = "trackExists">The track exists.</param>
+        /// <param name = "allowed">The allowed.</param>
+        /// <returns>The resulting create street preview.</returns>
+        public static List<AdventureIntroPreviewZombie> CreateStreetPreview(AdventureIntroContext c, IEnumerable<int[]> waves, Func<int, int> next, Func<float, float> nextFloat, Func<int, string, bool> trackExists, bool[] allowed = null)
         {
             var result = new List<AdventureIntroPreviewZombie>();
-            if (c.IsFinalBoss) return result;
-            int[] counts = new int[34]; int total = 0;
-            foreach (int[] wave in waves) foreach (int kind in wave)
+            if (c.IsFinalBoss)
             {
-                if (kind < 0) break;
-                if (kind >= 34 || kind == 1 || kind == 33 || kind == 19 && !c.IsStormyNight || kind == 13 && c.NativeMode != 28) continue;
-                counts[kind]++; total++;
-                if (kind == 20 || kind == 13) counts[kind] = 1;
+                return result;
             }
-            if (c.NativeMode == 31 && allowed != null) for (int k = 0; k < Math.Min(34, allowed.Length); k++) if (k != 19 && allowed[k]) counts[k] = Math.Max(1, counts[k]);
-            if (c.HasPool) counts[10] = 1;
-            if (total == 0) return result; // Host has not supplied the original populated wave list.
-            int budget = c.IsLittleTrouble ? 15 : c.NativeMode == 0 && (c.IsStormyNight || c.Level == 10 || c.Level == 20 || c.Level == 30) ? 18 : 10;
-            bool[,] occupied = new bool[5, 5];
-            for (int k = 0; k < 34; k++) if (counts[k] > 0 && (k == 23 || k == 32 || k == 12)) AddPreview(c, k, occupied, result, next, nextFloat, trackExists);
-            for (int k = 0; k < 34; k++) if (counts[k] > 0 && k != 23 && k != 32 && k != 12)
+
+            var counts = new int[34];
+            var total = 0;
+            foreach (int[] wave in waves)
             {
-                int number = Math.Max(1, Math.Min(counts[k], budget * counts[k] / total));
-                for (int i = 0; i < number; i++) AddPreview(c, k, occupied, result, next, nextFloat, trackExists);
+                foreach (int kind in wave)
+                {
+                    if (kind < 0)
+                    {
+                        break;
+                    }
+
+                    if (kind >= 34 || kind == 1 || kind == 33 || kind == 19 && !c.IsStormyNight || kind == 13 && c.NativeMode != 28)
+                    {
+                        continue;
+                    }
+
+                    counts[kind]++;
+                    total++;
+                    if (kind == 20 || kind == 13)
+                    {
+                        counts[kind] = 1;
+                    }
+                }
             }
+
+            if (c.NativeMode == 31 && allowed != null)
+            {
+                for (var k = 0; k < Math.Min(34, allowed.Length); k++)
+                {
+                    if (k != 19 && allowed[k])
+                    {
+                        counts[k] = Math.Max(1, counts[k]);
+                    }
+                }
+            }
+
+            if (c.HasPool)
+            {
+                counts[10] = 1;
+            }
+
+            if (total == 0)
+            {
+                return result; // Host has not supplied the original populated wave list.
+            }
+
+            var budget = c.IsLittleTrouble ? 15 : c.NativeMode == 0 && (c.IsStormyNight || c.Level == 10 || c.Level == 20 || c.Level == 30) ? 18 : 10;
+            var occupied = new bool[5, 5];
+            for (var k = 0; k < 34; k++)
+            {
+                if (counts[k] > 0 && (k == 23 || k == 32 || k == 12))
+                {
+                    AddPreview(c, k, occupied, result, next, nextFloat, trackExists);
+                }
+            }
+
+            for (var k = 0; k < 34; k++)
+            {
+                if (counts[k] > 0 && k != 23 && k != 32 && k != 12)
+                {
+                    var number = Math.Max(1, Math.Min(counts[k], budget * counts[k] / total));
+                    for (var i = 0; i < number; i++)
+                    {
+                        AddPreview(c, k, occupied, result, next, nextFloat, trackExists);
+                    }
+                }
+            }
+
             return result;
         }
-        private static void AddPreview(AdventureIntroContext c, int kind, bool[,] occupied, List<AdventureIntroPreviewZombie> result,
-            Func<int, int> next, Func<float, float> nextFloat, Func<int, string, bool> trackExists)
+
+        /// <summary>Performs add preview.</summary>
+        /// <param name = "c">The c.</param>
+        /// <param name = "kind">The kind.</param>
+        /// <param name = "occupied">The occupied.</param>
+        /// <param name = "result">The result.</param>
+        /// <param name = "next">The next.</param>
+        /// <param name = "nextFloat">The next float.</param>
+        /// <param name = "trackExists">The track exists.</param>
+        private static void AddPreview(AdventureIntroContext c, int kind, bool[, ] occupied, List<AdventureIntroPreviewZombie> result, Func<int, int> next, Func<float, float> nextFloat, Func<int, string, bool> trackExists)
         {
             int x = 0, y = 0;
             if (kind != 20)
             {
                 var spots = new List<int>();
-                for (int gx = 0; gx < 5; gx++) for (int gy = 0; gy < 5; gy++) if (CanUsePreviewCell(c, kind, gx, gy, occupied)) spots.Add(gx * 5 + gy);
-                int spot = spots.Count == 0 ? 12 : spots[next(spots.Count)]; x = spot / 5; y = spot % 5;
+                for (var gx = 0; gx < 5; gx++)
+                {
+                    for (var gy = 0; gy < 5; gy++)
+                    {
+                        if (CanUsePreviewCell(c, kind, gx, gy, occupied))
+                        {
+                            spots.Add(gx * 5 + gy);
+                        }
+                    }
+                }
+
+                var spot = spots.Count == 0 ? 12 : spots[next(spots.Count)];
+                x = spot / 5;
+                y = spot % 5;
                 occupied[x, y] = true;
-                if (kind == 23 || kind == 32) { occupied[x - 1, y] = true; occupied[x, y - 1] = true; occupied[x - 1, y - 1] = true; }
+                if (kind == 23 || kind == 32)
+                {
+                    occupied[x - 1, y] = true;
+                    occupied[x, y - 1] = true;
+                    occupied[x - 1, y - 1] = true;
+                }
             }
+
             result.Add(PlaceStreetZombie(c, kind, x, y, next, nextFloat, trackExists));
             if (kind == 20 && (c.NativeMode == 48 || c.NativeMode == 0 && c.Level == 45))
-            { result.Add(PlaceStreetZombie(c, kind, 1, y, next, nextFloat, trackExists)); result.Add(PlaceStreetZombie(c, kind, 2, y, next, nextFloat, trackExists)); }
-        }
-    }
-    public sealed class AdventureIntroClock
-    {
-        public readonly AdventureIntroPlan Plan;
-        public int NativeTime { get; private set; }
-        public bool WaitingForSeeds { get; private set; }
-        public bool Complete { get { return NativeTime >= Plan.End; } }
-        public AdventureIntroClock(AdventureIntroPlan plan)
-        {
-            Plan = plan ?? throw new ArgumentNullException(nameof(plan));
-            if (plan.NonScrolling && plan.DaveTime == 0) NativeTime = plan.ChooseSeeds ? plan.ChooserOnEnd - 20 : plan.End - 20;
-        }
-        public AdventureIntroFrame Frame { get { return AdventureIntroPresentation.Sample(Plan, NativeTime, WaitingForSeeds); } }
-        public void Tick(bool paused = false, bool dialogActive = false, bool shovelTutorialActive = false, Action<AdventureIntroEvent> emit = null)
-        {
-            if (Complete || paused || dialogActive || shovelTutorialActive || WaitingForSeeds) return;
-            int previous = NativeTime;
-            NativeTime = Math.Min(Plan.End, NativeTime + AdventureIntroPresentation.NativeUpdate);
-            if (Plan.ChooseSeeds && previous < Plan.ChooserOnEnd && NativeTime >= Plan.ChooserOnEnd)
-            { NativeTime = Plan.ChooserOnEnd; WaitingForSeeds = true; }
-            AdventureIntroPresentation.EventsBetween(Plan, previous, NativeTime, emit);
-        }
-        public void BeginReturn()
-        {
-            if (!WaitingForSeeds) return;
-            WaitingForSeeds = false;
-            NativeTime = Plan.ChooserOnEnd + 10; // PC 0x49C955..0x49C967, successful seed chooser handoff.
+            {
+                result.Add(PlaceStreetZombie(c, kind, 1, y, next, nextFloat, trackExists));
+                result.Add(PlaceStreetZombie(c, kind, 2, y, next, nextFloat, trackExists));
+            }
         }
     }
 }

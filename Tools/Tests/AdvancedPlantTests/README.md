@@ -3,13 +3,13 @@
 Run from the `PvZUnity` directory:
 
 ```powershell
-dotnet run --project tests/AdvancedPlantTests/AdvancedPlantTests.csproj -c Release
-dotnet run --project tests/AdvancedPlantTests/LegacyRegression/LegacyRegression.csproj -c Release
+dotnet run --project Tools/Tests/AdvancedPlantTests/AdvancedPlantTests.csproj -c Release
+dotnet run --project Tools/Tests/AdvancedPlantTests/LegacyRegression/LegacyRegression.csproj -c Release
 ```
 
 The first executable tests the extended plants, including the shared damage model's
 documented differences from the executable. The second compiles the existing
-`tests/Program.cs` unchanged with all current plant partials and verified data.
+`Tools/Tests/Program.cs` unchanged with all current plant partials and verified data.
 Both run without Unity or a test-framework package. They validate simulation
 events and flame state, not Unity rendering, animation playback or audio output.
 

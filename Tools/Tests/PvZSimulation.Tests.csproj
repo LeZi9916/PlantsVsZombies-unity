@@ -8,11 +8,12 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="Program.cs" />
-    <Compile Include="../Assets/Scripts/GameSimulation.cs" Link="GameSimulation.cs" />
-    <Compile Include="../Assets/Scripts/Plants/*.cs" Link="Plants/%(Filename)%(Extension)" />
-    <Compile Include="../Assets/Scripts/Timing/*.cs" Link="Timing/%(Filename)%(Extension)" />
-    <Compile Include="../Assets/Scripts/VerifiedData/VerifiedDataCatalog.cs" Link="VerifiedDataCatalog.cs" />
-    <Compile Include="../Assets/Scripts/VerifiedData/VerifiedData.generated.cs" Link="VerifiedData.generated.cs" />
+
+
+
+
+
   </ItemGroup>
-<ItemGroup><Compile Include="../Assets/Scripts/Random/*.cs" /></ItemGroup>
+<ItemGroup></ItemGroup>
+  <Import Project="SimulationSources.props" />
 </Project>

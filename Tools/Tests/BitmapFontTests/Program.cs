@@ -4,7 +4,7 @@ using System.Globalization;
 using System.IO;
 using System.Security.Cryptography;
 using System.Text;
-using PvZReplica.UI.BitmapFonts;
+using PlantsVsZombies.UI.BitmapFonts;
 
 internal static class Program
 {

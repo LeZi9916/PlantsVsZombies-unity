@@ -1,16 +1,16 @@
 # 冒险核心回归
 
-在 PvZUnity 根目录运行 `dotnet run --project tests/AdventureTests/AdventureTests.csproj -c Release`。默认先运行独立断言，再运行真实连续50关冒险，成功退出码为0。自动玩家只调用公开操作，不增加阳光、不注入植物/僵尸、不清场、不调血或改胜利；独立单位测试中明确标记的 fixture 使用内部测试状态，二者分开报告。
+在 PvZUnity 根目录运行 `dotnet run --project Tools/Tests/AdventureTests/AdventureTests.csproj -c Release`。默认先运行独立断言，再运行真实连续50关冒险，成功退出码为0。自动玩家只调用公开操作，不增加阳光、不注入植物/僵尸、不清场、不调血或改胜利；独立单位测试中明确标记的 fixture 使用内部测试状态，二者分开报告。
 
 连续冒险每关使用固定种子 `level*104729`，通过同一用户GUID、同一AdventureCampaign逐关战斗、拾取奖励、磁盘保存并重读验证。测试过程中自动重开存储进行断言，不替代用户关闭再打开Player的交互测试。失败时退出码非0且CSV记录实际失败，不会强行解锁余下关卡。
 
 参数：`--unit`、`--playthrough`、`--all-levels`、`--level 38`、`--level 38 12345`。单关会产生 trace-<level>.txt 和 playthrough-<level>.csv；完整结果为 playthrough-results.csv。单元/连续进度文件只在本目录 artifacts/<GUID>/ 下生成，旧文件保留用于验证备份。
 
-Unity编译能力核对：`dotnet build tests/AdventureTests/UnityCoreCompile/UnityCoreCompile.csproj -c Release`；这是netstandard2.1/C#7.3纯核心编译，不启动Unity，不写主工程Build、Library或ProjectSettings。
+Unity编译能力核对：`dotnet build Tools/Tests/AdventureTests/UnityCoreCompile/UnityCoreCompile.csproj -c Release`；这是netstandard2.1/C#9.0纯核心编译，不启动Unity，不写主工程Build、Library或ProjectSettings。
 
 接线、实现范围与近似项见项目根 ADVENTURE_HANDOFF.md。不能把该测试的通过解释为原版所有随机状态、动画或视觉已一致。
 
-可选本机奖励机器码核对：`python tests/AdventureTests/verify_native_awards.py`（需已安装Capstone）。这是解码后受限整数分支解释，不是CPU执行或完整原版游戏回放；外部首周目谓词由测试提供。
+可选本机奖励机器码核对：`python Tools/Tests/AdventureTests/verify_native_awards.py`（需已安装Capstone）。这是解码后受限整数分支解释，不是CPU执行或完整原版游戏回放；外部首周目谓词由测试提供。
 
 
 ## 升级植物回归

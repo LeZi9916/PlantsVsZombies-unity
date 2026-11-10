@@ -4,9 +4,9 @@ using System.Linq;
 using System.Reflection;
 using System.Collections.Generic;
 using System.Security.Cryptography;
-using PvZReplica;
-using PvZReplica.Adventure;
-using PvZReplica.Profiles;
+using PlantsVsZombies.Simulation;
+using PlantsVsZombies.Adventure;
+using PlantsVsZombies.Profiles;
 
 internal static class AdventureUnitTests
 {
@@ -21,8 +21,8 @@ internal static class AdventureUnitTests
         if(g.Adventure.Phase==AdventurePhase.ChoosingSeeds)
         {var deck=wanted.ToList();foreach(var k in g.Adventure.Level.UnlockedSeeds)if(deck.Count<6&&!deck.Contains(k))deck.Add(k);Check(g.ChooseAdventureSeeds(deck),"fixture chooses legal earned deck");}
         if(level==5) for(int c=3;c<=5;c++)g.RemovePlant(2,c);
-        g.Adventure.CurrentWave=g.Adventure.Waves.Count;g.Adventure.FinalAmbush=false;
-        g.Adventure.NextSkySun=float.MaxValue;
+        g.Adventure.CurrentWave=g.Adventure.Waves.Count;g.Adventure._finalAmbush=false;
+        g.Adventure._nextSkySun=float.MaxValue;
         return g;
     }
     private static void CreditFixture(GameSimulation g)
@@ -50,7 +50,7 @@ internal static class AdventureUnitTests
             var spec=AdventureLevels.Get(n);Check(spec.BaseWaveCount==BitConverter.ToInt32(pe,Offset(pe,0x74EDD8)+(n-1)*4),"native base wave count "+n);
             Check(spec.WaveCount==(n==15?8:spec.BaseWaveCount),"runtime wave override "+n);
             var plan=AdventureWavePlan.Build(spec,new Random(n));Check(plan.Count==spec.WaveCount,"complete playable wave plan "+n);
-            for(int z=0;z<34;z++)Check(PvZReplica.VerifiedData.VerifiedDataCatalog.AdventureLevels[n-1].ZombieFlagsRaw[z]==BitConverter.ToInt32(pe,Offset(pe,0x74EEA0)+z*204+n*4),"native row eligibility "+n+":"+z);
+            for(int z=0;z<34;z++)Check(PlantsVsZombies.VerifiedData.VerifiedDataCatalog.AdventureLevels[n-1].ZombieFlagsRaw[z]==BitConverter.ToInt32(pe,Offset(pe,0x74EEA0)+z*204+n*4),"native row eligibility "+n+":"+z);
             Check(spec.DefaultSeeds.All(k=>spec.UnlockedSeeds.Contains(k)),"no default unearned seed "+n);
             Check(spec.UnlockedSeeds.Distinct().Count()==spec.UnlockedSeeds.Count,"unlocked cards have no duplicate awards "+n);
             Check(plan.All(w=>w.Zombies.Count>0 && w.Zombies.All(z=>(int)z<=24)),"executable zombie behavior for every planned spawn "+n);
@@ -121,7 +121,7 @@ internal static class AdventureUnitTests
     }
     private static void Progression(string workspace)
     {
-        string dir=Path.Combine(workspace,"tests","AdventureTests","artifacts",Guid.NewGuid().ToString("N"));Directory.CreateDirectory(dir);
+        string dir=Path.Combine(workspace,"Tools","Tests","AdventureTests","artifacts",Guid.NewGuid().ToString("N"));Directory.CreateDirectory(dir);
         string old=Path.Combine(dir,"profiles.dat"),path=Path.Combine(dir,"campaign.adventure");
         var catalog=new ProfileCatalog(old);var profile=catalog.Create("冒险测试");byte[] oldBytes=File.ReadAllBytes(old);
         var store=new AdventureProgressStore(path);var campaign=new AdventureCampaign(store,profile.Id);var game=campaign.BeginOrResume();var bot=new PlaythroughBot(game);

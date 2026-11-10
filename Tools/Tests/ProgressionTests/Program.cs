@@ -1,10 +1,10 @@
 using System;
 using System.IO;
 using System.Collections.Generic;
-using PvZReplica;
-using PvZReplica.Adventure;
-using PvZReplica.Profiles;
-using PvZReplica.Progression;
+using PlantsVsZombies.Simulation;
+using PlantsVsZombies.Adventure;
+using PlantsVsZombies.Profiles;
+using PlantsVsZombies.Progression;
 
 internal static class Program
 {
@@ -22,6 +22,16 @@ internal static class Program
         using(var users=new BinaryWriter(File.Create(Path.Combine(folder,"users.dat")))){users.Write(14);users.Write((ushort)1);users.Write((ushort)3);users.Write(new byte[]{90,111,235});users.Write(7u);users.Write(7u);}
         var directory=OriginalSaveFormat.ReadDirectory(folder);Check(directory.Count==1&&directory[0].Name=="Zoë"&&directory[0].OriginalId==7,"Native v14 byte-wise username and user mapping");
         var source=OriginalSaveFormat.ReadUser(original);Check(source.Level==36&&source.Coins==10000&&source.Plants.Count==1,"Native v12 import");Check(source.Purchases[14]==5,"Native supply marker normalization");
+        Check(source.Name == "user7" && source.Purchases.Length == 80 && source.ChallengeRecords.Length == 100,
+            "Imported saves supply a fallback name and complete non-null record arrays");
+        var emptySaveBytes = new byte[887];
+        Put(emptySaveBytes, 0, 12);
+        Put(emptySaveBytes, 4, 1);
+        var emptySavePath = Path.Combine(folder, "user8.dat");
+        File.WriteAllBytes(emptySavePath, emptySaveBytes);
+        var emptySave = OriginalSaveFormat.ReadUser(emptySavePath);
+        Check(emptySave.Plants.Count == 0 && emptySave.Name == "user8" && emptySave.Purchases.Length == 80,
+            "A valid empty garden retains non-null parsed collections");
         var profiles=new ProfileCatalog(Path.Combine(folder,"profiles.dat"));Guid id=Guid.NewGuid();profiles.CreateImported(id,"原版导入");
         var store=new PlayerAccountStore(Path.Combine(folder,"wallet.account"));store.Import(id,source.Coins,source.Purchases,source.ChallengeRecords,source.ChallengeRecords[49],source.Plants);
         var progress=new AdventureProgressStore(Path.Combine(folder,"campaign.adventure"));progress.Import(id,source.Level,source.FinishedAdventure);

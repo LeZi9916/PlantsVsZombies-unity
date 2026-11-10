@@ -1,8 +1,20 @@
 # ProfileDialog integration
 
-`PvZReplica.UI.ProfileDialog` is an independent modal. It does not modify
+`PlantsVsZombies.UI.ProfileDialog` is an independent modal. It does not modify
 `PvZGame`, create the catalog, import original saves, or change the game scene.
 The current production catalog uses `Guid` profile IDs and `Guid? SelectedId`.
+
+Run the current logic fixtures with the prepared resource root:
+
+```powershell
+dotnet run --project Tools/Tests/ProfileDialogTests/ProfileDialogTests.csproj -c Release -- Assets/StreamingAssets
+dotnet run --project Tools/Tests/ProfileDialogTests/RealCatalogTests/RealCatalogTests.csproj -c Release -- Assets/StreamingAssets
+```
+
+`UnityStubs.cs` and `OriginalUiWidgetsFixture.cs` provide inert image drawing
+and deterministic input for state, fallback-label, persistence, and ownership
+checks. These fixtures do not verify widget appearance, native GUI input, or
+rendered pixels. Use the Unity and Player regression paths for rendering.
 
 ## Lifecycle and input
 
@@ -95,9 +107,9 @@ not a runtime dependency of this component.
 From the workspace root:
 
 ```powershell
-dotnet run --project PvZUnity/tests/ProfileDialogTests/ProfileDialogTests.csproj -c Release
-dotnet run --project PvZUnity/tests/ProfileDialogTests/RealCatalogTests/RealCatalogTests.csproj -c Release
-& ./PvZUnity/tests/ProfileDialogTests/run-unity.ps1
+dotnet run --project PvZUnity/Tools/Tests/ProfileDialogTests/ProfileDialogTests.csproj -c Release
+dotnet run --project PvZUnity/Tools/Tests/ProfileDialogTests/RealCatalogTests/RealCatalogTests.csproj -c Release
+& ./PvZUnity/Tools/Tests/ProfileDialogTests/run-unity.ps1
 ```
 
 The first suite uses controllable Unity and catalog test doubles. The second

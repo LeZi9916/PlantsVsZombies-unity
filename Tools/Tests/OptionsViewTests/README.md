@@ -3,7 +3,7 @@
 `run.ps1` 只在本目录创建独立 Unity 6000.3.17f1 工程，复制当前工作区的设置视图、同工程位图字体代码和所需资源，运行编辑器断言并构建 Windows Player。Player 对工程 StreamingAssets 和原包资源分别渲染，输出截图及像素差检查；这不是原版截图对比。
 
 ```powershell
-& .\tests\OptionsViewTests\run.ps1
+& .\Tools\Tests\OptionsViewTests\run.ps1
 ```
 
 2026-11-08 结果：最终代码的编辑器测试通过 **71 条断言**。覆盖主菜单/游戏入口、重叠矩形命中与释放、音量滑块、全屏草稿、返回、重开确认和取消等。最初 StreamingAssets 缺少按下素材时，两种资源路径的 Player 截图检查均输出 `PASS`，按钮区域有 4,912 个不同像素；这不证明与原游戏截图一致。后续资产准备脚本已复制按下素材，runner 现在要求准备后的素材与原包在该区域产生相同像素；更新后的比较尚需重新运行验证。

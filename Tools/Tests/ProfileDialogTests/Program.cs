@@ -1,7 +1,7 @@
 using System;
 using System.IO;
-using PvZReplica.Profiles;
-using PvZReplica.UI;
+using PlantsVsZombies.Profiles;
+using PlantsVsZombies.UI;
 using UnityEngine;
 
 internal static class Program

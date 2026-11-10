@@ -1,0 +1,285 @@
+#nullable enable
+
+using PlantsVsZombies.Simulation;
+
+using System;
+using System.Collections.Generic;
+
+namespace PlantsVsZombies.Adventure
+{
+    /// <summary>Defines adventure board.</summary>
+    public sealed class AdventureBoard
+    {
+        /// <summary>Gets or sets conveyor ticks.</summary>
+        public int ConveyorTicks { get; internal set; }
+        /// <summary>Gets or sets total waves spawned.</summary>
+        public int TotalWavesSpawned { get; internal set; }
+
+        /// <summary>Stores dropped first coin,  dropped mode gift.</summary>
+        internal bool _droppedFirstCoin, _droppedModeGift;
+        /// <summary>Gets or sets rake row.</summary>
+        public int RakeRow { get; internal set; } = -1;
+        /// <summary>Gets or sets rake column.</summary>
+        public int RakeColumn { get; internal set; } = 7;
+        /// <summary>Gets or sets rake attracting.</summary>
+        public bool RakeAttracting { get; internal set; }
+        /// <summary>Gets or sets rake triggered.</summary>
+        public bool RakeTriggered { get; internal set; }
+        /// <summary>Gets or sets rake age.</summary>
+        public float RakeAge { get; internal set; }
+
+        /// <summary>Stores rake damage done.</summary>
+        internal bool _rakeDamageDone;
+        /// <summary>Gets or sets reward presentation.</summary>
+        public AdventureRewardPresentation RewardPresentation { get; internal set; }
+
+        /// <summary>Stores last reward x,  last reward y.</summary>
+        internal float _lastRewardX = 400f, _lastRewardY = 300f;
+        /// <summary>Stores reward lightfill played.</summary>
+        internal bool _rewardLightfillPlayed;
+        /// <summary>Gets or sets required seeds.</summary>
+        public IReadOnlyList<PlantKind> RequiredSeeds { get; internal set; } = Array.AsReadOnly(new PlantKind[0]);
+
+        /// <summary>Stores seed flashes.</summary>
+        public readonly List<AdventureSeedFlashState> SeedFlashes = new List<AdventureSeedFlashState>();
+        /// <summary>Stores seed flash id.</summary>
+        internal int _seedFlashId;
+        /// <summary>Gets or sets level.</summary>
+        public AdventureLevelSpec Level { get; internal set; }
+        /// <summary>Gets or sets phase.</summary>
+        public AdventurePhase Phase { get; internal set; }
+        /// <summary>Gets or sets tutorial.</summary>
+        public AdventureTutorial Tutorial { get; internal set; }
+        /// <summary>Gets or sets selected seeds.</summary>
+        public IReadOnlyList<PlantKind> SelectedSeeds { get; internal set; }
+        /// <summary>Gets or sets waves.</summary>
+        public IReadOnlyList<AdventureWave> Waves { get; internal set; }
+
+        /// <summary>Stores packets.</summary>
+        internal readonly List<AdventurePacket> _packets = new List<AdventurePacket>();
+        /// <summary>Stores vases.</summary>
+        internal readonly List<AdventureVase> _vases = new List<AdventureVase>();
+        /// <summary>Stores graves.</summary>
+        internal readonly List<AdventureCellTimer> _graves = new List<AdventureCellTimer>();
+        /// <summary>Stores craters.</summary>
+        internal readonly List<AdventureCellTimer> _craters = new List<AdventureCellTimer>();
+        /// <summary>Stores ice.</summary>
+        internal readonly List<AdventureCellTimer> _ice = new List<AdventureCellTimer>();
+        /// <summary>Stores balls.</summary>
+        internal readonly List<AdventureBossBall> _balls = new List<AdventureBossBall>();
+        /// <summary>Stores nuts.</summary>
+        internal readonly List<AdventureBowlingNut> _nuts = new List<AdventureBowlingNut>();
+        /// <summary>Gets or sets packets.</summary>
+        public IReadOnlyList<AdventurePacket> Packets
+        {
+            get
+            {
+                return _packets.AsReadOnly();
+            }
+        }
+
+        /// <summary>Gets or sets vases.</summary>
+        public IReadOnlyList<AdventureVase> Vases
+        {
+            get
+            {
+                return _vases.AsReadOnly();
+            }
+        }
+
+        /// <summary>Gets or sets graves.</summary>
+        public IReadOnlyList<AdventureCellTimer> Graves
+        {
+            get
+            {
+                return _graves.AsReadOnly();
+            }
+        }
+
+        /// <summary>Gets or sets craters.</summary>
+        public IReadOnlyList<AdventureCellTimer> Craters
+        {
+            get
+            {
+                return _craters.AsReadOnly();
+            }
+        }
+
+        /// <summary>Gets or sets ice trails.</summary>
+        public IReadOnlyList<AdventureCellTimer> IceTrails
+        {
+            get
+            {
+                return _ice.AsReadOnly();
+            }
+        }
+
+        /// <summary>Gets or sets boss balls.</summary>
+        public IReadOnlyList<AdventureBossBall> BossBalls
+        {
+            get
+            {
+                return _balls.AsReadOnly();
+            }
+        }
+
+        /// <summary>Gets or sets bowling nuts.</summary>
+        public IReadOnlyList<AdventureBowlingNut> BowlingNuts
+        {
+            get
+            {
+                return _nuts.AsReadOnly();
+            }
+        }
+
+        /// <summary>Gets or sets current wave.</summary>
+        public int CurrentWave { get; internal set; }
+        /// <summary>Gets or sets flags spawned.</summary>
+        public int FlagsSpawned { get; internal set; }
+        /// <summary>Gets or sets wave countdown.</summary>
+        public float WaveCountdown { get; internal set; }
+        /// <summary>Gets or sets vase stage.</summary>
+        public int VaseStage { get; internal set; }
+        /// <summary>Gets or sets fog blown remaining.</summary>
+        public float FogBlownRemaining { get; internal set; }
+        /// <summary>Gets or sets storm flash.</summary>
+        public bool StormFlash { get; internal set; }
+        /// <summary>Gets or sets boss health.</summary>
+        public float BossHealth { get; internal set; }
+
+        /// <summary>Gets or sets boss max health.</summary>
+        public float BossMaxHealth
+        {
+            get
+            {
+                return 40000f;
+            }
+        }
+
+        /// <summary>Gets or sets boss head vulnerable.</summary>
+        public bool BossHeadVulnerable { get; internal set; }
+
+        /// <summary>Gets or sets reward available.</summary>
+        public bool RewardAvailable
+        {
+            get
+            {
+                return Phase == AdventurePhase.Reward;
+            }
+        }
+
+        /// <summary>Gets or sets reward collected.</summary>
+        public bool RewardCollected
+        {
+            get
+            {
+                return Phase == AdventurePhase.Finished;
+            }
+        }
+
+        /// <summary>Gets or sets selected seed.</summary>
+        public PlantKind? SelectedSeed { get; internal set; }
+
+        /// <summary>Stores notice raised.</summary>
+        public Action<AdventureNotice> NoticeRaised;
+        /// <summary>Stores packet id.</summary>
+        internal int _packetId;
+        /// <summary>Stores zombie id.</summary>
+        internal int _zombieId;
+        /// <summary>Stores ticks.</summary>
+        internal int _ticks;
+        /// <summary>Stores next packet.</summary>
+        internal float _nextPacket;
+        /// <summary>Stores next sky sun.</summary>
+        internal float _nextSkySun;
+        /// <summary>Stores sky sun count.</summary>
+        internal int _skySunCount;
+        /// <summary>Stores warned.</summary>
+        internal bool _warned;
+        /// <summary>Stores last spawn row.</summary>
+        internal int _lastSpawnRow = -1;
+        /// <summary>Stores last conveyor seed.</summary>
+        internal PlantKind? _lastConveyorSeed;
+        /// <summary>Stores final ambush.</summary>
+        internal bool _finalAmbush;
+        /// <summary>Stores previous wave health.</summary>
+        internal float _previousWaveHealth;
+        /// <summary>Stores wave initial countdown.</summary>
+        internal float _waveInitialCountdown;
+        /// <summary>Stores wave trigger health.</summary>
+        internal float _waveTriggerHealth;
+        /// <summary>Stores planted sunflowers.</summary>
+        internal int _plantedSunflowers;
+        /// <summary>Stores collected sun.</summary>
+        internal bool _collectedSun;
+        /// <summary>Stores boss timer.</summary>
+        internal float _bossTimer;
+        /// <summary>Stores boss cycle.</summary>
+        internal int _bossCycle;
+        /// <summary>Stores next hammer sun.</summary>
+        internal float _nextHammerSun;
+        /// <summary>Stores removal tutorial done.</summary>
+        internal bool _removalTutorialDone;
+        /// <summary>Performs notice.</summary>
+        /// <param name = "kind">The kind.</param>
+        /// <param name = "value">The value.</param>
+        /// <param name = "row">The row.</param>
+        /// <param name = "column">The column.</param>
+        internal void Notice(AdventureNoticeKind kind, int value = 0, int row = -1, int column = -1)
+        {
+            if (NoticeRaised != null)
+            {
+                NoticeRaised(new AdventureNotice {
+                    Kind = kind,
+                    Value = value,
+                    Row = row,
+                    Column = column
+                });
+            }
+        }
+
+        /// <summary>Gets or sets available seeds.</summary>
+        public IReadOnlyList<PlantKind> AvailableSeeds { get; internal set; }
+        /// <summary>Gets or sets imitater target.</summary>
+        public PlantKind? ImitaterTarget { get; internal set; }
+        /// <summary>Gets or sets selected cob cannon id.</summary>
+        public int? SelectedCobCannonId { get; internal set; }
+        /// <summary>Gets or sets money collected units.</summary>
+        public int MoneyCollectedUnits { get; internal set; }
+
+        /// <summary>Gets or sets money display value.</summary>
+        public long MoneyDisplayValue
+        {
+            get
+            {
+                return (long)MoneyCollectedUnits * 10;
+            }
+        }
+
+        /// <summary>Stores plant id.</summary>
+        internal int _plantId;
+        /// <summary>Stores coin id.</summary>
+        internal int _coinId;
+        /// <summary>Stores coins.</summary>
+        internal readonly List<AdventureCoin> _coins = new List<AdventureCoin>();
+        /// <summary>Stores cob shells.</summary>
+        internal readonly List<AdventureCobShell> _cobShells = new List<AdventureCobShell>();
+        /// <summary>Gets or sets coins.</summary>
+        public IReadOnlyList<AdventureCoin> Coins
+        {
+            get
+            {
+                return _coins.AsReadOnly();
+            }
+        }
+
+        /// <summary>Gets or sets cob shells.</summary>
+        public IReadOnlyList<AdventureCobShell> CobShells
+        {
+            get
+            {
+                return _cobShells.AsReadOnly();
+            }
+        }
+    }
+}

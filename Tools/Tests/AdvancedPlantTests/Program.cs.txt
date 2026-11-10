@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
-using PvZReplica;
-using PvZReplica.VerifiedData;
+using PlantsVsZombies.Simulation;
+using PlantsVsZombies.VerifiedData;
 
 internal static class Program
 {

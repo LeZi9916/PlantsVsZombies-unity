@@ -1,6 +1,6 @@
 # UI screenshot comparison
 
-Run `pwsh -File tests/UiComparisonTests/Run.ps1` on Windows to check equality,
+Run `pwsh -File Tools/Tests/UiComparisonTests/Run.ps1` on Windows to check equality,
 RGBA error metrics, difference bounds, alpha handling, output protection and
 dimension mismatch handling. Test images are written to a unique `artifacts/`
 subdirectory.

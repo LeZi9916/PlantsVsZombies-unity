@@ -32,15 +32,23 @@
 
 ## 验证
 
+当前 .NET 测试引用 Unity 6000.3.17f1 已编译的 `PlantsVsZombies.Runtime.dll`，不通过普通 dotnet 重编译 URP 主工程。默认读取主项目 `Library/ScriptAssemblies`；也可使用新隔离测试运行生成的程序集：
+
+```powershell
+dotnet run --project Tools/Tests/AlmanacTests/AlmanacTests.csproj -c Release -p:RuntimeAssembly="D:/path/to/PvZUnity/.unity-runs/<run>/p/Library/ScriptAssemblies/PlantsVsZombies.Runtime.dll" -- Tools/Tests/AlmanacTests/PreparedAssets
+```
+
+这验证逻辑与数据，不证明渲染效果。当前渲染回归请运行 `Tools/Tests/Run-UnityTests.ps1`；本目录旧 `UnityProject` 和 `RunUnitySmoke.ps1` 保存历史验证快照，未迁移为当前 URP 主项目测试入口。
+
 在 `PvZUnity/` 执行：
 
 ```powershell
 & .\Tools\PrepareAlmanacAssets.ps1
-& .\Tools\PrepareAlmanacAssets.ps1 -Destination .\tests\AlmanacTests\PreparedAssets
-dotnet run --project .\tests\AlmanacTests\AlmanacTests.csproj -c Release -- .\tests\AlmanacTests\PreparedAssets
-dotnet run --project .\tests\AlmanacTests\AlmanacTests.csproj -c Release -- .\tests\AlmanacTests\PreparedAssets --native-oracle
-& .\tests\PlayerSmokeTests\Run.ps1 -Mode UI
-& .\tests\AlmanacTests\RunUnitySmoke.ps1
+& .\Tools\PrepareAlmanacAssets.ps1 -Destination .\Tools\Tests\AlmanacTests\PreparedAssets
+dotnet run --project .\Tools\Tests\AlmanacTests\AlmanacTests.csproj -c Release -- .\Tools\Tests\AlmanacTests\PreparedAssets
+dotnet run --project .\Tools\Tests\AlmanacTests\AlmanacTests.csproj -c Release -- .\Tools\Tests\AlmanacTests\PreparedAssets --native-oracle
+& .\Tools\Tests\PlayerSmokeTests\Run.ps1 -Mode UI
+& .\Tools\Tests\AlmanacTests\RunUnitySmoke.ps1
 ```
 
 `--native-oracle` 使用已有 `Ubuntu-24.04` WSL / Unicorn 依赖，仅执行原 EXE `0x40CAA0/0x40CCF0` 的局部命中指令，对照边界、锁定集合和首页状态。可用性函数明确被桩替换，**不验证解锁规则、原版完整 UI 或渲染**。

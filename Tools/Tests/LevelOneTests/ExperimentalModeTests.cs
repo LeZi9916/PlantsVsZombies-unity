@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
-using PvZReplica;
-using PvZReplica.Levels;
+using PlantsVsZombies.Simulation;
+using PlantsVsZombies.Levels;
 
 internal static class ExperimentalModeTests
 {

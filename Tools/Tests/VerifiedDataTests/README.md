@@ -39,7 +39,7 @@ to an alternate directory containing the same five JSON filenames.
 Run the independent .NET 9 console tests (no test framework packages or Unity):
 
 ```powershell
-dotnet run --project PvZUnity/tests/VerifiedDataTests/VerifiedDataTests.csproj --configuration Release
+dotnet run --project PvZUnity/Tools/Tests/VerifiedDataTests/VerifiedDataTests.csproj --configuration Release
 ```
 
 The optional PowerShell generator regression tests create temporary fixture
@@ -47,7 +47,7 @@ copies under the test directory, then check a matching baseline and rejected
 invalid input or stale output:
 
 ```powershell
-pwsh -NoProfile -File PvZUnity/tests/VerifiedDataTests/GeneratorTests.ps1
+pwsh -NoProfile -File PvZUnity/Tools/Tests/VerifiedDataTests/GeneratorTests.ps1
 ```
 
 The tests locate the original JSON under `analysis/ida/balance` by walking up

@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 
-namespace PvZReplica.Profiles
+namespace PlantsVsZombies.Profiles
 {
     public sealed class UserProfile
     {

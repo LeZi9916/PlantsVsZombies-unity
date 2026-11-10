@@ -2,7 +2,7 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.Text.Json;
-using PvZReplica.Randomness;
+using PlantsVsZombies.Randomness;
 
 internal static class Program
 {

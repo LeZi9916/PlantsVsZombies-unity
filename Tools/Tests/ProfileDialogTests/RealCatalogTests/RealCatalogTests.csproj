@@ -2,7 +2,7 @@
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>net9.0</TargetFramework>
-    <LangVersion>7.3</LangVersion>
+    <LangVersion>9.0</LangVersion>
     <ImplicitUsings>disable</ImplicitUsings>
     <Nullable>disable</Nullable>
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
@@ -10,8 +10,10 @@
   <ItemGroup>
     <Compile Include="Program.cs" />
     <Compile Include="../UnityStubs.cs" Link="UnityStubs.cs" />
-    <Compile Include="../../../Assets/Scripts/UI/ProfileDialog.cs" Link="ProfileDialog.cs" />
-    <Compile Include="../../../Assets/Scripts/Profiles/ProfileCatalog.cs" Link="ProfileCatalog.cs" />
-    <Compile Include="../../../Assets/Scripts/Profiles/UserProfile.cs" Link="UserProfile.cs" />
+    <Compile Include="../OriginalUiWidgetsFixture.cs" Link="OriginalUiWidgetsFixture.cs" />
+    <Compile Include="../../../../Assets/Scripts/UI/ProfileDialog.cs" Link="Runtime/%(Filename)%(Extension)" />
+    <Compile Include="../../../../Assets/Scripts/Profiles/ProfileCatalog.cs" Link="Runtime/%(Filename)%(Extension)" />
+    <Compile Include="../../../../Assets/Scripts/Profiles/ProfileSaveStage.cs" Link="Runtime/%(Filename)%(Extension)" />
+    <Compile Include="../../../../Assets/Scripts/Profiles/UserProfile.cs" Link="Runtime/%(Filename)%(Extension)" />
   </ItemGroup>
 </Project>

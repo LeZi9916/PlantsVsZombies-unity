@@ -1,12 +1,18 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>netstandard2.1</TargetFramework>
-    <LangVersion>7.3</LangVersion>
+    <LangVersion>9.0</LangVersion>
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
     <ImplicitUsings>disable</ImplicitUsings>
     <Nullable>disable</Nullable>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="../../../Assets/Scripts/Timing/PlantTiming.cs" Link="PlantTiming.cs" />
+    <Compile Include="../../../../Assets/Scripts/Timing/AttackAttempt.cs" Link="Runtime/%(Filename)%(Extension)" />
+    <Compile Include="../../../../Assets/Scripts/Timing/PlantKind.cs" Link="Runtime/%(Filename)%(Extension)" />
+    <Compile Include="../../../../Assets/Scripts/Timing/PlantTiming.cs" Link="Runtime/%(Filename)%(Extension)" />
+    <Compile Include="../../../../Assets/Scripts/Timing/PlantTimingInput.cs" Link="Runtime/%(Filename)%(Extension)" />
+    <Compile Include="../../../../Assets/Scripts/Timing/PlantTimingResult.cs" Link="Runtime/%(Filename)%(Extension)" />
+    <Compile Include="../../../../Assets/Scripts/Timing/PlantTimingState.cs" Link="Runtime/%(Filename)%(Extension)" />
+    <Compile Include="../../../../Assets/Scripts/Timing/ShootingTrack.cs" Link="Runtime/%(Filename)%(Extension)" />
   </ItemGroup>
 </Project>

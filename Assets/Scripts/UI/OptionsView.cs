@@ -1,128 +1,181 @@
+#nullable enable
+using PlantsVsZombies.UI.BitmapFonts;
 using System;
 using System.Collections.Generic;
 using System.IO;
-using PvZReplica.UI.BitmapFonts;
 using UnityEngine;
 
-namespace PvZReplica.UI
+namespace PlantsVsZombies.UI
 {
-    public enum OptionsCloseResult
-    {
-        None,
-        ReturnToGame,
-        OpenAlmanac,
-        RestartLevel,
-        MainMenu
-    }
-
     /// <summary>
     /// A modal IMGUI view. Values are drafts; the owner applies them after ReturnToGame.
     /// All drawing and pointer positions use an 800 x 600, top-left-origin coordinate space.
     /// </summary>
     public sealed class OptionsView : IDisposable
     {
+        /// <summary>Stores logical width.</summary>
         public const float LogicalWidth = 800f;
+        /// <summary>Stores logical height.</summary>
         public const float LogicalHeight = 600f;
-
+        /// <summary>Stores panel x.</summary>
         private const float PanelX = 188f;
+        /// <summary>Stores panel y.</summary>
         private const float PanelY = 51f;
+        /// <summary>Stores knob width.</summary>
         private const float KnobWidth = 22f;
+        /// <summary>Stores knob height.</summary>
         private const float KnobHeight = 29f;
-
-        private static readonly Rect Panel = new Rect(PanelX, PanelY, 423f, 498f);
-        private static readonly Rect MusicTrack = new Rect(PanelX + 199f, PanelY + 116f, 135f, 40f);
-        private static readonly Rect SoundTrack = new Rect(PanelX + 199f, PanelY + 143f, 135f, 40f);
-        private static readonly Rect AccelerationBox = new Rect(PanelX + 283f, PanelY + 175f, 46f, 45f);
-        private static readonly Rect FullScreenBox = new Rect(PanelX + 284f, PanelY + 206f, 46f, 45f);
-        private static readonly Rect AlmanacButton = new Rect(PanelX + 107f, PanelY + 241f, 209f, 46f);
-        private static readonly Rect RestartButton = new Rect(PanelX + 107f, PanelY + 284f, 209f, 46f);
-        private static readonly Rect MainMenuButton = new Rect(PanelX + 107f, PanelY + 327f, 209f, 46f);
-        private static readonly Rect ReturnButton = new Rect(PanelX + 30f, PanelY + 381f, 360f, 100f);
-        private static readonly Rect RestartDialog = new Rect(193f, 154f, 413f, 292f);
-        private static readonly Rect ConfirmRestartButton = new Rect(224f, 366f, 163f, 46f);
-        private static readonly Rect CancelRestartButton = new Rect(400f, 366f, 163f, 46f);
-
+        /// <summary>Stores panel.</summary>
+        private static readonly Rect s_panel = new Rect(PanelX, PanelY, 423f, 498f);
+        /// <summary>Stores music track.</summary>
+        private static readonly Rect s_musicTrack = new Rect(PanelX + 199f, PanelY + 116f, 135f, 40f);
+        /// <summary>Stores sound track.</summary>
+        private static readonly Rect s_soundTrack = new Rect(PanelX + 199f, PanelY + 143f, 135f, 40f);
+        /// <summary>Stores acceleration box.</summary>
+        private static readonly Rect s_accelerationBox = new Rect(PanelX + 283f, PanelY + 175f, 46f, 45f);
+        /// <summary>Stores full screen box.</summary>
+        private static readonly Rect s_fullScreenBox = new Rect(PanelX + 284f, PanelY + 206f, 46f, 45f);
+        /// <summary>Stores almanac button.</summary>
+        private static readonly Rect s_almanacButton = new Rect(PanelX + 107f, PanelY + 241f, 209f, 46f);
+        /// <summary>Stores restart button.</summary>
+        private static readonly Rect s_restartButton = new Rect(PanelX + 107f, PanelY + 284f, 209f, 46f);
+        /// <summary>Stores main menu button.</summary>
+        private static readonly Rect s_mainMenuButton = new Rect(PanelX + 107f, PanelY + 327f, 209f, 46f);
+        /// <summary>Stores return button.</summary>
+        private static readonly Rect s_returnButton = new Rect(PanelX + 30f, PanelY + 381f, 360f, 100f);
+        /// <summary>Stores restart dialog.</summary>
+        private static readonly Rect s_restartDialog = new Rect(193f, 154f, 413f, 292f);
+        /// <summary>Stores confirm restart button.</summary>
+        private static readonly Rect s_confirmRestartButton = new Rect(224f, 366f, 163f, 46f);
+        /// <summary>Stores cancel restart button.</summary>
+        private static readonly Rect s_cancelRestartButton = new Rect(400f, 366f, 163f, 46f);
+        /// <summary>Defines pointer capture.</summary>
         private enum PointerCapture
         {
+            /// <summary>Identifies none.</summary>
             None,
+            /// <summary>Identifies music.</summary>
             Music,
+            /// <summary>Identifies sound.</summary>
             Sound,
+            /// <summary>Identifies return.</summary>
             Return,
+            /// <summary>Identifies almanac.</summary>
             Almanac,
+            /// <summary>Identifies restart.</summary>
             Restart,
+            /// <summary>Identifies main menu.</summary>
             MainMenu,
+            /// <summary>Identifies confirm restart.</summary>
             ConfirmRestart,
+            /// <summary>Identifies cancel restart.</summary>
             CancelRestart
         }
 
-        private Texture2D background;
-        private Texture2D sliderSlot;
-        private Texture2D sliderKnob;
-        private Texture2D uncheckedBox;
-        private Texture2D checkedBox;
-        private Texture2D returnNormal;
-        private Texture2D returnHighlighted;
-        private Texture2D buttonLeft;
-        private Texture2D buttonMiddle;
-        private Texture2D buttonRight;
-        private Texture2D buttonDownLeft;
-        private Texture2D buttonDownMiddle;
-        private Texture2D buttonDownRight;
-        private Texture2D[] dialogParts;
-        private readonly string imageDirectory;
-        private ImGuiBitmapFont menuFont;
-        private ImGuiBitmapFont menuHoverFont;
-        private ImGuiBitmapFont returnFont;
-        private ImGuiBitmapFont returnHoverFont;
-        private ImGuiBitmapFont dialogTitleFont;
-        private ImGuiBitmapFont dialogBodyFont;
-        private readonly Dictionary<ImGuiBitmapFont, Dictionary<string, BitmapTextLayout>> buttonLayouts =
-            new Dictionary<ImGuiBitmapFont, Dictionary<string, BitmapTextLayout>>();
-        private bool buttonFontsLoaded;
-        private Font font;
-        private GUIStyle labelStyle;
-        private PointerCapture capture;
-        private float grabOffset;
-        private Vector2 pointer = new Vector2(-1000f, -1000f);
-        private bool selectorMode;
-        private bool confirmingRestart;
-        private bool disposed;
-
+        /// <summary>Stores background.</summary>
+        private Texture2D _background;
+        /// <summary>Stores slider slot.</summary>
+        private Texture2D _sliderSlot;
+        /// <summary>Stores slider knob.</summary>
+        private Texture2D _sliderKnob;
+        /// <summary>Stores unchecked box.</summary>
+        private Texture2D _uncheckedBox;
+        /// <summary>Stores checked box.</summary>
+        private Texture2D _checkedBox;
+        /// <summary>Stores return normal.</summary>
+        private Texture2D _returnNormal;
+        /// <summary>Stores return highlighted.</summary>
+        private Texture2D _returnHighlighted;
+        /// <summary>Stores button left.</summary>
+        private Texture2D _buttonLeft;
+        /// <summary>Stores button middle.</summary>
+        private Texture2D _buttonMiddle;
+        /// <summary>Stores button right.</summary>
+        private Texture2D _buttonRight;
+        /// <summary>Stores button down left.</summary>
+        private Texture2D _buttonDownLeft;
+        /// <summary>Stores button down middle.</summary>
+        private Texture2D _buttonDownMiddle;
+        /// <summary>Stores button down right.</summary>
+        private Texture2D _buttonDownRight;
+        /// <summary>Stores dialog parts.</summary>
+        private Texture2D[] _dialogParts;
+        /// <summary>Stores image directory.</summary>
+        private readonly string _imageDirectory;
+        /// <summary>Stores menu font.</summary>
+        private ImGuiBitmapFont _menuFont;
+        /// <summary>Stores menu hover font.</summary>
+        private ImGuiBitmapFont _menuHoverFont;
+        /// <summary>Stores return font.</summary>
+        private ImGuiBitmapFont _returnFont;
+        /// <summary>Stores return hover font.</summary>
+        private ImGuiBitmapFont _returnHoverFont;
+        /// <summary>Stores dialog title font.</summary>
+        private ImGuiBitmapFont _dialogTitleFont;
+        /// <summary>Stores dialog body font.</summary>
+        private ImGuiBitmapFont _dialogBodyFont;
+        /// <summary>Stores button layouts.</summary>
+        private readonly Dictionary<ImGuiBitmapFont, Dictionary<string, BitmapTextLayout>> _buttonLayouts = new Dictionary<ImGuiBitmapFont, Dictionary<string, BitmapTextLayout>>();
+        /// <summary>Stores button fonts loaded.</summary>
+        private bool _buttonFontsLoaded;
+        /// <summary>Stores font.</summary>
+        private Font _font;
+        /// <summary>Stores label style.</summary>
+        private GUIStyle _labelStyle;
+        /// <summary>Stores capture.</summary>
+        private PointerCapture _capture;
+        /// <summary>Stores grab offset.</summary>
+        private float _grabOffset;
+        /// <summary>Stores pointer.</summary>
+        private Vector2 _pointer = new Vector2(-1000f, -1000f);
+        /// <summary>Stores selector mode.</summary>
+        private bool _selectorMode;
+        /// <summary>Stores confirming restart.</summary>
+        private bool _confirmingRestart;
+        /// <summary>Stores disposed.</summary>
+        private bool _disposed;
+        /// <summary>Gets or sets music volume.</summary>
         public float MusicVolume { get; private set; }
+        /// <summary>Gets or sets sound volume.</summary>
         public float SoundVolume { get; private set; }
+        /// <summary>Gets or sets full screen.</summary>
         public bool FullScreen { get; private set; }
+        /// <summary>Gets or sets is open.</summary>
         public bool IsOpen { get; private set; }
+        /// <summary>Gets or sets close result.</summary>
         public OptionsCloseResult CloseResult { get; private set; }
+        /// <summary>Gets or sets gameplay buttons enabled.</summary>
         public bool GameplayButtonsEnabled { get; set; }
+        /// <summary>Gets or sets original right label.</summary>
         public Func<string, float, float, Color, bool> OriginalRightLabel { get; set; }
 
-        /// <param name="resourceRoot">Directory containing the raw images subdirectory.</param>
+        /// <param name = "resourceRoot">Directory containing the raw images subdirectory.</param>
         public OptionsView(string resourceRoot)
         {
             if (string.IsNullOrEmpty(resourceRoot))
+            {
                 throw new ArgumentException("A resource root containing images is required.", "resourceRoot");
+            }
 
-            string images = Path.Combine(resourceRoot, "images");
-            imageDirectory = images;
+            var images = Path.Combine(resourceRoot, "images");
+            _imageDirectory = images;
             try
             {
-                background = LoadMaskedBackground(images);
-                sliderSlot = LoadTexture(images, "options_sliderslot.png");
-                sliderKnob = LoadTexture(images, "options_sliderknob2.png");
-                uncheckedBox = LoadTexture(images, "options_checkbox0.png");
-                checkedBox = LoadTexture(images, "options_checkbox1.png");
-                returnNormal = LoadTexture(images, "options_backtogamebutton0.png");
-                returnHighlighted = LoadTexture(images, "options_backtogamebutton2.png");
-                buttonLeft = LoadTexture(images, "button_left.png");
-                buttonMiddle = LoadTexture(images, "button_middle.png");
-                buttonRight = LoadTexture(images, "button_right.png");
-                if (File.Exists(Path.Combine(images, "button_down_left.png")) &&
-                    File.Exists(Path.Combine(images, "button_down_middle.png")) &&
-                    File.Exists(Path.Combine(images, "button_down_right.png")))
+                _background = LoadMaskedBackground(images);
+                _sliderSlot = LoadTexture(images, "options_sliderslot.png");
+                _sliderKnob = LoadTexture(images, "options_sliderknob2.png");
+                _uncheckedBox = LoadTexture(images, "options_checkbox0.png");
+                _checkedBox = LoadTexture(images, "options_checkbox1.png");
+                _returnNormal = LoadTexture(images, "options_backtogamebutton0.png");
+                _returnHighlighted = LoadTexture(images, "options_backtogamebutton2.png");
+                _buttonLeft = LoadTexture(images, "button_left.png");
+                _buttonMiddle = LoadTexture(images, "button_middle.png");
+                _buttonRight = LoadTexture(images, "button_right.png");
+                if (File.Exists(Path.Combine(images, "button_down_left.png")) && File.Exists(Path.Combine(images, "button_down_middle.png")) && File.Exists(Path.Combine(images, "button_down_right.png")))
                 {
-                    buttonDownLeft = LoadTexture(images, "button_down_left.png");
-                    buttonDownMiddle = LoadTexture(images, "button_down_middle.png");
-                    buttonDownRight = LoadTexture(images, "button_down_right.png");
+                    _buttonDownLeft = LoadTexture(images, "button_down_left.png");
+                    _buttonDownMiddle = LoadTexture(images, "button_down_middle.png");
+                    _buttonDownRight = LoadTexture(images, "button_down_right.png");
                 }
             }
             catch
@@ -136,17 +189,21 @@ namespace PvZReplica.UI
         public void Open(float musicVolume, float soundVolume, bool fullScreen)
         {
             ThrowIfDisposed();
-            if (IsOpen) throw new InvalidOperationException("The options view is already open.");
-            float music = ClampVolume(musicVolume, "musicVolume");
-            float sound = ClampVolume(soundVolume, "soundVolume");
+            if (IsOpen)
+            {
+                throw new InvalidOperationException("The options view is already open.");
+            }
+
+            var music = ClampVolume(musicVolume, "musicVolume");
+            var sound = ClampVolume(soundVolume, "soundVolume");
             MusicVolume = music;
             SoundVolume = sound;
             FullScreen = fullScreen;
-            selectorMode = !GameplayButtonsEnabled;
-            confirmingRestart = false;
+            _selectorMode = !GameplayButtonsEnabled;
+            _confirmingRestart = false;
             CloseResult = OptionsCloseResult.None;
-            capture = PointerCapture.None;
-            pointer = new Vector2(-1000f, -1000f);
+            _capture = PointerCapture.None;
+            _pointer = new Vector2(-1000f, -1000f);
             IsOpen = true;
         }
 
@@ -154,12 +211,13 @@ namespace PvZReplica.UI
         public void Close()
         {
             ThrowIfDisposed();
-            if (confirmingRestart)
+            if (_confirmingRestart)
             {
-                confirmingRestart = false;
-                capture = PointerCapture.None;
+                _confirmingRestart = false;
+                _capture = PointerCapture.None;
                 return;
             }
+
             Finish(OptionsCloseResult.ReturnToGame);
         }
 
@@ -168,18 +226,27 @@ namespace PvZReplica.UI
         {
             ThrowIfDisposed();
             if (IsOpen || CloseResult != OptionsCloseResult.OpenAlmanac)
+            {
                 throw new InvalidOperationException("The options view is not suspended for the almanac.");
-            capture = PointerCapture.None;
-            pointer = new Vector2(-1000f, -1000f);
+            }
+
+            _capture = PointerCapture.None;
+            _pointer = new Vector2(-1000f, -1000f);
             CloseResult = OptionsCloseResult.None;
             IsOpen = true;
         }
 
+        /// <summary>Performs finish.</summary>
+        /// <param name = "result">The result.</param>
         private void Finish(OptionsCloseResult result)
         {
-            if (!IsOpen) return;
-            capture = PointerCapture.None;
-            confirmingRestart = false;
+            if (!IsOpen)
+            {
+                return;
+            }
+
+            _capture = PointerCapture.None;
+            _confirmingRestart = false;
             IsOpen = false;
             CloseResult = result;
         }
@@ -188,46 +255,51 @@ namespace PvZReplica.UI
         public void Draw()
         {
             ThrowIfDisposed();
-            if (!IsOpen) return;
+            if (!IsOpen)
+            {
+                return;
+            }
+
             EnsureLabelStyle();
             EnsureButtonFonts();
-            Color oldColor = GUI.color;
-            Color oldContentColor = GUI.contentColor;
-            bool oldEnabled = GUI.enabled;
+            var oldColor = GUI.color;
+            var oldContentColor = GUI.contentColor;
+            var oldEnabled = GUI.enabled;
             try
             {
                 GUI.color = Color.white;
                 GUI.contentColor = Color.white;
                 GUI.enabled = true;
-                Image(Panel, background, Color.white);
-                Color labelColor = new Color(107f / 255f, 109f / 255f, 145f / 255f, 1f);
-                float musicOffset = selectorMode ? 5f : 0f;
-                float soundOffset = selectorMode ? 10f : 0f;
-                float accelerationOffset = selectorMode ? 15f : 0f;
-                float fullScreenOffset = selectorMode ? 20f : 0f;
+                Image(s_panel, _background, Color.white);
+                var labelColor = new Color(107f / 255f, 109f / 255f, 145f / 255f, 1f);
+                var musicOffset = _selectorMode ? 5f : 0f;
+                var soundOffset = _selectorMode ? 10f : 0f;
+                var accelerationOffset = _selectorMode ? 15f : 0f;
+                var fullScreenOffset = _selectorMode ? 20f : 0f;
                 NativeOrSystemLabel(new Rect(PanelX, PanelY + 119f + musicOffset, 186f, 23f), "音乐", PanelX + 186f, PanelY + 140f + musicOffset, labelColor);
                 NativeOrSystemLabel(new Rect(PanelX, PanelY + 146f + soundOffset, 186f, 23f), "音效", PanelX + 186f, PanelY + 167f + soundOffset, labelColor);
-                NativeOrSystemLabel(new Rect(PanelX, PanelY + 176f + accelerationOffset, 274f, 23f), "3D加速", PanelX + 274f, PanelY + 197f + accelerationOffset,
-                    new Color(labelColor.r, labelColor.g, labelColor.b, 0.55f));
+                NativeOrSystemLabel(new Rect(PanelX, PanelY + 176f + accelerationOffset, 274f, 23f), "3D加速", PanelX + 274f, PanelY + 197f + accelerationOffset, new Color(labelColor.r, labelColor.g, labelColor.b, 0.55f));
                 NativeOrSystemLabel(new Rect(PanelX, PanelY + 208f + fullScreenOffset, 274f, 23f), "全屏幕显示", PanelX + 274f, PanelY + 229f + fullScreenOffset, labelColor);
-
-                Rect musicTrack = OffsetY(MusicTrack, musicOffset);
-                Rect soundTrack = OffsetY(SoundTrack, soundOffset);
-                Rect accelerationBox = OffsetY(AccelerationBox, accelerationOffset);
-                Rect fullScreenBox = OffsetY(FullScreenBox, fullScreenOffset);
-                if (!selectorMode)
+                var musicTrack = OffsetY(s_musicTrack, musicOffset);
+                var soundTrack = OffsetY(s_soundTrack, soundOffset);
+                var accelerationBox = OffsetY(s_accelerationBox, accelerationOffset);
+                var fullScreenBox = OffsetY(s_fullScreenBox, fullScreenOffset);
+                if (!_selectorMode)
                 {
-                    DrawMenuButton(AlmanacButton, "查看图鉴", PointerCapture.Almanac);
-                    DrawMenuButton(RestartButton, "重新开始本关卡", PointerCapture.Restart);
-                    DrawMenuButton(MainMenuButton, "主菜单", PointerCapture.MainMenu);
+                    DrawMenuButton(s_almanacButton, "查看图鉴", PointerCapture.Almanac);
+                    DrawMenuButton(s_restartButton, "重新开始本关卡", PointerCapture.Restart);
+                    DrawMenuButton(s_mainMenuButton, "主菜单", PointerCapture.MainMenu);
                 }
+
                 DrawSlider(musicTrack, MusicVolume);
                 DrawSlider(soundTrack, SoundVolume);
-                Image(new Rect(accelerationBox.x, accelerationBox.y, 42f, 39f), uncheckedBox,
-                    new Color(0.55f, 0.55f, 0.55f, 0.7f));
-                Image(new Rect(fullScreenBox.x, fullScreenBox.y, 42f, 39f), FullScreen ? checkedBox : uncheckedBox, Color.white);
-                DrawReturnButton(selectorMode ? "确定" : "返回游戏");
-                if (confirmingRestart) DrawRestartConfirmation();
+                Image(new Rect(accelerationBox.x, accelerationBox.y, 42f, 39f), _uncheckedBox, new Color(0.55f, 0.55f, 0.55f, 0.7f));
+                Image(new Rect(fullScreenBox.x, fullScreenBox.y, 42f, 39f), FullScreen ? _checkedBox : _uncheckedBox, Color.white);
+                DrawReturnButton(_selectorMode ? "确定" : "返回游戏");
+                if (_confirmingRestart)
+                {
+                    DrawRestartConfirmation();
+                }
             }
             finally
             {
@@ -244,207 +316,359 @@ namespace PvZReplica.UI
         public bool HandlePointer(Vector2 position, EventType type)
         {
             ThrowIfDisposed();
-            if (!IsOpen) return false;
-            if (type != EventType.MouseDown && type != EventType.MouseDrag &&
-                type != EventType.MouseUp && type != EventType.MouseMove) return false;
-            pointer = position;
-            if (confirmingRestart)
+            if (!IsOpen)
+            {
+                return false;
+            }
+
+            if (type != EventType.MouseDown && type != EventType.MouseDrag && type != EventType.MouseUp && type != EventType.MouseMove)
+            {
+                return false;
+            }
+
+            _pointer = position;
+            if (_confirmingRestart)
             {
                 if (type == EventType.MouseDown)
                 {
-                    capture = ConfirmRestartButton.Contains(position) ? PointerCapture.ConfirmRestart :
-                        CancelRestartButton.Contains(position) ? PointerCapture.CancelRestart : PointerCapture.None;
+                    _capture = s_confirmRestartButton.Contains(position) ? PointerCapture.ConfirmRestart : s_cancelRestartButton.Contains(position) ? PointerCapture.CancelRestart : PointerCapture.None;
                 }
                 else if (type == EventType.MouseUp)
                 {
-                    PointerCapture released = capture;
-                    capture = PointerCapture.None;
-                    PointerCapture underPointer = ButtonUnderPointer();
+                    var released = _capture;
+                    _capture = PointerCapture.None;
+                    var underPointer = ButtonUnderPointer();
                     if (released == PointerCapture.ConfirmRestart && underPointer == released)
+                    {
                         Finish(OptionsCloseResult.RestartLevel);
+                    }
                     else if (released == PointerCapture.CancelRestart && underPointer == released)
-                        confirmingRestart = false;
+                    {
+                        _confirmingRestart = false;
+                    }
                 }
+
                 return true;
             }
+
             if (type == EventType.MouseDown)
             {
-                capture = PointerCapture.None;
-                Rect musicTrack = OffsetY(MusicTrack, selectorMode ? 5f : 0f);
-                Rect soundTrack = OffsetY(SoundTrack, selectorMode ? 10f : 0f);
-                Rect accelerationBox = OffsetY(AccelerationBox, selectorMode ? 15f : 0f);
-                Rect fullScreenBox = OffsetY(FullScreenBox, selectorMode ? 20f : 0f);
+                _capture = PointerCapture.None;
+                var musicTrack = OffsetY(s_musicTrack, _selectorMode ? 5f : 0f);
+                var soundTrack = OffsetY(s_soundTrack, _selectorMode ? 10f : 0f);
+                var accelerationBox = OffsetY(s_accelerationBox, _selectorMode ? 15f : 0f);
+                var fullScreenBox = OffsetY(s_fullScreenBox, _selectorMode ? 20f : 0f);
                 // Child widgets receive input in reverse draw order, including overlapping bounds.
-                if (ReturnButton.Contains(position)) capture = PointerCapture.Return;
-                else if (fullScreenBox.Contains(position)) FullScreen = !FullScreen;
-                else if (accelerationBox.Contains(position)) return true;
+                if (s_returnButton.Contains(position))
+                {
+                    _capture = PointerCapture.Return;
+                }
+                else if (fullScreenBox.Contains(position))
+                {
+                    FullScreen = !FullScreen;
+                }
+                else if (accelerationBox.Contains(position))
+                {
+                    return true;
+                }
                 else if (soundTrack.Contains(position))
+                {
                     BeginSlider(PointerCapture.Sound, soundTrack, SoundVolume, position);
+                }
                 else if (musicTrack.Contains(position))
+                {
                     BeginSlider(PointerCapture.Music, musicTrack, MusicVolume, position);
-                else if (!selectorMode && MainMenuButton.Contains(position)) capture = PointerCapture.MainMenu;
-                else if (!selectorMode && RestartButton.Contains(position)) capture = PointerCapture.Restart;
-                else if (!selectorMode && AlmanacButton.Contains(position)) capture = PointerCapture.Almanac;
+                }
+                else if (!_selectorMode && s_mainMenuButton.Contains(position))
+                {
+                    _capture = PointerCapture.MainMenu;
+                }
+                else if (!_selectorMode && s_restartButton.Contains(position))
+                {
+                    _capture = PointerCapture.Restart;
+                }
+                else if (!_selectorMode && s_almanacButton.Contains(position))
+                {
+                    _capture = PointerCapture.Almanac;
+                }
             }
             else if (type == EventType.MouseDrag)
             {
-                if (capture == PointerCapture.Music) MusicVolume = SliderDragValue(MusicTrack, position.x);
-                else if (capture == PointerCapture.Sound) SoundVolume = SliderDragValue(SoundTrack, position.x);
+                if (_capture == PointerCapture.Music)
+                {
+                    MusicVolume = SliderDragValue(s_musicTrack, position.x);
+                }
+                else if (_capture == PointerCapture.Sound)
+                {
+                    SoundVolume = SliderDragValue(s_soundTrack, position.x);
+                }
             }
             else if (type == EventType.MouseUp)
             {
-                PointerCapture released = capture;
-                capture = PointerCapture.None;
-                PointerCapture underPointer = ButtonUnderPointer();
-                if (released == PointerCapture.Return && underPointer == released) Close();
-                else if (released == PointerCapture.Almanac && underPointer == released) Finish(OptionsCloseResult.OpenAlmanac);
+                var released = _capture;
+                _capture = PointerCapture.None;
+                var underPointer = ButtonUnderPointer();
+                if (released == PointerCapture.Return && underPointer == released)
+                {
+                    Close();
+                }
+                else if (released == PointerCapture.Almanac && underPointer == released)
+                {
+                    Finish(OptionsCloseResult.OpenAlmanac);
+                }
                 else if (released == PointerCapture.Restart && underPointer == released)
                 {
-                    confirmingRestart = true;
+                    _confirmingRestart = true;
                     LoadDialogParts();
                 }
-                else if (released == PointerCapture.MainMenu && underPointer == released) Finish(OptionsCloseResult.MainMenu);
+                else if (released == PointerCapture.MainMenu && underPointer == released)
+                {
+                    Finish(OptionsCloseResult.MainMenu);
+                }
             }
+
             return true;
         }
 
+        /// <summary>Performs dispose.</summary>
         public void Dispose()
         {
-            if (disposed) return;
-            disposed = true;
+            if (_disposed)
+            {
+                return;
+            }
+
+            _disposed = true;
             IsOpen = false;
-            capture = PointerCapture.None;
-            Release(background);
-            Release(sliderSlot);
-            Release(sliderKnob);
-            Release(uncheckedBox);
-            Release(checkedBox);
-            Release(returnNormal);
-            Release(returnHighlighted);
-            Release(buttonLeft);
-            Release(buttonMiddle);
-            Release(buttonRight);
-            Release(buttonDownLeft);
-            Release(buttonDownMiddle);
-            Release(buttonDownRight);
-            if (dialogParts != null)
-                foreach (Texture2D part in dialogParts) Release(part);
-            if (menuFont != null) menuFont.Dispose();
-            if (menuHoverFont != null) menuHoverFont.Dispose();
-            if (returnFont != null) returnFont.Dispose();
-            if (returnHoverFont != null) returnHoverFont.Dispose();
-            if (dialogTitleFont != null) dialogTitleFont.Dispose();
-            if (dialogBodyFont != null) dialogBodyFont.Dispose();
-            buttonLayouts.Clear();
-            Release(font);
+            _capture = PointerCapture.None;
+            Release(_background);
+            Release(_sliderSlot);
+            Release(_sliderKnob);
+            Release(_uncheckedBox);
+            Release(_checkedBox);
+            Release(_returnNormal);
+            Release(_returnHighlighted);
+            Release(_buttonLeft);
+            Release(_buttonMiddle);
+            Release(_buttonRight);
+            Release(_buttonDownLeft);
+            Release(_buttonDownMiddle);
+            Release(_buttonDownRight);
+            if (_dialogParts != null)
+            {
+                foreach (Texture2D part in _dialogParts)
+                {
+                    Release(part);
+                }
+            }
+
+            if (_menuFont != null)
+            {
+                _menuFont.Dispose();
+            }
+
+            if (_menuHoverFont != null)
+            {
+                _menuHoverFont.Dispose();
+            }
+
+            if (_returnFont != null)
+            {
+                _returnFont.Dispose();
+            }
+
+            if (_returnHoverFont != null)
+            {
+                _returnHoverFont.Dispose();
+            }
+
+            if (_dialogTitleFont != null)
+            {
+                _dialogTitleFont.Dispose();
+            }
+
+            if (_dialogBodyFont != null)
+            {
+                _dialogBodyFont.Dispose();
+            }
+
+            _buttonLayouts.Clear();
+            Release(_font);
         }
 
+        /// <summary>Performs begin slider.</summary>
+        /// <param name = "target">The target.</param>
+        /// <param name = "track">The track.</param>
+        /// <param name = "value">The value.</param>
+        /// <param name = "position">The position.</param>
         private void BeginSlider(PointerCapture target, Rect track, float value, Vector2 position)
         {
-            Rect knob = KnobRect(track, value);
+            var knob = KnobRect(track, value);
             if (position.x >= knob.x && position.x < knob.xMax)
             {
-                capture = target;
-                grabOffset = position.x - knob.x;
+                _capture = target;
+                _grabOffset = position.x - knob.x;
             }
             else
             {
-                float updated = Mathf.Clamp01((position.x - track.x) / track.width);
-                if (target == PointerCapture.Music) MusicVolume = updated;
-                else SoundVolume = updated;
+                var updated = Mathf.Clamp01((position.x - track.x) / track.width);
+                if (target == PointerCapture.Music)
+                {
+                    MusicVolume = updated;
+                }
+                else
+                {
+                    SoundVolume = updated;
+                }
             }
         }
 
+        /// <summary>Performs slider drag value.</summary>
+        /// <param name = "track">The track.</param>
+        /// <param name = "x">The x.</param>
+        /// <returns>The resulting slider drag value.</returns>
         private float SliderDragValue(Rect track, float x)
         {
-            return Mathf.Clamp01((x - track.x - grabOffset) / (track.width - KnobWidth));
+            return Mathf.Clamp01((x - track.x - _grabOffset) / (track.width - KnobWidth));
         }
 
+        /// <summary>Performs knob rect.</summary>
+        /// <param name = "track">The track.</param>
+        /// <param name = "value">The value.</param>
+        /// <returns>The resulting knob rect.</returns>
         private static Rect KnobRect(Rect track, float value)
         {
-            return new Rect(track.x + (int)((track.width - KnobWidth) * value),
-                track.y + (int)((track.height - KnobHeight) / 2f), KnobWidth, KnobHeight);
+            return new Rect(track.x + (int)((track.width - KnobWidth) * value), track.y + (int)((track.height - KnobHeight) / 2f), KnobWidth, KnobHeight);
         }
 
+        /// <summary>Performs offset y.</summary>
+        /// <param name = "rect">The rect.</param>
+        /// <param name = "offset">The offset.</param>
+        /// <returns>The resulting offset y.</returns>
         private static Rect OffsetY(Rect rect, float offset)
         {
             rect.y += offset;
             return rect;
         }
 
+        /// <summary>Performs draw slider.</summary>
+        /// <param name = "track">The track.</param>
+        /// <param name = "value">The value.</param>
         private void DrawSlider(Rect track, float value)
         {
-            Image(new Rect(track.x, track.y + 15f, track.width, 10f), sliderSlot, Color.white);
-            Image(KnobRect(track, value), sliderKnob, Color.white);
+            Image(new Rect(track.x, track.y + 15f, track.width, 10f), _sliderSlot, Color.white);
+            Image(KnobRect(track, value), _sliderKnob, Color.white);
         }
 
+        /// <summary>Performs draw menu button.</summary>
+        /// <param name = "rect">The rect.</param>
+        /// <param name = "text">The text.</param>
+        /// <param name = "target">The target.</param>
         private void DrawMenuButton(Rect rect, string text, PointerCapture target)
         {
-            bool hovered = ButtonUnderPointer() == target;
-            bool pressed = hovered && capture == target;
-            float x = rect.x + (pressed ? 1f : 0f);
-            Texture2D left = pressed && buttonDownLeft != null ? buttonDownLeft : buttonLeft;
-            Texture2D middle = pressed && buttonDownMiddle != null ? buttonDownMiddle : buttonMiddle;
-            Texture2D right = pressed && buttonDownRight != null ? buttonDownRight : buttonRight;
+            var hovered = ButtonUnderPointer() == target;
+            var pressed = hovered && _capture == target;
+            var x = rect.x + (pressed ? 1f : 0f);
+            var left = pressed && _buttonDownLeft != null ? _buttonDownLeft : _buttonLeft;
+            var middle = pressed && _buttonDownMiddle != null ? _buttonDownMiddle : _buttonMiddle;
+            var right = pressed && _buttonDownRight != null ? _buttonDownRight : _buttonRight;
             Image(new Rect(x, rect.y, left.width, left.height), left, Color.white);
-            int count = Mathf.RoundToInt((rect.width - left.width - right.width) / middle.width);
-            for (int i = 0; i < count; i++)
+            var count = Mathf.RoundToInt((rect.width - left.width - right.width) / middle.width);
+            for (var i = 0; i < count; i++)
+            {
                 Image(new Rect(x + left.width + i * middle.width, rect.y, middle.width, middle.height), middle, Color.white);
+            }
+
             Image(new Rect(x + left.width + count * middle.width, rect.y, right.width, right.height), right, Color.white);
-            ImGuiBitmapFont bitmap = hovered ? menuHoverFont : menuFont;
-            int height = bitmap != null ? bitmap.Data.LineHeight : 18;
-            float baseline = rect.y + (pressed ? 1f : 0f) + (int)((rect.height - height / 6 - 1f + height) / 2f) - 4f;
+            var bitmap = hovered ? _menuHoverFont : _menuFont;
+            var height = bitmap != null ? bitmap.Data.LineHeight : 18;
+            var baseline = rect.y + (pressed ? 1f : 0f) + (int)((rect.height - height / 6 - 1f + height) / 2f) - 4f;
             if (!DrawCenteredBitmap(bitmap, text, rect, 1f + (pressed ? 1f : 0f), baseline, Color.white))
-                Label(rect, text, 16, TextAnchor.MiddleCenter,
-                    hovered ? new Color(0.32f, 0.78f, 0.18f) : new Color(0.19f, 0.52f, 0.12f));
+            {
+                Label(rect, text, 16, TextAnchor.MiddleCenter, hovered ? new Color(0.32f, 0.78f, 0.18f) : new Color(0.19f, 0.52f, 0.12f));
+            }
         }
 
+        /// <summary>Performs draw return button.</summary>
+        /// <param name = "text">The text.</param>
         private void DrawReturnButton(string text)
         {
-            bool hovered = ButtonUnderPointer() == PointerCapture.Return;
-            bool pressed = hovered && capture == PointerCapture.Return;
-            Image(ReturnButton, pressed ? returnHighlighted : returnNormal, Color.white);
-            ImGuiBitmapFont bitmap = hovered ? returnHoverFont : returnFont;
-            int height = bitmap != null ? bitmap.Data.LineHeight : 41;
-            float baseline = ReturnButton.y - 5f + (int)((ReturnButton.height - height / 6 - 1f + height) / 2f) + (pressed ? 1f : 0f);
-            if (!DrawCenteredBitmap(bitmap, text, ReturnButton, -2f, baseline, Color.white))
-                Label(new Rect(ReturnButton.x - 2f, ReturnButton.y - 5f, ReturnButton.width, ReturnButton.height),
-                    text, 30, TextAnchor.MiddleCenter,
-                    hovered ? new Color(0.32f, 0.78f, 0.18f) : new Color(0.19f, 0.52f, 0.12f));
+            var hovered = ButtonUnderPointer() == PointerCapture.Return;
+            var pressed = hovered && _capture == PointerCapture.Return;
+            Image(s_returnButton, pressed ? _returnHighlighted : _returnNormal, Color.white);
+            var bitmap = hovered ? _returnHoverFont : _returnFont;
+            var height = bitmap != null ? bitmap.Data.LineHeight : 41;
+            var baseline = s_returnButton.y - 5f + (int)((s_returnButton.height - height / 6 - 1f + height) / 2f) + (pressed ? 1f : 0f);
+            if (!DrawCenteredBitmap(bitmap, text, s_returnButton, -2f, baseline, Color.white))
+            {
+                Label(new Rect(s_returnButton.x - 2f, s_returnButton.y - 5f, s_returnButton.width, s_returnButton.height), text, 30, TextAnchor.MiddleCenter, hovered ? new Color(0.32f, 0.78f, 0.18f) : new Color(0.19f, 0.52f, 0.12f));
+            }
         }
 
+        /// <summary>Performs button under pointer.</summary>
+        /// <returns>The resulting button under pointer.</returns>
         private PointerCapture ButtonUnderPointer()
         {
-            if (confirmingRestart)
+            if (_confirmingRestart)
             {
-                if (ConfirmRestartButton.Contains(pointer)) return PointerCapture.ConfirmRestart;
-                if (CancelRestartButton.Contains(pointer)) return PointerCapture.CancelRestart;
+                if (s_confirmRestartButton.Contains(_pointer))
+                {
+                    return PointerCapture.ConfirmRestart;
+                }
+
+                if (s_cancelRestartButton.Contains(_pointer))
+                {
+                    return PointerCapture.CancelRestart;
+                }
+
                 return PointerCapture.None;
             }
-            if (ReturnButton.Contains(pointer)) return PointerCapture.Return;
-            if (OffsetY(FullScreenBox, selectorMode ? 20f : 0f).Contains(pointer) ||
-                OffsetY(AccelerationBox, selectorMode ? 15f : 0f).Contains(pointer) ||
-                OffsetY(SoundTrack, selectorMode ? 10f : 0f).Contains(pointer) ||
-                OffsetY(MusicTrack, selectorMode ? 5f : 0f).Contains(pointer) || selectorMode)
+
+            if (s_returnButton.Contains(_pointer))
+            {
+                return PointerCapture.Return;
+            }
+
+            if (OffsetY(s_fullScreenBox, _selectorMode ? 20f : 0f).Contains(_pointer) || OffsetY(s_accelerationBox, _selectorMode ? 15f : 0f).Contains(_pointer) || OffsetY(s_soundTrack, _selectorMode ? 10f : 0f).Contains(_pointer) || OffsetY(s_musicTrack, _selectorMode ? 5f : 0f).Contains(_pointer) || _selectorMode)
+            {
                 return PointerCapture.None;
-            if (MainMenuButton.Contains(pointer)) return PointerCapture.MainMenu;
-            if (RestartButton.Contains(pointer)) return PointerCapture.Restart;
-            if (AlmanacButton.Contains(pointer)) return PointerCapture.Almanac;
+            }
+
+            if (s_mainMenuButton.Contains(_pointer))
+            {
+                return PointerCapture.MainMenu;
+            }
+
+            if (s_restartButton.Contains(_pointer))
+            {
+                return PointerCapture.Restart;
+            }
+
+            if (s_almanacButton.Contains(_pointer))
+            {
+                return PointerCapture.Almanac;
+            }
+
             return PointerCapture.None;
         }
 
+        /// <summary>Performs ensure button fonts.</summary>
         private void EnsureButtonFonts()
         {
-            if (buttonFontsLoaded) return;
-            buttonFontsLoaded = true;
+            if (_buttonFontsLoaded)
+            {
+                return;
+            }
+
+            _buttonFontsLoaded = true;
             try
             {
-                menuFont = ImGuiBitmapFont.LoadFromResources("DwarvenTodcraft18GreenInset");
-                menuHoverFont = ImGuiBitmapFont.LoadFromResources("DwarvenTodcraft18BrightGreenInset");
-                returnFont = ImGuiBitmapFont.LoadFromResources("DwarvenTodcraft36GreenInset");
-                returnHoverFont = ImGuiBitmapFont.LoadFromResources("DwarvenTodcraft36BrightGreenInset");
-                dialogTitleFont = ImGuiBitmapFont.LoadFromResources("DwarvenTodcraft24");
-                dialogBodyFont = ImGuiBitmapFont.LoadFromResources("DwarvenTodcraft15");
+                _menuFont = ImGuiBitmapFont.LoadFromResources("DwarvenTodcraft18GreenInset");
+                _menuHoverFont = ImGuiBitmapFont.LoadFromResources("DwarvenTodcraft18BrightGreenInset");
+                _returnFont = ImGuiBitmapFont.LoadFromResources("DwarvenTodcraft36GreenInset");
+                _returnHoverFont = ImGuiBitmapFont.LoadFromResources("DwarvenTodcraft36BrightGreenInset");
+                _dialogTitleFont = ImGuiBitmapFont.LoadFromResources("DwarvenTodcraft24");
+                _dialogBodyFont = ImGuiBitmapFont.LoadFromResources("DwarvenTodcraft15");
             }
             catch (Exception error)
             {
@@ -452,114 +676,224 @@ namespace PvZReplica.UI
             }
         }
 
+        /// <summary>Performs draw centered bitmap.</summary>
+        /// <param name = "bitmap">The bitmap.</param>
+        /// <param name = "text">The text.</param>
+        /// <param name = "rect">The rect.</param>
+        /// <param name = "offset">The offset.</param>
+        /// <param name = "baseline">The baseline.</param>
+        /// <param name = "color">The color.</param>
+        /// <returns>The resulting draw centered bitmap.</returns>
         private bool DrawCenteredBitmap(ImGuiBitmapFont bitmap, string text, Rect rect, float offset, float baseline, Color color)
         {
-            if (bitmap == null) return false;
+            if (bitmap == null)
+            {
+                return false;
+            }
+
             Dictionary<string, BitmapTextLayout> layouts;
-            if (!buttonLayouts.TryGetValue(bitmap, out layouts))
+            if (!_buttonLayouts.TryGetValue(bitmap, out layouts))
             {
                 layouts = new Dictionary<string, BitmapTextLayout>();
-                buttonLayouts.Add(bitmap, layouts);
+                _buttonLayouts.Add(bitmap, layouts);
             }
+
             BitmapTextLayout layout;
             if (!layouts.TryGetValue(text, out layout))
             {
                 layout = bitmap.Layout(text);
                 layouts.Add(text, layout);
             }
-            if (layout.MissingGlyphs.Count != 0 || layout.LineCount != 1) return false;
-            float x = rect.x + (int)((rect.width - layout.Width) / 2f) + offset;
+
+            if (layout.MissingGlyphs.Count != 0 || layout.LineCount != 1)
+            {
+                return false;
+            }
+
+            var x = rect.x + (int)((rect.width - layout.Width) / 2f) + offset;
             bitmap.Draw(layout, x, baseline - bitmap.Data.Base, color);
             return true;
         }
 
+        /// <summary>Performs load dialog parts.</summary>
         private void LoadDialogParts()
         {
-            if (dialogParts != null) return;
-            string[] names = { "dialog_topleft.png", "dialog_topmiddle.png", "dialog_topright.png",
-                "dialog_bigbottomleft.png", "dialog_bigbottommiddle.png", "dialog_bigbottomright.png", "dialog_header.png",
-                "dialog_centerleft.png", "dialog_centermiddle.png", "dialog_centerright.png" };
-            dialogParts = new Texture2D[names.Length];
-            for (int i = 0; i < names.Length; i++)
+            if (_dialogParts != null)
             {
-                if (!File.Exists(Path.Combine(imageDirectory, names[i]))) continue;
-                try { dialogParts[i] = LoadTexture(imageDirectory, names[i]); }
-                catch (Exception error) { Debug.LogWarning("Options dialog image unavailable: " + error.Message); }
+                return;
+            }
+
+            string[] names =
+            {
+                "dialog_topleft.png",
+                "dialog_topmiddle.png",
+                "dialog_topright.png",
+                "dialog_bigbottomleft.png",
+                "dialog_bigbottommiddle.png",
+                "dialog_bigbottomright.png",
+                "dialog_header.png",
+                "dialog_centerleft.png",
+                "dialog_centermiddle.png",
+                "dialog_centerright.png"
+            };
+            _dialogParts = new Texture2D[names.Length];
+            for (var i = 0; i < names.Length; i++)
+            {
+                if (!File.Exists(Path.Combine(_imageDirectory, names[i])))
+                {
+                    continue;
+                }
+
+                try
+                {
+                    _dialogParts[i] = LoadTexture(_imageDirectory, names[i]);
+                }
+                catch (Exception error)
+                {
+                    Debug.LogWarning("Options dialog image unavailable: " + error.Message);
+                }
             }
         }
 
+        /// <summary>Performs restart dialog texture.</summary>
+        /// <param name = "name">The name.</param>
+        /// <returns>The resulting restart dialog texture.</returns>
         private Texture2D RestartDialogTexture(string name)
         {
-            string[] names={"dialog_topleft.png","dialog_topmiddle.png","dialog_topright.png","dialog_bigbottomleft.png","dialog_bigbottommiddle.png","dialog_bigbottomright.png","dialog_header.png","dialog_centerleft.png","dialog_centermiddle.png","dialog_centerright.png"};
-            int index=Array.IndexOf(names,name);
-            return dialogParts!=null&&index>=0&&index<dialogParts.Length?dialogParts[index]:null;
+            string[] names =
+            {
+                "dialog_topleft.png",
+                "dialog_topmiddle.png",
+                "dialog_topright.png",
+                "dialog_bigbottomleft.png",
+                "dialog_bigbottommiddle.png",
+                "dialog_bigbottomright.png",
+                "dialog_header.png",
+                "dialog_centerleft.png",
+                "dialog_centermiddle.png",
+                "dialog_centerright.png"
+            };
+            var index = Array.IndexOf(names, name);
+            return _dialogParts != null && index >= 0 && index < _dialogParts.Length ? _dialogParts[index] : null;
         }
+
+        /// <summary>Performs draw restart confirmation.</summary>
         private void DrawRestartConfirmation()
         {
             LoadDialogParts();
-            OriginalUiWidgets.DialogFrame(RestartDialogTexture,new Rect(RestartDialog.x,RestartDialog.y+45f,RestartDialog.width,RestartDialog.height-45f),true,false);
-            OriginalUiWidgets.Image(RestartDialogTexture("dialog_header.png"),new Rect(RestartDialog.x+(int)((RestartDialog.width-187f)/2f)-5f,RestartDialog.y,187f,64f));
-            Color color = new Color(224f / 255f, 187f / 255f, 98f / 255f);
-            if (!DrawCenteredBitmap(dialogTitleFont, "重新开始本关？", RestartDialog, 0f, 252f, color))
+            OriginalUiWidgets.DialogFrame(RestartDialogTexture, new Rect(s_restartDialog.x, s_restartDialog.y + 45f, s_restartDialog.width, s_restartDialog.height - 45f), true, false);
+            OriginalUiWidgets.Image(RestartDialogTexture("dialog_header.png"), new Rect(s_restartDialog.x + (int)((s_restartDialog.width - 187f) / 2f) - 5f, s_restartDialog.y, 187f, 64f));
+            var color = new Color(224f / 255f, 187f / 255f, 98f / 255f);
+            if (!DrawCenteredBitmap(_dialogTitleFont, "重新开始本关？", s_restartDialog, 0f, 252f, color))
+            {
                 Label(new Rect(210f, 222f, 380f, 40f), "重新开始本关？", 24, TextAnchor.MiddleCenter, color);
-            if (!DrawCenteredBitmap(dialogBodyFont, "你想要再次从头", RestartDialog, 0f, 286f, color))
+            }
+
+            if (!DrawCenteredBitmap(_dialogBodyFont, "你想要再次从头", s_restartDialog, 0f, 286f, color))
+            {
                 Label(new Rect(210f, 265f, 380f, 25f), "你想要再次从头", 16, TextAnchor.MiddleCenter, color);
-            if (!DrawCenteredBitmap(dialogBodyFont, "进行这一关卡么？", RestartDialog, 0f, 305f, color))
+            }
+
+            if (!DrawCenteredBitmap(_dialogBodyFont, "进行这一关卡么？", s_restartDialog, 0f, 305f, color))
+            {
                 Label(new Rect(210f, 284f, 380f, 25f), "进行这一关卡么？", 16, TextAnchor.MiddleCenter, color);
-            DrawMenuButton(ConfirmRestartButton, "重新开始", PointerCapture.ConfirmRestart);
-            DrawMenuButton(CancelRestartButton, "取消", PointerCapture.CancelRestart);
+            }
+
+            DrawMenuButton(s_confirmRestartButton, "重新开始", PointerCapture.ConfirmRestart);
+            DrawMenuButton(s_cancelRestartButton, "取消", PointerCapture.CancelRestart);
         }
 
+        /// <summary>Performs image.</summary>
+        /// <param name = "rect">The rect.</param>
+        /// <param name = "texture">The texture.</param>
+        /// <param name = "color">The color.</param>
         private static void Image(Rect rect, Texture2D texture, Color color)
         {
-            Color old = GUI.color;
+            var old = GUI.color;
             GUI.color = color;
             GUI.DrawTexture(rect, texture, ScaleMode.StretchToFill, true);
             GUI.color = old;
         }
 
+        /// <summary>Performs ensure label style.</summary>
         private void EnsureLabelStyle()
         {
-            if (labelStyle != null) return;
-            font = Font.CreateDynamicFontFromOSFont(new[] {
-                "Microsoft YaHei", "SimHei", "Noto Sans CJK SC", "Arial Unicode MS"
+            if (_labelStyle != null)
+            {
+                return;
+            }
+
+            _font = Font.CreateDynamicFontFromOSFont(new[] {
+                "Microsoft YaHei",
+                "SimHei",
+                "Noto Sans CJK SC",
+                "Arial Unicode MS"
             }, 20);
-            labelStyle = new GUIStyle(GUI.skin.label);
-            if (font != null) labelStyle.font = font;
-            labelStyle.fontStyle = FontStyle.Bold;
-            labelStyle.wordWrap = false;
-            labelStyle.richText = false;
-            labelStyle.clipping = TextClipping.Clip;
-            labelStyle.padding = new RectOffset(0, 0, 0, 0);
+            _labelStyle = new GUIStyle(GUI.skin.label);
+            if (_font != null)
+            {
+                _labelStyle.font = _font;
+            }
+
+            _labelStyle.fontStyle = FontStyle.Bold;
+            _labelStyle.wordWrap = false;
+            _labelStyle.richText = false;
+            _labelStyle.clipping = TextClipping.Clip;
+            _labelStyle.padding = new RectOffset(0, 0, 0, 0);
         }
 
+        /// <summary>Performs label.</summary>
+        /// <param name = "rect">The rect.</param>
+        /// <param name = "text">The text.</param>
+        /// <param name = "size">The size.</param>
+        /// <param name = "alignment">The alignment.</param>
+        /// <param name = "color">The color.</param>
         private void Label(Rect rect, string text, int size, TextAnchor alignment, Color color)
         {
-            labelStyle.fontSize = size;
-            labelStyle.alignment = alignment;
-            labelStyle.normal.textColor = color;
-            GUI.Label(rect, text, labelStyle);
+            _labelStyle.fontSize = size;
+            _labelStyle.alignment = alignment;
+            _labelStyle.normal.textColor = color;
+            GUI.Label(rect, text, _labelStyle);
         }
 
+        /// <summary>Performs native or system label.</summary>
+        /// <param name = "fallback">The fallback.</param>
+        /// <param name = "text">The text.</param>
+        /// <param name = "right">The right.</param>
+        /// <param name = "baseline">The baseline.</param>
+        /// <param name = "color">The color.</param>
         private void NativeOrSystemLabel(Rect fallback, string text, float right, float baseline, Color color)
         {
             if (OriginalRightLabel == null || !OriginalRightLabel(text, right, baseline, color))
+            {
                 Label(fallback, text, 18, TextAnchor.MiddleRight, color);
+            }
         }
 
+        /// <summary>Performs load masked background.</summary>
+        /// <param name = "images">The images.</param>
+        /// <returns>The resulting load masked background.</returns>
+        /// <exception cref = "InvalidDataException">The operation cannot satisfy its preconditions.</exception>
         private static Texture2D LoadMaskedBackground(string images)
         {
-            Texture2D color = LoadTexture(images, "options_menuback.jpg");
+            var color = LoadTexture(images, "options_menuback.jpg");
             Texture2D mask = null;
             Texture2D result = null;
             try
             {
                 mask = LoadTexture(images, "options_menuback_.png");
                 if (color.width != mask.width || color.height != mask.height)
+                {
                     throw new InvalidDataException("The options background and alpha mask have different dimensions.");
-                Color32[] pixels = color.GetPixels32();
-                Color32[] alpha = mask.GetPixels32();
-                for (int i = 0; i < pixels.Length; i++) pixels[i].a = alpha[i].r;
+                }
+
+                var pixels = color.GetPixels32();
+                var alpha = mask.GetPixels32();
+                for (var i = 0; i < pixels.Length; i++)
+                {
+                    pixels[i].a = alpha[i].r;
+                }
+
                 result = new Texture2D(color.width, color.height, TextureFormat.RGBA32, false);
                 result.name = "options_menuback_rgba";
                 result.hideFlags = HideFlags.HideAndDontSave;
@@ -581,14 +915,23 @@ namespace PvZReplica.UI
             }
         }
 
+        /// <summary>Performs load texture.</summary>
+        /// <param name = "images">The images.</param>
+        /// <param name = "name">The name.</param>
+        /// <returns>The resulting load texture.</returns>
+        /// <exception cref = "InvalidDataException">The operation cannot satisfy its preconditions.</exception>
         private static Texture2D LoadTexture(string images, string name)
         {
-            string path = Path.Combine(images, name);
-            byte[] bytes = File.ReadAllBytes(path);
-            Texture2D texture = new Texture2D(2, 2, TextureFormat.RGBA32, false);
+            var path = Path.Combine(images, name);
+            var bytes = File.ReadAllBytes(path);
+            var texture = new Texture2D(2, 2, TextureFormat.RGBA32, false);
             try
             {
-                if (!texture.LoadImage(bytes)) throw new InvalidDataException("Unable to decode image: " + path);
+                if (!texture.LoadImage(bytes))
+                {
+                    throw new InvalidDataException("Unable to decode image: " + path);
+                }
+
                 texture.name = name;
                 texture.hideFlags = HideFlags.HideAndDontSave;
                 texture.filterMode = FilterMode.Bilinear;
@@ -602,23 +945,48 @@ namespace PvZReplica.UI
             }
         }
 
+        /// <summary>Performs clamp volume.</summary>
+        /// <param name = "value">The value.</param>
+        /// <param name = "parameter">The parameter.</param>
+        /// <returns>The resulting clamp volume.</returns>
+        /// <exception cref = "ArgumentOutOfRangeException">The operation cannot satisfy its preconditions.</exception>
         private static float ClampVolume(float value, string parameter)
         {
             if (float.IsNaN(value) || float.IsInfinity(value))
+            {
                 throw new ArgumentOutOfRangeException(parameter, "Volume must be finite.");
+            }
+
             return Mathf.Clamp01(value);
         }
 
+        /// <summary>Performs release.</summary>
+        /// <param name = "resource">The resource.</param>
         private static void Release(UnityEngine.Object resource)
         {
-            if (resource == null) return;
-            if (Application.isPlaying) UnityEngine.Object.Destroy(resource);
-            else UnityEngine.Object.DestroyImmediate(resource);
+            if (resource == null)
+            {
+                return;
+            }
+
+            if (Application.isPlaying)
+            {
+                UnityEngine.Object.Destroy(resource);
+            }
+            else
+            {
+                UnityEngine.Object.DestroyImmediate(resource);
+            }
         }
 
+        /// <summary>Performs throw if disposed.</summary>
+        /// <exception cref = "ObjectDisposedException">The operation cannot satisfy its preconditions.</exception>
         private void ThrowIfDisposed()
         {
-            if (disposed) throw new ObjectDisposedException("OptionsView");
+            if (_disposed)
+            {
+                throw new ObjectDisposedException("OptionsView");
+            }
         }
     }
 }

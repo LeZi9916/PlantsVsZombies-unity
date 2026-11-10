@@ -4,9 +4,9 @@ using System.Diagnostics;
 using System.Text.Json;
 using System.IO;
 using System.Reflection;
-using PvZReplica.Reanimation;
-using PvZReplica.UI;
-using PvZReplica.VerifiedData;
+using PlantsVsZombies.Reanimation;
+using PlantsVsZombies.UI;
+using PlantsVsZombies.VerifiedData;
 using UnityEngine;
 
 internal static class Program
@@ -81,12 +81,12 @@ internal static class Program
 
     private static void Field(AlmanacView view, string name, object value)
     {
-        typeof(AlmanacView).GetField(name, BindingFlags.Instance | BindingFlags.NonPublic).SetValue(view, value);
+        typeof(AlmanacView).GetField("_" + name, BindingFlags.Instance | BindingFlags.NonPublic).SetValue(view, value);
     }
 
     private static float FloatField(AlmanacView view, string name)
     {
-        return (float)typeof(AlmanacView).GetField(name, BindingFlags.Instance | BindingFlags.NonPublic).GetValue(view);
+        return (float)typeof(AlmanacView).GetField("_" + name, BindingFlags.Instance | BindingFlags.NonPublic).GetValue(view);
     }
 
     private static void Pointer(AlmanacView view, float x, float y, EventType type)
@@ -220,7 +220,7 @@ internal static class Program
             UseShellExecute = false, CreateNoWindow = true
         };
         foreach (string arg in new[] { "-d", "Ubuntu-24.04", "--", "sh", "-c",
-            "PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=analysis/ida/plant_timing/vendor python3 PvZUnity/tests/AlmanacTests/native_oracle.py" })
+            "PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=analysis/ida/plant_timing/vendor python3 PvZUnity/Tools/Tests/AlmanacTests/native_oracle.py" })
             start.ArgumentList.Add(arg);
         string json;
         using (Process process = Process.Start(start))

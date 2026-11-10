@@ -2,21 +2,22 @@
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>net9.0</TargetFramework>
-    <LangVersion>7.3</LangVersion>
+    <LangVersion>9.0</LangVersion>
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
     <GenerateTargetFrameworkAttribute>false</GenerateTargetFrameworkAttribute>
     <UnityManaged Condition="'$(UnityManaged)' == ''">C:/Program Files/Unity Editors/6000.3.17f1/Editor/Data/Managed/UnityEngine</UnityManaged>
+    <RuntimeAssembly Condition="'$(RuntimeAssembly)' == ''">$(MSBuildThisFileDirectory)../../../Library/ScriptAssemblies/PlantsVsZombies.Runtime.dll</RuntimeAssembly>
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="Program.cs.txt" />
-    <Compile Include="../../Assets/Scripts/UI/AlmanacView.cs" Link="AlmanacView.cs" />
-    <Compile Include="../../Assets/Scripts/UI/AlmanacPortraitLayout.cs" Link="AlmanacPortraitLayout.cs" />
-    <Compile Include="../../Assets/Scripts/Reanimation/ReanimationRenderer.cs" Link="ReanimationRenderer.cs" />
-    <Compile Include="../../Assets/Scripts/VerifiedData/*.cs" Link="VerifiedData/%(Filename)%(Extension)" />
+    <Reference Include="PlantsVsZombies.Runtime"><HintPath>$(RuntimeAssembly)</HintPath></Reference>
     <Reference Include="UnityEngine.CoreModule"><HintPath>$(UnityManaged)/UnityEngine.CoreModule.dll</HintPath></Reference>
     <Reference Include="UnityEngine.IMGUIModule"><HintPath>$(UnityManaged)/UnityEngine.IMGUIModule.dll</HintPath></Reference>
     <Reference Include="UnityEngine.ImageConversionModule"><HintPath>$(UnityManaged)/UnityEngine.ImageConversionModule.dll</HintPath></Reference>
     <Reference Include="UnityEngine.TextRenderingModule"><HintPath>$(UnityManaged)/UnityEngine.TextRenderingModule.dll</HintPath></Reference>
   </ItemGroup>
+  <Target Name="CheckUnityRuntime" BeforeTargets="ResolveReferences">
+    <Error Condition="!Exists('$(RuntimeAssembly)')" Text="Compile the project with Unity 6000.3.17f1 first, or pass -p:RuntimeAssembly=&lt;isolated-project&gt;/Library/ScriptAssemblies/PlantsVsZombies.Runtime.dll. Do not build the generated root csproj with dotnet." />
+  </Target>
 </Project>

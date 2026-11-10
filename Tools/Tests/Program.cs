@@ -1,5 +1,5 @@
 using System;
-using PvZReplica;
+using PlantsVsZombies.Simulation;
 
 internal static class Program
 {

@@ -1,8 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using PvZReplica;
-using PvZReplica.Adventure;
+using PlantsVsZombies.Simulation;
+using PlantsVsZombies.Adventure;
 
 // Test-only player. All world changes go through the same public actions available to the host UI.
 // It cannot add sun, place free units, kill zombies, edit waves, or mark a match won.

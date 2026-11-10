@@ -3,24 +3,37 @@ using System.Linq;
 using System.IO;
 using System.Globalization;
 using System.Collections.Generic;
-using PvZReplica;
-using PvZReplica.Adventure;
-using PvZReplica.Profiles;
+using PlantsVsZombies.Simulation;
+using PlantsVsZombies.Adventure;
+using PlantsVsZombies.Profiles;
 
 internal static class Program
 {
+    /// <summary>Finds the repository independently of simulation source layout.</summary>
+    /// <returns>The absolute repository directory.</returns>
+    /// <exception cref="DirectoryNotFoundException">The repository cannot be found.</exception>
     private static string Workspace()
     {
-        var dir=new DirectoryInfo(Directory.GetCurrentDirectory());
-        while(dir!=null) {if(File.Exists(Path.Combine(dir.FullName,"Assets","Scripts","GameSimulation.cs")))return dir.FullName;dir=dir.Parent;}
-        dir=new DirectoryInfo(AppContext.BaseDirectory);
-        while(dir!=null) {if(File.Exists(Path.Combine(dir.FullName,"Assets","Scripts","GameSimulation.cs")))return dir.FullName;dir=dir.Parent;}
-        throw new Exception("Project workspace not found.");
+        foreach (var start in new[] { Directory.GetCurrentDirectory(), AppContext.BaseDirectory })
+        {
+            for (var directory = new DirectoryInfo(start); directory != null; directory = directory.Parent)
+            {
+                if (File.Exists(Path.Combine(directory.FullName, "ProjectSettings", "ProjectVersion.txt"))
+                    && File.Exists(Path.Combine(directory.FullName, ".editorconfig")))
+                {
+                    return directory.FullName;
+                }
+            }
+        }
+
+        throw new DirectoryNotFoundException("Project workspace not found.");
     }
     private static void Require(bool condition,string reason) {if(!condition)throw new Exception(reason);}
     public static void Main(string[] args)
     {
         string root=Workspace();Directory.SetCurrentDirectory(root);
+        var outputDirectory = Path.Combine(root, "Tools", "Tests", "AdventureTests", "artifacts", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(outputDirectory);
         if(args.Length==0 || args[0]=="--unit") {AdventureUnitTests.Run(root);UpgradePlantTests.Run(root);if(args.Length>0)return;}
         int single=args.Length>=2 && args[0]=="--level"?int.Parse(args[1]):0;
         bool campaignMode=single==0 && (args.Length==0 || args[0]!="--all-levels");
@@ -29,7 +42,7 @@ internal static class Program
         AdventureProgressStore store=null;AdventureCampaign campaign=null;string catalogPath=null,savePath=null;byte[] catalogBytes=null;
         if(campaignMode)
         {
-            string dir=Path.Combine(root,"tests","AdventureTests","artifacts","campaign-"+Guid.NewGuid().ToString("N"));Directory.CreateDirectory(dir);
+            string dir=Path.Combine(outputDirectory,"campaign");Directory.CreateDirectory(dir);
             catalogPath=Path.Combine(dir,"profiles.dat");savePath=Path.Combine(dir,"campaign.adventure");
             var catalog=new ProfileCatalog(catalogPath);var profile=catalog.Create("连续冒险回归");catalogBytes=File.ReadAllBytes(catalogPath);
             store=new AdventureProgressStore(savePath);store.SaveAttempt(profile.Id,104729,new PlantKind[0]);
@@ -48,7 +61,7 @@ internal static class Program
                 if(single>0 && ticks%100==0)trace.Add(g.Elapsed.ToString("F1")+" sun="+g.SunAmount+" wave="+g.Adventure.CurrentWave+" plants="+
                     string.Join(";",g.Plants.Select(p=>p.Kind+"("+p.Row+","+p.Column+")"))+" zombies="+string.Join(";",g.Zombies.Select(z=>z.Kind+"("+z.Row+","+z.X.ToString("F1")+")")));
             }
-            if(single>0)File.WriteAllLines(Path.Combine(root,"tests","AdventureTests","trace-"+single+".txt"),trace);
+            if(single>0)File.WriteAllLines(Path.Combine(outputDirectory,"trace-"+single+".txt"),trace);
             bool reward=false,reloaded=false;
             if(g.State==MatchState.Won)
             {
@@ -74,7 +87,7 @@ internal static class Program
                 if(campaignMode)break;
             }
         }
-        string report=Path.Combine(root,"tests","AdventureTests",single==0?"playthrough-results.csv":"playthrough-"+single+".csv");File.WriteAllLines(report,rows);
+        string report=Path.Combine(outputDirectory,single==0?"playthrough-results.csv":"playthrough-"+single+".csv");File.WriteAllLines(report,rows);
         Console.WriteLine((campaignMode?"Continuous campaign, saved reward and reloaded checkpoint at every level: ":"Public-action independent playthrough wins: ")+won+"/"+(single==0?50:1));
         if(campaignMode)Console.WriteLine("Replica-only checkpoint evidence: "+savePath);
         if(won!=(single==0?50:1))Environment.ExitCode=1;

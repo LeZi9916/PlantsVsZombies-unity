@@ -1,12 +1,28 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>netstandard2.1</TargetFramework>
-    <LangVersion>7.3</LangVersion>
+    <LangVersion>9.0</LangVersion>
     <ImplicitUsings>disable</ImplicitUsings>
     <Nullable>disable</Nullable>
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="../../../Assets/Scripts/Sun/*.cs" Link="Sun/%(Filename)%(Extension)" />
+    <Compile Include="../../../../Assets/Scripts/Sun/SkySunContext.cs" Link="Runtime/%(Filename)%(Extension)" />
+    <Compile Include="../../../../Assets/Scripts/Sun/SkySunFall.cs" Link="Runtime/%(Filename)%(Extension)" />
+    <Compile Include="../../../../Assets/Scripts/Sun/SkySunFallState.cs" Link="Runtime/%(Filename)%(Extension)" />
+    <Compile Include="../../../../Assets/Scripts/Sun/SkySunFallTick.cs" Link="Runtime/%(Filename)%(Extension)" />
+    <Compile Include="../../../../Assets/Scripts/Sun/SkySunRules.cs" Link="Runtime/%(Filename)%(Extension)" />
+    <Compile Include="../../../../Assets/Scripts/Sun/SkySunState.cs" Link="Runtime/%(Filename)%(Extension)" />
+    <Compile Include="../../../../Assets/Scripts/Sun/SkySunTick.cs" Link="Runtime/%(Filename)%(Extension)" />
+    <Compile Include="../../../../Assets/Scripts/Sun/SunBalanceRules.cs" Link="Runtime/%(Filename)%(Extension)" />
+    <Compile Include="../../../../Assets/Scripts/Sun/SunKind.cs" Link="Runtime/%(Filename)%(Extension)" />
+    <Compile Include="../../../../Assets/Scripts/Sun/SunPickupRules.cs" Link="Runtime/%(Filename)%(Extension)" />
+    <Compile Include="../../../../Assets/Scripts/Sun/SunPickupState.cs" Link="Runtime/%(Filename)%(Extension)" />
+    <Compile Include="../../../../Assets/Scripts/Sun/SunPickupTick.cs" Link="Runtime/%(Filename)%(Extension)" />
+    <Compile Include="../../../../Assets/Scripts/Sun/SunPlantKind.cs" Link="Runtime/%(Filename)%(Extension)" />
+    <Compile Include="../../../../Assets/Scripts/Sun/SunPlantRules.cs" Link="Runtime/%(Filename)%(Extension)" />
+    <Compile Include="../../../../Assets/Scripts/Sun/SunPlantState.cs" Link="Runtime/%(Filename)%(Extension)" />
+    <Compile Include="../../../../Assets/Scripts/Sun/SunPlantTick.cs" Link="Runtime/%(Filename)%(Extension)" />
+    <Compile Include="../../../../Assets/Scripts/Sun/SunValidation.cs" Link="Runtime/%(Filename)%(Extension)" />
   </ItemGroup>
 </Project>

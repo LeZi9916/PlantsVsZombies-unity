@@ -2,7 +2,7 @@
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>net9.0</TargetFramework>
-    <LangVersion>7.3</LangVersion>
+    <LangVersion>9.0</LangVersion>
     <ImplicitUsings>disable</ImplicitUsings>
     <Nullable>disable</Nullable>
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
@@ -12,6 +12,13 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="Program.cs.txt" />
-    <Compile Include="../../Assets/Scripts/VerifiedData/*.cs" Link="VerifiedData/%(Filename)%(Extension)" />
+    <Compile Include="../../../Assets/Scripts/VerifiedData/AdventureLevelDefinition.cs" Link="Runtime/%(Filename)%(Extension)" />
+    <Compile Include="../../../Assets/Scripts/VerifiedData/AdventureZombieRowHeader.cs" Link="Runtime/%(Filename)%(Extension)" />
+    <Compile Include="../../../Assets/Scripts/VerifiedData/ChallengeModeDefinition.cs" Link="Runtime/%(Filename)%(Extension)" />
+    <Compile Include="../../../Assets/Scripts/VerifiedData/PlantDefinition.cs" Link="Runtime/%(Filename)%(Extension)" />
+    <Compile Include="../../../Assets/Scripts/VerifiedData/ReanimationDefinition.cs" Link="Runtime/%(Filename)%(Extension)" />
+    <Compile Include="../../../Assets/Scripts/VerifiedData/VerifiedDataCatalog.cs" Link="Runtime/%(Filename)%(Extension)" />
+    <Compile Include="../../../Assets/Scripts/VerifiedData/VerifiedDataTables.generated.cs" Link="Runtime/%(Filename)%(Extension)" />
+    <Compile Include="../../../Assets/Scripts/VerifiedData/ZombieDefinition.cs" Link="Runtime/%(Filename)%(Extension)" />
   </ItemGroup>
 </Project>

@@ -1,76 +1,8 @@
+#nullable enable
 using System;
 
-namespace PvZReplica.BoardUI
+namespace PlantsVsZombies.BoardUI
 {
-    /// <summary>A top-left-origin point, in native logical pixels.</summary>
-    public readonly struct NativePoint
-    {
-        public readonly int X;
-        public readonly int Y;
-
-        public NativePoint(int x, int y)
-        {
-            X = x;
-            Y = y;
-        }
-    }
-
-    /// <summary>A top-left-origin integer rectangle, in native logical pixels.</summary>
-    public readonly struct NativeRect
-    {
-        public readonly int X;
-        public readonly int Y;
-        public readonly int Width;
-        public readonly int Height;
-
-        public NativeRect(int x, int y, int width, int height)
-        {
-            if (width < 0) throw new ArgumentOutOfRangeException(nameof(width));
-            if (height < 0) throw new ArgumentOutOfRangeException(nameof(height));
-            X = x;
-            Y = y;
-            Width = width;
-            Height = height;
-        }
-    }
-
-    /// <summary>An unscaled image operation before or after logical clipping.</summary>
-    public readonly struct NativeBlit
-    {
-        public readonly NativeRect Source;
-        public readonly NativeRect Destination;
-
-        public NativeBlit(NativeRect source, NativeRect destination)
-        {
-            if (source.Width != destination.Width || source.Height != destination.Height)
-                throw new ArgumentException("Only unscaled blits are supported.");
-            Source = source;
-            Destination = destination;
-        }
-
-        public bool TryClip(NativeRect clip, out NativeBlit result)
-        {
-            long left = Math.Max((long)Destination.X, clip.X);
-            long top = Math.Max((long)Destination.Y, clip.Y);
-            long right = Math.Min((long)Destination.X + Destination.Width, (long)clip.X + clip.Width);
-            long bottom = Math.Min((long)Destination.Y + Destination.Height, (long)clip.Y + clip.Height);
-            if (right <= left || bottom <= top)
-            {
-                result = default(NativeBlit);
-                return false;
-            }
-
-            int width = checked((int)(right - left));
-            int height = checked((int)(bottom - top));
-            int sourceX = checked((int)(Source.X + left - Destination.X));
-            int sourceY = checked((int)(Source.Y + top - Destination.Y));
-            result = new NativeBlit(
-                new NativeRect(sourceX, sourceY, width, height),
-                new NativeRect(checked((int)left), checked((int)top), width, height));
-            return true;
-        }
-    }
-
     /// <summary>
     /// Isolated draw coordinates for the examined executable's first-play 1-1
     /// path. Board and seed-bank origins are supplied independently by the host.
@@ -78,39 +10,68 @@ namespace PvZReplica.BoardUI
     /// </summary>
     public static class FirstAdventureBoardUi
     {
+        /// <summary>Stores canvas width.</summary>
         public const int CanvasWidth = 800;
+        /// <summary>Stores canvas height.</summary>
         public const int CanvasHeight = 600;
+        /// <summary>Stores background width.</summary>
         public const int BackgroundWidth = 1400;
+        /// <summary>Stores background height.</summary>
         public const int BackgroundHeight = 600;
+        /// <summary>Stores sod width.</summary>
         public const int SodWidth = 771;
+        /// <summary>Stores sod height.</summary>
         public const int SodHeight = 127;
+        /// <summary>Stores seed bank width.</summary>
         public const int SeedBankWidth = 446;
+        /// <summary>Stores seed bank height.</summary>
         public const int SeedBankHeight = 87;
+        /// <summary>Stores seed bank entrance y.</summary>
         public const int SeedBankEntranceY = -SeedBankHeight;
+        /// <summary>Stores sun font resource.</summary>
         public const string SunFontResource = "FONT_CONTINUUMBOLD14";
-
+        /// <summary>Gets or sets canvas.</summary>
         public static NativeRect Canvas
         {
-            get { return new NativeRect(0, 0, CanvasWidth, CanvasHeight); }
+            get
+            {
+                return new NativeRect(0, 0, CanvasWidth, CanvasHeight);
+            }
         }
 
+        /// <summary>Performs unsodded background.</summary>
+        /// <param name = "boardX">The board x.</param>
+        /// <param name = "boardY">The board y.</param>
+        /// <returns>The resulting unsodded background.</returns>
         public static NativeBlit UnsoddedBackground(int boardX, int boardY)
         {
             return Blit(0, 0, BackgroundWidth, BackgroundHeight, checked(boardX - 220), boardY);
         }
 
-        /// <param name="nativeProgress">The original Board+0x556C field, not elapsed seconds.</param>
+        /// <param name = "nativeProgress">The original Board+0x556C field, not elapsed seconds.</param>
         public static int RevealedSodWidth(int nativeProgress)
         {
-            if (nativeProgress <= 0) return 0;
-            if (nativeProgress >= 1000) return SodWidth;
+            if (nativeProgress <= 0)
+            {
+                return 0;
+            }
+
+            if (nativeProgress >= 1000)
+            {
+                return SodWidth;
+            }
+
             return (SodWidth * nativeProgress + 500) / 1000;
         }
 
+        /// <summary>Performs single row sod.</summary>
+        /// <param name = "boardX">The board x.</param>
+        /// <param name = "boardY">The board y.</param>
+        /// <param name = "nativeProgress">The native progress.</param>
+        /// <returns>The resulting single row sod.</returns>
         public static NativeBlit SingleRowSod(int boardX, int boardY, int nativeProgress)
         {
-            return Blit(0, 0, RevealedSodWidth(nativeProgress), SodHeight,
-                checked(boardX + 19), checked(boardY + 265));
+            return Blit(0, 0, RevealedSodWidth(nativeProgress), SodHeight, checked(boardX + 19), checked(boardY + 265));
         }
 
         /// <summary>
@@ -147,24 +108,41 @@ namespace PvZReplica.BoardUI
         /// </summary>
         public static NativePoint SunTextOrigin(int bankX, int bankY, int measuredWidth)
         {
-            if (measuredWidth < 0) throw new ArgumentOutOfRangeException(nameof(measuredWidth));
+            if (measuredWidth < 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(measuredWidth));
+            }
+
             return new NativePoint(checked(bankX + 38 - measuredWidth / 2), checked(bankY + 78));
         }
 
+        /// <summary>Performs displayed sun.</summary>
+        /// <param name = "nativeSun">The native sun.</param>
+        /// <returns>The resulting displayed sun.</returns>
         public static int DisplayedSun(int nativeSun)
         {
             return nativeSun > 0 ? nativeSun : 0;
         }
 
+        /// <summary>Performs is sun text red.</summary>
+        /// <param name = "flashCounter">The flash counter.</param>
+        /// <returns>The resulting is sun text red.</returns>
         public static bool IsSunTextRed(int flashCounter)
         {
             return flashCounter > 0 && flashCounter % 20 < 10;
         }
 
+        /// <summary>Performs blit.</summary>
+        /// <param name = "sourceX">The source x.</param>
+        /// <param name = "sourceY">The source y.</param>
+        /// <param name = "width">The width.</param>
+        /// <param name = "height">The height.</param>
+        /// <param name = "x">The x.</param>
+        /// <param name = "y">The y.</param>
+        /// <returns>The resulting blit.</returns>
         private static NativeBlit Blit(int sourceX, int sourceY, int width, int height, int x, int y)
         {
-            return new NativeBlit(new NativeRect(sourceX, sourceY, width, height),
-                new NativeRect(x, y, width, height));
+            return new NativeBlit(new NativeRect(sourceX, sourceY, width, height), new NativeRect(x, y, width, height));
         }
     }
 }
