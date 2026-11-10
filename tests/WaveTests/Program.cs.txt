@@ -1,0 +1,249 @@
+using System;
+using System.Collections.Generic;
+using System.Globalization;
+using System.IO;
+using System.Security.Cryptography;
+using System.Text.Json;
+using PvZReplica.Waves;
+
+internal static class WaveTests
+{
+    private static int assertions;
+
+    private static void Equal<T>(T expected, T actual, string context)
+    {
+        assertions++;
+        if (!EqualityComparer<T>.Default.Equals(expected, actual))
+            throw new InvalidOperationException(context + ": expected " + expected + ", got " + actual);
+    }
+
+    private static void Throws<T>(Action action, string context) where T : Exception
+    {
+        assertions++;
+        try { action(); }
+        catch (T) { return; }
+        throw new InvalidOperationException(context + ": expected " + typeof(T).Name);
+    }
+
+    private static string FindRoot()
+    {
+        string[] starts = { AppContext.BaseDirectory, Environment.CurrentDirectory };
+        foreach (string start in starts)
+        {
+            for (DirectoryInfo current = new DirectoryInfo(start); current != null; current = current.Parent)
+            {
+                if (File.Exists(Path.Combine(current.FullName, "analysis", "ida", "balance", "zombies_full.json")) &&
+                    File.Exists(Path.Combine(current.FullName, "PvZUnity", "tests", "WaveTests", "native-oracle.json")))
+                    return current.FullName;
+            }
+        }
+        throw new DirectoryNotFoundException("Cannot locate the local EXE, balance exports, and oracle fixture.");
+    }
+
+    private static int Field(JsonElement row, string name)
+    {
+        return row.GetProperty(name).GetProperty("value").GetInt32();
+    }
+
+    private static string Sha256(string path)
+    {
+        using (SHA256 hash = SHA256.Create())
+        using (FileStream input = File.OpenRead(path))
+            return BitConverter.ToString(hash.ComputeHash(input)).Replace("-", "").ToLowerInvariant();
+    }
+
+    private static void Main()
+    {
+        string root = FindRoot();
+        string balance = Path.Combine(root, "analysis", "ida", "balance");
+        string fixture = Path.Combine(root, "PvZUnity", "tests", "WaveTests", "native-oracle.json");
+        using (JsonDocument native = JsonDocument.Parse(File.ReadAllText(fixture)))
+        using (JsonDocument zombies = JsonDocument.Parse(File.ReadAllText(Path.Combine(balance, "zombies_full.json"))))
+        using (JsonDocument levels = JsonDocument.Parse(File.ReadAllText(Path.Combine(balance, "adventure_levels_full.json"))))
+        {
+            JsonElement oracle = native.RootElement;
+            string digest = oracle.GetProperty("exe_sha256").GetString();
+            Equal(1, oracle.GetProperty("format").GetInt32(), "oracle format");
+            Equal(digest, Sha256(Path.Combine(root, "PlantsVsZombies.exe")), "local EXE SHA-256");
+            Equal(digest, zombies.RootElement.GetProperty("source").GetProperty("exe_sha256").GetString().ToLowerInvariant(), "zombie table identity");
+            Equal(digest, levels.RootElement.GetProperty("source").GetProperty("exe_sha256").GetString().ToLowerInvariant(), "level table identity");
+
+            ZombieWaveDefinition[] definitions = ReadDefinitions(zombies.RootElement);
+            AdventureProfileFields[] profiles = ReadProfiles(oracle);
+            TestRawTables(oracle, levels.RootElement.GetProperty("levels"), definitions);
+            TestEligibility(oracle, levels.RootElement.GetProperty("levels"), definitions, profiles);
+            TestFlags(oracle, profiles);
+            TestBudgets(oracle, profiles);
+            TestFlagPrefills(oracle, definitions);
+            TestSelection(oracle, definitions);
+            TestBoundaries(definitions);
+            Console.WriteLine("PASS: {0} assertions against {1} x86 oracle vectors, plus boundary tests.",
+                assertions,
+                oracle.GetProperty("eligibility").GetArrayLength() + oracle.GetProperty("flags").GetArrayLength() +
+                oracle.GetProperty("pre_budgets").GetArrayLength() + oracle.GetProperty("flag_prefills").GetArrayLength() +
+                oracle.GetProperty("selection").GetArrayLength());
+        }
+    }
+
+    private static ZombieWaveDefinition[] ReadDefinitions(JsonElement table)
+    {
+        JsonElement rows = table.GetProperty("rows");
+        Equal(AdventureWaveRules.ZombieTypeCount, rows.GetArrayLength(), "definition count");
+        ZombieWaveDefinition[] result = new ZombieWaveDefinition[rows.GetArrayLength()];
+        for (int i = 0; i < result.Length; i++)
+        {
+            JsonElement row = rows[i];
+            Equal(i, row.GetProperty("id").GetInt32(), "definition ID");
+            result[i] = new ZombieWaveDefinition(i, Field(row, "wave_budget_cost_raw"),
+                Field(row, "base_level_gate_raw"), Field(row, "base_wave_gate_raw"),
+                Field(row, "base_selection_weight_raw"));
+        }
+        return result;
+    }
+
+    private static AdventureProfileFields[] ReadProfiles(JsonElement oracle)
+    {
+        JsonElement rows = oracle.GetProperty("profiles");
+        AdventureProfileFields[] result = new AdventureProfileFields[rows.GetArrayLength()];
+        for (int i = 0; i < result.Length; i++)
+            result[i] = new AdventureProfileFields(rows[i][0].GetBoolean(), rows[i][1].GetInt32(), rows[i][2].GetInt32());
+        return result;
+    }
+
+    private static void TestRawTables(JsonElement oracle, JsonElement levels, ZombieWaveDefinition[] definitions)
+    {
+        JsonElement rows = oracle.GetProperty("table_zombies");
+        Equal(definitions.Length, rows.GetArrayLength(), "native zombie table size");
+        for (int i = 0; i < definitions.Length; i++)
+        {
+            Equal(rows[i][0].GetInt32(), definitions[i].Id, "native table ID=" + i);
+            Equal(rows[i][1].GetInt32(), definitions[i].BudgetCost, "native table cost ID=" + i);
+            Equal(rows[i][2].GetInt32(), definitions[i].LevelGate, "native table level gate ID=" + i);
+            Equal(rows[i][3].GetInt32(), definitions[i].WaveGate, "native table wave gate ID=" + i);
+            Equal(rows[i][4].GetInt32(), definitions[i].SelectionWeight, "native table weight ID=" + i);
+        }
+        JsonElement waveCounts = oracle.GetProperty("table_level_counts");
+        JsonElement matrix = oracle.GetProperty("table_matrix");
+        Equal(50, waveCounts.GetArrayLength(), "native level table size");
+        Equal(50, matrix.GetArrayLength(), "native matrix level dimension");
+        for (int level = 0; level < 50; level++)
+        {
+            Equal(waveCounts[level].GetInt32(), levels[level].GetProperty("base_wave_count").GetProperty("value").GetInt32(),
+                "native wave count level=" + (level + 1));
+            Equal(34, matrix[level].GetArrayLength(), "native matrix zombie dimension");
+            JsonElement flags = levels[level].GetProperty("zombie_flag_cells");
+            Equal(34, flags.GetArrayLength(), "export matrix zombie dimension");
+            for (int id = 0; id < 34; id++)
+                Equal(matrix[level][id].GetInt32(), flags[id].GetProperty("flag").GetInt32(),
+                    "native matrix level=" + (level + 1) + " ID=" + id);
+        }
+    }
+
+    private static void TestEligibility(JsonElement oracle, JsonElement levels,
+        ZombieWaveDefinition[] definitions, AdventureProfileFields[] profiles)
+    {
+        Equal(50, levels.GetArrayLength(), "level count");
+        foreach (JsonElement test in oracle.GetProperty("eligibility").EnumerateArray())
+        {
+            int id = test[0].GetInt32();
+            int level = test[1].GetInt32();
+            int profile = test[2].GetInt32();
+            int flag = levels[AdventureWaveRules.TableIndex(level)].GetProperty("zombie_flag_cells")[id].GetProperty("flag").GetInt32();
+            bool actual = AdventureWaveRules.IsTableEligible(definitions[id], level, flag, profiles[profile]);
+            Equal(test[3].GetInt32() != 0, actual, "eligibility id=" + id + " level=" + level + " profile=" + profile);
+        }
+    }
+
+    private static void TestFlags(JsonElement oracle, AdventureProfileFields[] profiles)
+    {
+        foreach (JsonElement test in oracle.GetProperty("flags").EnumerateArray())
+        {
+            int level = test[0].GetInt32(), count = test[1].GetInt32(), wave = test[2].GetInt32();
+            int profile = test[3].GetInt32();
+            bool actual = AdventureWaveRules.IsFlagWave(level, count, wave, profiles[profile]);
+            Equal(test[4].GetInt32() != 0, actual, "flag level=" + level + " count=" + count + " wave=" + wave + " profile=" + profile);
+        }
+    }
+
+    private static void TestBudgets(JsonElement oracle, AdventureProfileFields[] profiles)
+    {
+        foreach (JsonElement test in oracle.GetProperty("pre_budgets").EnumerateArray())
+        {
+            int level = test[0].GetInt32(), wave = test[1].GetInt32(), profile = test[2].GetInt32();
+            int actual = AdventureWaveRules.PreAdjustmentBudget(level, wave, profiles[profile]);
+            Equal(test[3].GetInt32(), actual, "pre-budget level=" + level + " wave=" + wave + " profile=" + profile);
+        }
+    }
+
+    private static void TestSelection(JsonElement oracle, ZombieWaveDefinition[] definitions)
+    {
+        Equal(0, oracle.GetProperty("zero_weight_skipped").GetInt32(), "oracle skipped cases");
+        foreach (JsonElement test in oracle.GetProperty("selection").EnumerateArray())
+        {
+            ulong mask = ulong.Parse(test[0].GetString(), NumberStyles.HexNumber, CultureInfo.InvariantCulture);
+            int wave = test[1].GetInt32(), budget = test[2].GetInt32();
+            bool[] enabled = new bool[AdventureWaveRules.ZombieTypeCount];
+            for (int i = 0; i < enabled.Length; i++) enabled[i] = (mask & (1UL << i)) != 0;
+            IReadOnlyList<WeightedZombie> candidates = AdventureWaveRules.BuildCandidates(definitions, enabled, wave, budget);
+            JsonElement expected = test[6];
+            string context = "mask=" + test[0].GetString() + " wave=" + wave + " budget=" + budget;
+            Equal(expected.GetArrayLength(), candidates.Count, "candidate count " + context);
+            int cumulative = 0;
+            for (int i = 0; i < candidates.Count; i++)
+            {
+                Equal(expected[i][0].GetInt32(), candidates[i].ZombieId, "candidate ID " + context);
+                Equal(expected[i][1].GetInt32(), candidates[i].Weight, "candidate weight " + context);
+                if (candidates[i].Weight > 0)
+                {
+                    int picked;
+                    Equal(true, AdventureWaveRules.TrySelectByTicket(candidates, cumulative, out picked), "first ticket " + context);
+                    Equal(candidates[i].ZombieId, picked, "first ticket ID " + context);
+                    Equal(true, AdventureWaveRules.TrySelectByTicket(candidates, cumulative + candidates[i].Weight - 1, out picked), "last ticket " + context);
+                    Equal(candidates[i].ZombieId, picked, "last ticket ID " + context);
+                }
+                cumulative += candidates[i].Weight;
+            }
+            Equal(test[3].GetInt32(), AdventureWaveRules.TotalWeight(candidates), "native total " + context);
+            int result;
+            Equal(true, AdventureWaveRules.TrySelectByTicket(candidates, test[4].GetInt32(), out result), "native ticket " + context);
+            Equal(test[5].GetInt32(), result, "native selected ID " + context);
+        }
+    }
+
+    private static void TestFlagPrefills(JsonElement oracle, ZombieWaveDefinition[] definitions)
+    {
+        foreach (JsonElement test in oracle.GetProperty("flag_prefills").EnumerateArray())
+        {
+            int budget = test[0].GetInt32();
+            FlagWavePrefill actual = AdventureWaveRules.CalculateFlagPrefill(budget, definitions[0], definitions[1]);
+            JsonElement wave = test[2];
+            Equal(test[1].GetInt32(), actual.RemainingBudget, "flag remaining budget=" + budget);
+            Equal(actual.NormalCount + actual.FlagCount, wave.GetArrayLength(), "flag prefill length=" + budget);
+            for (int i = 0; i < actual.NormalCount; i++) Equal(0, wave[i].GetInt32(), "flag normal budget=" + budget);
+            Equal(1, actual.FlagCount, "flag count budget=" + budget);
+            Equal(1, wave[actual.NormalCount].GetInt32(), "flag ID budget=" + budget);
+        }
+    }
+
+    private static void TestBoundaries(ZombieWaveDefinition[] definitions)
+    {
+        Equal(0, AdventureWaveRules.TableIndex(1), "first table row");
+        Equal(49, AdventureWaveRules.TableIndex(50), "last table row");
+        Equal(49, AdventureWaveRules.TableIndex(1000), "clamped table row");
+        Throws<ArgumentOutOfRangeException>(() => AdventureWaveRules.TableIndex(0), "nonpositive level");
+        Throws<ArgumentOutOfRangeException>(() => AdventureWaveRules.IsFlagWave(2, 0, 0, default(AdventureProfileFields)), "zero wave count");
+        Throws<ArgumentOutOfRangeException>(() => AdventureWaveRules.PreAdjustmentBudget(2, 100, default(AdventureProfileFields)), "wave storage bound");
+        Throws<ArgumentOutOfRangeException>(() => AdventureWaveRules.CalculateFlagPrefill(0, definitions[0], definitions[1]), "prefill budget");
+        Throws<ArgumentException>(() => AdventureWaveRules.CalculateFlagPrefill(1, definitions[1], definitions[0]), "prefill types");
+        int picked;
+        Equal(false, AdventureWaveRules.TrySelectByTicket(new WeightedZombie[0], 0, out picked), "empty list");
+        Equal(-1, picked, "empty result sentinel");
+        Equal(false, AdventureWaveRules.TrySelectByTicket(new[] { new WeightedZombie(1, 0) }, 0, out picked), "zero-only list");
+        WeightedZombie[] one = { new WeightedZombie(0, 2) };
+        Throws<ArgumentOutOfRangeException>(() => AdventureWaveRules.TrySelectByTicket(one, -1, out picked), "negative ticket");
+        Throws<ArgumentOutOfRangeException>(() => AdventureWaveRules.TrySelectByTicket(one, 2, out picked), "ticket at total");
+        bool[] none = new bool[34];
+        Equal(0, AdventureWaveRules.BuildCandidates(definitions, none, 0, 0).Count, "no eligible candidates");
+        Throws<ArgumentException>(() => AdventureWaveRules.BuildCandidates(new ZombieWaveDefinition[33], none, 0, 1), "definition shape");
+    }
+}

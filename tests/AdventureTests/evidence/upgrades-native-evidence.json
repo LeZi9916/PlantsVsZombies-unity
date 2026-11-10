@@ -1,0 +1,102 @@
+{
+  "exe_sha256": "e1511201ec2ae9a7e30259f04bc2ec7272badb2574a2e9b405d0e916ae5c082c",
+  "method": "read-only PE table reads and Capstone instruction decoding; no complete native gameplay execution",
+  "plant_rows": [
+    {
+      "id": 40,
+      "sun_cost": 250,
+      "recharge_threshold_raw": 5000,
+      "action_period_raw": 150
+    },
+    {
+      "id": 41,
+      "sun_cost": 150,
+      "recharge_threshold_raw": 5000,
+      "action_period_raw": 2500
+    },
+    {
+      "id": 42,
+      "sun_cost": 150,
+      "recharge_threshold_raw": 5000,
+      "action_period_raw": 200
+    },
+    {
+      "id": 43,
+      "sun_cost": 225,
+      "recharge_threshold_raw": 5000,
+      "action_period_raw": 150
+    },
+    {
+      "id": 44,
+      "sun_cost": 200,
+      "recharge_threshold_raw": 5000,
+      "action_period_raw": 300
+    },
+    {
+      "id": 45,
+      "sun_cost": 50,
+      "recharge_threshold_raw": 5000,
+      "action_period_raw": 0
+    },
+    {
+      "id": 46,
+      "sun_cost": 125,
+      "recharge_threshold_raw": 5000,
+      "action_period_raw": 0
+    },
+    {
+      "id": 47,
+      "sun_cost": 500,
+      "recharge_threshold_raw": 5000,
+      "action_period_raw": 600
+    },
+    {
+      "id": 48,
+      "sun_cost": 0,
+      "recharge_threshold_raw": 750,
+      "action_period_raw": 0
+    }
+  ],
+  "instructions": [
+    {
+      "va": "0x46c604",
+      "bytes": "c74354c8000000",
+      "instruction": "mov dword ptr [ebx + 0x54], 0xc8"
+    },
+    {
+      "va": "0x46c88b",
+      "bytes": "c74354f4010000",
+      "instruction": "mov dword ptr [ebx + 0x54], 0x1f4"
+    },
+    {
+      "va": "0x46d3bd",
+      "bytes": "c7869000000064000000",
+      "instruction": "mov dword ptr [esi + 0x90], 0x64"
+    },
+    {
+      "va": "0x46d44b",
+      "bytes": "c78690000000c8000000",
+      "instruction": "mov dword ptr [esi + 0x90], 0xc8"
+    },
+    {
+      "va": "0x473196",
+      "bytes": "c74754b80b0000",
+      "instruction": "mov dword ptr [edi + 0x54], 0xbb8"
+    },
+    {
+      "va": "0x475252",
+      "bytes": "c78690000000ce000000",
+      "instruction": "mov dword ptr [esi + 0x90], 0xce"
+    },
+    {
+      "va": "0x476076",
+      "bytes": "8b049510aa7400",
+      "instruction": "mov eax, dword ptr [edx*4 + 0x74aa10]"
+    },
+    {
+      "va": "0x47646b",
+      "bytes": "8b048514aa7400",
+      "instruction": "mov eax, dword ptr [eax*4 + 0x74aa14]"
+    }
+  ]
+}

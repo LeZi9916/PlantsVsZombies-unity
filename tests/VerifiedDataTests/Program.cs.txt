@@ -1,0 +1,353 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Text.Json;
+using PvZReplica.VerifiedData;
+
+internal static class VerifiedDataTests
+{
+    private static int assertions;
+
+    private static void Check(bool condition, string message)
+    {
+        assertions++;
+        if (!condition) throw new InvalidOperationException(message);
+    }
+
+    private static void Equal<T>(T expected, T actual, string message)
+    {
+        Check(EqualityComparer<T>.Default.Equals(expected, actual),
+            message + ": expected " + expected + ", got " + actual);
+    }
+
+    private static int Value(JsonElement row, string field)
+    {
+        return row.GetProperty(field).GetProperty("value").GetInt32();
+    }
+
+    private static string FindInputDirectory()
+    {
+        for (DirectoryInfo parent = new DirectoryInfo(AppContext.BaseDirectory); parent != null; parent = parent.Parent)
+        {
+            string candidate = Path.Combine(parent.FullName, "analysis", "ida", "balance");
+            if (File.Exists(Path.Combine(candidate, "plants_full.json"))) return candidate;
+        }
+        throw new DirectoryNotFoundException("Could not locate analysis/ida/balance from the test executable.");
+    }
+
+    private static JsonDocument ReadTable(string directory, string name)
+    {
+        return JsonDocument.Parse(File.ReadAllText(Path.Combine(directory, name + ".json")));
+    }
+
+    private static void TestDimensions()
+    {
+        Equal(53, VerifiedDataCatalog.Plants.Count, "plant count");
+        Equal(34, VerifiedDataCatalog.Zombies.Count, "zombie count");
+        Equal(50, VerifiedDataCatalog.AdventureLevels.Count, "adventure level count");
+        Equal(34, VerifiedDataCatalog.AdventureZombieRowHeaders.Count, "adventure matrix header count");
+        Equal(72, VerifiedDataCatalog.ChallengeModes.Count, "mode count");
+        Equal(144, VerifiedDataCatalog.Reanimations.Count, "reanimation count");
+        Equal("E1511201EC2AE9A7E30259F04BC2EC7272BADB2574A2E9B405D0E916AE5C082C",
+            VerifiedDataCatalog.SourceExeSha256, "EXE provenance");
+    }
+
+    private static void TestPlants(string directory)
+    {
+        using (JsonDocument doc = ReadTable(directory, "plants_full"))
+        {
+            JsonElement rows = doc.RootElement.GetProperty("rows");
+            Equal(53, rows.GetArrayLength(), "source plant count");
+            int index = 0;
+            foreach (JsonElement row in rows.EnumerateArray())
+            {
+                int id = row.GetProperty("id").GetInt32();
+                Equal(index, id, "plant source ID");
+                PlantDefinition plant;
+                Check(VerifiedDataCatalog.TryGetPlant(id, out plant), "plant lookup " + id);
+                Check(ReferenceEquals(VerifiedDataCatalog.Plants[index], plant), "plant index " + id);
+                Equal(id, plant.Id, "plant ID");
+                Equal(row.GetProperty("internal_name").GetString(), plant.InternalName, "plant name " + id);
+                Equal(Value(row, "sun_cost"), plant.SunCost, "plant cost " + id);
+                Equal(Value(row, "recharge_threshold_raw"), plant.RechargeThresholdRaw, "plant recharge " + id);
+                Equal(Value(row, "reanimation_id"), plant.ReanimationId, "plant animation ID " + id);
+                Equal(Value(row, "action_dispatch_code_raw"), plant.ActionDispatchCodeRaw, "plant action code " + id);
+                Equal(Value(row, "action_period_raw"), plant.ActionPeriodRaw, "plant action period " + id);
+                Equal(Value(row, "unidentified_0x04"), plant.Unidentified0x04, "plant unknown 0x04 " + id);
+                Equal(Value(row, "unidentified_0x0c"), plant.Unidentified0x0C, "plant unknown 0x0c " + id);
+                ReanimationDefinition animation;
+                Check(VerifiedDataCatalog.TryGetReanimation(plant.ReanimationId, out animation), "plant animation lookup " + id);
+                Equal(row.GetProperty("reanimation_path").GetString(), animation.Path, "plant animation path " + id);
+                index++;
+            }
+        }
+    }
+
+    private static void TestZombies(string directory)
+    {
+        using (JsonDocument doc = ReadTable(directory, "zombies_full"))
+        {
+            JsonElement rows = doc.RootElement.GetProperty("rows");
+            Equal(34, rows.GetArrayLength(), "source zombie count");
+            int index = 0;
+            foreach (JsonElement row in rows.EnumerateArray())
+            {
+                int id = row.GetProperty("id").GetInt32();
+                Equal(index, id, "zombie source ID");
+                ZombieDefinition zombie;
+                Check(VerifiedDataCatalog.TryGetZombie(id, out zombie), "zombie lookup " + id);
+                Check(ReferenceEquals(VerifiedDataCatalog.Zombies[index], zombie), "zombie index " + id);
+                Equal(id, zombie.Id, "zombie ID");
+                Equal(row.GetProperty("internal_name").GetString(), zombie.InternalName, "zombie name " + id);
+                Equal(Value(row, "reanimation_id"), zombie.ReanimationId, "zombie animation ID " + id);
+                Equal(Value(row, "wave_budget_cost_raw"), zombie.WaveBudgetCostRaw, "zombie budget " + id);
+                Equal(Value(row, "base_level_gate_raw"), zombie.BaseLevelGateRaw, "zombie level gate " + id);
+                Equal(Value(row, "base_wave_gate_raw"), zombie.BaseWaveGateRaw, "zombie wave gate " + id);
+                Equal(Value(row, "base_selection_weight_raw"), zombie.BaseSelectionWeightRaw, "zombie weight " + id);
+                ReanimationDefinition animation;
+                Check(VerifiedDataCatalog.TryGetReanimation(zombie.ReanimationId, out animation), "zombie animation lookup " + id);
+                Equal(row.GetProperty("reanimation_path").GetString(), animation.Path, "zombie animation path " + id);
+                index++;
+            }
+        }
+    }
+
+    private static void TestAdventure(string directory)
+    {
+        using (JsonDocument doc = ReadTable(directory, "adventure_levels_full"))
+        {
+            JsonElement levels = doc.RootElement.GetProperty("levels");
+            JsonElement headers = doc.RootElement.GetProperty("zombie_row_headers");
+            Equal(50, levels.GetArrayLength(), "source level count");
+            Equal(34, headers.GetArrayLength(), "source matrix header count");
+            int levelIndex = 1;
+            int cells = 0;
+            foreach (JsonElement row in levels.EnumerateArray())
+            {
+                int id = row.GetProperty("level_index_1_based").GetInt32();
+                Equal(levelIndex, id, "source level ID");
+                AdventureLevelDefinition level;
+                Check(VerifiedDataCatalog.TryGetAdventureLevel(id, out level), "level lookup " + id);
+                Check(ReferenceEquals(VerifiedDataCatalog.AdventureLevels[id - 1], level), "level index " + id);
+                Equal(id, level.LevelIndex, "level ID");
+                Equal(Value(row, "base_wave_count"), level.BaseWaveCount, "base wave count " + id);
+                JsonElement flags = row.GetProperty("zombie_flag_cells");
+                Equal(34, flags.GetArrayLength(), "source flag count " + id);
+                Equal(34, level.ZombieFlagsRaw.Count, "flag count " + id);
+                int zombieIndex = 0;
+                foreach (JsonElement cell in flags.EnumerateArray())
+                {
+                    int zombieId = cell.GetProperty("zombie_id").GetInt32();
+                    Equal(zombieIndex, zombieId, "source flag zombie ID " + id);
+                    int expectedFlag = cell.GetProperty("flag").GetInt32();
+                    Equal(expectedFlag, level.ZombieFlagsRaw[zombieId], "raw flag " + id + "/" + zombieId);
+                    int actualFlag;
+                    Check(VerifiedDataCatalog.TryGetAdventureZombieFlagRaw(id, zombieId, out actualFlag),
+                        "flag lookup " + id + "/" + zombieId);
+                    Equal(expectedFlag, actualFlag, "flag lookup value " + id + "/" + zombieId);
+                    zombieIndex++;
+                    cells++;
+                }
+                levelIndex++;
+            }
+            Equal(1700, cells, "total matrix cells");
+            int headerIndex = 0;
+            foreach (JsonElement row in headers.EnumerateArray())
+            {
+                int id = row.GetProperty("zombie_id_index").GetInt32();
+                Equal(headerIndex, id, "source matrix header index");
+                AdventureZombieRowHeader header;
+                Check(VerifiedDataCatalog.TryGetAdventureZombieRowHeader(id, out header), "header lookup " + id);
+                Check(ReferenceEquals(VerifiedDataCatalog.AdventureZombieRowHeaders[id], header), "header index " + id);
+                Equal(id, header.ZombieIdIndex, "header zombie ID");
+                Equal(row.GetProperty("stored_header").GetInt32(), header.StoredHeaderRaw, "stored header " + id);
+                headerIndex++;
+            }
+        }
+    }
+
+    private static void TestModes(string directory)
+    {
+        using (JsonDocument doc = ReadTable(directory, "challenge_modes_full"))
+        {
+            JsonElement rows = doc.RootElement.GetProperty("rows");
+            Equal(72, rows.GetArrayLength(), "source mode count");
+            int index = 0;
+            foreach (JsonElement row in rows.EnumerateArray())
+            {
+                int id = row.GetProperty("id").GetInt32();
+                Equal(index + 1, id, "source mode ID");
+                ChallengeModeDefinition mode;
+                Check(VerifiedDataCatalog.TryGetChallengeMode(id, out mode), "mode lookup " + id);
+                Check(ReferenceEquals(VerifiedDataCatalog.ChallengeModes[index], mode), "mode index " + id);
+                Equal(id, mode.Id, "mode ID");
+                Equal(row.GetProperty("localization_key").GetString(), mode.LocalizationKey, "mode key " + id);
+                Equal(Value(row, "ui_category_index"), mode.UiCategoryIndex, "mode category " + id);
+                Equal(Value(row, "ui_grid_row"), mode.UiGridRow, "mode row " + id);
+                Equal(Value(row, "ui_grid_column"), mode.UiGridColumn, "mode column " + id);
+                Equal(Value(row, "unidentified_0x04"), mode.Unidentified0x04, "mode unknown 0x04 " + id);
+                index++;
+            }
+        }
+    }
+
+    private static void TestReanimations(string directory)
+    {
+        using (JsonDocument doc = ReadTable(directory, "reanimations_full"))
+        {
+            JsonElement rows = doc.RootElement.GetProperty("rows");
+            Equal(144, rows.GetArrayLength(), "source reanimation count");
+            int index = 0;
+            foreach (JsonElement row in rows.EnumerateArray())
+            {
+                int id = row.GetProperty("id").GetInt32();
+                Equal(index, id, "source reanimation ID");
+                ReanimationDefinition animation;
+                Check(VerifiedDataCatalog.TryGetReanimation(id, out animation), "reanimation lookup " + id);
+                Check(ReferenceEquals(VerifiedDataCatalog.Reanimations[index], animation), "reanimation index " + id);
+                Equal(id, animation.Id, "reanimation ID");
+                Equal(row.GetProperty("path").GetString(), animation.Path, "reanimation path " + id);
+                Equal(Value(row, "unknown_0x08"), animation.Unknown0x08, "reanimation unknown 0x08 " + id);
+                index++;
+            }
+        }
+    }
+
+    private static void TestKnownValues()
+    {
+        PlantDefinition pea;
+        Check(VerifiedDataCatalog.TryGetPlant(0, out pea), "peashooter exists");
+        Equal("PEASHOOTER", pea.InternalName, "peashooter name");
+        Equal(100, pea.SunCost, "peashooter cost");
+        Equal(750, pea.RechargeThresholdRaw, "peashooter raw recharge");
+        Equal(4, pea.ReanimationId, "peashooter animation");
+        PlantDefinition repeater;
+        PlantDefinition repeater2;
+        Check(VerifiedDataCatalog.TryGetPlant(7, out repeater), "first repeater");
+        Check(VerifiedDataCatalog.TryGetPlant(52, out repeater2), "second repeater");
+        Equal("REPEATER", repeater.InternalName, "first repeater name");
+        Equal(repeater.InternalName, repeater2.InternalName, "duplicate plant name preserved");
+        Check(!ReferenceEquals(repeater, repeater2), "duplicate plant rows remain distinct");
+        Equal(7, repeater.Id, "first repeater ID");
+        Equal(52, repeater2.Id, "second repeater ID");
+        PlantDefinition imitater;
+        Check(VerifiedDataCatalog.TryGetPlant(48, out imitater), "imitater exists");
+        Equal(0, imitater.SunCost, "imitater table cost");
+        Equal(33, imitater.Unidentified0x0C, "imitater unknown field");
+
+        ZombieDefinition ordinary;
+        ZombieDefinition duplicate;
+        ZombieDefinition flag;
+        Check(VerifiedDataCatalog.TryGetZombie(0, out ordinary), "ordinary zombie exists");
+        Check(VerifiedDataCatalog.TryGetZombie(26, out duplicate), "duplicate zombie exists");
+        Equal("ZOMBIE", ordinary.InternalName, "zombie name");
+        Equal(ordinary.InternalName, duplicate.InternalName, "duplicate zombie name preserved");
+        Check(!ReferenceEquals(ordinary, duplicate), "duplicate zombie rows remain distinct");
+        Equal(1, ordinary.WaveBudgetCostRaw, "ordinary zombie budget");
+        Equal(4000, ordinary.BaseSelectionWeightRaw, "ordinary zombie weight");
+        Equal(99, duplicate.BaseLevelGateRaw, "duplicate zombie level gate");
+        Check(VerifiedDataCatalog.TryGetZombie(1, out flag), "flag zombie exists");
+        Equal(0, flag.BaseSelectionWeightRaw, "flag zombie raw weight");
+
+        Equal(4, VerifiedDataCatalog.AdventureLevels[0].BaseWaveCount, "level 1 waves");
+        Equal(10, VerifiedDataCatalog.AdventureLevels[14].BaseWaveCount, "level 15 base waves");
+        Equal(30, VerifiedDataCatalog.AdventureLevels[49].BaseWaveCount, "level 50 waves");
+        Equal(1, VerifiedDataCatalog.AdventureLevels[0].ZombieFlagsRaw[0], "level 1 zombie 0 flag");
+        Equal(0, VerifiedDataCatalog.AdventureLevels[0].ZombieFlagsRaw[2], "level 1 zombie 2 flag");
+        Equal(1, VerifiedDataCatalog.AdventureLevels[49].ZombieFlagsRaw[24], "level 50 zombie 24 flag");
+        Equal(0, VerifiedDataCatalog.AdventureZombieRowHeaders[33].StoredHeaderRaw, "matrix header 33 is not corrected");
+        foreach (AdventureLevelDefinition level in VerifiedDataCatalog.AdventureLevels)
+            Equal(0, level.ZombieFlagsRaw[33], "last zombie matrix row " + level.LevelIndex);
+
+        Equal("[SURVIVAL_DAY_NORMAL]", VerifiedDataCatalog.ChallengeModes[0].LocalizationKey, "mode 1 key");
+        Equal("[UPSELL]", VerifiedDataCatalog.ChallengeModes[70].LocalizationKey, "mode 71 key");
+        Equal("[INTRO]", VerifiedDataCatalog.ChallengeModes[71].LocalizationKey, "mode 72 key");
+        Equal(10, VerifiedDataCatalog.ChallengeModes[71].Unidentified0x04, "mode 72 unknown field");
+        Equal("reanim\\PeaShooterSingle.reanim", VerifiedDataCatalog.Reanimations[4].Path, "animation 4 path");
+        Equal("reanim\\zombatar_zombie_head.reanim", VerifiedDataCatalog.Reanimations[143].Path, "animation 143 path");
+    }
+
+    private static void TestUnknownIds()
+    {
+        foreach (int id in new[] { int.MinValue, -1, 53, int.MaxValue })
+        {
+            PlantDefinition value;
+            Check(!VerifiedDataCatalog.TryGetPlant(id, out value) && value == null, "unknown plant " + id);
+        }
+        foreach (int id in new[] { int.MinValue, -1, 34, int.MaxValue })
+        {
+            ZombieDefinition zombie;
+            AdventureZombieRowHeader header;
+            Check(!VerifiedDataCatalog.TryGetZombie(id, out zombie) && zombie == null, "unknown zombie " + id);
+            Check(!VerifiedDataCatalog.TryGetAdventureZombieRowHeader(id, out header) && header == null,
+                "unknown matrix header " + id);
+            int flag = 123;
+            Check(!VerifiedDataCatalog.TryGetAdventureZombieFlagRaw(1, id, out flag) && flag == 0,
+                "unknown flag zombie " + id);
+        }
+        foreach (int id in new[] { int.MinValue, -1, 0, 51, int.MaxValue })
+        {
+            AdventureLevelDefinition level;
+            Check(!VerifiedDataCatalog.TryGetAdventureLevel(id, out level) && level == null, "unknown level " + id);
+            int flag = 123;
+            Check(!VerifiedDataCatalog.TryGetAdventureZombieFlagRaw(id, 0, out flag) && flag == 0,
+                "unknown flag level " + id);
+        }
+        foreach (int id in new[] { int.MinValue, -1, 0, 73, int.MaxValue })
+        {
+            ChallengeModeDefinition value;
+            Check(!VerifiedDataCatalog.TryGetChallengeMode(id, out value) && value == null, "unknown mode " + id);
+        }
+        foreach (int id in new[] { int.MinValue, -1, 144, int.MaxValue })
+        {
+            ReanimationDefinition value;
+            Check(!VerifiedDataCatalog.TryGetReanimation(id, out value) && value == null, "unknown animation " + id);
+        }
+    }
+
+    private static void CheckReadOnly<T>(IReadOnlyList<T> list, string name)
+    {
+        IList<T> mutable = list as IList<T>;
+        Check(mutable != null && mutable.IsReadOnly, name + " reports read-only");
+        bool rejected = false;
+        try { mutable[0] = mutable[0]; }
+        catch (NotSupportedException) { rejected = true; }
+        Check(rejected, name + " rejects mutation");
+    }
+
+    private static void TestReadOnly()
+    {
+        CheckReadOnly(VerifiedDataCatalog.Plants, "plants");
+        CheckReadOnly(VerifiedDataCatalog.Zombies, "zombies");
+        CheckReadOnly(VerifiedDataCatalog.AdventureLevels, "levels");
+        CheckReadOnly(VerifiedDataCatalog.AdventureZombieRowHeaders, "matrix headers");
+        CheckReadOnly(VerifiedDataCatalog.ChallengeModes, "modes");
+        CheckReadOnly(VerifiedDataCatalog.Reanimations, "reanimations");
+        foreach (AdventureLevelDefinition level in VerifiedDataCatalog.AdventureLevels)
+            CheckReadOnly(level.ZombieFlagsRaw, "level " + level.LevelIndex + " flags");
+    }
+
+    private static int Main()
+    {
+        try
+        {
+            string directory = FindInputDirectory();
+            TestDimensions();
+            TestPlants(directory);
+            TestZombies(directory);
+            TestAdventure(directory);
+            TestModes(directory);
+            TestReanimations(directory);
+            TestKnownValues();
+            TestUnknownIds();
+            TestReadOnly();
+            Console.WriteLine("Verified data tests passed (" + assertions + " assertions).");
+            return 0;
+        }
+        catch (Exception exception)
+        {
+            Console.Error.WriteLine(exception);
+            return 1;
+        }
+    }
+}

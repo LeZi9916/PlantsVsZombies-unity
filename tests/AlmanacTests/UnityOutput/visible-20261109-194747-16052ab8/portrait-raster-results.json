@@ -1,0 +1,78 @@
+{
+  "Passed": true,
+  "NativeVisualComparison": false,
+  "Checks": [
+    {
+      "Name": "preview-00-0",
+      "MaskMismatchFraction": 0.0,
+      "OpaqueColorMeanError": 0.5814249363867684,
+      "Passed": true
+    },
+    {
+      "Name": "thumb-00-0",
+      "MaskMismatchFraction": 0.0,
+      "OpaqueColorMeanError": 0.5974981604120677,
+      "Passed": true
+    },
+    {
+      "Name": "preview-00-1",
+      "MaskMismatchFraction": 0.0,
+      "OpaqueColorMeanError": 0.6040674603174603,
+      "Passed": true
+    },
+    {
+      "Name": "thumb-00-1",
+      "MaskMismatchFraction": 0.0,
+      "OpaqueColorMeanError": 0.5974981604120677,
+      "Passed": true
+    },
+    {
+      "Name": "preview-01-0",
+      "MaskMismatchFraction": 0.0,
+      "OpaqueColorMeanError": 0.5619009045497503,
+      "Passed": true
+    },
+    {
+      "Name": "thumb-01-0",
+      "MaskMismatchFraction": 0.0,
+      "OpaqueColorMeanError": 0.5160286336756925,
+      "Passed": true
+    },
+    {
+      "Name": "preview-01-1",
+      "MaskMismatchFraction": 0.0,
+      "OpaqueColorMeanError": 0.5860517435320585,
+      "Passed": true
+    },
+    {
+      "Name": "thumb-01-1",
+      "MaskMismatchFraction": 0.0,
+      "OpaqueColorMeanError": 0.5160286336756925,
+      "Passed": true
+    },
+    {
+      "Name": "preview-24-0",
+      "MaskMismatchFraction": 0.0,
+      "OpaqueColorMeanError": 1.02455953016551,
+      "Passed": true
+    },
+    {
+      "Name": "thumb-24-0",
+      "MaskMismatchFraction": 0.0,
+      "OpaqueColorMeanError": 0.9016277423920736,
+      "Passed": true
+    },
+    {
+      "Name": "preview-24-1",
+      "MaskMismatchFraction": 0.0,
+      "OpaqueColorMeanError": 1.040014484881405,
+      "Passed": true
+    },
+    {
+      "Name": "thumb-24-1",
+      "MaskMismatchFraction": 0.0,
+      "OpaqueColorMeanError": 0.9016277423920736,
+      "Passed": true
+    }
+  ]
+}

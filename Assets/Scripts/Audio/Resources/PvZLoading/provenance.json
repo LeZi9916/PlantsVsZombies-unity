@@ -1,0 +1,43 @@
+[
+  {
+    "key": "title",
+    "source": "images/titlescreen.jpg",
+    "sha256": "8bb6eed27b335cd7ad4284f78ac89877f42d7cbfc87d1c745a034e230cb91652",
+    "width": 800,
+    "height": 600
+  },
+  {
+    "key": "popcap",
+    "source": "images/PopCap_Logo.jpg",
+    "sha256": "2f8f14dd6c501dfa93cb07b8c4f8f35835b5987dff2ead8d1e1c0b1deb057593",
+    "width": 300,
+    "height": 300
+  },
+  {
+    "key": "grass",
+    "source": "images/LoadBar_grass.png",
+    "sha256": "341105a7629fe9e327a094df88a02ae2029209fe9f6279880e245df90632f82c",
+    "width": 314,
+    "height": 33
+  },
+  {
+    "key": "dirt",
+    "source": "images/LoadBar_dirt.png",
+    "sha256": "895e37391312c4f7b4eae3b5e2dd904195289d2c04b060b775f333bd2e7ed288",
+    "width": 321,
+    "height": 53
+  },
+  {
+    "key": "sodroll",
+    "source": "reanim/SodRollCap.png",
+    "sha256": "fdc3faaf745badd24bdf80d7d1aba4deb3477760c4e8f020dcc3b2cc5b2049dc",
+    "width": 73,
+    "height": 71
+  },
+  {
+    "key": "logo",
+    "source": "images/PvZ_Logo.jpg",
+    "alphaMask": "images/PvZ_Logo_.png",
+    "sha256": "ed295a221e2dd775c0e95a38a7a732eb91edb09bbd5a8749dd255261a9564ce1"
+  }
+]

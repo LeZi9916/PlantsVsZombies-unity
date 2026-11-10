@@ -1,0 +1,92 @@
+{
+  "StartedAt": "2026-11-09T18:00:12.6113606+08:00",
+  "FinishedAt": "2026-11-09T18:00:43.3519410+08:00",
+  "Passed": true,
+  "NativeVisualComparison": false,
+  "SourceHashes": [
+    {
+      "Name": "Reanimation/ReanimationRenderer.cs",
+      "Sha256": "0D149183932066EA6F259F089D58C9D89A6F1BF3275910088980F8B4FFD56126"
+    },
+    {
+      "Name": "VerifiedData/VerifiedDataCatalog.cs",
+      "Sha256": "6DCCB54648D2174B4CE1EE3FEF00219E2B3E72F021D7DD8B0D59E554E32F2CD0"
+    },
+    {
+      "Name": "VerifiedData/VerifiedData.generated.cs",
+      "Sha256": "B03C7DEB01E485AB5B2BEB6692AAF287F4D6CF29679F42D61C7529C3F097DCA5"
+    },
+    {
+      "Name": "UI/AlmanacView.cs",
+      "Sha256": "51311897143EA270A57E3B64572D04959EEFA28F4BF64C6878F68B000DB875CF"
+    },
+    {
+      "Name": "UI/AlmanacPortraitLayout.cs",
+      "Sha256": "73795128FB0831A91530F68E4F85844AD61FE1F437579940360FEF963A56189B"
+    }
+  ],
+  "AssemblySha256": "56AD04DC83A66907F922796D3FD5182C18C6A9B1BA6C824F54915A35B145467D",
+  "Screenshots": [
+    {
+      "Name": "boss.png",
+      "Width": 800,
+      "Height": 600,
+      "Sha256": "3240C58C3649132D53DC65053E96160FABE1A8F6DCEFD7E6FB2EC4F082F243B4"
+    },
+    {
+      "Name": "coffee.png",
+      "Width": 800,
+      "Height": 600,
+      "Sha256": "75625583A0687594B7B86EC9E5D0E64415081678028055B25F404D6E80FD2682"
+    },
+    {
+      "Name": "ducky.png",
+      "Width": 800,
+      "Height": 600,
+      "Sha256": "23AEDE79444E427AD41FFD6D5AA252085FAF41CE3BF5169DB6D39FCAB321B954"
+    },
+    {
+      "Name": "gatling.png",
+      "Width": 800,
+      "Height": 600,
+      "Sha256": "ADC8C37E8DF4A6B870D7D2B088EABC29C1F02E9CF2F431EFA02A3B7C5CF5AE38"
+    },
+    {
+      "Name": "home.png",
+      "Width": 800,
+      "Height": 600,
+      "Sha256": "31DC4E591A87C283448797EE97841E498E241FC761CAC2DD499703DDDF90B253"
+    },
+    {
+      "Name": "imitater.png",
+      "Width": 800,
+      "Height": 600,
+      "Sha256": "8D6B64886F8F7950A5A8E48B57966E387DF22360C684BE833AB8BD587739E4D0"
+    },
+    {
+      "Name": "plant.png",
+      "Width": 800,
+      "Height": 600,
+      "Sha256": "D69C8C412D4C9F0CBFA0A2BD00353AC5DB7E61054627C50414ED8F47DE90AF15"
+    },
+    {
+      "Name": "tallnut.png",
+      "Width": 800,
+      "Height": 600,
+      "Sha256": "E25E6681C19BEDA222038CFA95C0645B7EE2F9691EB72A6895A9C1FA9F7EB95F"
+    },
+    {
+      "Name": "threepeater.png",
+      "Width": 800,
+      "Height": 600,
+      "Sha256": "6264B6FAA9643411D6A78DA80474ACA8CF93CC6D0894C094EADD0F63F5B8AD44"
+    },
+    {
+      "Name": "zombie.png",
+      "Width": 800,
+      "Height": 600,
+      "Sha256": "7635214DCB40BA8ECA370CB1EB442DE25193D030AED80D1E62D85ACDAF343B1B"
+    }
+  ],
+  "Error": null
+}

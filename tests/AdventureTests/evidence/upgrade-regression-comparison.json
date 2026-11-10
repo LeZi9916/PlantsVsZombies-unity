@@ -1,0 +1,7 @@
+{
+  "levels_compared": 50,
+  "all_result_columns_identical": true,
+  "changes": [],
+  "baseline": "baseline/playthrough-before-upgrades.csv",
+  "current": "playthrough-results.csv"
+}

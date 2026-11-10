@@ -1,0 +1,536 @@
+using System;
+using System.Collections.Generic;
+using PvZReplica;
+using PvZReplica.Levels;
+using OriginalSun = PvZUnity.Sun;
+using OriginalTiming = PvZUnity.Timing;
+
+internal static class Program
+{
+    private static int assertions;
+
+    private static void Check(bool condition, string name)
+    {
+        assertions++;
+        if (!condition) throw new Exception("Native sky integration: " + name);
+    }
+
+    private static void Equal<T>(T expected, T actual, string name)
+    {
+        Check(EqualityComparer<T>.Default.Equals(expected, actual),
+            name + " (expected " + expected + ", got " + actual + ")");
+    }
+
+    private static void Near(float expected, float actual, string name)
+    {
+        Check(Math.Abs(expected - actual) < 0.0001f, name + " (expected " + expected + ", got " + actual + ")");
+    }
+
+    private static void Throws<T>(Action action, string name) where T : Exception
+    {
+        assertions++;
+        try { action(); }
+        catch (T) { return; }
+        throw new Exception("Expected " + typeof(T).Name + ": " + name);
+    }
+
+    private sealed class Draws
+    {
+        public readonly List<int> Bounds = new List<int>();
+        public int Initial = 137;
+        public int X = 549;
+        public int Interval = 274;
+        public int Landing;
+
+        public int Next(int bound)
+        {
+            Bounds.Add(bound);
+            if (bound == 276) return Initial;
+            if (bound == 550) return X;
+            if (bound == 275) return Interval;
+            if (bound == 250) return Landing;
+            throw new Exception("Unexpected bound " + bound);
+        }
+    }
+
+    private static GameSimulation NewGame(Draws draws, double tickSeconds = 0.01, bool allowRemoval = false)
+    {
+        return new GameSimulation(new GameRules {
+            EnableExperimentalLevelOne = true,
+            LevelOneOptions = new ExperimentalLevelOneOptions {
+                UseNativeSkySunRules = true,
+                NativeSkySunRandomDraw = draws.Next,
+                SecondsPerNativeTick = tickSeconds,
+                AllowPlantRemoval = allowRemoval,
+                CompletionCondition = g => false
+            },
+            SkySunInterval = 0f,
+            ZombieSpeed = 0f,
+            MowersEnabled = false
+        }, 123);
+    }
+
+    private static void PlantFirst(GameSimulation game, float initialUpdate = 0.01f)
+    {
+        game.Update(initialUpdate);
+        Equal(LevelOneTutorialStage.AwaitingSeedSelection, game.CurrentLevelOneTutorialStage.Value, "first tutorial stage");
+        Check(game.TrySelectLevelOneSeed(PlantKind.Peashooter), "select first seed");
+        Check(game.TryPlant(PlantKind.Peashooter, 2, 0), "plant first seed");
+        Equal(200, game.LevelOneNativeSkySunCountdownTicks.Value, "tutorial overwrites counter to 200");
+        Equal(0, game.LevelOneNativeSkySunDropCount.Value, "overwrite preserves drop count");
+    }
+
+    private static LevelOneNativeSkySun FirstSun(GameSimulation game)
+    {
+        PlantFirst(game);
+        game.Update(1.99f);
+        Equal(1, game.LevelOneNativeSkySunCountdownTicks.Value, "199 advances leave one tick");
+        Equal(0, game.LevelOneNativeSkySuns.Count, "no early spawn");
+        game.Update(0.01f);
+        Equal(1, game.LevelOneNativeSkySuns.Count, "first spawn on tick 200");
+        Equal(1, game.LevelOneNativeSkySunDropCount.Value, "first spawn counted");
+        return game.LevelOneNativeSkySuns[0];
+    }
+
+    private static void DefaultIsolation()
+    {
+        int calls = 0;
+        var options = new ExperimentalLevelOneOptions {
+            UseNativeSkySunRules = true,
+            NativeSkySunRandomDraw = bound => { calls++; throw new Exception("native RNG in demo"); }
+        };
+        var rules = new GameRules {
+            EnableExperimentalLevelOne = false,
+            LevelOneOptions = options,
+            StartingSun = 150,
+            SkySunInterval = 0.02f,
+            ZombieCount = 0
+        };
+        GameSimulation demo = new GameSimulation(rules);
+        Check(!demo.LevelOneUsesNativeSkySunRules, "native option alone cannot enable demo");
+        Equal((int?)null, demo.LevelOneNativeSkySunCountdownTicks, "no demo native counter");
+        demo.Update(0.02f);
+        Equal(0, calls, "demo did not call native RNG");
+        Equal(0, demo.LevelOneNativeSkySuns.Count, "demo native list empty");
+        Equal(1, demo.Suns.Count, "demo legacy sun still spawns");
+        Sun old = demo.Suns[0];
+        Check(demo.CollectSun(old), "demo legacy sun collects");
+        Equal(175, demo.SunAmount, "demo legacy collection stays immediate");
+
+        int factoryCalls = 0;
+        int randomCalls = 0;
+        var legacyOptions = new ExperimentalLevelOneOptions {
+            SkySunFactory = (g, random) => { factoryCalls++; return new Sun { X = 3f, Y = -1f, TargetY = 2f }; },
+            NativeSkySunRandomDraw = bound => { randomCalls++; return 0; },
+            SecondsPerNativeTick = 0.0001
+        };
+        var legacyRules = new GameRules {
+            EnableExperimentalLevelOne = true, LevelOneOptions = legacyOptions,
+            SkySunInterval = 1f, ZombieSpeed = 0f
+        };
+        GameSimulation legacy = new GameSimulation(legacyRules);
+        legacyOptions.UseNativeSkySunRules = true;
+        legacy.Update(0.01f);
+        Check(legacy.TrySelectLevelOneSeed(PlantKind.Peashooter) && legacy.TryPlant(PlantKind.Peashooter, 2, 0), "legacy first plant");
+        legacy.Update(0.03f);
+        Check(!legacy.LevelOneUsesNativeSkySunRules, "native option captured at construction");
+        Equal(1, factoryCalls, "legacy factory remains active");
+        Equal(0, randomCalls, "legacy does not invoke native RNG");
+        Equal(1, legacy.Suns.Count, "legacy sky stays in legacy list");
+        Equal(0, legacy.LevelOneNativeSkySuns.Count, "legacy native list empty");
+    }
+
+    private static void TutorialAndSchedule()
+    {
+        var draws = new Draws();
+        int factoryCalls = 0;
+        var options = new ExperimentalLevelOneOptions {
+            UseNativeSkySunRules = true,
+            NativeSkySunRandomDraw = draws.Next,
+            SkySunFactory = (g, random) => { factoryCalls++; return new Sun(); }
+        };
+        var rules = new GameRules {
+            EnableExperimentalLevelOne = true, LevelOneOptions = options,
+            SkySunInterval = 0f, ZombieSpeed = 0f
+        };
+        var game = new GameSimulation(rules);
+        options.UseNativeSkySunRules = false;
+        options.NativeSkySunRandomDraw = bound => { throw new Exception("mutated callback"); };
+        Check(game.LevelOneUsesNativeSkySunRules, "enabled option captured");
+        Equal(562, game.LevelOneNativeSkySunCountdownTicks.Value, "initial 425 + R(276)");
+        Equal(1, draws.Bounds.Count, "initial draw count");
+        Equal(276, draws.Bounds[0], "initial draw bound");
+        game.Update(5f);
+        Equal(LevelOneTutorialStage.AwaitingSeedSelection, game.CurrentLevelOneTutorialStage.Value, "tutorial starts");
+        Equal(562, game.LevelOneNativeSkySunCountdownTicks.Value, "tutorial stage 1 freezes counter");
+        Check(game.TrySelectLevelOneSeed(PlantKind.Peashooter), "select while frozen");
+        game.Update(3f);
+        Equal(562, game.LevelOneNativeSkySunCountdownTicks.Value, "tutorial stage 2 freezes counter");
+        Check(game.TryPlant(PlantKind.Peashooter, 2, 0), "first placement");
+        Equal(200, game.LevelOneNativeSkySunCountdownTicks.Value, "first plant overrides native counter");
+        game.Update(1.99f);
+        Equal(1, game.LevelOneNativeSkySunCountdownTicks.Value, "no spawn before 200th effective tick");
+        Equal(0, game.LevelOneNativeSkySuns.Count, "no premature object");
+        game.Update(0.01f);
+        Equal(709, game.LevelOneNativeSkySunCountdownTicks.Value, "first interval uses 435 + 274");
+        Equal(1, game.LevelOneNativeSkySuns.Count, "first native sun");
+        var first = game.LevelOneNativeSkySuns[0];
+        var readOnly = (IList<LevelOneNativeSkySun>)game.LevelOneNativeSkySuns;
+        Throws<NotSupportedException>(() => readOnly.Clear(), "native object list cannot be externally cleared");
+        Near(649f, first.PixelX, "original pixel X");
+        Near(60f, first.PixelY, "creation tick does not move new sun");
+        Equal(300, first.LandingPixelY, "original landing target");
+        Equal(OriginalSun.SunKind.Normal, first.Kind, "normal 1-1 sky sun");
+        Equal(0, game.Suns.Count, "native objects never enter legacy grid list");
+        Equal(0, factoryCalls, "opt-in bypasses legacy factory and interval");
+        game.Update(7.08f);
+        Equal(1, game.LevelOneNativeSkySuns.Count, "no second sun one tick early");
+        Equal(1, game.LevelOneNativeSkySunCountdownTicks.Value, "next counter approaches zero");
+        game.Update(0.01f);
+        Equal(2, game.LevelOneNativeSkySuns.Count, "second sun at reset interval");
+        Equal(2, game.LevelOneNativeSkySunDropCount.Value, "two native drops");
+        Equal(719, game.LevelOneNativeSkySunCountdownTicks.Value, "second interval uses 445 + 274");
+        int[] expectedBounds = { 276, 550, 275, 250, 550, 275, 250 };
+        Equal(expectedBounds.Length, draws.Bounds.Count, "draw count through second spawn");
+        for (int i = 0; i < expectedBounds.Length; i++) Equal(expectedBounds[i], draws.Bounds[i], "draw order " + i);
+    }
+
+    private static void ClickFlightAndPause()
+    {
+        var draws = new Draws();
+        var game = NewGame(draws);
+        int collected = 0;
+        game.EventRaised = e => { if (e == GameEvent.SunCollected) collected++; };
+        LevelOneNativeSkySun sun = FirstSun(game);
+        Equal(50, game.SunAmount, "balance after first plant");
+        Check(!game.HitTestLevelOneNativeSkySun(sun, 633, 60), "normal sun left bound excludes x-16");
+        Check(game.HitTestLevelOneNativeSkySun(sun, 634, 60), "normal sun left bound includes x-15");
+        Check(!game.HitTestLevelOneNativeSkySun(sun, 724, 60), "normal sun right bound excluded");
+        Check(!game.TryClickLevelOneNativeSkySun(sun, 649, 60, -1), "negative button rejected");
+        game.TogglePause();
+        Check(game.HitTestLevelOneNativeSkySun(sun, 649, 60), "geometric hit remains observable while paused");
+        Check(!game.TryClickLevelOneNativeSkySun(sun, 649, 60), "paused click rejected");
+        int countdown = game.LevelOneNativeSkySunCountdownTicks.Value;
+        game.Update(30f);
+        Near(60f, sun.PixelY, "pause freezes falling");
+        Equal(countdown, game.LevelOneNativeSkySunCountdownTicks.Value, "pause freezes spawn countdown");
+        game.TogglePause();
+        Check(game.TryClickLevelOneNativeSkySun(sun, 649, 60), "falling sun can be clicked");
+        Check(sun.IsCollecting, "click starts flight");
+        Check(!game.HitTestLevelOneNativeSkySun(sun, 649, 60), "collecting object no longer hittable");
+        Check(!game.TryClickLevelOneNativeSkySun(sun, 649, 60), "duplicate click rejected");
+        Equal(50, game.SunAmount, "click does not credit immediately");
+        Equal(0, collected, "click does not emit collection event");
+        game.TogglePause();
+        game.Update(30f);
+        Near(649f, sun.PixelX, "pause freezes flight X");
+        Near(60f, sun.PixelY, "pause freezes flight Y");
+        Equal(0, collected, "pause cannot credit");
+        game.TogglePause();
+        game.Update(0.01f);
+        Check(sun.PixelX < 649f && sun.PixelY < 60f, "flight moves in native pixels");
+        Equal(50, game.SunAmount, "first flight tick is not credit");
+        for (int i = 0; i < 500 && !sun.IsDead; i++) game.Update(0.01f);
+        Check(sun.IsDead, "flight eventually marks object dead");
+        Equal(75, game.SunAmount, "credit happens after flight");
+        Equal(1, collected, "collection event occurs once on credit");
+        Equal(0, game.LevelOneNativeSkySuns.Count, "credited object removed");
+        Check(!game.TryClickLevelOneNativeSkySun(sun, 15, 0), "stale reference rejected");
+        game.Update(0.1f);
+        Equal(1, collected, "removed object cannot credit twice");
+    }
+
+    private static void LandingAndExpiry()
+    {
+        var draws = new Draws { X = 0, Interval = 274, Landing = 0 };
+        var game = NewGame(draws);
+        int collected = 0;
+        game.EventRaised = e => { if (e == GameEvent.SunCollected) collected++; };
+        LevelOneNativeSkySun sun = FirstSun(game);
+        game.Update(3.58f);
+        Check(sun.PixelY < 300f && sun.GroundAgeTicks == 0, "falling does not age on ground");
+        game.Update(0.01f);
+        Near(300f, sun.PixelY, "sun reaches native landing Y");
+        Equal(1, sun.GroundAgeTicks, "landing update is first ground tick");
+        game.Update(7.48f);
+        Equal(749, sun.GroundAgeTicks, "749 ground ticks remain visible");
+        Equal(0, sun.FadeTicksRemaining, "no fade at age 749");
+        game.Update(0.01f);
+        Equal(750, sun.GroundAgeTicks, "750th ground update");
+        Equal(15, sun.FadeTicksRemaining, "fade begins without decrement on threshold tick");
+        game.Update(0.14f);
+        Equal(1, sun.FadeTicksRemaining, "one fade update remains");
+        Check(!sun.IsDead && game.HitTestLevelOneNativeSkySun(sun, 100, 300), "fading sun remains hittable");
+        game.Update(0.01f);
+        Check(sun.IsDead, "fifteenth fade tick expires sun");
+        Check(!game.HitTestLevelOneNativeSkySun(sun, 100, 300), "expired sun no longer hittable");
+        Check(!game.TryClickLevelOneNativeSkySun(sun, 100, 300), "expired reference cannot collect");
+        Equal(50, game.SunAmount, "expiration does not credit");
+        Equal(0, collected, "expiration does not emit collection");
+    }
+
+    private static void PauseInsideCollectionEvent()
+    {
+        var game = NewGame(new Draws { X = 0 }, 0.005);
+        PlantFirst(game);
+        game.Update(1f);
+        Equal(1, game.LevelOneNativeSkySuns.Count, "event-pause setup spawn");
+        var sun = game.LevelOneNativeSkySuns[0];
+        int events = 0;
+        game.EventRaised = e => {
+            if (e == GameEvent.SunCollected) { events++; game.TogglePause(); }
+        };
+        Check(game.TryClickLevelOneNativeSkySun(sun, 100, 60), "event-pause setup click");
+        game.Update(30f);
+        Equal(MatchState.Paused, game.State, "collection callback can pause");
+        Equal(1, events, "collection callback runs once");
+        Equal(75, game.SunAmount, "credit committed before event callback");
+        float elapsed = game.Elapsed;
+        int countdown = game.LevelOneNativeSkySunCountdownTicks.Value;
+        game.Update(20f);
+        Near(elapsed, game.Elapsed, "paused callback ignores subsequent time");
+        game.TogglePause();
+        game.Update(0.01f);
+        Equal(countdown - 2, game.LevelOneNativeSkySunCountdownTicks.Value,
+            "resume executes only new time, not leftover large-frame time");
+        Check(game.Elapsed - elapsed < 0.011f, "resume does not simulate old large-frame remainder");
+        Equal(1, events, "resume does not re-credit");
+    }
+
+    private static void RepeatedTutorialOverride()
+    {
+        var game = NewGame(new Draws(), 0.01, true);
+        FirstSun(game);
+        Check(game.RemovePlant(2, 0), "remove first plant before repeating tutorial");
+        for (int i = 0; i < 2; i++)
+        {
+            var legacy = new Sun();
+            game.Suns.Add(legacy);
+            Check(game.CollectSun(legacy), "fund replacement seed");
+        }
+        game.Update(5.51f);
+        Equal(LevelOneTutorialStage.AwaitingSeedSelection, game.CurrentLevelOneTutorialStage.Value, "seed becomes usable again");
+        Check(game.TrySelectLevelOneSeed(PlantKind.Peashooter), "select replacement seed");
+        Check(game.TryPlant(PlantKind.Peashooter, 2, 0), "place replacement with one current plant");
+        Equal(200, game.LevelOneNativeSkySunCountdownTicks.Value, "repeated one-plant tutorial resets timer");
+        Equal(1, game.LevelOneNativeSkySunDropCount.Value, "tutorial reset retains previous drop history");
+        game.Update(1.99f);
+        Equal(1, game.LevelOneNativeSkySunCountdownTicks.Value, "repeated override has no early spawn");
+        game.Update(0.01f);
+        Equal(2, game.LevelOneNativeSkySunDropCount.Value, "next spawn remains second native drop");
+        Equal(719, game.LevelOneNativeSkySunCountdownTicks.Value, "second-drop interval uses preserved history");
+    }
+
+    private static void TerminalStateStopsNativeSky()
+    {
+        var game = NewGame(new Draws());
+        var sun = FirstSun(game);
+        game.Zombies.Add(new Zombie { Row = 2, X = -1f, Health = 270f });
+        game.Update(0.01f);
+        Equal(MatchState.Lost, game.State, "zombie ends experimental match");
+        float y = sun.PixelY;
+        int countdown = game.LevelOneNativeSkySunCountdownTicks.Value;
+        game.Update(30f);
+        Near(y, sun.PixelY, "terminal match freezes sun movement");
+        Equal(countdown, game.LevelOneNativeSkySunCountdownTicks.Value, "terminal match freezes timer");
+        Check(!game.TryClickLevelOneNativeSkySun(sun, (int)sun.PixelX, (int)sun.PixelY), "terminal match rejects collection");
+    }
+
+    private static void ClickDuringFadeAndCap()
+    {
+        var game = NewGame(new Draws { X = 0, Interval = 274, Landing = 0 });
+        LevelOneNativeSkySun sun = FirstSun(game);
+        game.Update(11.08f);
+        Equal(15, sun.FadeTicksRemaining, "setup reaches fade start");
+        Check(game.TryClickLevelOneNativeSkySun(sun, 100, 300), "click during fade");
+        Check(sun.IsCollecting && sun.FadeTicksRemaining == 0, "click cancels fade");
+        Equal(50, game.SunAmount, "fade click does not immediately credit");
+        for (int i = 0; i < 500 && !sun.IsDead; i++) game.Update(0.01f);
+        Check(sun.IsDead, "clicked fading sun completes flight");
+        Equal(75, game.SunAmount, "clicked fading sun credits once");
+
+        game = NewGame(new Draws { X = 0, Interval = 274, Landing = 0 });
+        sun = FirstSun(game);
+        for (int i = 0; i < 398; i++)
+        {
+            var legacy = new Sun();
+            game.Suns.Add(legacy);
+            Check(game.CollectSun(legacy), "legacy collection while native enabled");
+        }
+        Equal(10000, game.SunAmount, "legacy balance may exceed native cap");
+        game.Update(0.01f);
+        Equal(10000, game.SunAmount, "unclicked native sun does not clamp legacy balance");
+        Check(game.TryClickLevelOneNativeSkySun(sun, 100, (int)sun.PixelY), "click over-cap sun");
+        for (int i = 0; i < 500 && !sun.IsDead; i++) game.Update(0.01f);
+        Equal(9990, game.SunAmount, "native credit applies native cap to legacy over-cap balance");
+        while (game.LevelOneNativeSkySunDropCount.Value < 2) game.Update(0.01f);
+        LevelOneNativeSkySun second = game.LevelOneNativeSkySuns[0];
+        int eventsAtCap = 0;
+        game.EventRaised = e => { if (e == GameEvent.SunCollected) eventsAtCap++; };
+        Check(game.TryClickLevelOneNativeSkySun(second, 100, 60), "click next sun at capped balance");
+        for (int i = 0; i < 500 && !second.IsDead; i++) game.Update(0.01f);
+        Equal(9990, game.SunAmount, "zero-added credit retains cap");
+        Equal(1, eventsAtCap, "zero-added native credit still raises collection event");
+    }
+
+    private static void ClockConversionAndValidation()
+    {
+        var slow = NewGame(new Draws(), 0.02);
+        PlantFirst(slow, 0.02f);
+        slow.Update(3.99f);
+        Equal(1, slow.LevelOneNativeSkySunCountdownTicks.Value, "slow clock waits for full native tick");
+        Equal(0, slow.LevelOneNativeSkySuns.Count, "slow clock not early");
+        slow.Update(0.01f);
+        Equal(1, slow.LevelOneNativeSkySuns.Count, "slow clock uses configured seconds per native tick");
+        Near(60f, slow.LevelOneNativeSkySuns[0].PixelY, "slow spawn has not moved");
+
+        var fast = NewGame(new Draws(), 0.005);
+        PlantFirst(fast);
+        fast.Update(0.99f);
+        Equal(2, fast.LevelOneNativeSkySunCountdownTicks.Value, "fast clock advances two native ticks per simulation tick");
+        fast.Update(0.01f);
+        Equal(1, fast.LevelOneNativeSkySuns.Count, "fast clock spawns after 100 simulation steps");
+        Near(60f, fast.LevelOneNativeSkySuns[0].PixelY, "last substep spawns without movement");
+
+        var phased = NewGame(new Draws(), 0.02);
+        PlantFirst(phased, 0.02f);
+        phased.Update(0.01f);
+        Equal(200, phased.LevelOneNativeSkySunCountdownTicks.Value, "half native tick is retained");
+        phased.TogglePause();
+        phased.Update(10f);
+        phased.TogglePause();
+        phased.Update(0.01f);
+        Equal(199, phased.LevelOneNativeSkySunCountdownTicks.Value, "pause preserves fractional native tick");
+
+        var boundary = NewGame(new Draws { Initial = 0, X = 0, Interval = 0, Landing = 0 }, 0.01 / 1024.0);
+        PlantFirst(boundary);
+        boundary.Update(0.01f);
+        Equal(2, boundary.LevelOneNativeSkySunDropCount.Value, "1024-update limit allows its exact boundary");
+        Equal(56, boundary.LevelOneNativeSkySunCountdownTicks.Value, "all boundary substeps execute once");
+
+        Throws<ArgumentOutOfRangeException>(() => NewGame(new Draws(), 0.0000001), "reject unbounded per-step native work");
+        Throws<InvalidOperationException>(() => new GameSimulation(new GameRules {
+            EnableExperimentalLevelOne = true,
+            LevelOneOptions = new ExperimentalLevelOneOptions {
+                UseNativeSkySunRules = true, NativeSkySunRandomDraw = bound => bound
+            }
+        }), "invalid initial draw");
+        var invalidOptions = new ExperimentalLevelOneOptions {
+            UseNativeSkySunRules = true,
+            NativeSkySunRandomDraw = bound => bound == 275 ? bound : 0
+        };
+        var invalid = new GameSimulation(new GameRules { EnableExperimentalLevelOne = true, LevelOneOptions = invalidOptions });
+        PlantFirst(invalid);
+        invalid.Update(1.99f);
+        Throws<InvalidOperationException>(() => invalid.Update(0.01f), "invalid subsequent draw");
+        Equal(1, invalid.LevelOneNativeSkySunCountdownTicks.Value, "invalid draw did not commit scheduler state");
+        Equal(0, invalid.LevelOneNativeSkySuns.Count, "invalid draw did not publish a spawn");
+    }
+
+    private static void SharedRandomFallback()
+    {
+        const int seed = 8765;
+        var game = new GameSimulation(new GameRules {
+            EnableExperimentalLevelOne = true,
+            LevelOneOptions = new ExperimentalLevelOneOptions { UseNativeSkySunRules = true },
+            SkySunInterval = 0f,
+            ZombieSpeed = 0f
+        }, seed);
+        var expectedRandom = new Random(seed);
+        int initialDraw = expectedRandom.Next(276);
+        Equal(425 + initialDraw, game.LevelOneNativeSkySunCountdownTicks.Value, "shared RNG initializes native timer");
+        PlantFirst(game);
+        int plantDraw = expectedRandom.Next(OriginalTiming.PlantTiming.InitialRandomBound(OriginalTiming.PlantKind.Peashooter));
+        var timing = OriginalTiming.PlantTiming.Initialize(OriginalTiming.PlantKind.Peashooter, plantDraw);
+        int x = 0, interval = 0, landing = 0;
+        for (int tick = 1; tick <= 200; tick++)
+        {
+            // The experimental host updates sky scheduling before PlantTiming.
+            if (tick == 200)
+            {
+                x = expectedRandom.Next(550);
+                interval = expectedRandom.Next(275);
+                landing = expectedRandom.Next(250);
+            }
+            var input = new OriginalTiming.PlantTimingInput(true, true, true, true, false,
+                OriginalTiming.ShootingTrack.Head, true, 0);
+            int bound = OriginalTiming.PlantTiming.RequiredRandomBound(timing, input);
+            if (bound != 0)
+                input = new OriginalTiming.PlantTimingInput(true, true, true, true, false,
+                    OriginalTiming.ShootingTrack.Head, true, expectedRandom.Next(bound));
+            timing = OriginalTiming.PlantTiming.Tick(timing, input).State;
+        }
+        game.Update(2f);
+        Equal(1, game.LevelOneNativeSkySuns.Count, "shared RNG produces one sky sun");
+        Near(100 + x, game.LevelOneNativeSkySuns[0].PixelX, "shared RNG sky X follows plant draws");
+        Equal(300 + landing, game.LevelOneNativeSkySuns[0].LandingPixelY, "shared RNG landing draw order");
+        Equal(435 + interval, game.LevelOneNativeSkySunCountdownTicks.Value, "shared RNG interval draw order");
+        Equal(timing.Countdown, game.Plants[0].Timing.Value.Countdown, "shared RNG retains PlantTiming state");
+    }
+
+    private static void FrameChunkingAndGate()
+    {
+        var large = NewGame(new Draws(), 0.017);
+        var small = NewGame(new Draws(), 0.017);
+        PlantFirst(large, 0.02f);
+        PlantFirst(small, 0.02f);
+        large.Update(13f);
+        for (int i = 0; i < 1300; i++) small.Update(0.01f);
+        Equal(large.LevelOneNativeSkySunCountdownTicks, small.LevelOneNativeSkySunCountdownTicks, "counter is frame-chunk independent");
+        Equal(large.LevelOneNativeSkySunDropCount, small.LevelOneNativeSkySunDropCount, "drop count is frame-chunk independent");
+        Equal(large.LevelOneNativeSkySuns.Count, small.LevelOneNativeSkySuns.Count, "live list is frame-chunk independent");
+        for (int i = 0; i < large.LevelOneNativeSkySuns.Count; i++)
+        {
+            Near(large.LevelOneNativeSkySuns[i].PixelX, small.LevelOneNativeSkySuns[i].PixelX, "chunk-independent X");
+            Near(large.LevelOneNativeSkySuns[i].PixelY, small.LevelOneNativeSkySuns[i].PixelY, "chunk-independent Y");
+            Equal(large.LevelOneNativeSkySuns[i].GroundAgeTicks, small.LevelOneNativeSkySuns[i].GroundAgeTicks, "chunk-independent ground age");
+        }
+
+        var gate = NewGame(new Draws(), 0.01, true);
+        PlantFirst(gate);
+        Check(gate.RemovePlant(2, 0), "configured removal works in native mode");
+        Equal(LevelOneTutorialStage.AwaitingUsableSeed, gate.CurrentLevelOneTutorialStage.Value, "removal leaves tutorial stage 3");
+        gate.Update(2f);
+        Equal(1, gate.LevelOneNativeSkySunDropCount.Value, "stage 3 still advances sky with zero plants");
+        Check(!large.TryClickLevelOneNativeSkySun(gate.LevelOneNativeSkySuns[0], 649, 60), "another simulation cannot collect an object");
+    }
+
+    private static void ExistingPlantTimingRemainsOwner()
+    {
+        var draws = new Draws();
+        var game = NewGame(draws);
+        game.Update(0.01f);
+        var plant = new Plant {
+            Kind = PlantKind.Sunflower,
+            Row = 2,
+            Column = 0,
+            Health = 300f,
+            Timing = OriginalTiming.PlantTiming.Initialize(OriginalTiming.PlantKind.Sunflower, 0)
+        };
+        game.Plants.Add(plant);
+        game.Update(2.99f);
+        Equal(0, game.Suns.Count, "existing PlantTiming has not produced early");
+        game.Update(0.01f);
+        Equal(1, game.Suns.Count, "existing PlantTiming produces exactly one legacy plant sun");
+        Equal(0, game.LevelOneNativeSkySuns.Count, "plant sun is not duplicated as sky sun");
+        Check(game.CollectSun(game.Suns[0]), "legacy plant sun remains collectable");
+        Equal(175, game.SunAmount, "legacy plant sun keeps old immediate credit");
+    }
+
+    private static void Main()
+    {
+        DefaultIsolation();
+        TutorialAndSchedule();
+        ClickFlightAndPause();
+        LandingAndExpiry();
+        PauseInsideCollectionEvent();
+        RepeatedTutorialOverride();
+        TerminalStateStopsNativeSky();
+        ClickDuringFadeAndCap();
+        ClockConversionAndValidation();
+        SharedRandomFallback();
+        FrameChunkingAndGate();
+        ExistingPlantTimingRemainsOwner();
+        Console.WriteLine("PASS: {0} native-sky integration assertions.", assertions);
+    }
+}

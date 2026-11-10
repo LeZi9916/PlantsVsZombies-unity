@@ -1,0 +1,545 @@
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.IO;
+using System.Runtime.InteropServices;
+using System.Text.Json;
+using PvZUnity.Sun;
+
+internal static class Program
+{
+    private static readonly List<Dictionary<string, object>> Cases = new List<Dictionary<string, object>>();
+    private static readonly List<Action<JsonElement>> Checks = new List<Action<JsonElement>>();
+    private static int assertions;
+
+    private static void Check(bool condition, string description)
+    {
+        assertions++;
+        if (!condition) throw new Exception("Case " + currentCase + ": " + description);
+    }
+
+    private static int currentCase;
+
+    private static Dictionary<string, object> Case(string op)
+    {
+        return new Dictionary<string, object> { { "op", op } };
+    }
+
+    private static void Add(Dictionary<string, object> item, Action<JsonElement> check)
+    {
+        Cases.Add(item);
+        Checks.Add(check);
+    }
+
+    private static void EqualInt(JsonElement item, string name, int expected)
+    {
+        int actual = item.GetProperty(name).GetInt32();
+        Check(actual == expected, name + ": expected " + expected + ", got " + actual);
+    }
+
+    private static void EqualBool(JsonElement item, string name, bool expected)
+    {
+        bool actual = item.GetProperty(name).GetBoolean();
+        Check(actual == expected, name + ": expected " + expected + ", got " + actual);
+    }
+
+    private static void EqualFloat(JsonElement item, string name, float expected)
+    {
+        float actual = item.GetProperty(name).GetSingle();
+        Check(Math.Abs(actual - expected) <= 0.0001f, name + ": expected " + expected + ", got " + actual);
+    }
+
+    private static void DrawBounds(JsonElement item, params int[] expected)
+    {
+        JsonElement bounds = item.GetProperty("drawBounds");
+        Check(bounds.GetArrayLength() == expected.Length, "draw count");
+        for (int i = 0; i < expected.Length; i++) Check(bounds[i].GetInt32() == expected[i], "draw bound " + i);
+    }
+
+    private static void SkyInitCases()
+    {
+        foreach (int background in new[] { -1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 })
+        {
+            foreach (int draw in new[] { 0, 1, 137, 275 })
+            {
+                bool supported = SkySunRules.SupportsBackground(background);
+                var item = Case("sky_init");
+                item["background"] = background;
+                item["countdown"] = 123;
+                item["drops"] = 12;
+                item["draws"] = supported ? new[] { draw } : new int[0];
+                SkySunState state = supported ? SkySunRules.Initialize(background, draw) : new SkySunState(123, 0);
+                Add(item, result => {
+                    EqualInt(result, "countdown", state.Countdown);
+                    EqualInt(result, "drops", state.Drops);
+                    DrawBounds(result, supported ? new[] { 276 } : new int[0]);
+                });
+            }
+        }
+    }
+
+    private static void InitialBalanceCases()
+    {
+        foreach (int mode in new[] { 0, 19, 20, 24, 31, 50, 51, 60, 61 })
+            foreach (int playerLevel in new[] { 1, 34, 35, 36 })
+                foreach (int boardLevel in new[] { 0, 1, 2 })
+                    for (int flags = 0; flags < 8; flags++)
+                    {
+                        bool pC80 = (flags & 1) != 0;
+                        bool pBC0 = (flags & 2) != 0;
+                        bool p1580 = (flags & 4) != 0;
+                        int expected = SunBalanceRules.InitialBalance(mode, playerLevel, boardLevel, pC80, pBC0, p1580);
+                        var hooks = new List<int>();
+                        if (pC80) hooks.Add(0x460C80);
+                        if (pBC0) hooks.Add(0x460BC0);
+                        if (p1580) hooks.Add(0x461580);
+                        var item = Case("initial_balance");
+                        item["mode"] = mode;
+                        item["playerLevel"] = playerLevel;
+                        item["boardLevel"] = boardLevel;
+                        item["trueHooks"] = hooks;
+                        Add(item, result => EqualInt(result, "balance", expected));
+                    }
+    }
+
+    private static void AddSky(SkySunState state, SkySunContext context, int xDraw, int intervalDraw, int blockAddress)
+    {
+        bool needs = SkySunRules.NeedsDraws(state, context);
+        SkySunTick expected = SkySunRules.Tick(state, context, needs ? xDraw : -1, needs ? intervalDraw : -1);
+        var item = Case("sky");
+        item["background"] = context.Background;
+        item["mode"] = context.Mode;
+        item["boardFlag"] = context.BoardFlag5624;
+        item["board561C"] = context.BoardCountdown561C;
+        item["board5618"] = context.BoardCountdown5618;
+        item["tutorial"] = context.TutorialState;
+        item["plants"] = context.PlantCount;
+        item["countdown"] = state.Countdown;
+        item["drops"] = state.Drops;
+        item["blockAddress"] = blockAddress;
+        item["draws"] = needs ? new[] { xDraw, intervalDraw } : new int[0];
+        Add(item, result => {
+            EqualInt(result, "countdown", expected.State.Countdown);
+            EqualInt(result, "drops", expected.State.Drops);
+            DrawBounds(result, needs ? new[] { 550, 275 } : new int[0]);
+            JsonElement spawns = result.GetProperty("spawns");
+            Check(spawns.GetArrayLength() == (expected.Spawned ? 1 : 0), "sky spawn count");
+            if (expected.Spawned)
+            {
+                Check(spawns[0][0].GetInt32() == expected.X && spawns[0][1].GetInt32() == expected.Y, "sky coordinates");
+                Check(spawns[0][2].GetInt32() == (int)expected.Kind && spawns[0][3].GetInt32() == expected.MotionType, "sky kind/motion");
+            }
+        });
+    }
+
+    private static SkySunContext Context(int background = 0, int mode = 0, bool flag = false,
+        int count561c = 0, int count5618 = -1, int tutorial = 0, int plants = 0, bool external = false)
+    {
+        return new SkySunContext(background, mode, true, flag, count561c, count5618, tutorial, plants, external);
+    }
+
+    private static void SkyCases()
+    {
+        foreach (int countdown in new[] { -2, 0, 1, 2, 425, int.MinValue })
+            foreach (int drops in new[] { 0, 1, 50, 51, 52, 53, 200 })
+                foreach (int mode in new[] { 0, 37 })
+                    foreach (int draw in new[] { 0, 1 })
+                        AddSky(new SkySunState(countdown, drops), Context(mode: mode), draw == 0 ? 0 : 549,
+                            draw == 0 ? 0 : 274, 0);
+
+        foreach (int background in new[] { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 })
+            AddSky(new SkySunState(1, 0), Context(background: background), 123, 123, 0);
+        foreach (int mode in new[] { 0, 19, 23, 31, 37, 42, 43, 50, 71, 72, 73 })
+            AddSky(new SkySunState(1, 0), Context(mode: mode), 123, 123, 0);
+        foreach (int tutorial in new[] { 0, 1, 2, 3, 13, 14 })
+            foreach (int plants in new[] { 0, 1 })
+                AddSky(new SkySunState(1, 0), Context(tutorial: tutorial, plants: plants), 123, 123, 0);
+        AddSky(new SkySunState(1, 0), Context(flag: true), 0, 0, 0);
+        AddSky(new SkySunState(1, 0), Context(count561c: 1), 0, 0, 0);
+        AddSky(new SkySunState(1, 0), Context(count5618: 0), 0, 0, 0);
+        foreach (int address in new[] { 0x460BC0, 0x460CE0, 0x460BA0, 0x427A60 })
+            AddSky(new SkySunState(1, 0), Context(external: true), 0, 0, address);
+
+        var paused = new SkySunContext(0, 0, false, false, 0, -1, 0, 0, false);
+        Check(!SkySunRules.NeedsDraws(new SkySunState(1, 0), paused), "outer sky gate");
+        Check(SkySunRules.Tick(new SkySunState(1, 0), paused, -1, -1).State.Countdown == 1, "outer sky pause");
+    }
+
+    private static void PlantCases()
+    {
+        foreach (SunPlantKind kind in new[] { SunPlantKind.Sunflower, SunPlantKind.SunShroom, SunPlantKind.TwinSunflower })
+        {
+            foreach (int draw in new[] { 0, 1, 475, 949, 950 })
+            {
+                SunPlantState expected = SunPlantRules.Initialize(kind, draw);
+                var item = Case("plant_init");
+                item["kind"] = (int)kind;
+                item["draws"] = new[] { draw };
+                Add(item, result => { EqualInt(result, "countdown", expected.Countdown); DrawBounds(result, 951); });
+            }
+            foreach (int countdown in new[] { -1, 0, 1, 2, 300, 2500, int.MinValue })
+                foreach (bool enabled in new[] { false, true })
+                    foreach (int mode in new[] { 0, 39 })
+                        foreach (int phase in new[] { 0, 23 })
+                            foreach (int draw in new[] { 0, 150 })
+                            {
+                                var state = new SunPlantState(kind, countdown);
+                                bool needs = SunPlantRules.NeedsDraw(state, enabled);
+                                SunPlantTick expected = SunPlantRules.Tick(state, enabled, mode, phase, needs ? draw : -1);
+                                var item = Case("plant");
+                                item["kind"] = (int)kind;
+                                item["countdown"] = countdown;
+                                item["enabled"] = enabled;
+                                item["mode"] = mode;
+                                item["phase"] = phase;
+                                item["draws"] = needs ? new[] { draw } : new int[0];
+                                Add(item, result => {
+                                    EqualInt(result, "countdown", expected.State.Countdown);
+                                    DrawBounds(result, needs ? new[] { 151 } : new int[0]);
+                                    JsonElement spawns = result.GetProperty("spawns");
+                                    Check(spawns.GetArrayLength() == expected.SpawnCount, "plant spawn count");
+                                    for (int i = 0; i < expected.SpawnCount; i++)
+                                        Check(spawns[i][2].GetInt32() == (int)expected.SpawnKind && spawns[i][3].GetInt32() == 2, "plant spawn kind/motion");
+                                });
+                            }
+        }
+    }
+
+    private static void PlantSequenceCases()
+    {
+        const int ticks = 3800;
+        foreach (SunPlantKind kind in new[] { SunPlantKind.Sunflower, SunPlantKind.SunShroom, SunPlantKind.TwinSunflower })
+            foreach (int endpoint in new[] { 0, 1 })
+            {
+                int initialDraw = endpoint == 0 ? 0 : 950;
+                int periodDraw = endpoint == 0 ? 0 : 150;
+                int mode = kind == SunPlantKind.Sunflower ? 39 : 0;
+                int phase = kind == SunPlantKind.SunShroom ? 23 : 0;
+                SunPlantState state = SunPlantRules.Initialize(kind, initialDraw);
+                uint checksum = 2166136261;
+                var events = new List<int[]>();
+                var bounds = new List<int> { 951 };
+                for (int tick = 1; tick <= ticks; tick++)
+                {
+                    bool needs = SunPlantRules.NeedsDraw(state, true);
+                    if (needs) bounds.Add(151);
+                    SunPlantTick next = SunPlantRules.Tick(state, true, mode, phase, needs ? periodDraw : -1);
+                    state = next.State;
+                    checksum = unchecked((checksum * 16777619) ^ (uint)state.Countdown);
+                    if (next.SpawnCount != 0)
+                        events.Add(new[] { tick, state.Countdown, next.SpawnCount, (int)next.SpawnKind, next.MotionType });
+                }
+                Check(events.Count == 2, "two plant production events in sequence");
+                int expectedCountdown = state.Countdown;
+                uint expectedChecksum = checksum;
+                var item = Case("plant_sequence");
+                item["kind"] = (int)kind;
+                item["mode"] = mode;
+                item["phase"] = phase;
+                item["ticks"] = ticks;
+                item["initialDraw"] = initialDraw;
+                item["periodDraw"] = periodDraw;
+                Add(item, result => {
+                    EqualInt(result, "countdown", expectedCountdown);
+                    Check(result.GetProperty("checksum").GetUInt32() == expectedChecksum, "per-tick plant sequence checksum");
+                    DrawBounds(result, bounds.ToArray());
+                    JsonElement actualEvents = result.GetProperty("events");
+                    Check(actualEvents.GetArrayLength() == events.Count, "plant sequence event count");
+                    for (int i = 0; i < events.Count; i++)
+                        for (int j = 0; j < events[i].Length; j++)
+                            Check(actualEvents[i][j].GetInt32() == events[i][j], "plant sequence event " + i + ":" + j);
+                });
+            }
+    }
+
+    private static Dictionary<string, object> CoinCase(string op, SunPickupState state)
+    {
+        var item = Case(op);
+        item["kind"] = (int)state.Kind;
+        item["x"] = state.X;
+        item["y"] = state.Y;
+        item["age"] = state.GroundAge;
+        item["fade"] = state.FadeCountdown;
+        item["collecting"] = state.Collecting;
+        item["dead"] = state.Dead;
+        return item;
+    }
+
+    private static void CompareCoin(JsonElement result, SunPickupState expected, int balance, bool comparePosition)
+    {
+        EqualInt(result, "age", expected.GroundAge);
+        EqualInt(result, "fade", expected.FadeCountdown);
+        EqualBool(result, "collecting", expected.Collecting);
+        EqualBool(result, "dead", expected.Dead);
+        EqualInt(result, "balance", balance);
+        if (comparePosition) { EqualFloat(result, "x", expected.X); EqualFloat(result, "y", expected.Y); }
+    }
+
+    private static SunPickupTick AddPickup(SunPickupState state, int balance, bool enabled, bool ground,
+        bool ageEnabled, bool extended, int mode)
+    {
+        SunPickupTick expected = SunPickupRules.Tick(state, balance, enabled, ground, ageEnabled, extended, mode);
+        var item = CoinCase("pickup", state);
+        item["balance"] = balance;
+        item["enabled"] = enabled;
+        item["ground"] = ground;
+        item["ageEnabled"] = ageEnabled;
+        item["extended"] = extended;
+        item["mode"] = mode;
+        bool comparePosition = state.Collecting || state.FadeCountdown != 0 || !enabled || state.Dead || (ground && ageEnabled);
+        Add(item, result => {
+            CompareCoin(result, expected.State, expected.Balance, comparePosition);
+            EqualBool(result, "achievementCheck", expected.AchievementCheck);
+        });
+        return expected;
+    }
+
+    private static void PickupCases()
+    {
+        foreach (SunKind kind in new[] { SunKind.Normal, SunKind.Small, SunKind.Large })
+        {
+            var valueCase = Case("value");
+            valueCase["kind"] = (int)kind;
+            int expectedValue = SunPickupRules.Value(kind);
+            Add(valueCase, result => EqualInt(result, "value", expectedValue));
+            foreach (int age in new[] { 0, 748, 749, 750, 1498, 1499, 5998, 5999 })
+                foreach (bool extended in new[] { false, true })
+                    foreach (int mode in new[] { 0, 43 })
+                        AddPickup(new SunPickupState(kind, 200, 100, age), 0, true, true, true, extended, mode);
+            foreach (int fade in new[] { 1, 2, 15 })
+                foreach (bool enabled in new[] { false, true })
+                    AddPickup(new SunPickupState(kind, 200, 100, 750, fade), 0, enabled, true, true, false, 0);
+            AddPickup(new SunPickupState(kind, 200, 50, 749), 0, true, false, true, false, 0);
+            AddPickup(new SunPickupState(kind, 200, 100, 749), 0, true, true, false, false, 31);
+            AddPickup(new SunPickupState(kind, 200, 100, 749, 0, false, true), 0, true, true, true, false, 0);
+
+            foreach (float x in new[] { 6.9f, 7.0f, 7.1f, 15.0f, 22.9f, 23.0f, 23.1f, 200.0f })
+                foreach (int balance in new[] { 0, 7975, 7990, 9989, 9990 })
+                    AddPickup(new SunPickupState(kind, x, 0, 500, 0, true), balance, true, false, true, false, 0);
+        }
+
+        SunPickupState life = new SunPickupState(SunKind.Normal, 200, 100);
+        for (int i = 0; i < 765; i++)
+            life = AddPickup(life, 0, true, true, true, false, 0).State;
+        Check(life.Dead && life.GroundAge == 750, "complete ground lifetime and fade");
+
+        SunPickupState flight = new SunPickupState(SunKind.Normal, 649, 549, 0, 0, true);
+        int balanceNow = 10;
+        int flightTicks = 0;
+        while (!flight.Dead && flightTicks++ < 500)
+        {
+            SunPickupTick next = AddPickup(flight, balanceNow, true, false, true, false, 0);
+            flight = next.State;
+            balanceNow = next.Balance;
+        }
+        Check(flight.Dead && balanceNow == 35, "complete collection flight and credit");
+        AddPickup(flight, balanceNow, true, false, true, false, 0);
+    }
+
+    private static SkySunFallTick AddSkyFall(SkySunFallState state, int balance, bool enabled, int mode)
+    {
+        SkySunFallTick expected = SkySunFall.Tick(state, balance, enabled, true, false, mode);
+        var item = CoinCase("sky_fall", state.Pickup);
+        item["balance"] = balance;
+        item["enabled"] = enabled;
+        item["mode"] = mode;
+        item["landingY"] = state.LandingY;
+        Add(item, result => {
+            CompareCoin(result, expected.State.Pickup, expected.Balance, true);
+            EqualBool(result, "achievementCheck", expected.AchievementCheck);
+        });
+        return expected;
+    }
+
+    private static void SkyFallCases()
+    {
+        foreach (int draw in new[] { 0, 1, 125, 248, 249 })
+        {
+            var item = Case("sky_motion_init");
+            item["draws"] = new[] { draw };
+            Add(item, result => {
+                EqualFloat(result, "verticalSpeed", SkySunFall.VerticalSpeed);
+                EqualFloat(result, "horizontalSpeed", 0);
+                EqualInt(result, "landingY", 300 + draw);
+                DrawBounds(result, 250);
+            });
+        }
+        foreach (int landingDraw in new[] { 0, 249 })
+        {
+            int mode = landingDraw == 0 ? 0 : 37;
+            SkySunTick spawn = SkySunRules.Tick(new SkySunState(1, 0), Context(mode: mode), 200, 0);
+            SkySunFallState state = SkySunFall.Initialize(spawn, landingDraw);
+            int updates = 0;
+            int firstGround = -1;
+            while (!state.Pickup.Dead && updates < 2000)
+            {
+                SkySunFallTick next = AddSkyFall(state, 0, true, mode);
+                updates++;
+                if (next.GroundBranch && firstGround < 0) firstGround = updates;
+                state = next.State;
+            }
+            Check(firstGround > 0 && state.Pickup.Dead && state.Pickup.GroundAge == 750,
+                "sky spawn/fall/ground/fade sequence");
+            Check(updates == firstGround + 749 + 15, "landing update counts as first ground tick");
+        }
+
+        SkySunTick movingSpawn = SkySunRules.Tick(new SkySunState(1, 0), Context(), 100, 0);
+        SkySunFallState moving = SkySunFall.Initialize(movingSpawn, 249);
+        for (int i = 0; i < 30; i++) moving = AddSkyFall(moving, 0, true, 0).State;
+        SunPickupState clicked;
+        Check(SunPickupRules.TryClick(moving.Pickup, (int)moving.Pickup.X, (int)moving.Pickup.Y,
+            0, true, false, false, out clicked), "click a falling sun");
+        moving = moving.WithPickup(clicked);
+        int balance = 0;
+        int ticks = 0;
+        while (!moving.Pickup.Dead && ticks++ < 500)
+        {
+            SkySunFallTick next = AddSkyFall(moving, balance, true, 0);
+            moving = next.State;
+            balance = next.Balance;
+        }
+        Check(moving.Pickup.Dead && balance == 25, "falling pickup flies and credits");
+    }
+
+    private static void HitCases()
+    {
+        foreach (SunKind kind in new[] { SunKind.Normal, SunKind.Small, SunKind.Large })
+            foreach (bool special in new[] { false, true })
+                foreach (int x in new[] { 184, 185, 199, 200, 259, 260, 274, 275 })
+                    foreach (int y in new[] { 84, 85, 99, 100, 159, 160, 174, 175, 204, 205 })
+                    {
+                        var state = new SunPickupState(kind, 200, 100, 750, 15);
+                        bool expected = SunPickupRules.HitTest(state, x, y, special);
+                        var item = CoinCase("hit", state);
+                        item["special"] = special;
+                        item["mouseX"] = x;
+                        item["mouseY"] = y;
+                        Add(item, result => EqualBool(result, "hit", expected));
+                    }
+        foreach (bool dead in new[] { false, true })
+            foreach (bool collecting in new[] { false, true })
+            {
+                var state = new SunPickupState(SunKind.Normal, 200, 100, 0, 0, collecting, dead);
+                bool expected = SunPickupRules.HitTest(state, 200, 100, false);
+                var item = CoinCase("hit", state);
+                item["mouseX"] = 200;
+                item["mouseY"] = 100;
+                Add(item, result => EqualBool(result, "hit", expected));
+            }
+    }
+
+    private static void ClickCases()
+    {
+        foreach (SunKind kind in new[] { SunKind.Normal, SunKind.Small, SunKind.Large })
+            foreach (int scene in new[] { 2, 3, 5 })
+                foreach (bool paused in new[] { false, true })
+                    foreach (int button in new[] { -1, 0, 1 })
+                        foreach (int fade in new[] { 0, 1, 15 })
+                        {
+                            var state = new SunPickupState(kind, 200, 100, 749, fade);
+                            SunPickupState expected;
+                            bool clicked = SunPickupRules.TryClick(state, 200, 100, button, scene == 3, paused, false, out expected);
+                            Check(clicked == expected.Collecting, "click transition");
+                            var item = CoinCase("click", state);
+                            item["scene"] = scene;
+                            item["paused"] = paused;
+                            item["button"] = button;
+                            Add(item, result => CompareCoin(result, expected, 0, true));
+                        }
+        var alreadyFlying = new SunPickupState(SunKind.Normal, 200, 100, 0, 0, true);
+        SunPickupState unchanged;
+        Check(!SunPickupRules.TryClick(alreadyFlying, 200, 100, 0, true, false, false, out unchanged), "no repeated click");
+        var outside = new SunPickupState(SunKind.Normal, 200, 100);
+        Check(!SunPickupRules.TryClick(outside, 184, 100, 0, true, false, false, out unchanged), "outside click");
+    }
+
+    private static void ValidationCases()
+    {
+        Check(SunPickupRules.Value(SunKind.Normal) == 25 && SunPickupRules.Value(SunKind.Small) == 15
+            && SunPickupRules.Value(SunKind.Large) == 50, "sun values");
+        CheckThrows(() => SkySunRules.Initialize(0, 276));
+        CheckThrows(() => SkySunRules.Initialize(1, 0));
+        CheckThrows(() => SunPlantRules.Initialize(SunPlantKind.Sunflower, 951));
+        CheckThrows(() => SunPickupRules.Value((SunKind)1));
+        CheckThrows(() => new SunPickupState(SunKind.Normal, float.NaN, 0));
+        CheckThrows(() => SunPickupRules.Tick(new SunPickupState(SunKind.Normal, 0, 0), 9991, true, false, true, false, 0));
+    }
+
+    private static void CheckThrows(Action action)
+    {
+        try { action(); }
+        catch (ArgumentException) { assertions++; return; }
+        throw new Exception("Expected an input validation exception");
+    }
+
+    private static string FindRoot()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir != null)
+        {
+            if (File.Exists(Path.Combine(dir.FullName, "PlantsVsZombies.exe"))) return dir.FullName;
+            dir = dir.Parent;
+        }
+        throw new Exception("Could not find the local original executable.");
+    }
+
+    private static JsonDocument RunOracle()
+    {
+        string root = FindRoot();
+        var process = new Process();
+        process.StartInfo.WorkingDirectory = root;
+        process.StartInfo.UseShellExecute = false;
+        process.StartInfo.RedirectStandardInput = true;
+        process.StartInfo.RedirectStandardOutput = true;
+        process.StartInfo.RedirectStandardError = true;
+        process.StartInfo.CreateNoWindow = true;
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        {
+            process.StartInfo.FileName = "wsl.exe";
+            process.StartInfo.ArgumentList.Add("-d");
+            process.StartInfo.ArgumentList.Add(Environment.GetEnvironmentVariable("SUN_TEST_WSL_DISTRO") ?? "Ubuntu-24.04");
+            process.StartInfo.ArgumentList.Add("--");
+            process.StartInfo.ArgumentList.Add("sh");
+            process.StartInfo.ArgumentList.Add("-c");
+            process.StartInfo.ArgumentList.Add("PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=analysis/ida/plant_timing/vendor python3 analysis/ida/sun/machine_oracle.py");
+        }
+        else
+        {
+            process.StartInfo.FileName = "python3";
+            process.StartInfo.ArgumentList.Add(Path.Combine(root, "analysis", "ida", "sun", "machine_oracle.py"));
+            process.StartInfo.Environment["PYTHONPATH"] = Path.Combine(root, "analysis", "ida", "plant_timing", "vendor");
+            process.StartInfo.Environment["PYTHONDONTWRITEBYTECODE"] = "1";
+        }
+        process.Start();
+        process.StandardInput.Write(JsonSerializer.Serialize(new { cases = Cases }));
+        process.StandardInput.Close();
+        string output = process.StandardOutput.ReadToEnd();
+        string error = process.StandardError.ReadToEnd();
+        process.WaitForExit();
+        if (process.ExitCode != 0) throw new Exception("Machine oracle failed: " + error);
+        return JsonDocument.Parse(output);
+    }
+
+    private static void Main()
+    {
+        ValidationCases();
+        InitialBalanceCases();
+        SkyInitCases();
+        SkyCases();
+        PlantCases();
+        PlantSequenceCases();
+        PickupCases();
+        SkyFallCases();
+        HitCases();
+        ClickCases();
+        using (JsonDocument document = RunOracle())
+        {
+            Check(document.RootElement.GetProperty("exeSha256").GetString() ==
+                "e1511201ec2ae9a7e30259f04bc2ec7272badb2574a2e9b405d0e916ae5c082c", "oracle EXE hash");
+            JsonElement results = document.RootElement.GetProperty("results");
+            Check(results.GetArrayLength() == Checks.Count, "oracle result count");
+            for (currentCase = 0; currentCase < Checks.Count; currentCase++) Checks[currentCase](results[currentCase]);
+        }
+        Console.WriteLine("Passed " + Cases.Count + " original-machine-code cases and " + assertions + " assertions.");
+    }
+}

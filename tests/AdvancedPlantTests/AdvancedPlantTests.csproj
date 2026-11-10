@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+    <LangVersion>7.3</LangVersion>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <GenerateTargetFrameworkAttribute>false</GenerateTargetFrameworkAttribute>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="Program.cs.txt" />
+    <Compile Include="../../Assets/Scripts/GameSimulation.cs" Link="GameSimulation.cs" />
+    <Compile Include="../../Assets/Scripts/Plants/*.cs" Link="Plants/%(Filename)%(Extension)" />
+    <Compile Include="../../Assets/Scripts/Timing/*.cs" Link="Timing/%(Filename)%(Extension)" />
+    <Compile Include="../../Assets/Scripts/VerifiedData/*.cs" Link="VerifiedData/%(Filename)%(Extension)" />
+  </ItemGroup>
+<ItemGroup><Compile Include="../../Assets/Scripts/Random/*.cs" /></ItemGroup>
+</Project>

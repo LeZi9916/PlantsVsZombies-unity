@@ -1,0 +1,405 @@
+{
+  "StartedAt": "2026-11-09T18:29:48.8749316+08:00",
+  "FinishedAt": "2026-11-09T18:30:21.2398393+08:00",
+  "Passed": true,
+  "NativeVisualComparison": false,
+  "SourceHashes": [
+    {
+      "Name": "Reanimation/ReanimationRenderer.cs",
+      "Sha256": "D64384E3A12E6214877D6D8503D0A7E4C652C1968DB2460B0BC1F1AF1DDD5CEB"
+    },
+    {
+      "Name": "VerifiedData/VerifiedDataCatalog.cs",
+      "Sha256": "6DCCB54648D2174B4CE1EE3FEF00219E2B3E72F021D7DD8B0D59E554E32F2CD0"
+    },
+    {
+      "Name": "VerifiedData/VerifiedData.generated.cs",
+      "Sha256": "B03C7DEB01E485AB5B2BEB6692AAF287F4D6CF29679F42D61C7529C3F097DCA5"
+    },
+    {
+      "Name": "UI/AlmanacView.cs",
+      "Sha256": "44E2BAC45DFC33D36B7314F3CB4E2737627118C1A1A7924BC06B48514F944F59"
+    },
+    {
+      "Name": "UI/AlmanacPortraitLayout.cs",
+      "Sha256": "73795128FB0831A91530F68E4F85844AD61FE1F437579940360FEF963A56189B"
+    }
+  ],
+  "AssemblySha256": "00CF387522CD0C3DC0655CACBC296A2E4BF862030501737A807F270E697C372F",
+  "Screenshots": [
+    {
+      "Name": "boss.png",
+      "Width": 800,
+      "Height": 600,
+      "Sha256": "AA9398D74257F7F31350122AF43901D3E5336870499AD3737844CAB3A13C8743"
+    },
+    {
+      "Name": "coffee.png",
+      "Width": 800,
+      "Height": 600,
+      "Sha256": "2679E4E168C6BB922580B113F48D423283F28C7A578DA43A0CAA3B871EEA1C27"
+    },
+    {
+      "Name": "ducky.png",
+      "Width": 800,
+      "Height": 600,
+      "Sha256": "580D15B91D3D0887A808AB60D52481F91DE414F415CA003A476C6B14DE94D692"
+    },
+    {
+      "Name": "gatling.png",
+      "Width": 800,
+      "Height": 600,
+      "Sha256": "54C4373BCA8111C1882BBE6534B874AE4BDC867D3DD57526D63BDD6B34A3EF21"
+    },
+    {
+      "Name": "home.png",
+      "Width": 800,
+      "Height": 600,
+      "Sha256": "31DC4E591A87C283448797EE97841E498E241FC761CAC2DD499703DDDF90B253"
+    },
+    {
+      "Name": "imitater.png",
+      "Width": 800,
+      "Height": 600,
+      "Sha256": "F7473E75F9EB758399BDCBCC756032D47E9FF92F3725FC27153AE1256583D714"
+    },
+    {
+      "Name": "plant.png",
+      "Width": 800,
+      "Height": 600,
+      "Sha256": "D69C8C412D4C9F0CBFA0A2BD00353AC5DB7E61054627C50414ED8F47DE90AF15"
+    },
+    {
+      "Name": "tallnut.png",
+      "Width": 800,
+      "Height": 600,
+      "Sha256": "6B0AF441F452785F8ADD3015F35102E0090B7937A8DDDCFB60BAADC25A502D89"
+    },
+    {
+      "Name": "threepeater.png",
+      "Width": 800,
+      "Height": 600,
+      "Sha256": "C7020F79296B6B0B38F96023112D8A2F27ACCB898784E0AFD9DB71417881D270"
+    },
+    {
+      "Name": "zombie-00-0.png",
+      "Width": 800,
+      "Height": 600,
+      "Sha256": "4AFF8A993A9A50CE003742FD652F48D9D19C5D06F7D85DCB6F43B33624E881A8"
+    },
+    {
+      "Name": "zombie-00-1.png",
+      "Width": 800,
+      "Height": 600,
+      "Sha256": "A41DC928AAD90358E17199B1AD95381C6C8B2EE4EF04D2491CDE9DE3999574DD"
+    },
+    {
+      "Name": "zombie-01-0.png",
+      "Width": 800,
+      "Height": 600,
+      "Sha256": "B9192043946C789524F9CE55CA040E9958C85F67708665B1B1A6544E74A4C873"
+    },
+    {
+      "Name": "zombie-01-1.png",
+      "Width": 800,
+      "Height": 600,
+      "Sha256": "8545C497064AE0F5368CC6A76C4E007FAB9C65F909CD72B4D7C8433FB92917D9"
+    },
+    {
+      "Name": "zombie-02-0.png",
+      "Width": 800,
+      "Height": 600,
+      "Sha256": "6EBC094F055A0D84754842E34E87EEFBB4AE8E6D6862AEB6BE429E0A3DBD678E"
+    },
+    {
+      "Name": "zombie-02-1.png",
+      "Width": 800,
+      "Height": 600,
+      "Sha256": "4C962990F16A9F9630A8E42FE22363C0EC959378A1C839C987A69AD93ECCDD01"
+    },
+    {
+      "Name": "zombie-03-0.png",
+      "Width": 800,
+      "Height": 600,
+      "Sha256": "162D9AB1F0CD447D233CBCAF93CF3E6161B1C5E6700B26544CF4E69D48013BC7"
+    },
+    {
+      "Name": "zombie-03-1.png",
+      "Width": 800,
+      "Height": 600,
+      "Sha256": "99F587AF6E3454C7CD943E6D56E7C85FF8271FD31BB5BFE3D53F8654D4881BE0"
+    },
+    {
+      "Name": "zombie-04-0.png",
+      "Width": 800,
+      "Height": 600,
+      "Sha256": "5265B9B28BD1242FC1991F1AE314D7C803BC24893FB3CE2A7D5E0E8B5E50C8E3"
+    },
+    {
+      "Name": "zombie-04-1.png",
+      "Width": 800,
+      "Height": 600,
+      "Sha256": "FA0F6C4CECFDCC383EEE50018592794DE38FC082FC1C01045FAE7F735DBBFB40"
+    },
+    {
+      "Name": "zombie-05-0.png",
+      "Width": 800,
+      "Height": 600,
+      "Sha256": "57ACBE309F8449C68810E2571BB4208EB363876D45951F547275A7D840F18CBC"
+    },
+    {
+      "Name": "zombie-05-1.png",
+      "Width": 800,
+      "Height": 600,
+      "Sha256": "B118EFE532E132BAB56B96F5BDD7215B4D15446DB6392BD5A23772BEEA327ED9"
+    },
+    {
+      "Name": "zombie-06-0.png",
+      "Width": 800,
+      "Height": 600,
+      "Sha256": "32DEA8C6E65405577CB277A77643B3A1BE7CA4828AB744088C22E623B1EDB94F"
+    },
+    {
+      "Name": "zombie-06-1.png",
+      "Width": 800,
+      "Height": 600,
+      "Sha256": "83DB4C88BAF5A9C4D0DC55DDE931EFEDA338FD6BE92B465787B159D767819F93"
+    },
+    {
+      "Name": "zombie-07-0.png",
+      "Width": 800,
+      "Height": 600,
+      "Sha256": "2819812255AC847625502CCA5D7CD95529ED3314B4E25211F7F1B26735A733A5"
+    },
+    {
+      "Name": "zombie-07-1.png",
+      "Width": 800,
+      "Height": 600,
+      "Sha256": "9D3B0C22F4FA34EAEFAC9B6ACF7F9FA4DFF9B46DB015AA8C78699475F9336A06"
+    },
+    {
+      "Name": "zombie-08-0.png",
+      "Width": 800,
+      "Height": 600,
+      "Sha256": "D65826E07100600DEB5DB19C2A4957CABA2B991760BD8E4A7AB94119E722EE43"
+    },
+    {
+      "Name": "zombie-08-1.png",
+      "Width": 800,
+      "Height": 600,
+      "Sha256": "30983E6E6712C531B49103807D59AF71D9E7E0B59439C50D6C8FDE1F398A4719"
+    },
+    {
+      "Name": "zombie-09-0.png",
+      "Width": 800,
+      "Height": 600,
+      "Sha256": "10414105CE5168B40A68778930515B998914CD45E4785F15E2C3B2F02C4A6C66"
+    },
+    {
+      "Name": "zombie-09-1.png",
+      "Width": 800,
+      "Height": 600,
+      "Sha256": "F34BA46CBABF3A2368621B416B6229796054DDF875F5E9039BAA201339E883C9"
+    },
+    {
+      "Name": "zombie-10-0.png",
+      "Width": 800,
+      "Height": 600,
+      "Sha256": "EAF7C8287F6FA31407ABA5967BAD3742025B3264C58724D2255349D8A3EF0DAC"
+    },
+    {
+      "Name": "zombie-10-1.png",
+      "Width": 800,
+      "Height": 600,
+      "Sha256": "580D15B91D3D0887A808AB60D52481F91DE414F415CA003A476C6B14DE94D692"
+    },
+    {
+      "Name": "zombie-11-0.png",
+      "Width": 800,
+      "Height": 600,
+      "Sha256": "E73A3915EDF63787B0314653812EB818B822BECCC5F09802FFD01A1EF2B094B2"
+    },
+    {
+      "Name": "zombie-11-1.png",
+      "Width": 800,
+      "Height": 600,
+      "Sha256": "0E481E76446DE5E92C20CAA1E38247A5AFC67F5AA163C8AD846222973D1BA3A8"
+    },
+    {
+      "Name": "zombie-12-0.png",
+      "Width": 800,
+      "Height": 600,
+      "Sha256": "5AE1A0149B00AB850ECA11F553BBD2D4186A30CD22A891E3EE3B22E1941D18AC"
+    },
+    {
+      "Name": "zombie-12-1.png",
+      "Width": 800,
+      "Height": 600,
+      "Sha256": "32CB489BC68EAA0ABD2ED77A7AF890B4B15D1B7535C0E678887026456BE7241A"
+    },
+    {
+      "Name": "zombie-13-0.png",
+      "Width": 800,
+      "Height": 600,
+      "Sha256": "E480471E7AB3D302ED707DF3F0125E05F57B2784B72EE830A6C5AE401EA95270"
+    },
+    {
+      "Name": "zombie-13-1.png",
+      "Width": 800,
+      "Height": 600,
+      "Sha256": "91ED00E8F3F0C7DF2E595489A0FE06B6B99D34F59C2D31F1C4BA5633512EC2F3"
+    },
+    {
+      "Name": "zombie-14-0.png",
+      "Width": 800,
+      "Height": 600,
+      "Sha256": "BA73202558533B1132278191657D0044EC9BC600121DBC6DA78D88FCBD7FFE93"
+    },
+    {
+      "Name": "zombie-14-1.png",
+      "Width": 800,
+      "Height": 600,
+      "Sha256": "A221785580DCFFEBDF697FDDB53049488991B6FFE288E79C7B63B66A3AA8E46F"
+    },
+    {
+      "Name": "zombie-15-0.png",
+      "Width": 800,
+      "Height": 600,
+      "Sha256": "75839FF4B4D6D443449BA709BE07F0042A08BFD78F27BAB1F01A44320C66983B"
+    },
+    {
+      "Name": "zombie-15-1.png",
+      "Width": 800,
+      "Height": 600,
+      "Sha256": "C70054A47F2991524B350ABB8FE53AB4A9EE1593B6D7063B57F7106C10685A9B"
+    },
+    {
+      "Name": "zombie-16-0.png",
+      "Width": 800,
+      "Height": 600,
+      "Sha256": "7F843128EF79AA7BE23861F660E6A587ACFE5C7E4F8E563B394B0DC5DCAFDBD2"
+    },
+    {
+      "Name": "zombie-16-1.png",
+      "Width": 800,
+      "Height": 600,
+      "Sha256": "7CEC2E6A1B855DF98D951A67F4586E541917FD00668A48922EA2B91076F9CC58"
+    },
+    {
+      "Name": "zombie-17-0.png",
+      "Width": 800,
+      "Height": 600,
+      "Sha256": "FF9498FD19B81382549EE10A9C0B2DE8E6D41B69BC4762B1856CC9ACBC4E6CE6"
+    },
+    {
+      "Name": "zombie-17-1.png",
+      "Width": 800,
+      "Height": 600,
+      "Sha256": "70BCF7EE3E79E5752447632059275596A4EA5FAA0FF24ACC50183EAE8D27D3D8"
+    },
+    {
+      "Name": "zombie-18-0.png",
+      "Width": 800,
+      "Height": 600,
+      "Sha256": "FDAF4174B71895B1CD83432D2EA6B37F9E33AB147E40D14F5A2B020D7E2287D9"
+    },
+    {
+      "Name": "zombie-18-1.png",
+      "Width": 800,
+      "Height": 600,
+      "Sha256": "FD6418579EC87660C1706DA91E560B5C76A1E0EA9217D6E69146789CCD776269"
+    },
+    {
+      "Name": "zombie-19-0.png",
+      "Width": 800,
+      "Height": 600,
+      "Sha256": "34706C75A55AD1A04B42E8E02FB9D8124646AB70C983CE8DD2D254CCD016E0BA"
+    },
+    {
+      "Name": "zombie-19-1.png",
+      "Width": 800,
+      "Height": 600,
+      "Sha256": "34706C75A55AD1A04B42E8E02FB9D8124646AB70C983CE8DD2D254CCD016E0BA"
+    },
+    {
+      "Name": "zombie-20-0.png",
+      "Width": 800,
+      "Height": 600,
+      "Sha256": "1615AFD5BE85211831ADAC80A1132CE3C4EADBE3404206E554A1708D0EEBFD2A"
+    },
+    {
+      "Name": "zombie-20-1.png",
+      "Width": 800,
+      "Height": 600,
+      "Sha256": "154BE736DEA66DA27806ACDF1675D0C5E3523E4C685F2A897F0C6CAC933C15C5"
+    },
+    {
+      "Name": "zombie-21-0.png",
+      "Width": 800,
+      "Height": 600,
+      "Sha256": "FA08FB3DC2D02FECE0C46237CF720E154DF33369E948FF753458FF10702D5C61"
+    },
+    {
+      "Name": "zombie-21-1.png",
+      "Width": 800,
+      "Height": 600,
+      "Sha256": "AA7CE7BDA807979D7FA6994CD3CCC7D75470EC3868BEFA797882EBFA51083209"
+    },
+    {
+      "Name": "zombie-22-0.png",
+      "Width": 800,
+      "Height": 600,
+      "Sha256": "76D553B88A6E6FAC631C345D7B4CA375CBEA5FF9A9E09CFEA54AEABB2882DFF6"
+    },
+    {
+      "Name": "zombie-22-1.png",
+      "Width": 800,
+      "Height": 600,
+      "Sha256": "3AD32BF0BE09D3CC4517F4753CB56C5D502AD4CE08463D321AC476BC6D623E88"
+    },
+    {
+      "Name": "zombie-23-0.png",
+      "Width": 800,
+      "Height": 600,
+      "Sha256": "C9169EF09C8B4D7D5BB887E7E2D5258668C59A001565013DFAD1F60E14CE2C23"
+    },
+    {
+      "Name": "zombie-23-1.png",
+      "Width": 800,
+      "Height": 600,
+      "Sha256": "017804A0E88F6B301410CBC9474ABC340CA6092DAC824D15F5880DD633F54B57"
+    },
+    {
+      "Name": "zombie-24-0.png",
+      "Width": 800,
+      "Height": 600,
+      "Sha256": "48D5C76AC38105017274860B4A6338BB5201594C96D7AEC885A6578258724E10"
+    },
+    {
+      "Name": "zombie-24-1.png",
+      "Width": 800,
+      "Height": 600,
+      "Sha256": "DBA0086E95DFDB567F391840D05FD6889A8D4A82FBCACB21ACA21CC971B76291"
+    },
+    {
+      "Name": "zombie-25-0.png",
+      "Width": 800,
+      "Height": 600,
+      "Sha256": "46DB618048B7D7CF8D51EC7F5B0937042B88C486804AC1710DDFD7885489D65D"
+    },
+    {
+      "Name": "zombie-25-1.png",
+      "Width": 800,
+      "Height": 600,
+      "Sha256": "AA9398D74257F7F31350122AF43901D3E5336870499AD3737844CAB3A13C8743"
+    },
+    {
+      "Name": "zombie.png",
+      "Width": 800,
+      "Height": 600,
+      "Sha256": "326F004CEFC1D3C819CD7E5058A43FAABE9456E4E5D9124F2E435163C5101D74"
+    }
+  ],
+  "FrozenIndexPixelsUnchanged": true,
+  "Error": null
+}

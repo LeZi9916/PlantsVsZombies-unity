@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <LangVersion>7.3</LangVersion>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../Assets/Scripts/UI/BitmapFonts/BmFontData.cs" />
+    <Compile Include="../../Assets/Scripts/UI/BitmapFonts/BmFontRecord.cs" />
+    <Compile Include="../../Assets/Scripts/UI/BitmapFonts/BmFontParser.cs" />
+    <Compile Include="../../Assets/Scripts/UI/BitmapFonts/BitmapTextLayout.cs" />
+    <Compile Include="Program.cs" />
+    <Compile Include="RawFontReader.cs" />
+  </ItemGroup>
+</Project>

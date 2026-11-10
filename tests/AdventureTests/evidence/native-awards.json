@@ -1,0 +1,210 @@
+{
+  "exe_sha256": "e1511201ec2ae9a7e30259f04bc2ec7272badb2574a2e9b405d0e916ae5c082c",
+  "entry_va": "0x54bd41",
+  "stop_va": "0x54be86",
+  "method": "Capstone-decoded restricted integer instruction interpreter; not CPU/x86 emulator execution",
+  "supplied_predicate": "HasFinishedAdventure=false at call 0x54BD73",
+  "scope": "isolated reward selection branch; not full original gameplay",
+  "levels": [
+    {
+      "level": 1,
+      "native_reward_id": 7
+    },
+    {
+      "level": 2,
+      "native_reward_id": 7
+    },
+    {
+      "level": 3,
+      "native_reward_id": 7
+    },
+    {
+      "level": 4,
+      "native_reward_id": 9
+    },
+    {
+      "level": 5,
+      "native_reward_id": 7
+    },
+    {
+      "level": 6,
+      "native_reward_id": 7
+    },
+    {
+      "level": 7,
+      "native_reward_id": 7
+    },
+    {
+      "level": 8,
+      "native_reward_id": 7
+    },
+    {
+      "level": 9,
+      "native_reward_id": 15
+    },
+    {
+      "level": 10,
+      "native_reward_id": 7
+    },
+    {
+      "level": 11,
+      "native_reward_id": 7
+    },
+    {
+      "level": 12,
+      "native_reward_id": 7
+    },
+    {
+      "level": 13,
+      "native_reward_id": 7
+    },
+    {
+      "level": 14,
+      "native_reward_id": 10
+    },
+    {
+      "level": 15,
+      "native_reward_id": 7
+    },
+    {
+      "level": 16,
+      "native_reward_id": 7
+    },
+    {
+      "level": 17,
+      "native_reward_id": 7
+    },
+    {
+      "level": 18,
+      "native_reward_id": 7
+    },
+    {
+      "level": 19,
+      "native_reward_id": 15
+    },
+    {
+      "level": 20,
+      "native_reward_id": 7
+    },
+    {
+      "level": 21,
+      "native_reward_id": 7
+    },
+    {
+      "level": 22,
+      "native_reward_id": 7
+    },
+    {
+      "level": 23,
+      "native_reward_id": 7
+    },
+    {
+      "level": 24,
+      "native_reward_id": 11
+    },
+    {
+      "level": 25,
+      "native_reward_id": 7
+    },
+    {
+      "level": 26,
+      "native_reward_id": 7
+    },
+    {
+      "level": 27,
+      "native_reward_id": 7
+    },
+    {
+      "level": 28,
+      "native_reward_id": 7
+    },
+    {
+      "level": 29,
+      "native_reward_id": 15
+    },
+    {
+      "level": 30,
+      "native_reward_id": 7
+    },
+    {
+      "level": 31,
+      "native_reward_id": 7
+    },
+    {
+      "level": 32,
+      "native_reward_id": 7
+    },
+    {
+      "level": 33,
+      "native_reward_id": 7
+    },
+    {
+      "level": 34,
+      "native_reward_id": 14
+    },
+    {
+      "level": 35,
+      "native_reward_id": 7
+    },
+    {
+      "level": 36,
+      "native_reward_id": 7
+    },
+    {
+      "level": 37,
+      "native_reward_id": 7
+    },
+    {
+      "level": 38,
+      "native_reward_id": 7
+    },
+    {
+      "level": 39,
+      "native_reward_id": 15
+    },
+    {
+      "level": 40,
+      "native_reward_id": 7
+    },
+    {
+      "level": 41,
+      "native_reward_id": 7
+    },
+    {
+      "level": 42,
+      "native_reward_id": 7
+    },
+    {
+      "level": 43,
+      "native_reward_id": 7
+    },
+    {
+      "level": 44,
+      "native_reward_id": 13
+    },
+    {
+      "level": 45,
+      "native_reward_id": 7
+    },
+    {
+      "level": 46,
+      "native_reward_id": 7
+    },
+    {
+      "level": 47,
+      "native_reward_id": 7
+    },
+    {
+      "level": 48,
+      "native_reward_id": 7
+    },
+    {
+      "level": 49,
+      "native_reward_id": 15
+    },
+    {
+      "level": 50,
+      "native_reward_id": 21
+    }
+  ]
+}

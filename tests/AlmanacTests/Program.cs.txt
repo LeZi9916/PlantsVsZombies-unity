@@ -1,0 +1,262 @@
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Text.Json;
+using System.IO;
+using System.Reflection;
+using PvZReplica.Reanimation;
+using PvZReplica.UI;
+using PvZReplica.VerifiedData;
+using UnityEngine;
+
+internal static class Program
+{
+    private static int checks;
+    private static void Check(bool value, string message)
+    {
+        checks++;
+        if (!value) throw new Exception(message);
+    }
+
+    private static bool Click(AlmanacView view, float x, float y) { return view.HandleClick(new Vector2(x, y)); }
+
+    private static void Main(string[] args)
+    {
+        string root = Path.GetFullPath(args.Length == 0 ? "PreparedAssets" : args[0]);
+        Check(File.Exists(Path.Combine(root, "properties", "LawnStrings.txt")), "prepared strings exist");
+        MethodInfo readStrings = typeof(AlmanacView).GetMethod("ReadStrings", BindingFlags.Static | BindingFlags.NonPublic);
+        var strings = (Dictionary<string, string>)readStrings.Invoke(null, new object[] { Path.Combine(root, "properties", "LawnStrings.txt") });
+        for (int id = 0; id < 49; id++) CheckEntry(strings, VerifiedDataCatalog.Plants[id].InternalName);
+        for (int id = 0; id < 26; id++) CheckEntry(strings, VerifiedDataCatalog.Zombies[id].InternalName);
+        Check(strings["PEASHOOTER"] == "\u8c4c\u8c46\u5c04\u624b", "UTF-16 Chinese text is decoded");
+        Check(strings["ZOMBIE_DESCRIPTION"].Contains("{270}"), "numeric source token retained");
+        MethodInfo format = typeof(AlmanacView).GetMethod("FormatDescription", BindingFlags.Static | BindingFlags.NonPublic);
+        string rendered = (string)format.Invoke(null, new object[] { "{KEYWORD}A{STAT}B{270}{SHORTLINE}{FLAVOR}C{UNKNOWN}" });
+        Check(rendered.Contains("(270)") && rendered.Contains("{UNKNOWN}") && !rendered.Contains("{KEYWORD}") &&
+            !rendered.Contains("{SHORTLINE}") && rendered.Contains("</color>"), "markup formatting");
+
+        var renderer = new ReanimationRenderer(root);
+        var view = new AlmanacView(root, renderer);
+        Check(view.Screen == AlmanacScreen.Home && !view.IsClosed && view.SelectedId == -1, "initial home");
+        Check(!Click(view, 24, 172), "decorative home frame is not a button");
+        Check(Click(view, 130, 345) && view.Screen == AlmanacScreen.PlantDetail && view.SelectedId == 0, "plant button defaults to 0");
+        for (int id = 0; id < 49; id++)
+        {
+            float x = id == 48 ? 20 : 26 + (id % 8) * 52;
+            float y = id == 48 ? 23 : 92 + (id / 8) * 78;
+            Check(Click(view, x + 1, y + 1) && view.SelectedId == id, "plant ID " + id);
+        }
+        Check(Click(view, 33, 568) && view.Screen == AlmanacScreen.Home, "index returns directly home");
+        Check(Click(view, 488, 346) && view.Screen == AlmanacScreen.ZombieDetail && view.SelectedId == 0, "zombie button defaults to 0");
+        for (int id = 0; id < 26; id++)
+        {
+            float x = id == 25 ? 192 : 22 + (id % 5) * 85;
+            float y = id == 25 ? 486 : 86 + (id / 5) * 80;
+            Check(Click(view, x + 1, y + 1) && view.SelectedId == id, "zombie ID " + id);
+        }
+        view.HandleBack();
+        Click(view, 131, 346);
+        Check(view.SelectedId == 48, "returning to plants retains its last selection");
+        view.HandleBack();
+        Click(view, 488, 346);
+        Check(view.SelectedId == 25, "returning to zombies retains its independent selection");
+        view.SetUnlockedZombies(new[] { 0, 2 });
+        Check(view.Screen == AlmanacScreen.ZombieIndex && view.SelectedId == -1, "locking selection clears it");
+        Check(!Click(view, 108, 87) && view.SelectedId == -1, "locked slot is inert");
+        Check(Click(view, 193, 87) && view.SelectedId == 2, "unlocked zombie works");
+        bool threw = false;
+        try { view.SetUnlockedPlants(new[] { 49 }); } catch (ArgumentOutOfRangeException) { threw = true; }
+        Check(threw, "invalid unlock rejected");
+        Check(Click(view, 677, 568) && view.IsClosed, "close button exposes closure");
+        Check(!Click(view, 33, 568), "closed view ignores input");
+        view.Open();
+        Check(!view.IsClosed && view.Screen == AlmanacScreen.Home, "open resets state");
+        Check(view.HandleBack() && view.IsClosed, "back closes home");
+        CheckPointerBehavior(view);
+        CheckPortraitLayout();
+        if (Array.IndexOf(args, "--native-oracle") >= 0) CheckNativeHitTests(root);
+        // Unity's native object disposal is exercised by the player smoke test.
+        Console.WriteLine("Almanac tests passed: " + checks + " checks.");
+    }
+
+    private static void Field(AlmanacView view, string name, object value)
+    {
+        typeof(AlmanacView).GetField(name, BindingFlags.Instance | BindingFlags.NonPublic).SetValue(view, value);
+    }
+
+    private static float FloatField(AlmanacView view, string name)
+    {
+        return (float)typeof(AlmanacView).GetField(name, BindingFlags.Instance | BindingFlags.NonPublic).GetValue(view);
+    }
+
+    private static void Pointer(AlmanacView view, float x, float y, EventType type)
+    {
+        Check(view.HandlePointer(new Vector2(x, y), type), "open modal consumes " + type);
+    }
+
+    private static void CheckPointerBehavior(AlmanacView view)
+    {
+        view.SetUnlockedPlants(null);
+        view.SetUnlockedZombies(null);
+        view.Open();
+        Pointer(view, 131, 346, EventType.MouseDown);
+        Check(view.Screen == AlmanacScreen.Home, "navigation does not activate on press");
+        Pointer(view, 300, 420, EventType.MouseDrag);
+        Pointer(view, 300, 420, EventType.MouseUp);
+        Check(view.Screen == AlmanacScreen.Home, "dragging off a home button cancels activation");
+        Pointer(view, 300, 420, EventType.MouseDown);
+        Pointer(view, 131, 346, EventType.MouseUp);
+        Check(view.Screen == AlmanacScreen.Home, "release without a matching press cannot navigate");
+        Pointer(view, 131, 346, EventType.MouseDown);
+        Pointer(view, 131, 346, EventType.MouseUp);
+        Check(view.SelectedId == 0, "new almanac session defaults to peashooter");
+        Pointer(view, 80, 95, EventType.MouseDown);
+        Check(view.SelectedId == 1, "entry selects on mouse down");
+        Pointer(view, 80, 95, EventType.MouseUp);
+        Field(view, "formattedDescription", "long description");
+        Field(view, "descriptionRect", new Rect(485, 300, 258, 100));
+        Field(view, "descriptionHeight", 400f);
+        Field(view, "scrollOffset", 30f);
+        Field(view, "animationEpoch", 12f);
+        Click(view, 80, 95);
+        Check(FloatField(view, "scrollOffset") == 30f && FloatField(view, "animationEpoch") == 12f,
+            "reselecting the same entry preserves scroll and animation");
+        Check(view.HandleScroll(new Vector2(600, 320), 120f) && FloatField(view, "scrollOffset") == 35f,
+            "wheel magnitude does not multiply the native five-unit step");
+        Check(view.HandleScroll(new Vector2(600, 320), -3f) && FloatField(view, "scrollOffset") == 30f,
+            "negative wheel input scrolls up");
+        Check(!view.HandleScroll(new Vector2(200, 320), 1f), "wheel outside description is ignored");
+        Check(!view.HandleScroll(new Vector2(600, 320), float.NaN), "invalid wheel is ignored");
+        Field(view, "scrollOffset", 0f);
+        Pointer(view, 739, 312, EventType.MouseDown);
+        Check(FloatField(view, "scrollOffset") == 0f, "grabbing the thumb does not jump");
+        Pointer(view, 739, 387, EventType.MouseDrag);
+        Check(FloatField(view, "scrollOffset") == 300f, "thumb drags through its full travel");
+        Pointer(view, 900, 900, EventType.MouseDrag);
+        Check(FloatField(view, "scrollOffset") == 300f, "captured thumb clamps outside the canvas");
+        Pointer(view, 900, 900, EventType.MouseUp);
+        Pointer(view, 739, 300, EventType.MouseDrag);
+        Check(FloatField(view, "scrollOffset") == 300f, "release ends scrollbar capture");
+        Click(view, 133, 95);
+        Check(view.SelectedId == 2 && FloatField(view, "scrollOffset") == 0f &&
+            float.IsNaN(FloatField(view, "animationEpoch")), "new entry resets description and portrait animation");
+        Pointer(view, 33, 568, EventType.MouseDown);
+        Check(view.SelectedId == 2, "index remains on category until release");
+        Pointer(view, 33, 568, EventType.MouseUp);
+        Check(view.Screen == AlmanacScreen.Home, "index returns on release");
+        Click(view, 131, 346);
+        Check(view.SelectedId == 2, "index navigation retains the chosen entry");
+        Pointer(view, 677, 568, EventType.MouseDown);
+        Check(!view.IsClosed, "close waits for release");
+        Pointer(view, 400, 550, EventType.MouseUp);
+        Check(!view.IsClosed, "dragging off close cancels it");
+        Pointer(view, 677, 568, EventType.MouseDown);
+        Pointer(view, 677, 568, EventType.MouseUp);
+        Check(view.IsClosed, "matching close release closes the modal");
+        Check(!view.HandlePointer(new Vector2(131, 346), EventType.MouseDown), "closed modal ignores pointer events");
+        view.Open();
+        Click(view, 131, 346);
+        Check(view.SelectedId == 0, "a newly opened dialog resets old session selections");
+        view.HandleBack();
+        Pointer(view, 131, 346, EventType.MouseDown);
+        view.HandleBack();
+        view.Open();
+        Pointer(view, 131, 346, EventType.MouseUp);
+        Check(view.Screen == AlmanacScreen.Home, "reopening clears stale pointer capture");
+        Check(!view.HandleClick(new Vector2(float.NaN, 346)), "NaN click cannot activate a control");
+        Check(!view.HandlePointer(new Vector2(131, 346), EventType.Layout), "non-pointer event is ignored");
+    }
+
+    private static void CheckPortraitLayout()
+    {
+        // These expectations come from the independent local EXE exports in
+        // analysis/ui_validation/20261109-almanac/native-draw, not fitted sprite bounds.
+        Vector2 pea = AlmanacPortraitLayout.PlantPreviewOrigin(0);
+        Vector2 tallnut = AlmanacPortraitLayout.PlantPreviewOrigin(23);
+        Vector2 cannon = AlmanacPortraitLayout.PlantPreviewOrigin(47);
+        Vector2 pot = AlmanacPortraitLayout.PlantPreviewOrigin(33);
+        Vector2 coffee = AlmanacPortraitLayout.PlantPreviewOrigin(35);
+        Vector2 grave = AlmanacPortraitLayout.PlantPreviewOrigin(11);
+        Check(pea.x == 578 && pea.y == 140, "native peashooter preview anchor");
+        Check(tallnut.x == 578 && tallnut.y == 158, "tallnut retains its native vertical placement");
+        Check(cannon.x == 538 && cannon.y == 140, "wide cob cannon shifts left without shrinking");
+        Check(pot.y == 146 && coffee.y == 140 && grave.y == 155,
+            "plant instance placement includes its separate native draw-height offset");
+        Vector2 boss = AlmanacPortraitLayout.ZombiePreviewOrigin(25);
+        Check(boss.x == 19 && boss.y == 0, "boss uses its scene-space head origin");
+        Rect clip = AlmanacPortraitLayout.ZombiePreviewClip;
+        Check(clip.x == 517 && clip.y == 124 && clip.width == 197 && clip.height == 187,
+            "zombie preview uses native clipping, not fit-to-box normalization");
+        int[] staticPlants = {4, 6, 12, 23, 27, 30, 41, 47, 32, 34, 39, 44, 46};
+        for (int index = 0; index < staticPlants.Length; index++)
+            Check(AlmanacPortraitLayout.PlantAtlasCell(staticPlants[index]) == index,
+                "original packet_plants atlas cell " + index);
+        Check(AlmanacPortraitLayout.PlantAtlasCell(40) == -1, "gatling thumbnail uses body and head tracks");
+        Vector2 origin;
+        float scale;
+        AlmanacPortraitLayout.PlantThumbnailTransform(40, new Rect(26, 92, 50, 70), out origin, out scale);
+        Check(origin.x == 28 && origin.y == 101 && scale == 0.5f, "gatling thumbnail native offset/scale");
+        AlmanacPortraitLayout.PlantThumbnailTransform(28, new Rect(26, 92, 50, 70), out origin, out scale);
+        Check(origin.x == 38 && origin.y == 105 && scale == 0.45f, "split pea thumbnail native offset/scale");
+        Vector2 football = AlmanacPortraitLayout.ZombieThumbnailOrigin(7, new Rect(22, 86, 76, 76));
+        Check(football.x == 28 && football.y == 99, "football cached image native placement");
+        bool invalid = false;
+        try { AlmanacPortraitLayout.PlantPreviewOrigin(49); } catch (ArgumentOutOfRangeException) { invalid = true; }
+        Check(invalid, "portrait layout rejects non-almanac plant IDs");
+        invalid = false;
+        try { AlmanacPortraitLayout.ZombieThumbnailOrigin(26, new Rect()); } catch (ArgumentOutOfRangeException) { invalid = true; }
+        Check(invalid, "portrait layout rejects non-almanac zombie IDs");
+    }
+
+    private static void CheckNativeHitTests(string root)
+    {
+        DirectoryInfo directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory != null && !File.Exists(Path.Combine(directory.FullName, "PlantsVsZombies.exe")))
+            directory = directory.Parent;
+        if (directory == null) throw new DirectoryNotFoundException("Local native EXE is missing.");
+        var start = new ProcessStartInfo {
+            FileName = "wsl.exe", WorkingDirectory = directory.FullName,
+            RedirectStandardOutput = true, RedirectStandardError = true,
+            UseShellExecute = false, CreateNoWindow = true
+        };
+        foreach (string arg in new[] { "-d", "Ubuntu-24.04", "--", "sh", "-c",
+            "PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=analysis/ida/plant_timing/vendor python3 PvZUnity/tests/AlmanacTests/native_oracle.py" })
+            start.ArgumentList.Add(arg);
+        string json;
+        using (Process process = Process.Start(start))
+        {
+            json = process.StandardOutput.ReadToEnd();
+            string error = process.StandardError.ReadToEnd();
+            process.WaitForExit();
+            if (process.ExitCode != 0) throw new Exception("Native oracle failed: " + error);
+        }
+        MethodInfo slotAt = typeof(AlmanacView).GetMethod("SlotAt", BindingFlags.Instance | BindingFlags.NonPublic);
+        using (JsonDocument document = JsonDocument.Parse(json))
+        {
+            foreach (JsonElement group in document.RootElement.GetProperty("groups").EnumerateArray())
+            {
+                int category = group.GetProperty("category").GetInt32();
+                bool limited = group.GetProperty("limited").GetBoolean();
+                var view = new AlmanacView(root, new ReanimationRenderer(root));
+                if (limited) { view.SetUnlockedPlants(new[] { 0, 2 }); view.SetUnlockedZombies(new[] { 0, 2 }); }
+                if (category == 1) Click(view, 131, 346);
+                else if (category == 2) Click(view, 488, 346);
+                foreach (JsonElement vector in group.GetProperty("vectors").EnumerateArray())
+                {
+                    int x = vector[0].GetInt32(), y = vector[1].GetInt32(), expected = vector[2].GetInt32();
+                    int actual = (int)slotAt.Invoke(view, new object[] { new Vector2(x, y) });
+                    Check(actual == expected, "native hit test category=" + category + " limited=" + limited +
+                        " x=" + x + " y=" + y + ": expected " + expected + ", got " + actual);
+                }
+            }
+        }
+        Console.WriteLine("Native almanac hit tests match the local EXE; availability calls are stubbed.");
+    }
+
+    private static void CheckEntry(Dictionary<string, string> values, string key)
+    {
+        Check(values.ContainsKey(key) && !string.IsNullOrWhiteSpace(values[key]), key + " name");
+        Check(values.ContainsKey(key + "_DESCRIPTION_HEADER") && !string.IsNullOrWhiteSpace(values[key + "_DESCRIPTION_HEADER"]), key + " header");
+        Check(values.ContainsKey(key + "_DESCRIPTION") && !string.IsNullOrWhiteSpace(values[key + "_DESCRIPTION"]), key + " description");
+    }
+}

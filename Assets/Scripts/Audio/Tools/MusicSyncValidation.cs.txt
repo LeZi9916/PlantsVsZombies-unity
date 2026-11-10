@@ -1,0 +1,50 @@
+using System;
+using System.IO;
+using System.Linq;
+using System.Text.Json;
+using System.Collections.Generic;
+using System.Globalization;
+using PvZReplica.Audio;
+class Program
+{
+ static int checks;
+ static void Check(bool value,string message){checks++;if(!value)throw new Exception(message);}
+ static void Main(string[] args)
+ {
+  var options=new JsonSerializerOptions{IncludeFields=true,WriteIndented=true};
+  var manifest=JsonSerializer.Deserialize<NativeMusicManifest>(File.ReadAllText(args[1]),options);
+  var clips=manifest.clips.ToDictionary(c=>c.key);var burst=new OriginalMusicBurst();var jumps=new List<Dictionary<string,int>>();
+  bool previousNight=false;int ticks=0;double maxError=0;
+  foreach(string line in File.ReadLines(args[0]).Skip(1))
+  {
+   string[] c=line.Split(',');bool night=c[0]=="1";int tick=int.Parse(c[1]),position=int.Parse(c[2]),zombies=int.Parse(c[3]);
+   if(night!=previousNight){burst.Reset();previousNight=night;}
+   if(c[4]=="1")burst.ForceBurst();burst.Tick(zombies,night,position);
+   int[] actual={(int)burst.State,burst.BurstCounter,(int)burst.DrumsState,burst.RecordedPosition,burst.DrumsCounter};
+   for(int i=0;i<actual.Length;i++)Check(actual[i]==int.Parse(c[5+i]),"Native state mismatch night="+night+" tick="+tick+" field="+i+" actual="+actual[i]+" expected="+c[5+i]);
+   double[] gains={burst.NightBase,burst.Drums,burst.HiHats};
+   for(int i=0;i<(night?2:3);i++){double error=Math.Abs(gains[i]-double.Parse(c[10+i],CultureInfo.InvariantCulture));maxError=Math.Max(maxError,error);Check(error<0.000001,"Native gain mismatch tick="+tick+" field="+i+" actual="+gains[i]+" native="+c[10+i]);}
+   Check(burst.RequestedNightOrder==int.Parse(c[13]),"Native 76/77 jump mismatch tick="+tick);
+   if(burst.RequestedNightOrder>=0)jumps.Add(new Dictionary<string,int>{{"tick",tick},{"nativePosition",position},{"order",burst.RequestedNightOrder}});
+   ticks++;
+  }
+  Check(jumps.Any(j=>j["order"]==76)&&jumps.Any(j=>j["order"]==77),"Actual row trace must exercise both native night entries");
+  foreach(var clip in clips.Values)
+  {
+   Check(clip.rowTimeMap.Length>0,"Missing actual row map "+clip.key);
+   for(int i=0;i<clip.rowTimeMap.Length;i++)
+   {
+    var point=clip.rowTimeMap[i];Check(clip.PositionAtSample(point.sample)==((point.order&65535)|(point.row<<16)),"PCM row start maps exactly "+clip.key);
+    if(i>0)Check(point.sample>clip.rowTimeMap[i-1].sample,"Increasing PCM row map "+clip.key);
+   }
+   Check(clip.PositionAtSample(clip.frames)==clip.PositionAtSample(clip.loopStartSample),"Tracker loop maps to actual loop start "+clip.key);
+  }
+  foreach(string terrain in new[]{"day","pool","fog","roof"})
+  {
+   var group=clips.Values.Where(c=>c.key.StartsWith(terrain+"_")).ToArray();Check(group.Select(c=>c.frames).Distinct().Count()==1&&group.Select(c=>c.loopStartSample).Distinct().Count()==1,"Source stems sample aligned "+terrain);
+  }
+  Check(clips["night_burst77"].nativeOrder==77&&clips["night_standby"].nativeOrder==92,"Native night entry and standby material");
+  var result=new{nativeTicks=ticks,assertions=checks,maximumGainError=maxError,nightJumps=jumps,clips=clips.Count,unityAudioTypesCompiled=true};
+  File.WriteAllText(args[2],JsonSerializer.Serialize(result,options));Console.WriteLine(JsonSerializer.Serialize(result,options));
+ }
+}

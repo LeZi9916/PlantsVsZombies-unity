@@ -1,0 +1,288 @@
+using System;
+using System.Collections.Generic;
+using PvZReplica;
+using PvZReplica.VerifiedData;
+
+internal static class Program
+{
+    private static int assertions;
+
+    private static void Check(bool condition, string name)
+    {
+        assertions++;
+        if (!condition) throw new Exception("Failed: " + name);
+    }
+
+    private static void Near(float actual, float expected, string name)
+    {
+        Check(Math.Abs(actual - expected) < 0.001f,
+            name + " (expected " + expected + ", got " + actual + ")");
+    }
+
+    private static GameSimulation EmptyGame(int sun = 1000)
+    {
+        return new GameSimulation(new GameRules {
+            StartingSun = sun, ZombieCount = 0, SkySunInterval = 0f,
+            ZombieSpeed = 0f, MowersEnabled = false
+        });
+    }
+
+    private static int Count(List<GameEvent> events, GameEvent kind)
+    {
+        return events.FindAll(e => e == kind).Count;
+    }
+
+    private static Zombie AddZombie(GameSimulation game, ZombieKind kind, int row, float x,
+        float health = 270f, float armor = 0f, float shield = 0f)
+    {
+        Zombie zombie = new Zombie {
+            Kind = kind, Row = row, X = x, Health = health,
+            ArmorHealth = armor, ShieldHealth = shield
+        };
+        game.Zombies.Add(zombie);
+        return zombie;
+    }
+
+    private static void DefinitionsAndPlanting()
+    {
+        Check((int)PlantKind.Jalapeno == 20 && (int)PlantKind.TallNut == 23, "executable plant IDs");
+        PlantDefinition jalapeno;
+        PlantDefinition tallNut;
+        Check(VerifiedDataCatalog.TryGetPlant(20, out jalapeno) && jalapeno.SunCost == 125 &&
+            jalapeno.RechargeThresholdRaw == 5000, "jalapeno executable table row");
+        Check(VerifiedDataCatalog.TryGetPlant(23, out tallNut) && tallNut.SunCost == 125 &&
+            tallNut.RechargeThresholdRaw == 3000, "tall-nut executable table row");
+        Check(GameSimulation.Cost(PlantKind.Jalapeno) == 125 &&
+            GameSimulation.Cost(PlantKind.TallNut) == 125, "seed prices");
+        Near(GameSimulation.RechargeTime(PlantKind.Jalapeno), 50.01f, "jalapeno recharge time in simulation");
+        Near(GameSimulation.RechargeTime(PlantKind.TallNut), 30.01f, "tall-nut recharge time in simulation");
+
+        GameSimulation poor = EmptyGame(124);
+        Check(!poor.TryPlant(PlantKind.Jalapeno, 0, 0) && !poor.TryPlant(PlantKind.TallNut, 0, 1) &&
+            poor.SunAmount == 124, "not enough sun rejects both cards");
+
+        GameSimulation game = EmptyGame(250);
+        List<GameEvent> events = new List<GameEvent>();
+        game.EventRaised = events.Add;
+        Check(game.TryPlant(PlantKind.Jalapeno, 2, 0), "plant jalapeno");
+        Check(game.TryPlant(PlantKind.TallNut, 3, 0), "plant tall-nut on its independent card");
+        Check(game.SunAmount == 0 && Count(events, GameEvent.Planted) == 2, "sun and planted events");
+        Near(game.PlantAt(2, 0).Health, 300f, "jalapeno initial health");
+        Near(game.PlantAt(2, 0).ActionTimer, 1f, "jalapeno initial fuse");
+        Near(game.PlantAt(3, 0).Health, 8000f, "tall-nut initial health");
+        Check(!game.TryPlant(PlantKind.Jalapeno, 2, 0), "occupied tile is rejected");
+        Check(!game.TryPlant((PlantKind)21, 1, 0), "unimplemented plant remains rejected");
+    }
+
+    private static void CardCooldownsAndPause()
+    {
+        GameSimulation game = EmptyGame();
+        Check(game.TryPlant(PlantKind.Jalapeno, 0, 0), "jalapeno cooldown setup");
+        Check(game.TryPlant(PlantKind.TallNut, 1, 0), "tall-nut cooldown setup");
+        Near(game.CooldownRemaining(PlantKind.Jalapeno), 50.01f, "jalapeno initial cooldown");
+        Near(game.CooldownRemaining(PlantKind.TallNut), 30.01f, "tall-nut initial cooldown");
+        game.TogglePause();
+        game.Update(60f);
+        Near(game.CooldownRemaining(PlantKind.Jalapeno), 50.01f, "pause freezes cooldown");
+        Near(game.PlantAt(0, 0).ActionTimer, 1f, "pause freezes fuse");
+        Check(game.Flames.Count == 0, "pause does not ignite flame");
+        game.TogglePause();
+
+        game.Update(30f);
+        Check(game.PlantAt(0, 0) == null, "detonation consumes jalapeno while card recharges");
+        Near(game.CooldownRemaining(PlantKind.TallNut), 0.01f, "tall-nut not ready at raw threshold");
+        Check(!game.TryPlant(PlantKind.TallNut, 1, 1), "tall-nut card still cooling");
+        game.Update(0.01f);
+        Near(game.CooldownRemaining(PlantKind.TallNut), 0f, "tall-nut ready after threshold plus one tick");
+        Check(game.TryPlant(PlantKind.TallNut, 1, 1), "tall-nut can be replanted when ready");
+        Check(!game.TryPlant(PlantKind.Jalapeno, 0, 1), "jalapeno card remains independently cooling");
+        game.Update(19f);
+        game.Update(0.99f);
+        Near(game.CooldownRemaining(PlantKind.Jalapeno), 0.01f, "jalapeno not ready at raw threshold");
+        game.Update(0.01f);
+        Near(game.CooldownRemaining(PlantKind.Jalapeno), 0f, "jalapeno ready after threshold plus one tick");
+        Check(game.TryPlant(PlantKind.Jalapeno, 0, 1), "jalapeno can be replanted when ready");
+    }
+
+    private static void TallNutDefense()
+    {
+        GameSimulation game = EmptyGame();
+        List<GameEvent> events = new List<GameEvent>();
+        game.EventRaised = events.Add;
+        Check(game.TryPlant(PlantKind.TallNut, 2, 3), "tall-nut defense setup");
+        Plant plant = game.PlantAt(2, 3);
+        game.Update(2f);
+        Check(game.PlantAt(2, 3) == plant && game.Peas.Count == 0 && game.Flames.Count == 0,
+            "tall-nut takes no active action");
+        Near(plant.Health, 8000f, "idle tall-nut keeps health");
+        Check(events.Count == 1 && events[0] == GameEvent.Planted, "idle tall-nut raises no action event");
+
+        Zombie attacker = AddZombie(game, ZombieKind.Normal, 2, 3.5f);
+        game.Update(0.01f);
+        Near(plant.Health, 7996f, "zombie bites tall-nut");
+        Check(attacker.Eating, "attacker is eating tall-nut");
+        plant.Health = 4f;
+        game.Update(0.05f);
+        Check(game.PlantAt(2, 3) == null && game.Zombies.Contains(attacker),
+            "tall-nut dies from bites without hurting attacker");
+        Check(Count(events, GameEvent.JalapenoExplosion) == 0, "tall-nut death does not explode");
+    }
+
+    private static void JalapenoRowAndEvents()
+    {
+        GameSimulation game = EmptyGame();
+        List<GameEvent> events = new List<GameEvent>();
+        int flameRowAtEvent = -1;
+        bool consumedAtEvent = false;
+        game.EventRaised = e => {
+            events.Add(e);
+            if (e == GameEvent.JalapenoExplosion)
+            {
+                if (game.Flames.Count == 1) flameRowAtEvent = game.Flames[0].Row;
+                consumedAtEvent = game.PlantAt(2, 4) == null;
+            }
+        };
+        Check(game.TryPlant(PlantKind.Jalapeno, 2, 4), "row attack setup");
+        Zombie normal = AddZombie(game, ZombieKind.Normal, 2, 0.3f);
+        Zombie adjacent = AddZombie(game, ZombieKind.Conehead, 1, 3f, armor: 370f);
+        Zombie flag = AddZombie(game, ZombieKind.Flag, 2, 1.5f);
+        Zombie cone = AddZombie(game, ZombieKind.Conehead, 2, 3f, armor: 370f);
+        Zombie otherSide = AddZombie(game, ZombieKind.ScreenDoor, 3, 3f, shield: 1100f);
+        Zombie bucket = AddZombie(game, ZombieKind.Buckethead, 2, 6f, armor: 1100f);
+        Zombie door = AddZombie(game, ZombieKind.ScreenDoor, 2, 9.5f, shield: 1100f);
+        Zombie unsupported = AddZombie(game, (ZombieKind)3, 2, 8.5f);
+
+        game.Update(0.99f);
+        Check(game.PlantAt(2, 4) != null && game.Flames.Count == 0 && game.Zombies.Count == 8,
+            "no damage, flame, or consumption before fuse expires");
+        Check(Count(events, GameEvent.ZombieHit) == 0 && Count(events, GameEvent.JalapenoExplosion) == 0,
+            "no premature damage or explosion event");
+        game.Update(0.01f);
+        Check(game.PlantAt(2, 4) == null, "jalapeno consumed on detonation");
+        Check(!game.Zombies.Contains(normal) && !game.Zombies.Contains(flag) &&
+            !game.Zombies.Contains(cone) && !game.Zombies.Contains(bucket) && !game.Zombies.Contains(door),
+            "all five supported default targets die throughout the row");
+        Check(game.Zombies.Count == 3 && game.Zombies.Contains(adjacent) && game.Zombies.Contains(otherSide) &&
+            game.Zombies.Contains(unsupported), "other rows and unimplemented zombie kinds are untouched");
+        Near(adjacent.ArmorHealth, 370f, "other row armor unchanged");
+        Near(otherSide.ShieldHealth, 1100f, "other row shield unchanged");
+        Near(unsupported.Health, 270f, "unsupported zombie health unchanged");
+        Check(Count(events, GameEvent.ZombieHit) == 5 && Count(events, GameEvent.ZombieDied) == 5,
+            "one hit and death event per killed target");
+        Check(Count(events, GameEvent.JalapenoExplosion) == 1 && Count(events, GameEvent.Explosion) == 0,
+            "one jalapeno-specific event and no generic explosion event");
+        Check(game.Flames.Count == 1 && game.Flames[0].Row == 2 && flameRowAtEvent == 2 && consumedAtEvent,
+            "the correct flame and consumption are visible when explosion event is raised");
+        game.Update(1.1f);
+        Check(game.Flames.Count == 0, "flame expires");
+        Check(Count(events, GameEvent.JalapenoExplosion) == 1 && Count(events, GameEvent.ZombieHit) == 5,
+            "detonation and damage do not repeat");
+    }
+
+    private static void ArmorAndChill()
+    {
+        GameSimulation game = EmptyGame();
+        List<GameEvent> events = new List<GameEvent>();
+        game.EventRaised = events.Add;
+        Check(game.TryPlant(PlantKind.Jalapeno, 2, 4), "armor test setup");
+        Zombie armored = AddZombie(game, ZombieKind.Conehead, 2, 1f, health: 3000f, armor: 370f);
+        Zombie shielded = AddZombie(game, ZombieKind.ScreenDoor, 2, 2f, health: 3000f, shield: 1100f);
+        Zombie heavyArmor = AddZombie(game, ZombieKind.Buckethead, 2, 7f, health: 3000f, armor: 2000f);
+        Zombie exact = AddZombie(game, ZombieKind.Normal, 2, 8f, health: 1800f);
+        Zombie barelyAlive = AddZombie(game, ZombieKind.Flag, 2, 9f, health: 1801f);
+        Zombie unusualArmor = AddZombie(game, ZombieKind.Buckethead, 2, 8.2f, health: 1000f, armor: 1200f);
+        Zombie unusualShield = AddZombie(game, ZombieKind.ScreenDoor, 2, 8.4f, health: 3000f, shield: 2500f);
+        Zombie elsewhere = AddZombie(game, ZombieKind.Normal, 3, 1f, health: 3000f);
+        armored.ChillRemaining = 10f;
+        elsewhere.ChillRemaining = 10f;
+        game.Update(1.02f);
+        Near(armored.ArmorHealth, 0f, "blast breaks armor");
+        Near(armored.Health, 1570f, "damage remaining after armor reaches body");
+        Near(shielded.ShieldHealth, 0f, "blast breaks screen-door shield");
+        Near(shielded.Health, 2300f, "simulation damage remaining after shield reaches body");
+        Near(heavyArmor.ArmorHealth, 200f, "sufficient armor absorbs blast");
+        Near(heavyArmor.Health, 3000f, "sufficient armor protects body in simulation");
+        Check(!game.Zombies.Contains(exact), "exactly 1800 body health dies");
+        Near(barelyAlive.Health, 1f, "1801 body health survives with one");
+        Near(unusualArmor.Health, 400f, "shared damage model can leave a low-body high-armor target alive");
+        Near(unusualShield.ShieldHealth, 700f, "shared damage model consumes a large shield first");
+        Near(unusualShield.Health, 3000f, "shared damage model does not bypass the remaining shield");
+        Near(armored.ChillRemaining, 0f, "flame clears chill on a survivor");
+        Check(elsewhere.ChillRemaining > 8f && elsewhere.Health == 3000f,
+            "other row is neither thawed nor damaged");
+        Check(Count(events, GameEvent.ZombieHit) == 7 && Count(events, GameEvent.ZombieDied) == 1,
+            "survivors receive hits without death events");
+    }
+
+    private static void EmptyRowAndBiteImmunity()
+    {
+        GameSimulation game = EmptyGame();
+        List<GameEvent> events = new List<GameEvent>();
+        game.EventRaised = events.Add;
+        Check(game.TryPlant(PlantKind.Jalapeno, 4, 0), "empty row setup");
+        Zombie other = AddZombie(game, ZombieKind.Normal, 3, 3f);
+        game.Update(1.02f);
+        Check(game.PlantAt(4, 0) == null && game.Zombies.Contains(other), "empty row still consumes jalapeno");
+        Check(game.Flames.Count == 1 && game.Flames[0].Row == 4 &&
+            Count(events, GameEvent.JalapenoExplosion) == 1, "empty row still emits flame and event");
+        Check(Count(events, GameEvent.ZombieHit) == 0 && Count(events, GameEvent.ZombieDied) == 0,
+            "empty row raises no zombie events");
+
+        game = EmptyGame();
+        events = new List<GameEvent>();
+        game.EventRaised = events.Add;
+        Check(game.TryPlant(PlantKind.Jalapeno, 2, 4), "bite immunity setup");
+        game.PlantAt(2, 4).Health = 4f;
+        Zombie eater = AddZombie(game, ZombieKind.Normal, 2, 4.5f);
+        game.Update(0.01f);
+        Check(game.PlantAt(2, 4) != null && game.PlantAt(2, 4).Health == 4f,
+            "jalapeno cannot be chewed before detonation");
+        game.Update(1.1f);
+        Check(!game.Zombies.Contains(eater), "jalapeno damages attacker after countdown");
+        Check(game.Flames.Count == 1 && Count(events, GameEvent.JalapenoExplosion) == 1 &&
+            Count(events, GameEvent.ZombieHit) == 1, "jalapeno emits flame and explosion");
+        Check(game.CooldownRemaining(PlantKind.Jalapeno) > 0f, "detonated jalapeno card continues cooling");
+    }
+
+    private static void ConsecutiveDetonationsAndWin()
+    {
+        GameSimulation game = EmptyGame();
+        List<GameEvent> events = new List<GameEvent>();
+        game.EventRaised = events.Add;
+        game.Plants.Add(new Plant { Kind = PlantKind.Jalapeno, Row = 2, Column = 1, Health = 300f, ActionTimer = 0.01f });
+        game.Plants.Add(new Plant { Kind = PlantKind.Jalapeno, Row = 2, Column = 7, Health = 300f, ActionTimer = 0.01f });
+        Zombie survivor = AddZombie(game, ZombieKind.Normal, 2, 4f, health: 4000f);
+        game.Update(0.01f);
+        Check(game.Plants.Count == 0 && game.Flames.Count == 2, "multiple plants detonate without skipping");
+        Near(survivor.Health, 400f, "two simultaneous jalapenos each deal damage");
+        Check(Count(events, GameEvent.JalapenoExplosion) == 2 && Count(events, GameEvent.ZombieHit) == 2,
+            "multiple detonations each emit their events");
+
+        game = new GameSimulation(new GameRules {
+            StartingSun = 125, ZombieCount = 1, FirstZombieDelay = 0f,
+            SkySunInterval = 0f, ZombieSpeed = 0f, MowersEnabled = false
+        });
+        events = new List<GameEvent>();
+        game.EventRaised = events.Add;
+        game.Update(0.01f);
+        Zombie last = game.Zombies[0];
+        last.X = 6f;
+        Check(game.TryPlant(PlantKind.Jalapeno, last.Row, 1), "winning blast setup");
+        game.Update(1.02f);
+        Check(game.State == MatchState.Won && game.Zombies.Count == 0, "last zombie blast wins");
+        Check(Count(events, GameEvent.ZombieDied) == 1 && Count(events, GameEvent.JalapenoExplosion) == 1 &&
+            Count(events, GameEvent.Won) == 1, "death, blast and win events are each emitted once");
+    }
+
+    private static void Main()
+    {
+        DefinitionsAndPlanting();
+        CardCooldownsAndPause();
+        TallNutDefense();
+        JalapenoRowAndEvents();
+        ArmorAndChill();
+        EmptyRowAndBiteImmunity();
+        ConsecutiveDetonationsAndWin();
+        Console.WriteLine("PASS: " + assertions + " advanced plant assertions");
+    }
+}

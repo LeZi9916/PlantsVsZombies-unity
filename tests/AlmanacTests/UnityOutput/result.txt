@@ -1,0 +1,6 @@
+Blank capture or no repaint: home
+Blank capture or no repaint: plant
+Blank capture or no repaint: imitater
+Blank capture or no repaint: zombie
+Blank capture or no repaint: ducky
+Blank capture or no repaint: boss
