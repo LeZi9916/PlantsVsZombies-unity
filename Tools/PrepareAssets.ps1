@@ -45,7 +45,7 @@ foreach ($group in $resources.SelectNodes('//Resources')) {
     }
 }
 
-$animations = @('PeaShooterSingle', 'PeaShooter', 'SunFlower', 'Wallnut', 'Tallnut', 'CherryBomb', 'Jalapeno', 'fire', 'SnowPea', 'PotatoMine', 'Zombie', 'Zombie_flagpole', 'Zombie_surprise', 'Sun', 'LawnMower')
+$animations = @('PeaShooterSingle', 'PeaShooter', 'SunFlower', 'Wallnut', 'Tallnut', 'CherryBomb', 'Jalapeno', 'fire', 'SnowPea', 'PotatoMine', 'Zombie', 'Zombie_flagpole', 'Zombie_surprise', 'Sun', 'LawnMower', 'Hammer')
 foreach ($name in $animations) {
     $relative = "reanim\$name.reanim"
     if (-not (Copy-Asset $relative)) { throw "Missing animation: $relative" }

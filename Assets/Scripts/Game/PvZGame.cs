@@ -280,6 +280,10 @@ namespace PlantsVsZombies.Game
             var pendingAction = _pendingUiAction;
             _pendingUiAction = null;
             pendingAction?.Invoke();
+            if (_hammerAnimationAge < 1f)
+            {
+                _hammerAnimationAge = Mathf.Min(1f, _hammerAnimationAge + Time.unscaledDeltaTime);
+            }
             HandleInput();
             PreserveAdventureFeedbackDuringPause(Time.unscaledDeltaTime);
             if (UpdateOriginalLoading(Time.unscaledDeltaTime))
@@ -2407,6 +2411,8 @@ namespace PlantsVsZombies.Game
         internal bool _choosingImitater;
         /// <summary>Stores adventure pointer.</summary>
         internal Vector2 _adventurePointer;
+        /// <summary>Stores the current native Whack-a-Zombie hammer animation age.</summary>
+        internal float _hammerAnimationAge = 1f;
         /// <summary>The board that received the most recent insufficient-sun click.</summary>
         private GameSimulation? _sunWarningGame;
         /// <summary>The native update at which the sun display began its seventy-tick warning.</summary>
@@ -2596,6 +2602,7 @@ namespace PlantsVsZombies.Game
         private void AttachAdventureGame(GameSimulation simulation)
         {
             _game = simulation;
+            _hammerAnimationAge = 1f;
             _animations.ResetNativePlayback();
             _game.EventRaised = PlaySound;
             _game.Adventure.NoticeRaised = AdventureNotice;
@@ -2606,9 +2613,9 @@ namespace PlantsVsZombies.Game
                 _deck.Add(seed);
             }
 
-            if (_game.Adventure.Level.Mode == AdventureMode.WhackAZombie)
+            if (_modeSession == null && _game.Adventure.Level.Mode == AdventureMode.WhackAZombie)
             {
-                _deck.AddRange(new[] { PlantKind.PotatoMine, PlantKind.CherryBomb, PlantKind.GraveBuster });
+                _deck.AddRange(new[] { PlantKind.PotatoMine, PlantKind.GraveBuster, PlantKind.CherryBomb });
             }
 
             _choosingSeeds = _game.Adventure.Phase == AdventurePhase.ChoosingSeeds;
@@ -3131,6 +3138,7 @@ namespace PlantsVsZombies.Game
 
             if (board.Level.Mode == AdventureMode.WhackAZombie)
             {
+                _hammerAnimationAge = 0.2f;
                 for (var i = _game.Zombies.Count - 1; i >= 0; i--)
                 {
                     var zombie = _game.Zombies[i];
@@ -5000,6 +5008,7 @@ namespace PlantsVsZombies.Game
 
             if (m == ModeMechanic.Whack)
             {
+                _hammerAnimationAge = 0.2f;
                 for (var i = _game.Zombies.Count - 1; i >= 0; i--)
                 {
                     var z = _game.Zombies[i];

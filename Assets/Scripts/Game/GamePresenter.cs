@@ -1112,7 +1112,10 @@ namespace PlantsVsZombies.Game
         /// <summary>Draws the original hammer attached to the logical pointer in Whack-a-Zombie boards.</summary>
         private void DrawAdventureHammerCursor()
         {
-            if (_owner._game == null || !_owner._game.IsAdventure || _owner._game.Adventure.Level.Mode != AdventureMode.WhackAZombie
+            var whackBoard = _owner._game != null && _owner._game.IsAdventure
+                && (_owner._game.Adventure.Level.Mode == AdventureMode.WhackAZombie
+                    || _owner.IsModeBoard && _owner._modeSession.Definition.Mechanic == ModeMechanic.Whack);
+            if (!whackBoard
                 || _owner._choosingSeeds || _owner.AdventureIntroActive || _owner._game.State != MatchState.Playing
                 || _owner._optionsView.IsOpen || _owner._confirmingQuit || _owner._unavailableFeature != null
                 || !new Rect(0, 0, 800, 600).Contains(_owner._adventurePointer))
@@ -1124,7 +1127,7 @@ namespace PlantsVsZombies.Game
             // reanimation is then drawn at that origin with anim_whack_zombie held.
             _owner._animations.DrawNativePlayback("Hammer",
                 new Vector2(_owner._adventurePointer.x - 25f, _owner._adventurePointer.y - 35f),
-                1f, 1f, "anim_whack_zombie", false, 24f);
+                1f, _owner._hammerAnimationAge, "anim_whack_zombie", false, 24f);
         }
 
         /// <summary>Draws the original holder with its shovel removed while the tool is held.</summary>
@@ -3996,7 +3999,7 @@ namespace PlantsVsZombies.Game
             }
 
             var packets = board.Level.HasConveyor || board.Level.Mode == AdventureMode.Vasebreaker;
-            if (board.Level.Number >= 5)
+            if (board.Level.Number >= 5 && board.Level.Mode != AdventureMode.WhackAZombie)
             {
                 DrawShovelBank(PvZGame.s_adventureShovelButton);
             }
@@ -4394,7 +4397,7 @@ namespace PlantsVsZombies.Game
                 ModeButton(new Rect(500, 8, 95, 64), s.SlotRollingRemaining > 0 ? "转动中" : "拉动 25");
             }
 
-            if (d.Mechanic != ModeMechanic.IZombie && d.Mechanic != ModeMechanic.Aquarium && d.Mechanic != ModeMechanic.Beghouled && d.Mechanic != ModeMechanic.BeghouledTwist)
+            if (d.Mechanic != ModeMechanic.IZombie && d.Mechanic != ModeMechanic.Aquarium && d.Mechanic != ModeMechanic.Beghouled && d.Mechanic != ModeMechanic.BeghouledTwist && d.Mechanic != ModeMechanic.Whack)
             {
                 DrawShovelBank(PvZGame.s_adventureShovelButton);
             }

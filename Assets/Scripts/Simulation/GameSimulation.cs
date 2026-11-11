@@ -5422,6 +5422,10 @@ namespace PlantsVsZombies.Simulation
             {
                 AdvanceAdventureBoss(dt);
             }
+            else if (Adventure.Level.Mode == AdventureMode.WhackAZombie)
+            {
+                TickAdventureWhack(dt);
+            }
             else if (Adventure.Level.Mode != AdventureMode.Vasebreaker)
             {
                 AdvanceScheduledAdventureWaves(dt);
@@ -5696,11 +5700,7 @@ namespace PlantsVsZombies.Simulation
             var n = Adventure.Level.Number;
             if (Adventure.Level.Mode == AdventureMode.WhackAZombie)
             {
-                for (var i = 0; i < 9; i++)
-                {
-                    AddGravesInColumn(4 + i / 3, 1);
-                }
-
+                WhackPlaceGraves(9);
                 PickAdventureSpecialGrave();
                 return;
             }
@@ -5737,6 +5737,60 @@ namespace PlantsVsZombies.Simulation
             }
 
             PickAdventureSpecialGrave();
+        }
+
+        /// <summary>Places the original Whack-a-Zombie graves using its weighted empty-cell picker.</summary>
+        /// <param name="count">The number of graves to place.</param>
+        private void WhackPlaceGraves(int count)
+        {
+            var cells = new List<(int Row, int Column, int Weight)>();
+            for (var column = 3; column < Columns; column++)
+            {
+                for (var row = 0; row < RowCount; row++)
+                {
+                    if (Adventure._graves.Exists(grave => grave.Row == row && grave.Column == column))
+                    {
+                        continue;
+                    }
+
+                    var occupied = Plants.Exists(plant => plant.Row == row && plant.Column == column);
+                    cells.Add((row, column, occupied ? 1 : 100000));
+                }
+            }
+
+            count = Math.Min(count, cells.Count);
+            for (var i = 0; i < count; i++)
+            {
+                var total = 0;
+                foreach (var candidate in cells)
+                {
+                    total += candidate.Weight;
+                }
+
+                var pick = _random.Next(total);
+                var selected = 0;
+                for (var index = 0; index < cells.Count; index++)
+                {
+                    pick -= cells[index].Weight;
+                    if (pick < 0)
+                    {
+                        selected = index;
+                        break;
+                    }
+                }
+
+                var cell = cells[selected];
+                cells.RemoveAt(selected);
+                foreach (var plant in new PooledSnapshot<Plant>(Plants))
+                {
+                    if (plant.Row == cell.Row && plant.Column == cell.Column)
+                    {
+                        RemoveAdventurePlantAndStack(plant);
+                    }
+                }
+
+                Adventure._graves.Add(CreateAdventureGrave(cell.Row, cell.Column));
+            }
         }
 
         /// <summary>Marks one initial grave with the original special atlas row.</summary>
@@ -9558,6 +9612,134 @@ namespace PlantsVsZombies.Simulation
             }
         }
 
+        /// <summary>Advances the eight-wave adventure Whack-a-Zombie schedule.</summary>
+        /// <param name="dt">The elapsed simulation seconds.</param>
+        private void TickAdventureWhack(float dt)
+        {
+            var a = Adventure;
+            if (WaveSchedule != null)
+            {
+                WaveSchedule.ElapsedTicks += Math.Max(1, (int)Math.Round(dt * 100f));
+                WaveSchedule.InitialCountdownTicks = a.CurrentWave > 0 ? 2000 : 200;
+                WaveSchedule.CountdownTicks = Math.Max(0, (int)Math.Round(a.WaveCountdown * 100f));
+                WaveSchedule.HealthAtWaveStart = 0;
+                WaveSchedule.HealthToNextWave = -1;
+            }
+
+            if (a._finalAmbush)
+            {
+                return;
+            }
+
+            a.WaveCountdown -= dt;
+            if (a.CurrentWave > 0 && a.WaveCountdown <= 1f && !a._whackGravesRaised)
+            {
+                WhackPlaceGraves(Math.Max(1, 5 - a._graves.Count));
+                a._whackGravesRaised = true;
+            }
+
+            if (a.WaveCountdown <= 0)
+            {
+                a.CurrentWave++;
+                a.WaveCountdown = 20f;
+                a._whackGravesRaised = false;
+                a._whackSpawnTimer = a.CurrentWave == a.Waves.Count ? 1f : 0.01f;
+                a.TotalWavesSpawned++;
+                a.Notice(AdventureNoticeKind.WaveSpawned, a.CurrentWave - 1);
+                RaiseScheduledWaveEvent(global::PlantsVsZombies.Waves.WaveScheduleEventKind.WaveSpawned, a.CurrentWave - 1);
+            }
+
+            if (a.CurrentWave <= 0 || a.WaveCountdown < 3f)
+            {
+                return;
+            }
+
+            a._whackSpawnTimer -= dt;
+            if (a._whackSpawnTimer > 0)
+            {
+                return;
+            }
+
+            var phase = Math.Max(0, Math.Min(5, (a.CurrentWave - 1) * 6 / 12));
+            int[] triple =
+            {
+                0,
+                0,
+                0,
+                0,
+                10,
+                13
+            }, pair =
+            {
+                0,
+                30,
+                10,
+                10,
+                15,
+                18
+            }, bucket =
+            {
+                0,
+                0,
+                0,
+                10,
+                15,
+                15
+            }, cone =
+            {
+                0,
+                0,
+                30,
+                30,
+                30,
+                30
+            };
+            var roll = _random.Next(100);
+            var typeRoll = _random.Next(100);
+            var final = a.CurrentWave == a.Waves.Count;
+            var count = final ? 20 : roll < triple[phase] ? 3 : roll < triple[phase] + pair[phase] ? 2 : 1;
+            var kind = typeRoll < bucket[phase] && count < 3 ? ZombieKind.Buckethead : typeRoll < bucket[phase] + cone[phase] ? ZombieKind.Conehead : ZombieKind.Normal;
+            var graves = new List<AdventureCellTimer>();
+            foreach (var grave in a._graves)
+            {
+                if (!Plants.Exists(plant => plant.Row == grave.Row && plant.Column == grave.Column && plant.Kind == PlantKind.GraveBuster))
+                {
+                    graves.Add(grave);
+                }
+            }
+
+            var progress = Math.Max(0f, Math.Min(1f, (a.CurrentWave - 1) / 11f));
+            var speedMax = final ? 2f : 1f + 2f * progress * progress;
+            for (var i = 0; i < count && graves.Count > 0; i++)
+            {
+                var index = _random.Next(graves.Count);
+                var grave = graves[index];
+                graves.RemoveAt(index);
+                var zombieKind = final ? (_random.Next(2) == 0 ? ZombieKind.Conehead : ZombieKind.Buckethead) : kind;
+                var zombie = SpawnAdventureZombie(zombieKind, grave.Row, grave.Column + 0.5f, a.CurrentWave - 1);
+                zombie.Speed = 0.5f + (float)_random.NextDouble() * (speedMax - 0.5f);
+                zombie.DropRemaining = 0.5f;
+                InitializeAdventureGraveZombie(zombie, grave.Column);
+            }
+
+            var minTicks = (int)Math.Round(100f - 70f * progress);
+            var maxTicks = (int)Math.Round(200f - 140f * progress);
+            a._whackSpawnTimer = _random.Next(minTicks, maxTicks + 1) * 0.01f;
+            if (final)
+            {
+                a.WaveCountdown = 0;
+                a._finalAmbush = true;
+            }
+
+            if (WaveSchedule != null)
+            {
+                WaveSchedule.InitialCountdownTicks = a.CurrentWave > 0 ? 2000 : 200;
+                WaveSchedule.CountdownTicks = Math.Max(0, (int)Math.Round(a.WaveCountdown * 100f));
+                WaveSchedule.IsFinalWave = final;
+                WaveSchedule.AmbushComplete = a._finalAmbush;
+            }
+        }
+
         // PC 0x4312E0: twelve 2000-tick rounds, native chance arrays and 100..200 -> 30..60 spawn interval.
         /// <summary>Performs tick mode whack.</summary>
         /// <param name = "dt">The dt.</param>
@@ -9585,7 +9767,7 @@ namespace PlantsVsZombies.Simulation
                 s._whackSpawnTimer = a.CurrentWave == 12 ? 1f : 0.01f;
             }
 
-            if (a.WaveCountdown < 3f)
+            if (a.CurrentWave <= 0 || a.WaveCountdown < 3f)
             {
                 return;
             }
@@ -9651,12 +9833,14 @@ namespace PlantsVsZombies.Simulation
                 var g = graves[index];
                 graves.RemoveAt(index);
                 var z = SpawnAdventureZombie(final ? (_random.Next(2) == 0 ? ZombieKind.Conehead : ZombieKind.Buckethead) : kind, g.Row, g.Column + 0.5f, a.CurrentWave - 1);
-                z.Speed = (0.5f + (float)_random.NextDouble() * (speedMax - 0.5f)) * 1.25f;
+                z.Speed = 0.5f + (float)_random.NextDouble() * (speedMax - 0.5f);
                 z.DropRemaining = 0.5f;
+                InitializeAdventureGraveZombie(z, g.Column);
             }
 
-            float min = 1f - 0.7f * t, max = 2f - 1.4f * t;
-            s._whackSpawnTimer = min + (float)_random.NextDouble() * (max - min);
+            var minTicks = (int)Math.Round(100f - 70f * t);
+            var maxTicks = (int)Math.Round(200f - 140f * t);
+            s._whackSpawnTimer = _random.Next(minTicks, maxTicks + 1) * 0.01f;
             if (final)
             {
                 a.WaveCountdown = 0;
@@ -9668,30 +9852,7 @@ namespace PlantsVsZombies.Simulation
         /// <param name = "count">The count.</param>
         private void ModeWhackAddGraves(int count)
         {
-            var cells = new List<int>();
-            for (var r = 0; r < 5; r++)
-            {
-                for (var c = 3; c < 9; c++)
-                {
-                    if (!Adventure._graves.Exists(g => g.Row == r && g.Column == c))
-                    {
-                        cells.Add(r * 9 + c);
-                    }
-                }
-            }
-
-            for (var i = 0; i < count && cells.Count > 0; i++)
-            {
-                int index = _random.Next(cells.Count), cell = cells[index];
-                cells.RemoveAt(index);
-                var p = AdventurePlantAt(cell / 9, cell % 9, PlantLayer.Main);
-                if (p != null)
-                {
-                    RemoveAdventurePlantAndStack(p);
-                }
-
-                Adventure._graves.Add(CreateAdventureGrave(cell / 9, cell % 9));
-            }
+            WhackPlaceGraves(count);
         }
 
         /// <summary>Performs initialize mode packets.</summary>
@@ -10708,7 +10869,7 @@ namespace PlantsVsZombies.Simulation
             a.SelectedSeeds = defaults.AsReadOnly();
             if (d.Mechanic == ModeMechanic.Whack)
             {
-                a.SelectedSeeds = Array.AsReadOnly(new[] { PlantKind.PotatoMine, PlantKind.CherryBomb, PlantKind.GraveBuster });
+                a.SelectedSeeds = Array.AsReadOnly(new[] { PlantKind.PotatoMine, PlantKind.GraveBuster, PlantKind.IceShroom });
             }
 
             SunAmount = d.Mechanic == ModeMechanic.LastStand ? 5000 : d.Mechanic == ModeMechanic.IZombie ? 150 : d.Puzzle || d.Mechanic == ModeMechanic.Whack || IsModeMatch ? 0 : 50;
@@ -12636,7 +12797,8 @@ namespace PlantsVsZombies.Simulation
                 return;
             }
 
-            ResetAdventureWaveSchedule(Adventure.Level.Number == 2 && !Adventure.Level.IsReplay ? 5000 : 1800, true, true);
+            var firstCountdown = Adventure.Level.Mode == AdventureMode.WhackAZombie ? 200 : Adventure.Level.Number == 2 && !Adventure.Level.IsReplay ? 5000 : 1800;
+            ResetAdventureWaveSchedule(firstCountdown, true, true);
         }
 
         /// <summary>After replacing Adventure.Waves/current wave, reset only the scheduler. It preserves CurrentWave and FlagsSpawned.</summary>
