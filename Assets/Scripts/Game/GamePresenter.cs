@@ -1610,15 +1610,6 @@ namespace PlantsVsZombies.Game
                     DrawImage("ice.png", new Rect(PvZGame.AdventureGridX + ice.Column * PvZGame.CellWidth, _owner.AdventureCellY(ice.Row, ice.Column) + 44, 84, 42));
                 }
 
-                foreach (var grave in _owner._game.Adventure.Graves)
-                {
-                    var image = _owner.Texture("Tombstones.png");
-                    if (image != null)
-                    {
-                        DrawTextureWithSource(new Rect(PvZGame.AdventureGridX + grave.Column * PvZGame.CellWidth, _owner.AdventureCellY(grave.Row, grave.Column), 80, 91), image, new Rect(0, 0.75f, 0.2f, 0.25f));
-                    }
-                }
-
                 if (level.Mode == AdventureMode.Bowling)
                 {
                     Fill(new Rect(278, 90, 4, 475), new Color(0.9f, 0.08f, 0.04f));
@@ -1631,6 +1622,14 @@ namespace PlantsVsZombies.Game
 
                 for (var row = 0; row < _owner._game.RowCount; row++)
                 {
+                    foreach (var grave in _owner._game.Adventure._graves)
+                    {
+                        if (grave.Row == row)
+                        {
+                            DrawAdventureGrave(grave);
+                        }
+                    }
+
                     if (_owner._game.Adventure.RakeRow == row)
                     {
                         _owner._animations.DrawNativePlayback("Rake", new Vector2(PvZGame.AdventureGridX + _owner._game.Adventure.RakeColumn * PvZGame.CellWidth + 20, _owner.AdventureCellY(row, _owner._game.Adventure.RakeColumn)), 1f, _owner._game.Adventure.RakeTriggered ? _owner._game.Adventure.RakeAge + AdventureRenderRemainder : 0f, null, false, 20f);
@@ -1682,6 +1681,15 @@ namespace PlantsVsZombies.Game
                         if (zombie.Row == row)
                         {
                             DrawAdventureZombie(zombie);
+                        }
+                    }
+
+                    foreach (var effect in _owner._game.Presentation.ZombieRiseEffects)
+                    {
+                        if (effect.Row == row)
+                        {
+                            _adventureParticles.Draw(_presentationKeys.Get("grave-zombie-rise-", effect.Id), "ZombieRise",
+                                effect.Age + AdventureRenderRemainder, new Vector2(effect.X, effect.Y), effect.Id);
                         }
                     }
 
@@ -1770,7 +1778,30 @@ namespace PlantsVsZombies.Game
                         continue;
                     }
 
-                    _owner._animations.DrawNative(coin.Kind == AdventureCoinKind.Diamond ? "Diamond" : coin.Kind == AdventureCoinKind.Gold ? "Coin_gold" : "Coin_silver", new Vector2(coinRect.x, coinRect.y), 1f, coin.Age);
+                    var interpolation = AdventureRenderRemainder * 100f;
+                    var x = Mathf.Lerp(coin.PresentationPreviousX, coin.PresentationX, interpolation);
+                    var y = Mathf.Lerp(coin.PresentationPreviousY, coin.PresentationY, interpolation);
+                    var diamond = coin.Kind == AdventureCoinKind.Diamond;
+                    var tint = CanvasUI.Color;
+                    CanvasUI.Color = new Color(tint.r, tint.g, tint.b, tint.a * coin.PresentationAlpha);
+                    if (!diamond && coin.IsBeingCollected)
+                    {
+                        // PC 0x43CC10/0x43CEE0 hides rotating money during collection and draws its dollar face.
+                        _owner._animations.DrawResourceSprite("IMAGE_REANIM_COINGLOW", new Vector2(x + 26f, y + 28f), coin.PresentationScale);
+                        var gold = coin.Kind == AdventureCoinKind.Gold;
+                        _owner._animations.DrawResourceSprite(gold ? "IMAGE_REANIM_COIN_GOLD_DOLLAR" : "IMAGE_REANIM_COIN_SILVER_DOLLAR",
+                            new Vector2(x + (gold ? 30.5f : 29.5f), y + (gold ? 32.5f : 30f)), coin.PresentationScale);
+                    }
+                    else
+                    {
+                        // PC 0x43B610 attachment origins; 0x43CC10 keeps a shrinking diamond centred on its original pivot.
+                        var origin = diamond
+                            ? new Vector2(x + 15f - 18f * coin.PresentationScale, y + 17f - 13f * coin.PresentationScale)
+                            : new Vector2(x + 9f, y + 9f);
+                        _owner._animations.DrawNative(diamond ? "Diamond" : coin.Kind == AdventureCoinKind.Gold ? "Coin_gold" : "Coin_silver", origin, coin.PresentationScale, coin.Age);
+                    }
+
+                    CanvasUI.Color = tint;
                 }
 
                 foreach (var shell in _owner._game.Adventure.CobShells)
@@ -1859,6 +1890,66 @@ namespace PlantsVsZombies.Game
                 var fitted = new Rect(destination.center.x - texture.width * fit * 0.5f, destination.center.y - texture.height * fit * 0.5f, texture.width * fit, texture.height * fit);
                 DrawTextureWithSource(fitted, texture, new Rect(0, 0, 1, 1));
             }
+        }
+
+        /// <summary>Draws the original gravestone cell, soil mound, and emergence particles.</summary>
+        /// <param name="grave">The grave whose original grid-item counter is sampled.</param>
+        private void DrawAdventureGrave(AdventureCellTimer grave)
+        {
+            var pose = grave.GravePresentation;
+            if (!_owner._game.Adventure.GravesEnabled || pose == null)
+            {
+                return;
+            }
+
+            var origin = new Vector2(PvZGame.AdventureGridX + grave.Column * PvZGame.CellWidth,
+                _owner.AdventureCellY(grave.Row, grave.Column));
+            var stone = _owner.Texture("Tombstones.png");
+            if (stone != null)
+            {
+                var eaten = 0;
+                foreach (var plant in _owner._game.Plants)
+                {
+                    if (plant.Kind == PlantKind.GraveBuster && plant.Row == grave.Row && plant.Column == grave.Column && plant.ActionTimer <= 4f)
+                    {
+                        eaten = AdventureIntroPresentation.Curve(0, 400, 400 - (int)Math.Round(plant.ActionTimer * 100f), 10, 40, 1);
+                        break;
+                    }
+                }
+
+                DrawAdventureGraveBlit(stone, pose.Stone(grave.Row, stone.width / 5, stone.height / 4, eaten), origin);
+            }
+
+            var mound = _owner.Texture("Tombstone_mounds.png");
+            if (mound != null)
+            {
+                DrawAdventureGraveBlit(mound, pose.Mound(grave.Row, mound.width / 5, mound.height / 4), origin);
+            }
+
+            if (pose.Age < 1.6f)
+            {
+                _adventureParticles.Draw(_presentationKeys.Get("grave-rise-", grave.Row * 9 + grave.Column),
+                    "GraveStoneRise", pose.Age, origin + new Vector2(14 + pose.OffsetX, 78 + pose.OffsetY),
+                    grave.Row * 9 + grave.Column);
+            }
+        }
+
+        /// <summary>Submits an unscaled and clipped original grave atlas operation.</summary>
+        /// <param name="texture">The original stone or soil atlas.</param>
+        /// <param name="blit">The source cell and relative destination.</param>
+        /// <param name="origin">The lawn cell origin in board pixels.</param>
+        private void DrawAdventureGraveBlit(Texture texture, NativeBlit blit, Vector2 origin)
+        {
+            var source = blit.Source;
+            if (source.Height <= 0)
+            {
+                return;
+            }
+
+            var destination = blit.Destination;
+            DrawTextureWithSource(new Rect(origin.x + destination.X, origin.y + destination.Y, destination.Width, destination.Height),
+                texture, new Rect(source.X / (float)texture.width, 1f - (source.Y + source.Height) / (float)texture.height,
+                    source.Width / (float)texture.width, source.Height / (float)texture.height));
         }
 
         /// <summary>Stores adventure particles.</summary>
@@ -2022,6 +2113,11 @@ namespace PlantsVsZombies.Game
             if (zombie.DropRemaining > 0)
             {
                 y -= Mathf.Min(260f, zombie.DropRemaining * 120f);
+            }
+
+            if (zombie.GraveRiseTicks > 0)
+            {
+                y -= AdventureZombieRiseRules.Altitude(zombie.GraveRiseTicks);
             }
 
             return new Vector2(pixelX, y);
@@ -2452,6 +2548,15 @@ namespace PlantsVsZombies.Game
             var age = zombie.PresentationAnimationAge + (zombie.FrozenRemaining > 0 ? 0 : AdventureRenderRemainder * (zombie.ChillRemaining > 0 ? .5f : 1f));
             var rate = _owner._game.AdventurePresentationZombieRate(zombie);
             DrawAdventureZombiePose(zombie, name, clip, origin, size, age, rate, zombie.PresentationNewspaperGaspRemaining <= 0f);
+            if (zombie.PresentationNewspaperSurpriseAge >= 0f)
+            {
+                // PC 0x54E050 attaches at mPosX-11,mPosY, independently of the body's +15,-8 overlay.
+                var nativeX = AdventureZombieNativeRules.NativePositionX(x, size);
+                var questionOrigin = new Vector2(nativeX - 11f, AdventureFloorYAtPixel(zombie.Row, nativeX + 40f) - 30f);
+                _owner._animations.DrawNativePlayback("Zombie_surprise", questionOrigin, 1f,
+                    zombie.PresentationNewspaperSurpriseAge + AdventureRenderRemainder, null, false, 12f);
+            }
+
             if (zombie.FrozenRemaining > 0 && zombie.PresentationButter <= 0)
             {
                 _owner._animations.DrawResourceSprite("IMAGE_ICETRAP", new Vector2(PvZGame.AdventureGridX + x * PvZGame.CellWidth, _owner.AdventureCellY(zombie.Row, x) + 79), size);
@@ -3822,7 +3927,7 @@ namespace PlantsVsZombies.Game
                 DrawImage("CobCannon_target.png", new Rect(_owner._adventurePointer.x - 36, _owner._adventurePointer.y - 36, 72, 72));
             }
 
-            var advice = board.SelectedCobCannonId.HasValue ? "点击目标位置发射，右键取消瞄准。" : AdventureFirstWaveTutorialAdvice() ?? PvZGame.AdventureTutorialText(board.Tutorial);
+            var advice = AdventureFirstWaveTutorialAdvice() ?? _owner.AdventureTutorialText(board.Tutorial);
             if (_owner._adventureFeedback != null && Time.unscaledTime < _owner._adventureFeedbackUntil)
             {
                 advice = _owner._adventureFeedback;
@@ -3830,11 +3935,7 @@ namespace PlantsVsZombies.Game
 
             if (!string.IsNullOrEmpty(advice) && board.Phase == AdventurePhase.Playing)
             {
-                DrawOriginalUiAdvice(new Rect(175, 94, 450, 36), advice);
-                if (board.Level.Number > 2 && board.Tutorial != AdventureTutorial.Shovel && board.Tutorial != AdventureTutorial.Complete)
-                {
-                    DrawOriginalUiButton(new Rect(706, 86, 80, 32), "知道了");
-                }
+                DrawOriginalBoardAdvice(advice, board.Level.Number <= 2);
             }
 
             DrawAdventureWaveNotices();
@@ -4211,7 +4312,7 @@ namespace PlantsVsZombies.Game
             var status = d.Survival ? "旗帜 " + s.FlagsCompleted + " / " + (d.Endless ? "∞" : (d.Hard ? 10 : 5).ToString()) : d.Endless ? "连续通过 " + s.ClearedStages : d.Mechanic == ModeMechanic.Stars ? "杨桃 " + _owner._game.ModeStarCount() + " / 14" : d.Mechanic == ModeMechanic.Beghouled || d.Mechanic == ModeMechanic.BeghouledTwist ? "配对 " + s.Score + " / 75" : d.Mechanic == ModeMechanic.IZombie ? "大脑 " + Array.FindAll(s.Brains, x => x).Length + " / 5" : "波次 " + _owner._game.Adventure.CurrentWave + " / " + _owner._game.Adventure.Waves.Count;
             Label(new Rect(8, 570, 605, 26), d.Name + "  " + status, 16, Color.white, TextAnchor.MiddleLeft, true);
             ModeButton(PvZGame.s_modeBackButton, "返回模式选择");
-            var advice = s.Advice;
+            var advice = ResolveAdventureAdvice(s.Advice);
             if (_owner._adventureFeedback != null && Time.unscaledTime < _owner._adventureFeedbackUntil)
             {
                 advice = _owner._adventureFeedback;
@@ -4224,8 +4325,7 @@ namespace PlantsVsZombies.Game
 
             if (!string.IsNullOrEmpty(advice) && s.Phase != ModePhase.ChoosingSeeds)
             {
-                DrawOriginalUiAdvice(new Rect(125, 83, 550, 40), advice);
-                ModeButton(new Rect(690, 86, 100, 32), "知道了");
+                DrawOriginalBoardAdvice(advice, false);
             }
 
             if (s.Phase == ModePhase.Preparing)
@@ -4575,10 +4675,32 @@ namespace PlantsVsZombies.Game
             Label(shadow, text, 18, Color.black, TextAnchor.MiddleCenter, true);
             Label(rect, text, 18, Color.yellow, TextAnchor.MiddleCenter, true);
         }
+
+        /// <summary>Draws the original MessageWidget tutorial or planting hint strip.</summary>
+        /// <param name="text">The translated original advice.</param>
+        /// <param name="tutorial">Whether the level-one or level-two tutorial layout is required.</param>
+        private void DrawOriginalBoardAdvice(string text, bool tutorial)
+        {
+            // Original MessageWidget: tutorial y=476, height=60; Hint y=527, height=40.
+            var bounds = new Rect(0, tutorial ? 446 : 497, 800, tutorial ? 60 : 40);
+            Fill(bounds, new Color(0f, 0f, 0f, 128f / 255f));
+            bounds.y -= 3f;
+            var color = new Color(253f / 255f, 245f / 255f, 173f / 255f);
+            if (!OriginalUiWidgets.Text(bounds, text, "HouseofTerror16", color, true, true))
+            {
+                Label(bounds, text, 18, color, TextAnchor.MiddleCenter, true);
+            }
+        }
         /// <summary>Stores display account refresh,  wallet visible until.</summary>
         private float _displayAccountRefresh, _walletVisibleUntil;
         /// <summary>Stores original progression strings.</summary>
         private readonly Dictionary<string, string> _originalProgressionStrings = new Dictionary<string, string>();
+        /// <summary>Retains the last original advice key to avoid per-frame substring and placeholder allocations.</summary>
+        private string? _resolvedAdviceSource;
+        /// <summary>Retains the translated advice for the current original key and mode.</summary>
+        private string _resolvedAdviceText = "";
+        /// <summary>Identifies the mode whose native advice placeholders were resolved.</summary>
+        private int _resolvedAdviceModeId = -1;
 
         /// <summary>Performs read display account.</summary>
         /// <returns>The resulting read display account.</returns>
@@ -4857,10 +4979,51 @@ namespace PlantsVsZombies.Game
             DrawProgressionMessage();
         }
 
+        /// <summary>Resolves an original bracketed board-advice key while preserving explicit diagnostic text.</summary>
+        /// <param name="advice">An original LawnStrings key, translated advice, or runtime diagnostic.</param>
+        /// <returns>The original localized advice with its native flag target, an unchanged diagnostic, or an empty string.</returns>
+        internal string ResolveAdventureAdvice(string? advice)
+        {
+            if (string.IsNullOrEmpty(advice))
+            {
+                return "";
+            }
+
+            if (advice.Length < 3 || advice[0] != '[' || advice[advice.Length - 1] != ']')
+            {
+                return advice;
+            }
+
+            var definition = _owner._modeSession?.Definition ?? _owner._game?.ModeSession?.Definition;
+            var modeId = definition?.Id ?? 0;
+            if (modeId == _resolvedAdviceModeId && string.Equals(advice, _resolvedAdviceSource, StringComparison.Ordinal))
+            {
+                return _resolvedAdviceText;
+            }
+
+            var key = advice.Substring(1, advice.Length - 2);
+            var text = OriginalProgressionText(key);
+            if (text == key)
+            {
+                text = "";
+            }
+
+            if (definition != null && key == "ADVICE_SURVIVE_FLAGS")
+            {
+                var flags = definition.Mechanic == ModeMechanic.LastStand || !definition.Hard ? 5 : 10;
+                text = text.Replace("{FLAGS}", flags.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            }
+
+            _resolvedAdviceSource = advice;
+            _resolvedAdviceModeId = modeId;
+            _resolvedAdviceText = text;
+            return text;
+        }
+
         /// <summary>Performs original progression text.</summary>
         /// <param name = "key">The key.</param>
         /// <returns>The resulting original progression text.</returns>
-        private string OriginalProgressionText(string key)
+        internal string OriginalProgressionText(string key)
         {
             if (_originalProgressionStrings.Count == 0)
             {
@@ -5056,7 +5219,7 @@ namespace PlantsVsZombies.Game
             var warning = chooser ? "" : _owner._game.CooldownRemaining(kind) > 0 ? OriginalProgressionText("WAITING_TO_REFRESH") : _owner._game.AdventureSunAvailable < _owner._game.AdventureSeedCost(kind) ? OriginalProgressionText("NOT_ENOUGH_SUN") : "";
             DrawOriginalTooltipRequest(new OriginalTooltipRequest {
                 Title = OriginalProgressionText(key),
-                Body = OriginalProgressionText(key + "_TOOLTIP"),
+                Body = chooser ? OriginalProgressionText(key + "_TOOLTIP") : "",
                 Warning = warning,
                 X = (int)card.center.x,
                 Y = (int)card.yMax + 7,

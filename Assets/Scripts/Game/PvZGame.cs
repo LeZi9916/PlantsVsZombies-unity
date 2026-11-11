@@ -275,6 +275,7 @@ namespace PlantsVsZombies.Game
             _pendingUiAction = null;
             pendingAction?.Invoke();
             HandleInput();
+            PreserveAdventureFeedbackDuringPause(Time.unscaledDeltaTime);
             if (UpdateOriginalLoading(Time.unscaledDeltaTime))
             {
                 UpdateDynamicAudio();
@@ -1574,6 +1575,7 @@ namespace PlantsVsZombies.Game
                 HasCrazyDaveDialog = false
             };
             _adventureIntro = new AdventureIntroClock(AdventureIntroPresentation.CreatePlan(context));
+            _game.Adventure.GravesEnabled = _adventureIntro.Plan.GraveStoneTime == 0;
             _adventureIntroFrame = _adventureIntro.Frame;
             if (_adventureIntro.Plan.ChooseSeeds)
             {
@@ -1631,6 +1633,7 @@ namespace PlantsVsZombies.Game
             {
                 _adventureIntroRemainder -= (double).01f;
                 _adventureIntroVisualAge += .01f;
+                _game.AdvanceAdventureGraves();
                 _adventureIntro.Tick(emit: _adventureIntroEventHandler);
                 _adventureIntroFrame = _adventureIntro.Frame;
             }
@@ -1642,6 +1645,15 @@ namespace PlantsVsZombies.Game
         /// <param name = "item">The item.</param>
         private void HandleAdventureIntroEvent(AdventureIntroEvent item)
         {
+            if (item == AdventureIntroEvent.GraveStonesEnabled)
+            {
+                _game.Adventure.GravesEnabled = true;
+                foreach (var grave in _game.Adventure.Graves)
+                {
+                    PlayPresentationSound("dirt_rise");
+                }
+            }
+
             if (item == AdventureIntroEvent.ReadySetPlantStarted)
             {
                 PlayAdventureRewardSound("readysetplant.ogg");
@@ -1792,7 +1804,7 @@ namespace PlantsVsZombies.Game
         /// <returns>The resulting adventure coin rect.</returns>
         internal Rect AdventureCoinRect(AdventureCoin coin)
         {
-            return new Rect(AdventureGridX + coin.X * CellWidth - 20, AdventureCellY((int)coin.Row, coin.X) + 36, 40, 40);
+            return coin.IsBeingCollected ? new Rect(0f, 0f, 0f, 0f) : new Rect(coin.PresentationX, coin.PresentationY, 40f, 40f);
         }
 
         /// <summary>Performs adventure sun rect.</summary>
@@ -2410,6 +2422,12 @@ namespace PlantsVsZombies.Game
         /// <param name = "notice">The notice.</param>
         private void AdventureNotice(AdventureNotice notice)
         {
+            if (notice.Kind == AdventureNoticeKind.CoinCollectionStarted)
+            {
+                PlayAdventureCoinPickupSound((AdventureCoinKind)notice.Value);
+                _presenter.ShowWalletUntil(_game.Elapsed + 10f);
+            }
+
             if (notice.Kind == AdventureNoticeKind.CoinCollected)
             {
                 _modeAccountSnapshot = null;
@@ -2417,16 +2435,34 @@ namespace PlantsVsZombies.Game
                 _presenter.ShowWalletUntil(_game.Elapsed + 10f);
             }
 
+            if (notice.Kind == AdventureNoticeKind.CoinCollectionFailed)
+            {
+                AdventureFeedback(_modeSaveError ?? ("金币尚未保存：" + (_adventureCampaign?.LastPersistenceError ?? "请重试")), 5f);
+            }
+
             HandleAdventureRewardNoticeSound(notice);
-            // Huge/final warnings are original animated wave messages, not a small tutorial advice box.
-            if (notice.Kind == AdventureNoticeKind.VaseStage)
+        }
+
+        /// <summary>Plays the original pickup sample when a money collection flight begins.</summary>
+        /// <param name="kind">The silver, gold, or diamond pickup being collected.</param>
+        private void PlayAdventureCoinPickupSound(AdventureCoinKind kind)
+        {
+            var diamond = kind == AdventureCoinKind.Diamond;
+            if (_audioSource == null || !_presentationSounds.TryGetValue(diamond ? "diamond" : "coin", out var clip) || clip == null)
             {
-                AdventureFeedback("第 " + (notice.Value + 1) + " 轮：小心罐子里的僵尸！");
+                return;
             }
-            else if (notice.Kind == AdventureNoticeKind.BossAttack && notice.Value == 2)
+
+            if (diamond)
             {
-                AdventureFeedback("小心僵王的攻击！");
+                _audioSource.PlayOneShot(clip);
+                return;
             }
+
+            // Original Coin Foley uses the coin sample with a ten-semitone pitch range.
+            var semitones = (float)_zombieFoleyRandom.NextDouble() * 10f;
+            var frequency = Math.Max(100d, Math.Min(100000d, clip.frequency * Math.Pow(1.059463094359295d, semitones)));
+            _soundVoices.TryPlay(clip, _soundVolume, (float)(frequency / clip.frequency), 31, 8);
         }
 
         /// <summary>Performs adventure feedback.</summary>
@@ -2434,8 +2470,25 @@ namespace PlantsVsZombies.Game
         /// <param name = "duration">The duration.</param>
         private void AdventureFeedback(string text, float duration = 2.5f)
         {
-            _adventureFeedback = text;
+            _adventureFeedback = _presenter.ResolveAdventureAdvice(text);
             _adventureFeedbackUntil = Time.unscaledTime + duration;
+        }
+
+        /// <summary>Preserves the original board message lifetime while gameplay is paused by a modal.</summary>
+        /// <param name="delta">The unscaled frame duration consumed by the host clock.</param>
+        internal void PreserveAdventureFeedbackDuringPause(float delta)
+        {
+            if (_currentView != ScreenView.Board || _game == null || !_game.IsAdventure || _adventureFeedback == null
+                || delta <= 0f || float.IsNaN(delta) || float.IsInfinity(delta))
+            {
+                return;
+            }
+
+            if (_game.State == MatchState.Paused || _optionsView != null && _optionsView.IsOpen
+                || _confirmingQuit || _unavailableFeature != null || _profileDialog != null && _profileDialog.IsOpen)
+            {
+                _adventureFeedbackUntil += delta;
+            }
         }
 
         /// <summary>Performs adventure seed rect.</summary>
@@ -2558,43 +2611,19 @@ namespace PlantsVsZombies.Game
         /// <summary>Performs adventure tutorial text.</summary>
         /// <param name = "tutorial">The tutorial.</param>
         /// <returns>The resulting adventure tutorial text.</returns>
-        internal static string AdventureTutorialText(AdventureTutorial tutorial)
+        internal string? AdventureTutorialText(AdventureTutorial tutorial)
         {
-            switch (tutorial)
+            var shovelPlants = 0;
+            foreach (var plant in _game.Plants)
             {
-                case AdventureTutorial.ChooseSeed:
-                    return "点击种子卡片，选择豌豆射手。";
-                case AdventureTutorial.PlantPeashooter:
-                    return "点击草坪，种下豌豆射手。";
-                case AdventureTutorial.CollectSun:
-                    return "点击阳光，收集种植植物所需的能量。";
-                case AdventureTutorial.PlantSunflower:
-                    return "先种下两株向日葵，生产更多阳光。";
-                case AdventureTutorial.RechargeSunflower:
-                    return "收集阳光，等待向日葵种子恢复。";
-                case AdventureTutorial.Shovel:
-                    return "选择铲子，把草坪上的三株植物铲掉。";
-                case AdventureTutorial.NightMushrooms:
-                    return "夜晚没有从天而降的阳光，试试小蘑菇！";
-                case AdventureTutorial.PoolSupport:
-                    return "先在水面种下睡莲，再放上其他植物。";
-                case AdventureTutorial.FogVisibility:
-                    return "路灯花能照亮迷雾，三叶草能暂时吹走迷雾。";
-                case AdventureTutorial.RoofPots:
-                    return "屋顶需要花盆，投手可以越过斜坡攻击。";
-                case AdventureTutorial.Conveyor:
-                    return "点击传送带上的卡片，在草坪上使用。";
-                case AdventureTutorial.Bowling:
-                    return "在红线左侧放出坚果，击倒僵尸！";
-                case AdventureTutorial.Hammer:
-                    return "点击僵尸，用锤子保护你的脑子！";
-                case AdventureTutorial.Vases:
-                    return "点击罐子，使用掉出的植物打败僵尸。";
-                case AdventureTutorial.Boss:
-                    return "保护屋顶！冰菇克制火球，辣椒克制冰球。";
-                default:
-                    return null;
+                if (plant.Kind == PlantKind.Peashooter && plant.Row == 2 && plant.Column >= 3 && plant.Column <= 5)
+                {
+                    shovelPlants++;
+                }
             }
+
+            var key = AdventureAdviceRules.TutorialKey(tutorial, _selected >= 0, _shovel, shovelPlants);
+            return key == null ? null : _presenter.OriginalProgressionText(key);
         }
 
         /// <summary>Performs handle adventure click.</summary>
@@ -2652,7 +2681,6 @@ namespace PlantsVsZombies.Game
                     {
                         if (ContainsRequiredSeed(unlocked[i]))
                         {
-                            AdventureFeedback("这是戴夫为你挑选的植物。", 2f);
                             return;
                         }
 
@@ -2725,11 +2753,6 @@ namespace PlantsVsZombies.Game
                     RestartAdventure();
                 }
 
-                return;
-            }
-
-            if (new Rect(706, 86, 80, 32).Contains(point) && _game.AcknowledgeAdventureTutorial())
-            {
                 return;
             }
 
@@ -2886,45 +2909,30 @@ namespace PlantsVsZombies.Game
         /// <summary>Performs adventure planting feedback.</summary>
         private void AdventurePlantingFeedback()
         {
-            string message;
-            switch (_game.LastAdventurePlantingFailure)
+            if (_game.LastAdventurePlantingFailure == AdventurePlantingFailure.Tutorial)
             {
-                case AdventurePlantingFailure.NeedsLilyPad:
-                    message = "水面上需要先种睡莲。";
-                    break;
-                case AdventurePlantingFailure.NeedsFlowerPot:
-                    message = "屋顶上需要先放花盆。";
-                    break;
-                case AdventurePlantingFailure.NeedsWater:
-                    message = "这种植物需要种在水里。";
-                    break;
-                case AdventurePlantingFailure.NeedsSleepingMushroom:
-                    message = "咖啡豆需要放在睡着的蘑菇上。";
-                    break;
-                case AdventurePlantingFailure.Grave:
-                    message = "这里有墓碑，试试墓碑吞噬者。";
-                    break;
-                case AdventurePlantingFailure.Occupied:
-                    message = "这个位置已经有植物了。";
-                    break;
-                case AdventurePlantingFailure.Sun:
-                    message = "阳光不足。";
-                    break;
-                case AdventurePlantingFailure.Cooldown:
-                    message = "种子还没有恢复。";
-                    break;
-                case AdventurePlantingFailure.BowlingLine:
-                    message = "请在左侧三列放出坚果。";
-                    break;
-                case AdventurePlantingFailure.Tutorial:
-                    message = AdventureTutorialText(_game.Adventure.Tutorial);
-                    break;
-                default:
-                    message = "这里暂时不能种植。";
-                    break;
+                return;
             }
 
-            AdventureFeedback(message);
+            var kind = _selected >= 0 && _selected < _deck.Count ? _deck[_selected] : PlantKind.Peashooter;
+            foreach (var packet in _game.Adventure.Packets)
+            {
+                if (packet.Id == _selectedAdventurePacket)
+                {
+                    kind = packet.Kind;
+                    break;
+                }
+            }
+            if (kind == PlantKind.Imitater && _game.Adventure.ImitaterTarget.HasValue)
+            {
+                kind = _game.Adventure.ImitaterTarget.Value;
+            }
+
+            var key = AdventureAdviceRules.PlantingKey(_game.LastAdventurePlantingFailure, kind, !_game.Adventure.Level.IsReplay && _game.Adventure.Level.Number == 41);
+            if (key != null)
+            {
+                AdventureFeedback(_presenter.OriginalProgressionText(key), 5f);
+            }
         }
 
         // Modes and garden pages may set this on entry, then clear it on return to the selector.
@@ -3025,7 +3033,9 @@ namespace PlantsVsZombies.Game
                 "buzzer",
                 "seedlift",
                 "shovel",
-                "plant"
+                "plant",
+                "coin",
+                "diamond"
             };
             _dynamicAudioTasks = (manifest == null || manifest.clips == null ? 0 : manifest.clips.Length) + cues.Length;
             if (manifest != null && manifest.clips != null)
@@ -3071,10 +3081,11 @@ namespace PlantsVsZombies.Game
 
             foreach (string cue in cues)
             {
-                var path = Path.Combine(_root, "sounds", cue + ".ogg");
+                var diamond = cue == "diamond";
+                var path = Path.Combine(_root, "sounds", cue + (diamond ? ".wav" : ".ogg"));
                 if (File.Exists(path))
                 {
-                    using (var request = UnityWebRequestMultimedia.GetAudioClip(new Uri(path).AbsoluteUri, AudioType.OGGVORBIS))
+                    using (var request = UnityWebRequestMultimedia.GetAudioClip(new Uri(path).AbsoluteUri, diamond ? AudioType.WAV : AudioType.OGGVORBIS))
                     {
                         yield return request.SendWebRequest();
                         if (request.result == UnityWebRequest.Result.Success)
@@ -4500,13 +4511,6 @@ namespace PlantsVsZombies.Game
                 return true;
             }
 
-            if (new Rect(690, 86, 100, 32).Contains(point))
-            {
-                s.Advice = null;
-                _adventureFeedback = null;
-                return true;
-            }
-
             if (s.Phase == ModePhase.Preparing && new Rect(295, 535, 210, 34).Contains(point))
             {
                 s.BeginDefense();
@@ -4660,7 +4664,11 @@ namespace PlantsVsZombies.Game
             {
                 if (_selected >= 0 && !s.PlaceZombie(s.ZombieCards[_selected], row, col))
                 {
-                    AdventureFeedback("放在线的右侧，并准备足够阳光；蹦极僵尸要选左侧植物。", 3f);
+                    var bungee = s.ZombieCards[_selected] == ZombieKind.Bungee;
+                    if (bungee ? col >= _game.ModeIZombieColumns : col < _game.ModeIZombieColumns)
+                    {
+                        AdventureFeedback(bungee ? "[ADVICE_I_ZOMBIE_LEFT_OF_LINE]" : "[ADVICE_I_ZOMBIE_NOT_PASSED_LINE]", 3f);
+                    }
                 }
 
                 return true;

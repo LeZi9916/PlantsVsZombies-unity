@@ -51,6 +51,8 @@ namespace PlantsVsZombies.Simulation
         public bool BungeeCarrier;
         /// <summary>Stores drop remaining.</summary>
         public float DropRemaining;
+        /// <summary>Stores the original grave ambush countdown, independently of airborne bungee drops.</summary>
+        public int GraveRiseTicks;
         /// <summary>Stores linked zombie id.</summary>
         public int LinkedZombieId;
         /// <summary>Stores target column.</summary>
@@ -71,6 +73,8 @@ namespace PlantsVsZombies.Simulation
         internal float _presentationGarlicHeldAge, _presentationGarlicHeldHeadAge;
         /// <summary>Stores presentation max armor, presentation max shield, presentation newspaper gasp remaining.</summary>
         public float PresentationMaxArmor, PresentationMaxShield, PresentationNewspaperGaspRemaining;
+        /// <summary>Tracks the original independent question-mark attachment, or a negative value when absent.</summary>
+        public float PresentationNewspaperSurpriseAge = -1f;
         /// <summary>Stores presentation armor before hit,  presentation shield before hit.</summary>
         internal float _presentationArmorBeforeHit, _presentationShieldBeforeHit;
         /// <summary>Stores presentation native velocity.</summary>

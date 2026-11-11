@@ -65,6 +65,8 @@ namespace PlantsVsZombies.Simulation
         private readonly AdventureSeedBankContext _packetFeedbackContext = new AdventureSeedBankContext();
         /// <summary>Stores random.</summary>
         private readonly Random _random;
+        /// <summary>Samples original decorative grave choices without changing the combat random stream.</summary>
+        private readonly OriginalRandomAdapter _gravePresentationRandom;
         /// <summary>Stores seed cooldown ticks.</summary>
         private readonly int[] _seedCooldownTicks = new int[VerifiedDataCatalog.Plants.Count];
         /// <summary>Stores next zombie.</summary>
@@ -92,6 +94,7 @@ namespace PlantsVsZombies.Simulation
             }
 
             _random = new global::PlantsVsZombies.Randomness.OriginalRandomAdapter(unchecked((uint)randomSeed));
+            _gravePresentationRandom = new OriginalRandomAdapter(unchecked((uint)randomSeed));
             State = MatchState.Playing;
             SunAmount = Rules.StartingSun;
             _nextZombie = Rules.FirstZombieDelay;
@@ -1524,6 +1527,11 @@ namespace PlantsVsZombies.Simulation
         /// <param name = "flags">The flags.</param>
         private void HitAdventureExplosionZombie(Zombie zombie, float damage, bool burned, uint flags)
         {
+            if (zombie.GraveRiseTicks > 0)
+            {
+                return;
+            }
+
             // PC 42954D uses BurnBody (54E920); Potato takes the separate damage(1800,0x12)
             // branch. BurnBody compares BODY health, so thick armor cannot absorb an ash kill.
             if (burned && damage == 1800f && zombie.Kind != ZombieKind.Boss && zombie.Health < 1800f)
@@ -2028,7 +2036,8 @@ namespace PlantsVsZombies.Simulation
                 return;
             }
 
-            if (plant.Kind != PlantKind.Peashooter && plant.Kind != PlantKind.SnowPea && plant.Kind != PlantKind.Repeater && plant.Kind != PlantKind.Sunflower)
+            if (plant.Kind != PlantKind.Peashooter && plant.Kind != PlantKind.SnowPea && plant.Kind != PlantKind.Repeater && plant.Kind != PlantKind.Sunflower
+                && !AdventurePuffShroomRules.IsShortRange(plant.Kind))
             {
                 return;
             }
@@ -2058,7 +2067,8 @@ namespace PlantsVsZombies.Simulation
                 return AdvanceAdventurePotatoMine(plant);
             }
 
-            if (plant.Kind != PlantKind.Peashooter && plant.Kind != PlantKind.SnowPea && plant.Kind != PlantKind.Repeater && plant.Kind != PlantKind.Sunflower)
+            if (plant.Kind != PlantKind.Peashooter && plant.Kind != PlantKind.SnowPea && plant.Kind != PlantKind.Repeater && plant.Kind != PlantKind.Sunflower
+                && !AdventurePuffShroomRules.IsShortRange(plant.Kind))
             {
                 return false;
             }
@@ -2074,12 +2084,16 @@ namespace PlantsVsZombies.Simulation
             }
 
             var sunflower = plant.Kind == PlantKind.Sunflower;
-            var target = !sunflower && (plant.ModeFacesLeft ? FindAdventureTarget(plant.Row, -1f, plant.Column + .5f, false) != null : FindAdventureTarget(plant.Row, plant.Column + .4f, 20f, false) != null || CanShootAdventureBoss(plant));
+            var shortPuff = AdventurePuffShroomRules.IsShortRange(plant.Kind);
+            var target = shortPuff ? FindAdventurePuffTarget(plant) != null
+                : !sunflower && (plant.ModeFacesLeft ? FindAdventureTarget(plant.Row, -1f, plant.Column + .5f, false) != null : FindAdventureTarget(plant.Row, plant.Column + .4f, 20f, false) != null || CanShootAdventureBoss(plant));
             var state = plant.Timing.Value;
-            var input = new global::PlantsVsZombies.Timing.PlantTimingInput(true, true, true, true, target, global::PlantsVsZombies.Timing.ShootingTrack.Head, true, 0);
+            // PC 0x46D240 starts the mushroom body animation and its 29-tick shooting counter together.
+            var track = shortPuff ? global::PlantsVsZombies.Timing.ShootingTrack.Body : global::PlantsVsZombies.Timing.ShootingTrack.Head;
+            var input = new global::PlantsVsZombies.Timing.PlantTimingInput(true, true, true, true, target, track, true, 0);
             var bound = global::PlantsVsZombies.Timing.PlantTiming.RequiredRandomBound(state, input);
             var draw = bound == 0 ? 0 : _random.Next(bound);
-            var result = global::PlantsVsZombies.Timing.PlantTiming.Tick(state, new global::PlantsVsZombies.Timing.PlantTimingInput(true, true, true, true, target, global::PlantsVsZombies.Timing.ShootingTrack.Head, true, draw));
+            var result = global::PlantsVsZombies.Timing.PlantTiming.Tick(state, new global::PlantsVsZombies.Timing.PlantTimingInput(true, true, true, true, target, track, true, draw));
             plant.Timing = result.State;
             plant.ActionTimer = result.State.Countdown * .01f;
             if (result.AnimationStarted)
@@ -2099,6 +2113,11 @@ namespace PlantsVsZombies.Simulation
             {
                 var shot = FireAdventurePea(plant, plant.Row, plant.ModeFacesLeft, 20f);
                 shot.IsSnow = plant.Kind == PlantKind.SnowPea;
+                if (shortPuff)
+                {
+                    shot.Range = float.MaxValue;
+                }
+
                 // Source 0x472C70 queues the shot independently of later target loss.
                 if (!plant.ModeFacesLeft && Adventure.Level.HasRoof && plant.Column < 5)
                 {
@@ -3153,7 +3172,7 @@ namespace PlantsVsZombies.Simulation
                 Zombie hit = null;
                 foreach (Zombie z in Zombies)
                 {
-                    if (allowDamage && p.PresentationCanImpact && (!p.Homing || z.Id == p.TargetZombieId) && !z.Hypnotized && Math.Abs(z.Row - p.FlightRow) < 0.45f && !p.HitIds.Contains(z.Id) && (!z.Airborne || p.HitsAir) && (!z.Submerged || p.Lobbed) && (AdventurePuffShroomRules.IsShortRange(p.SourceKind)
+                    if (allowDamage && p.PresentationCanImpact && z.GraveRiseTicks <= 0 && (!p.Homing || z.Id == p.TargetZombieId) && !z.Hypnotized && Math.Abs(z.Row - p.FlightRow) < 0.45f && !p.HitIds.Contains(z.Id) && (!z.Airborne || p.HitsAir) && (!z.Submerged || p.Lobbed) && (AdventurePuffShroomRules.IsShortRange(p.SourceKind)
                         ? AdventurePuffShroomRules.Collides(p, z)
                         : z.X >= Math.Min(before, p.X) - 0.25f && z.X <= Math.Max(before, p.X) + 0.25f))
                     {
@@ -3222,7 +3241,7 @@ namespace PlantsVsZombies.Simulation
         /// <param name = "damageFlags">The damage flags.</param>
         private void HitAdventureZombie(Zombie z, float damage, bool bypassShield = false, uint damageFlags = 0)
         {
-            if (!Zombies.Contains(z))
+            if (!Zombies.Contains(z) || z.GraveRiseTicks > 0)
             {
                 return;
             }
@@ -3645,6 +3664,17 @@ namespace PlantsVsZombies.Simulation
         /// <param name = "dt">The dt.</param>
         private void AdventurePresentationTick(float dt)
         {
+            for (var i = Presentation.ZombieRiseEffects.Count - 1; i >= 0; i--)
+            {
+                var effect = Presentation.ZombieRiseEffects[i];
+                effect.Age += dt;
+                if (effect.Age >= 2f)
+                {
+                    Presentation.ZombieRiseEffects.RemoveAt(i);
+                }
+            }
+
+            AdvanceAdventureGraves();
             AdvanceAdventureExplosionPresentation();
             AdvanceAdventureIcePresentation(dt);
             AdvanceAdventureZombieFeedback(dt);
@@ -3761,7 +3791,8 @@ namespace PlantsVsZombies.Simulation
                     continue;
                 }
 
-                if (plant.Timing.HasValue && (plant.Kind == PlantKind.Peashooter || plant.Kind == PlantKind.SnowPea || plant.Kind == PlantKind.Repeater || plant.Kind == PlantKind.Sunflower))
+                if (plant.Timing.HasValue && (plant.Kind == PlantKind.Peashooter || plant.Kind == PlantKind.SnowPea || plant.Kind == PlantKind.Repeater || plant.Kind == PlantKind.Sunflower
+                    || AdventurePuffShroomRules.IsShortRange(plant.Kind)))
                 {
                     continue;
                 }
@@ -4566,6 +4597,7 @@ namespace PlantsVsZombies.Simulation
             // Original Board::UpdateGameObjects keeps existing projectiles moving through the award sequence.
             AdvanceAdventureProjectiles(.01f, allowDamage: false);
             AdvanceAdventurePresentationSuns(.01f);
+            AdvanceAdventureCoins(.01f);
             foreach (var plant in Plants)
             {
                 plant.Age += .01f;
@@ -5373,6 +5405,7 @@ namespace PlantsVsZombies.Simulation
                     AddGravesInColumn(4 + i / 3, 1);
                 }
 
+                PickAdventureSpecialGrave();
                 return;
             }
 
@@ -5406,6 +5439,21 @@ namespace PlantsVsZombies.Simulation
                 AddGravesInColumn(7, 3);
                 AddGravesInColumn(8, 3);
             }
+
+            PickAdventureSpecialGrave();
+        }
+
+        /// <summary>Marks one initial grave with the original special atlas row.</summary>
+        private void PickAdventureSpecialGrave()
+        {
+            if (Adventure._graves.Count > 0)
+            {
+                var appearance = Adventure._graves[_gravePresentationRandom.Next(Adventure._graves.Count)].GravePresentation;
+                if (appearance != null)
+                {
+                    appearance.Special = true;
+                }
+            }
         }
 
         /// <summary>Performs add graves in column.</summary>
@@ -5426,8 +5474,39 @@ namespace PlantsVsZombies.Simulation
 
                 if (rows.Count > 0)
                 {
-                    Adventure._graves.Add(new AdventureCellTimer { Column = column, Row = rows[_random.Next(rows.Count)], Remaining = float.MaxValue });
+                    Adventure._graves.Add(CreateAdventureGrave(rows[_random.Next(rows.Count)], column));
                 }
+            }
+        }
+
+        /// <summary>Creates a grave with original atlas selection, jitter, and staggered emergence.</summary>
+        /// <param name="row">The lawn row.</param>
+        /// <param name="column">The lawn column.</param>
+        /// <returns>A grave using original artwork parameters.</returns>
+        private AdventureCellTimer CreateAdventureGrave(int row, int column)
+        {
+            return new AdventureCellTimer
+            {
+                Row = row,
+                Column = column,
+                Remaining = float.MaxValue,
+                GravePresentation = new AdventureGravePresentation(_gravePresentationRandom.Next(20),
+                    _gravePresentationRandom.Next(10) - 5, _gravePresentationRandom.Next(10) - 5,
+                    _gravePresentationRandom.Next(50))
+            };
+        }
+
+        /// <summary>Advances the original grid-item emergence counter during introduction or battle.</summary>
+        internal void AdvanceAdventureGraves()
+        {
+            if (!IsAdventure || !Adventure.GravesEnabled)
+            {
+                return;
+            }
+
+            foreach (var grave in Adventure._graves)
+            {
+                grave.GravePresentation?.Tick();
             }
         }
 
@@ -6427,7 +6506,11 @@ namespace PlantsVsZombies.Simulation
             }
         }
 
-        /// <summary>Host loot input. Currency stays in this board; this is not a purchase or original profile mutation.</summary>
+        /// <summary>Creates a board pickup using the original currency units and logical pixel position.</summary>
+        /// <param name="kind">The currency or loot type to create.</param>
+        /// <param name="x">The pickup's horizontal lawn coordinate.</param>
+        /// <param name="row">The pickup's lawn row.</param>
+        /// <returns>The new pickup, or null when the board or coordinates cannot accept it.</returns>
         public AdventureCoin SpawnAdventureCoin(AdventureCoinKind kind, float x, float row)
         {
             if (!IsAdventure || State != MatchState.Playing || Adventure.Phase != AdventurePhase.Playing || !Enum.IsDefined(typeof(AdventureCoinKind), kind) || float.IsNaN(x) || float.IsInfinity(x) || float.IsNaN(row) || float.IsInfinity(row) || x < 0 || x >= Columns || row < 0 || row >= RowCount)
@@ -6442,14 +6525,18 @@ namespace PlantsVsZombies.Simulation
                 X = x,
                 Row = row
             };
+            var pitch = Adventure.Level.HasPool || Adventure.Level.HasRoof ? 85f : 100f;
+            var slope = Adventure.Level.HasRoof ? Math.Max(0f, 5f - x) * 20f - 10f : 0f;
+            coin.PresentationX = coin.PresentationPreviousX = 40f + x * 80f - 20f;
+            coin.PresentationY = coin.PresentationPreviousY = 80f + (int)row * pitch + slope + 36f;
             Adventure._coins.Add(coin);
             Adventure.Notice(AdventureNoticeKind.CoinCreated, coin.Id, (int)row, (int)x);
             return coin;
         }
 
-        /// <summary>Performs collect adventure coin.</summary>
-        /// <param name = "coin">The coin.</param>
-        /// <returns>The resulting collect adventure coin.</returns>
+        /// <summary>Starts the original manual money collection flight or commits noncurrency loot.</summary>
+        /// <param name="coin">The live pickup clicked by the player.</param>
+        /// <returns>Whether collection began; currency is persisted and credited when its flight arrives.</returns>
         public bool CollectAdventureCoin(AdventureCoin coin)
         {
             if (!IsAdventure || State != MatchState.Playing || Adventure.Phase != AdventurePhase.Playing || coin == null || coin.IsBeingCollected || !Adventure._coins.Contains(coin))
@@ -6457,7 +6544,16 @@ namespace PlantsVsZombies.Simulation
                 return false;
             }
 
-            return FinishAdventureCoin(coin);
+            if (coin.ValueUnits == 0)
+            {
+                return FinishAdventureCoin(coin);
+            }
+
+            coin.IsBeingCollected = true;
+            coin.CollectorPlantId = 0;
+            coin.PersistencePending = false;
+            Adventure.Notice(AdventureNoticeKind.CoinCollectionStarted, (int)coin.Kind);
+            return true;
         }
 
         /// <summary>Performs finish adventure coin.</summary>
@@ -6473,6 +6569,7 @@ namespace PlantsVsZombies.Simulation
             if (coin.ValueUnits == 0 && (Rules.AdventureLootCommit == null || !Rules.AdventureLootCommit(coin)))
             {
                 coin.PersistencePending = true;
+                Adventure.Notice(AdventureNoticeKind.CoinCollectionFailed, coin.Id);
                 return false;
             }
 
@@ -6480,6 +6577,9 @@ namespace PlantsVsZombies.Simulation
             if (Rules.AdventureCoinCommit != null && !Rules.AdventureCoinCommit(total))
             {
                 coin.PersistencePending = true;
+                coin.IsBeingCollected = false;
+                coin.CollectorPlantId = 0;
+                Adventure.Notice(AdventureNoticeKind.CoinCollectionFailed, coin.Id);
                 return false;
             }
 
@@ -6489,21 +6589,26 @@ namespace PlantsVsZombies.Simulation
             return true;
         }
 
-        /// <summary>Performs advance adventure upgrade world.</summary>
-        /// <param name = "dt">The dt.</param>
-        private void AdvanceAdventureUpgradeWorld(float dt)
+        /// <summary>Advances existing money pickups through combat and the visible reward sequence.</summary>
+        /// <param name="dt">The duration of one native simulation tick in seconds.</param>
+        private void AdvanceAdventureCoins(float dt)
         {
-            if (Adventure.SelectedCobCannonId.HasValue && FindPlantById(Adventure.SelectedCobCannonId.Value) == null)
-            {
-                Adventure.SelectedCobCannonId = null;
-            }
-
             for (var i = Adventure._coins.Count - 1; i >= 0; i--)
             {
                 var coin = Adventure._coins[i];
                 coin.Age += dt;
                 if (coin.IsBeingCollected)
                 {
+                    if (coin.CollectorPlantId == 0)
+                    {
+                        if (coin.TickCollection())
+                        {
+                            FinishAdventureCoin(coin);
+                        }
+
+                        continue;
+                    }
+
                     var collector = FindPlantById(coin.CollectorPlantId);
                     if (collector == null || collector.Kind != PlantKind.GoldMagnet)
                     {
@@ -6523,6 +6628,18 @@ namespace PlantsVsZombies.Simulation
                     Adventure._coins.RemoveAt(i);
                 }
             }
+        }
+
+        /// <summary>Performs advance adventure upgrade world.</summary>
+        /// <param name = "dt">The dt.</param>
+        private void AdvanceAdventureUpgradeWorld(float dt)
+        {
+            if (Adventure.SelectedCobCannonId.HasValue && FindPlantById(Adventure.SelectedCobCannonId.Value) == null)
+            {
+                Adventure.SelectedCobCannonId = null;
+            }
+
+            AdvanceAdventureCoins(dt);
 
             for (var i = Adventure._cobShells.Count - 1; i >= 0; i--)
             {
@@ -6936,13 +7053,14 @@ namespace PlantsVsZombies.Simulation
         /// <param name = "flags">The flags.</param>
         private void AdventurePresentationZombieEquipmentDamaged(Zombie z, uint flags)
         {
-            if ((flags & 16U) != 0 || z.PresentationDeath == global::PlantsVsZombies.Adventure.AdventureZombieDeathPresentation.Burned && z.Health <= 0)
+            if (z.PresentationDeath == global::PlantsVsZombies.Adventure.AdventureZombieDeathPresentation.Burned && z.Health <= 0)
             {
                 return;
             }
 
+            var suppressParts = (flags & 16U) != 0;
             var kind = z.ModeHead >= 26 ? z.ModeHead : (int)z.Kind;
-            if (z._presentationArmorBeforeHit > 0 && z.ArmorHealth <= 0)
+            if (!suppressParts && z._presentationArmorBeforeHit > 0 && z.ArmorHealth <= 0)
             {
                 int helm = global::PlantsVsZombies.Adventure.AdventureZombieEquipmentRules.HelmType(z), id = global::PlantsVsZombies.Adventure.AdventureZombieEquipmentRules.HelmParticle(helm);
                 if (id >= 0)
@@ -6954,7 +7072,7 @@ namespace PlantsVsZombies.Simulation
             if (z._presentationShieldBeforeHit > 0 && z.ShieldHealth <= 0)
             {
                 var id = z.Kind == ZombieKind.ScreenDoor ? 12 : z.Kind == ZombieKind.Newspaper ? 13 : z.Kind == ZombieKind.Ladder ? 54 : -1;
-                if (id >= 0)
+                if (id >= 0 && !suppressParts)
                 {
                     AddAdventureZombiePart(z, kind, id, global::PlantsVsZombies.Adventure.AdventureZombieEquipmentRules.ShieldTrack(z), null);
                 }
@@ -6966,11 +7084,11 @@ namespace PlantsVsZombies.Simulation
                     z.PresentationNewspaperGaspRemaining = global::PlantsVsZombies.Adventure.AdventureZombieDeathRules.AnimationSeconds(13, 8f);
                     z.UsedAbility = true;
                     z.Eating = false;
-                    z.FrozenRemaining = 0f;
-                    z.PresentationButter = 0f;
-                    if ((flags & 1U) == 0)
+                    if (!suppressParts && (flags & 1U) == 0)
                     {
                         RequestAdventureZombieFoley(67);
+                        // PC 0x54C8C2 attaches reanimation115 at the zombie's (-11,0).
+                        z.PresentationNewspaperSurpriseAge = 0f;
                     }
                 }
             }
@@ -7161,6 +7279,16 @@ namespace PlantsVsZombies.Simulation
             foreach (Zombie z in Zombies)
             {
                 z.PresentationShieldRecoil = Math.Max(0f, z.PresentationShieldRecoil - dt);
+                if (z.PresentationNewspaperSurpriseAge >= 0f)
+                {
+                    // Attachments keep their own source-rate clock, including while the body is chilled or frozen.
+                    z.PresentationNewspaperSurpriseAge += dt;
+                    if (z.PresentationNewspaperSurpriseAge >= 1.25f)
+                    {
+                        z.PresentationNewspaperSurpriseAge = -1f;
+                    }
+                }
+
                 if (z.PresentationNewspaperGaspRemaining > 0f && z.FrozenRemaining <= 0f)
                 {
                     z.PresentationNewspaperGaspRemaining = Math.Max(0f, z.PresentationNewspaperGaspRemaining - dt * (z.ChillRemaining > 0 ? .5f : 1f));
@@ -7168,6 +7296,23 @@ namespace PlantsVsZombies.Simulation
                     {
                         z.PresentationNativePhase = 31;
                         RefreshAdventureZombieNativeSpeed(z);
+                        // PC 0x541770: roar only after the gasp finishes, with a head and at most ten live opponents.
+                        if (!z.Headless)
+                        {
+                            var count = 0;
+                            foreach (var other in Zombies)
+                            {
+                                if (other.Health > 0f && !other.Headless && !other.Hypnotized)
+                                {
+                                    count++;
+                                }
+                            }
+
+                            if (count <= 10)
+                            {
+                                RequestAdventureZombieFoley(66);
+                            }
+                        }
                     }
                 }
             }
@@ -7701,6 +7846,25 @@ namespace PlantsVsZombies.Simulation
                         KillAdventureZombie(z);
                         continue;
                     }
+                }
+
+                if (z.GraveRiseTicks > 0)
+                {
+                    // PC 0x54DA20 / 0x544970: no movement or eating during the 150-update grave phase.
+                    if (z.FrozenRemaining <= 0f)
+                    {
+                        z.GraveRiseTicks--;
+                        if (z.GraveRiseTicks == 0)
+                        {
+                            z.PresentationNativePhase = -1;
+                        }
+                    }
+                    else
+                    {
+                        z.FrozenRemaining = Math.Max(0f, z.FrozenRemaining - dt);
+                    }
+
+                    continue;
                 }
 
                 if (z.DropRemaining > 0f)
@@ -8900,7 +9064,7 @@ namespace PlantsVsZombies.Simulation
                 a.Column = column;
                 other.Row = r;
                 other.Column = cx;
-                s.Advice = "交换需要形成横向或纵向三个相同植物。";
+                s.Advice = s.Score == 0 ? "[ADVICE_BEGHOULED_DRAG_TO_MATCH_3]" : "";
                 return false;
             }
 
@@ -9230,7 +9394,7 @@ namespace PlantsVsZombies.Simulation
                     RemoveAdventurePlantAndStack(p);
                 }
 
-                Adventure._graves.Add(new AdventureCellTimer { Row = cell / 9, Column = cell % 9, Remaining = float.MaxValue });
+                Adventure._graves.Add(CreateAdventureGrave(cell / 9, cell % 9));
             }
         }
 
@@ -9634,7 +9798,7 @@ namespace PlantsVsZombies.Simulation
             var matches = a == b && b == c ? 3 : a == b || a == c || b == c ? 2 : 0;
             if (matches == 0)
             {
-                s.Advice = "没有配对，再拉一次。";
+                s.Advice = "[ADVICE_SLOT_MACHINE_SPIN_AGAIN]";
                 return;
             }
 
@@ -9647,7 +9811,7 @@ namespace PlantsVsZombies.Simulation
                     Suns.Add(CreateSun(3.5f + i * 0.025f, 0f, 0.6f));
                 }
 
-                s.Advice = "阳光组合！";
+                s.Advice = matches == 3 ? "[ADVICE_SLOT_MACHINE_SUN_JACKPOT]" : "[ADVICE_SLOT_MACHINE_2_SUNS]";
             }
             else if (kind == 57)
             {
@@ -9656,7 +9820,7 @@ namespace PlantsVsZombies.Simulation
                     SpawnAdventureCoin(AdventureCoinKind.Diamond, 4f + i * 0.2f, 0);
                 }
 
-                s.Advice = "钻石组合！";
+                s.Advice = matches == 3 ? "[ADVICE_SLOT_MACHINE_DIAMOND_JACKPOT]" : "[ADVICE_SLOT_MACHINE_2_DIAMONDS]";
             }
             else
             {
@@ -9665,7 +9829,7 @@ namespace PlantsVsZombies.Simulation
                     AddAdventurePacket((PlantKind)kind);
                 }
 
-                s.Advice = matches == 3 ? "三个相同植物！" : "两个相同植物！";
+                s.Advice = matches == 3 ? "[ADVICE_SLOT_MACHINE_3_OF_A_KIND]" : "[ADVICE_SLOT_MACHINE_2_OF_A_KIND]";
             }
         }
 
@@ -10881,46 +11045,38 @@ namespace PlantsVsZombies.Simulation
             }
         }
 
-        /// <summary>Performs mode instruction.</summary>
-        /// <returns>The resulting mode instruction.</returns>
+        /// <summary>Selects the original introductory advice for the current independent mode.</summary>
+        /// <returns>A bracketed original LawnStrings key, or an empty string when no original advice is displayed.</returns>
         public string ModeInstruction()
         {
             var d = ModeSession.Definition;
             if (d.Survival)
             {
-                return "生存第 " + ModeSession.Stage + " 轮；保留植物、阳光和割草机，完成本轮后重新选卡。";
+                // Original Challenge::InitLevel shows survival advice only before the first stage.
+                return ModeSession.Stage == 1 ? d.Endless ? "[ADVICE_SURVIVE_ENDLESS]" : "[ADVICE_SURVIVE_FLAGS]" : "";
             }
 
             switch (d.Mechanic)
             {
                 case ModeMechanic.Vases:
-                    return "点击罐子打开；拾取并使用种子包，消灭罐中的全部僵尸。";
+                    // ScaryPotterStart's shovel tutorial belongs only to adventure, not standalone puzzles.
+                    return "";
                 case ModeMechanic.IZombie:
-                    return "购买僵尸并放在线右侧；吃掉向日葵获得阳光，吃完五路大脑。";
+                    return "[ADVICE_I_ZOMBIE_EAT_ALL_BRAINS]";
                 case ModeMechanic.Beghouled:
-                    return "点击相邻两株植物交换；横向或纵向三个相同植物消除，完成75次配对。";
+                    return "[ADVICE_BEGHOULED_DRAG_TO_MATCH_3]";
                 case ModeMechanic.BeghouledTwist:
-                    return "点击2×2植物块顺时针转动，连成三个相同植物，完成75次配对。";
+                    return "[ADVICE_BEGHOULED_TWIST_TO_MATCH_3]";
                 case ModeMechanic.Stars:
-                    return "在星形轮廓的14个位置种满杨桃。";
+                    return "[ADVICE_FILL_IN_STARFRUIT]";
                 case ModeMechanic.Aquarium:
-                    return "点击水中投放大脑（5阳光）；购买潜水僵尸，攒1000阳光购买奖杯。";
+                    return "[ADVICE_ZOMBIQUARIUM_CLICK_TO_FEED]";
                 case ModeMechanic.LastStand:
-                    return "用5000阳光布阵后开始；不能种阳光植物，守住五旗。";
+                    return ModeSession.Stage == 1 ? "[ADVICE_SURVIVE_FLAGS]" : "";
                 case ModeMechanic.Slots:
-                    return "每次拉动花费25阳光；收集2000阳光获胜。";
-                case ModeMechanic.RainingSeeds:
-                    return "使用从天空落下的种子包保护草坪。";
-                case ModeMechanic.Columns:
-                    return "在一格使用传送带植物，同一列的合法格子一起种植。";
-                case ModeMechanic.Portals:
-                    return "植物子弹与僵尸会穿过成对传送门；留意传送门移动。";
-                case ModeMechanic.PeaHeads:
-                    return "植物僵尸会发射豌豆，或携带坚果与爆炸植物的能力。";
-                case ModeMechanic.Invisible:
-                    return "僵尸隐形，利用被啃咬的植物与命中特效判断位置。";
+                    return "[ADVICE_SLOT_MACHINE_PULL]";
                 default:
-                    return d.Name;
+                    return "";
             }
         }
 
@@ -11694,7 +11850,7 @@ namespace PlantsVsZombies.Simulation
         }
 
         /// <summary>Gets or sets mode izombie columns.</summary>
-        private int ModeIZombieColumns
+        internal int ModeIZombieColumns
         {
             get
             {
@@ -12553,10 +12709,33 @@ namespace PlantsVsZombies.Simulation
                 foreach (var grave in a._graves)
                 {
                     var z = SpawnAdventureZombie(PickScheduledAmbushZombie(true), grave.Row, grave.Column + 0.5f, wave);
-                    z.DropRemaining = 0.5f;
+                    InitializeAdventureGraveZombie(z, grave.Column);
                     a.Notice(AdventureNoticeKind.GraveRise, (int)z.Kind, grave.Row, grave.Column);
                 }
             }
+        }
+
+        /// <summary>Starts the original land grave ambush without treating the zombie as a falling actor.</summary>
+        /// <param name="zombie">The new zombie created by the final-wave grave ambush.</param>
+        /// <param name="column">The grave's lawn column.</param>
+        private void InitializeAdventureGraveZombie(Zombie zombie, int column)
+        {
+            var nativeX = 40f + column * 80f - 25f;
+            zombie.X = AdventureZombieNativeRules.GridX(nativeX, zombie.IsSmall ? .5f : 1f);
+            zombie.PresentationPreviousX = zombie.X;
+            zombie.GraveRiseTicks = AdventureZombieRiseRules.DurationTicks;
+            zombie.PresentationNativePhase = 14;
+            zombie.DropRemaining = 0f;
+            zombie.Eating = false;
+            // PC 0x54DCCF uses mPosX+60,mPosY+110 for the original ZombieRise particle.
+            Presentation.ZombieRiseEffects.Add(new AdventureZombieRiseEffect
+            {
+                Id = ++Presentation._effectId,
+                Row = zombie.Row,
+                X = nativeX + 60f,
+                Y = AdventureBiteNativeY(zombie, (int)nativeX) + 110f
+            });
+            RequestAdventureZombieFoley(79);
         }
 
         /// <summary>Performs pick scheduled ambush zombie.</summary>

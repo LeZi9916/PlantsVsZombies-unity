@@ -61,6 +61,8 @@ namespace PlantsVsZombies.Adventure
         internal readonly List<AdventureVase> _vases = new List<AdventureVase>();
         /// <summary>Stores graves.</summary>
         internal readonly List<AdventureCellTimer> _graves = new List<AdventureCellTimer>();
+        /// <summary>Gets whether the original introduction has enabled gravestone emergence.</summary>
+        public bool GravesEnabled { get; internal set; } = true;
         /// <summary>Stores craters.</summary>
         internal readonly List<AdventureCellTimer> _craters = new List<AdventureCellTimer>();
         /// <summary>Stores ice.</summary>

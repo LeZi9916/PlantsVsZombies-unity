@@ -11,5 +11,7 @@ namespace PlantsVsZombies.Adventure
         public int Column { get; internal set; }
         /// <summary>Gets or sets remaining.</summary>
         public float Remaining { get; internal set; }
+        /// <summary>Gets the original grave appearance when this timer represents a gravestone.</summary>
+        public AdventureGravePresentation? GravePresentation { get; internal set; }
     }
 }

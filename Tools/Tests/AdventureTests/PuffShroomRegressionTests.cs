@@ -14,9 +14,12 @@ internal static class PuffShroomRegressionTests
         TargetRectangle();
         TargetAcquisition();
         PlantedOutsideRangeRemainsIdle();
+        FirstAndRepeatedAttackWindup();
+        PendingAttackSurvivesTargetLoss();
+        SleepingMushroomDefersWindup();
         LaunchAndLifetime();
         BodyCollisionAndTorchwood();
-        Console.WriteLine("PASS: PC Puff-shroom body targeting, native muzzle, 75-tick life, and spore collision regressions.");
+        Console.WriteLine("PASS: PC Puff-shroom body targeting, first/repeated attack windup, native muzzle, 75-tick life, and spore collision regressions.");
     }
 
     /// <summary>Fails the focused regression when original behavior is not preserved.</summary>
@@ -57,6 +60,7 @@ internal static class PuffShroomRegressionTests
     private static Plant PlaceMushroom(GameSimulation game)
     {
         var plant = (Plant)Invoke(game, "PlaceAdventurePlant", PlantKind.PuffShroom, 0, 1)!;
+        plant.Timing = PlantsVsZombies.Timing.PlantTiming.FromRaw(PlantsVsZombies.Timing.PlantKind.PuffShroom, 0, 0);
         plant.ActionTimer = 0;
         plant.Asleep = false;
         return plant;
@@ -104,8 +108,15 @@ internal static class PuffShroomRegressionTests
             PlaceMushroom(game);
             game.Zombies.Add(AtBodyLeft(bodyLeft));
             Invoke(game, "AdvanceAdventurePlants", .01f);
-            Check(game.Peas.Count == (bodyLeft == 410 ? 1 : 0), "Production Puff-shroom range differs at body-left " + bodyLeft + ".");
-            if (game.Peas.Count != 0)
+            Check(game.Peas.Count == 0, "A target must start the original body animation before the first spore exists.");
+            Check((game.Plants[0].PresentationShotAge == 0f) == (bodyLeft == 410), "Production Puff-shroom range differs at body-left " + bodyLeft + ".");
+            for (var tick = 0; tick < 28; tick++)
+            {
+                Invoke(game, "AdvanceAdventurePlants", .01f);
+            }
+
+            Check(game.Peas.Count == (bodyLeft == 410 ? 1 : 0), "The body animation launches its spore after twenty-eight native ticks.");
+            if (game.Peas.Count > 0)
             {
                 Check(game.Peas[0].Range == float.MaxValue, "Puff lifetime must not be cut short by the old three-column center-distance limit.");
             }
@@ -131,9 +142,96 @@ internal static class PuffShroomRegressionTests
         }
 
         zombie.X = AdventureZombieNativeRules.GridX(410 - 36 + .01f);
+        plant.Timing = PlantsVsZombies.Timing.PlantTiming.FromRaw(PlantsVsZombies.Timing.PlantKind.PuffShroom, 0, 0);
         game.Update(.01f);
-        Check(plant.PresentationShotAge >= 0f && game.Peas.Count > 0,
-            "Entering the real native attack rectangle still permits the production attack.");
+        Check(plant.PresentationShotAge == 0f && game.Peas.Count == 0,
+            "The first successful attempt after an idle period must start the complete attack animation.");
+        game.Update(.28f);
+        Check(plant.PresentationShotAge >= .28f && game.Peas.Count > 0,
+            "The first successful attempt launches only after its original body windup.");
+    }
+
+    /// <summary>Checks both short-range species start every attack at animation time zero and launch twenty-eight ticks later.</summary>
+    private static void FirstAndRepeatedAttackWindup()
+    {
+        foreach (var kind in new[] { PlantKind.PuffShroom, PlantKind.SeaShroom })
+        {
+            var game = Fixture();
+            var plant = PlaceMushroom(game);
+            plant.Kind = kind;
+            var timingKind = (PlantsVsZombies.Timing.PlantKind)(int)kind;
+            plant.Timing = PlantsVsZombies.Timing.PlantTiming.FromRaw(timingKind, 0, 0);
+            var zombie = AtBodyLeft(300);
+            zombie.FrozenRemaining = 1000f;
+            game.Zombies.Add(zombie);
+            var attacks = 0;
+            var launches = 0;
+            var attackTick = -1;
+            for (var tick = 0; tick < 400; tick++)
+            {
+                var before = game.Peas.Count;
+                game.Update(.01f);
+                if (plant.PresentationShotAge == 0f)
+                {
+                    Check(game.Peas.Count == before, kind + " must animate before its spore appears.");
+                    Check(plant.Timing!.Value.ShootingCountdown == 29, kind + " starts the original 29-tick shooting counter.");
+                    if (attackTick >= 0)
+                    {
+                        Check(tick - attackTick >= 136 && tick - attackTick <= 150,
+                            kind + " repeats attempts at the original 136..150-tick interval.");
+                    }
+
+                    attackTick = tick;
+                    attacks++;
+                }
+
+                if (game.Peas.Count > before)
+                {
+                    Check(tick - attackTick == 28, kind + " must launch exactly twenty-eight ticks after animation starts.");
+                    Check(Math.Abs(plant.PresentationShotAge - .28f) < .0001f,
+                        kind + " must preserve the running body animation at launch.");
+                    launches++;
+                }
+
+                // Isolate shooting from damage, travel, and any unrelated wave completion.
+                game.Peas.Clear();
+            }
+
+            Check(attacks >= 3 && launches >= 3, kind + " must cover its first and repeated successful attack cycles.");
+        }
+    }
+
+    /// <summary>Checks an already animated attack still launches when its target leaves the attack rectangle.</summary>
+    private static void PendingAttackSurvivesTargetLoss()
+    {
+        var game = Fixture();
+        var plant = PlaceMushroom(game);
+        game.Zombies.Add(AtBodyLeft(300));
+        Invoke(game, "AdvanceAdventurePlants", .01f);
+        Check(plant.PresentationShotAge == 0f && game.Peas.Count == 0, "Target acquisition must first start the body animation.");
+        game.Zombies.Clear();
+        for (var tick = 0; tick < 27; tick++)
+        {
+            Invoke(game, "AdvanceAdventurePlants", .01f);
+            Check(game.Peas.Count == 0, "A pending first attack cannot launch before its twenty-eighth update.");
+        }
+
+        Invoke(game, "AdvanceAdventurePlants", .01f);
+        Check(game.Peas.Count == 1, "PC UpdateShooting launches an already scheduled spore without reacquiring its target.");
+    }
+
+    /// <summary>Checks a sleeping mushroom starts its first attack only after waking.</summary>
+    private static void SleepingMushroomDefersWindup()
+    {
+        var game = Fixture();
+        var plant = PlaceMushroom(game);
+        game.Zombies.Add(AtBodyLeft(300));
+        plant.Asleep = true;
+        Invoke(game, "AdvanceAdventurePlants", .01f);
+        Check(plant.PresentationShotAge < 0f && game.Peas.Count == 0, "A sleeping mushroom cannot start an attack animation.");
+        plant.Asleep = false;
+        Invoke(game, "AdvanceAdventurePlants", .01f);
+        Check(plant.PresentationShotAge == 0f && game.Peas.Count == 0, "A newly awake mushroom must also play the complete first windup.");
     }
 
     /// <summary>Checks real firing coordinates, native velocity, image growth, and exact retirement update.</summary>

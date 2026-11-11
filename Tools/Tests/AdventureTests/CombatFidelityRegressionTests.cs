@@ -17,6 +17,7 @@ internal static class CombatFidelityRegressionTests
         DefensiveDamage();
         DefensivePresentation();
         ChomperTransitions();
+        NewspaperTransitions();
         HugeWavePreservesPlants();
         Console.WriteLine("PASS: native mine contact, zombie screen entry, defensive damage, and chomper regressions.");
     }
@@ -343,6 +344,92 @@ internal static class CombatFidelityRegressionTests
         }
 
         Check(state.NativePhase == 12 && giant.Health == 2960 && game.Zombies.Contains(giant), "Gargantuar takes the original forty bite damage and is not swallowed.");
+    }
+
+    /// <summary>Creates a live newspaper zombie using the production spawn path and breaks its held paper.</summary>
+    /// <param name="game">The isolated fixture simulation.</param>
+    /// <param name="flags">The original damage flags.</param>
+    /// <returns>The surviving newspaper zombie.</returns>
+    private static Zombie BreakNewspaper(GameSimulation game, uint flags = 0)
+    {
+        var zombie = (Zombie)Invoke(game, "SpawnAdventureZombie", ZombieKind.Newspaper, 2, 6f, 0)!;
+        zombie.Eating = true;
+        Invoke(game, "HitAdventureZombie", zombie, 150f, false, flags);
+        return zombie;
+    }
+
+    /// <summary>Checks original paper ripping, independent surprise playback, gasp completion, angry head, and roar admission.</summary>
+    private static void NewspaperTransitions()
+    {
+        var game = Fixture();
+        var zombie = BreakNewspaper(game);
+        Check(zombie.Health == 270f && zombie.ShieldHealth == 0f && !zombie.Eating, "Breaking the newspaper stops eating without damaging the body.");
+        Check(zombie.PresentationNativePhase == 30 && game.AdventurePresentationZombieAnimation(zombie) == "anim_gasp"
+            && game.AdventurePresentationZombieRate(zombie) == 8f, "The original thirteen-frame eight-fps gasp plays before angry walking.");
+        Check(zombie.PresentationNewspaperSurpriseAge == 0f && game.Presentation.ZombieSounds.FindAll(sound => sound.Foley == 67).Count == 1,
+            "Unsuppressed paper loss creates one original surprise attachment and rip sound.");
+        Check(AdventureZombieEquipmentRules.Image(zombie, "Zombie_paper", "Zombie_paper", "anim_head1") == null,
+            "The angry head is not substituted during the gasp.");
+        var x = zombie.X;
+        Invoke(game, "AdvanceAdventureZombies", .1f);
+        Check(zombie.X == x, "The surprised newspaper zombie stays still during the gasp.");
+        Invoke(game, "AdvanceAdventureZombieFeedback", 1.24f);
+        Check(zombie.PresentationNewspaperSurpriseAge >= 0f && zombie.PresentationNativePhase == 30,
+            "The original fifteen-frame surprise attachment stays alive for its full source duration.");
+        Invoke(game, "AdvanceAdventureZombieFeedback", .02f);
+        Check(zombie.PresentationNewspaperSurpriseAge < 0f && zombie.PresentationNativePhase == 30,
+            "The surprise attachment ends independently before the slower gasp.");
+        Invoke(game, "AdvanceAdventureZombieFeedback", .38f);
+        Check(zombie.PresentationNativePhase == 31 && game.AdventurePresentationZombieAnimation(zombie) == "anim_walk_nopaper",
+            "Completing the gasp enters original angry walking.");
+        Check(zombie.PresentationNativeVelocity >= .89f && zombie.PresentationNativeVelocity <= .91f,
+            "Angry newspaper walking uses the original native speed interval.");
+        Check(AdventureZombieEquipmentRules.Image(zombie, "Zombie_paper", "Zombie_paper", "anim_head1") == "IMAGE_REANIM_ZOMBIE_PAPER_MADHEAD",
+            "Angry walking substitutes the original mad-head artwork.");
+        Check(game.Presentation.ZombieSounds.FindAll(sound => sound.Foley == 66).Count == 1, "The original roar plays once after gasp completion.");
+        Invoke(game, "AdvanceAdventureZombieFeedback", 1f);
+        Check(game.Presentation.ZombieSounds.FindAll(sound => sound.Foley == 66).Count == 1, "Angry walking does not repeat its transition roar.");
+        var roar = AdventureZombieFoleyData.Definitions[66];
+        Check(roar.PitchRange == -2f && roar.Samples.Length == 3 && roar.Samples[0] == "newspaper_rarrgh"
+            && roar.Samples[1] == "newspaper_rarrgh2" && roar.Samples[2] == "newspaper_rarrgh2",
+            "Native Foley sixty-six keeps the original one-to-two sample weighting and pitch range.");
+
+        foreach (var flags in new[] { 1U, 16U })
+        {
+            var silent = Fixture();
+            var paper = BreakNewspaper(silent, flags);
+            Check(paper.PresentationNativePhase == 30 && paper.PresentationNewspaperSurpriseAge < 0f
+                && !silent.Presentation.ZombieSounds.Exists(sound => sound.Foley == 67),
+                "Original suppression flags keep the gasp while suppressing its question mark and rip sound.");
+        }
+
+        var frozen = Fixture();
+        var frozenPaper = (Zombie)Invoke(frozen, "SpawnAdventureZombie", ZombieKind.Newspaper, 2, 6f, 0)!;
+        frozenPaper.FrozenRemaining = 3f;
+        frozenPaper.PresentationButter = 2f;
+        Invoke(frozen, "HitAdventureZombie", frozenPaper, 150f, false, 0U);
+        var gasp = frozenPaper.PresentationNewspaperGaspRemaining;
+        Invoke(frozen, "AdvanceAdventureZombieFeedback", .5f);
+        Check(frozenPaper.FrozenRemaining == 3f && frozenPaper.PresentationButter == 2f
+            && frozenPaper.PresentationNewspaperGaspRemaining == gasp && frozenPaper.PresentationNewspaperSurpriseAge == .5f,
+            "Paper loss preserves immobilization while the independent original question-mark attachment continues.");
+
+        var crowded = Fixture();
+        var crowdedPaper = BreakNewspaper(crowded);
+        for (var index = 0; index < 10; index++)
+        {
+            Invoke(crowded, "SpawnAdventureZombie", ZombieKind.Normal, 0, 8f, 0);
+        }
+
+        Invoke(crowded, "AdvanceAdventureZombieFeedback", 2f);
+        Check(crowdedPaper.PresentationNativePhase == 31 && !crowded.Presentation.ZombieSounds.Exists(sound => sound.Foley == 66),
+            "More than ten live opponents suppress the original newspaper roar without blocking rage.");
+        var headless = Fixture();
+        var headlessPaper = BreakNewspaper(headless);
+        headlessPaper.Headless = true;
+        Invoke(headless, "AdvanceAdventureZombieFeedback", 2f);
+        Check(headlessPaper.PresentationNativePhase == 31 && !headless.Presentation.ZombieSounds.Exists(sound => sound.Foley == 66),
+            "A headless newspaper zombie completes its gasp without roaring.");
     }
 
     /// <summary>Checks live plant membership across the actual huge-wave warning and spawn path.</summary>

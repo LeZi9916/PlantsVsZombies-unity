@@ -443,7 +443,11 @@ namespace PlantsVsZombies.Reanimation
                     var brightness = emitter.Definition.Track("ParticleBrightness", 1).Value(time, particle.Brightness);
                     SpriteDrawState.Color = new Color(previous.r * emitter.Definition.Track("ParticleRed", 1).Value(time, particle.ColorRed) * brightness, previous.g * emitter.Definition.Track("ParticleGreen", 1).Value(time, particle.ColorGreen) * brightness, previous.b * emitter.Definition.Track("ParticleBlue", 1).Value(time, particle.ColorBlue) * brightness, previous.a * Mathf.Clamp01(alpha));
                     var position = Vector2.Lerp(particle.PreviousPosition, particle.Position, fraction);
-                    _renderer.DrawResourceSprite(emitter.Definition.Image, origin + position * scale, size * scale, Mathf.Lerp(particle.PreviousAngle, particle.Angle, fraction), particle.Frame, 0, 0, stretch, emitter.Definition.Additive);
+                    var clipTop = emitter.Definition.Track("ClipTop").Value(time, .5f);
+                    var clipBottom = emitter.Definition.Track("ClipBottom").Value(time, .5f);
+                    var imageRow = emitter.Definition.Tracks.ContainsKey("ImageRow") ? (int)SystemValue(system, emitter, "ImageRow") : 0;
+                    _renderer.DrawResourceSprite(emitter.Definition.Image, origin + position * scale, size * scale, Mathf.Lerp(particle.PreviousAngle, particle.Angle, fraction),
+                        particle.Frame, 0, 0, stretch, emitter.Definition.Additive, clipTop, clipBottom, imageRow);
                 }
             }
 

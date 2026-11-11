@@ -2833,12 +2833,24 @@ namespace PlantsVsZombies.Reanimation
         /// <param name = "rows">The rows.</param>
         /// <param name = "stretch">The stretch.</param>
         /// <param name = "additive">The additive.</param>
+        /// <param name="clipTop">The fraction hidden from the sprite's top edge by its original particle definition.</param>
+        /// <param name="clipBottom">The fraction hidden from the sprite's bottom edge by its original particle definition.</param>
+        /// <param name="imageRow">The original atlas row selected by the particle emitter.</param>
         /// <returns>The resulting draw resource sprite.</returns>
-        public bool DrawResourceSprite(string resource, Vector2 center, float scale, float degrees = 0f, int frame = 0, int columns = 0, int rows = 0, float stretch = 1f, bool additive = false)
+        public bool DrawResourceSprite(string resource, Vector2 center, float scale, float degrees = 0f, int frame = 0, int columns = 0, int rows = 0, float stretch = 1f, bool additive = false,
+            float clipTop = 0f, float clipBottom = 0f, int imageRow = 0)
         {
             using var objectScope = BeginObjectScope();
             // Original zero-area sprites have no visible pixels. IMGUI rejects their singular matrix.
             if (scale == 0f || stretch == 0f)
+            {
+                return true;
+            }
+
+            clipTop = Mathf.Clamp01(clipTop);
+            clipBottom = Mathf.Clamp01(clipBottom);
+            var visibleHeight = 1f - clipTop - clipBottom;
+            if (visibleHeight <= 0f)
             {
                 return true;
             }
@@ -2901,8 +2913,10 @@ namespace PlantsVsZombies.Reanimation
                     return true;
                 }
 
-                SpriteMatrix = sprite;
-                DrawTexturePart(texture, width, height, new Rect((frame % columns) / (float)columns, 1f - (frame / columns + 1f) / rows, 1f / columns, 1f / rows));
+                frame += Math.Max(0, Math.Min(rows - 1, imageRow)) * columns;
+                SpriteMatrix = sprite * Matrix4x4.Translate(new Vector3(0f, height * clipTop, 0f));
+                DrawTexturePart(texture, width, height * visibleHeight, new Rect((frame % columns) / (float)columns,
+                    1f - (frame / columns + 1f - clipBottom) / rows, 1f / columns, visibleHeight / rows));
             }
             finally
             {

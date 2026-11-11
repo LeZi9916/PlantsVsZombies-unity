@@ -53,6 +53,12 @@ internal static class Program
             return;
         }
 
+        if (args.Length > 0 && args[0] == "--coin-feedback")
+        {
+            CoinFeedbackRegressionTests.Run();
+            return;
+        }
+
         if (args.Length == 0 || args[0] == "--unit")
         {
             AdventureUnitTests.Run(root);
@@ -60,6 +66,7 @@ internal static class Program
             CombatFidelityRegressionTests.Run();
             RewardProjectileRegressionTests.Run();
             PuffShroomRegressionTests.Run();
+            CoinFeedbackRegressionTests.Run();
             if (args.Length > 0)
             {
                 return;

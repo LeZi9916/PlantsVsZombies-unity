@@ -19,6 +19,7 @@ internal static class ModeCoreProbe
     }
     private static void Main()
     {
+        PlantsVsZombies.Tests.Modes.ModeAdviceRegressionTests.Run();
         int modes=0;foreach(var mode in ModeCatalog.All){Check(mode.RecordIndex==mode.Id-1,"PC record index "+mode.Id);modes++;}Check(modes==55,"55 independent PC catalog entries");
         var survival=new ModeSession(1);Check(survival.ChooseSeeds(survival.Game.Adventure.SelectedSeeds),"survival seed selection");
         var veteran=new Plant{Kind=PlantKind.Peashooter,Row=2,Column=0,Layer=PlantLayer.Main,Health=211};survival.Game.Plants.Add(veteran);AddSun(survival.Game,200);int sunBefore=survival.Game.SunAmount;survival.Game.Mowers[0].Available=false;
@@ -46,7 +47,20 @@ internal static class ModeCoreProbe
         var whack=new ModeSession(30);whack.Update(2.51f);Check(whack.Game.Adventure.CurrentWave==1&&whack.Game.Zombies.Count>0,"native hammer schedule remains active without generic ambush");int hammerTarget=whack.Game.Zombies[0].Id;Check(whack.Game.HammerAdventureZombie(hammerTarget),"standalone hammer actually hits spawned zombie");
         var roof=new ModeSession(5);Check(roof.Game.Mowers.TrueForAll(m=>!m.Available),"roof cleaners are not gifted");var boughtRoof=new ModeSession(5,null,6,123,true,true);Check(boughtRoof.Game.Mowers.TrueForAll(m=>m.Available)&&boughtRoof.Game.Rules.AdventurePoolCleaners,"purchased cleaners carried into mode rules");
         int rakeCharges=0;bowling.Game.ApplyModePurchases(true,()=>{rakeCharges++;return true;});Check(rakeCharges==1&&bowling.Game.Adventure.RakeRow>=0,"rake charges once when actually placed");aqua.Game.ApplyModePurchases(true,()=>{rakeCharges++;return true;});Check(rakeCharges==1&&aqua.Game.Adventure.RakeRow<0,"special aquarium consumes no rake");
-        var gold=bowling.Game.SpawnAdventureCoin(AdventureCoinKind.Gold,1,1);bowling.Game.Rules.AdventureCoinCommit=total=>false;Check(!bowling.Game.CollectAdventureCoin(gold)&&bowling.Game.Adventure.Coins.Contains(gold),"failed coin persistence preserves collectible");int committed=0;bowling.Game.Rules.AdventureCoinCommit=total=>{committed=total;return true;};Check(bowling.Game.CollectAdventureCoin(gold)&&committed==5&&!bowling.Game.Adventure.Coins.Contains(gold),"coin retry commits cumulative units once");
+        var gold = bowling.Game.SpawnAdventureCoin(AdventureCoinKind.Gold, 1, 1);
+        bowling.Game.Rules.AdventureCoinCommit = total => false;
+        Check(bowling.Game.CollectAdventureCoin(gold), "Mode money starts its original collection flight");
+        bowling.Update(1.5f);
+        Check(gold.PersistencePending && !gold.IsBeingCollected && bowling.Game.Adventure.Coins.Contains(gold), "Failed arrival-time persistence preserves a collectible");
+        var committed = 0;
+        bowling.Game.Rules.AdventureCoinCommit = total =>
+        {
+            committed = total;
+            return true;
+        };
+        Check(bowling.Game.CollectAdventureCoin(gold), "The pending mode coin can be retried");
+        bowling.Update(.01f);
+        Check(committed == 5 && !bowling.Game.Adventure.Coins.Contains(gold), "Coin retry commits cumulative units once");
         vase.Game.ApplyModePurchases(true,null);var nutCells=new List<int>();foreach(var pair in vase._vaseSeeds)if(pair.Value==3)nutCells.Add(pair.Key);Check(nutCells.Count>=2,"PC vase wall-nut packets available");
         vase.SmashVase(nutCells[0]/9,nutCells[0]%9);int firstNut=vase.Game.Adventure.Packets[vase.Game.Adventure.Packets.Count-1].Id;Check(vase.UsePacket(firstNut,1,0),"first-aid initial wall-nut");vase.Game.AdventurePlantAt(1,0,PlantLayer.Main).Health=1000;vase.SmashVase(nutCells[1]/9,nutCells[1]%9);int nextNut=vase.Game.Adventure.Packets[vase.Game.Adventure.Packets.Count-1].Id;Check(vase.UsePacket(nextNut,1,0)&&vase.Game.AdventurePlantAt(1,0,PlantLayer.Main).Health==4000,"purchased first-aid heals through mode packet planting");
         var variants=new ModeSession(32);variants.ChooseSeeds(variants.Game.Adventure.SelectedSeeds);int nextId=5000;

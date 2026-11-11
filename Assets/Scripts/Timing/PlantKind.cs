@@ -12,6 +12,10 @@ namespace PlantsVsZombies.Timing
         /// <summary>Identifies snow pea.</summary>
         SnowPea = 5,
         /// <summary>Identifies repeater.</summary>
-        Repeater = 7
+        Repeater = 7,
+        /// <summary>Identifies the short-range land mushroom.</summary>
+        PuffShroom = 8,
+        /// <summary>Identifies the short-range aquatic mushroom.</summary>
+        SeaShroom = 24
     }
 }

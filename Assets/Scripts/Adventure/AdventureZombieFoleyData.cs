@@ -96,8 +96,16 @@ namespace PlantsVsZombies.Adventure
                 new AdventureZombieFoleyDefinition(-5.0f, new[] { "melonimpact", "melonimpact2" })
             },
             {
+                66,
+                new AdventureZombieFoleyDefinition(-2.0f, new[] { "newspaper_rarrgh", "newspaper_rarrgh2", "newspaper_rarrgh2" })
+            },
+            {
                 67,
                 new AdventureZombieFoleyDefinition(-2.0f, new[] { "newspaper_rip" })
+            },
+            {
+                79,
+                new AdventureZombieFoleyDefinition(10.0f, new[] { "gravestone_rumble" })
             },
         };
     }

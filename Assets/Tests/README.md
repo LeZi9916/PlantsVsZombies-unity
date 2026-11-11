@@ -82,3 +82,19 @@ artwork. They isolate visible shadow pixels, check the native muzzle, and compar
 new and grown spore sizes. `PVZ_BOARD_STRESS_OUTPUT` optionally saves screenshots
 to an explicitly selected ignored directory. Without the original assets these
 opt-in graphics tests are skipped; a skipped run is not graphics verification.
+
+Original feedback regressions use the same `PVZ_BOARD_STRESS_ASSETS` directory:
+
+```powershell
+./Tools/Tests/Run-UnityTests.ps1 -Platform EditMode -TestFilter 'AdventureAdviceRulesTests;AdventureGravePresentationTests;AdventureZombieRiseTests'
+./Tools/Tests/Run-UnityTests.ps1 -Platform PlayMode -TestFilter 'OriginalPuffShroomTests;OriginalCoinFeedbackTests;OriginalCoinGraphicsTests;OriginalNewspaperTests;OriginalGravestoneTests;OriginalBattleTooltipTests;ResourceSpriteClippingTests'
+```
+
+These fixtures cover the first mushroom attack's original windup, currency pickup
+samples and collection artwork, newspaper surprise and angry head artwork, grave
+atlas selection and separate soil, preview suppression, and final-wave emergence
+clipping. Synthetic sprite tests independently check particle atlas rows and top
+and bottom cropping. Tooltip fixtures keep combat names and availability warnings
+while reserving descriptions for the seed chooser. Audio checks decode original
+non-silent PCM and inspect production source playback; they do not measure a
+physical speaker or replace target-device listening checks.

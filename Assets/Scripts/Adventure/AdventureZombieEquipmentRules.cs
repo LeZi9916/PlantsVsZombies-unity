@@ -184,6 +184,12 @@ namespace PlantsVsZombies.Adventure
         {
             var helm = HelmType(z);
             var bodyTrack = Same(asset, body);
+            // PC UpdateZombieNewspaper (0x541829) replaces only anim_head1 after the gasp completes.
+            if (bodyTrack && z.Kind == ZombieKind.Newspaper && z.PresentationNativePhase == 31 && Same(track, "anim_head1"))
+            {
+                return "IMAGE_REANIM_ZOMBIE_PAPER_MADHEAD";
+            }
+
             var child = (helm == 8 && Same(asset, "Wallnut")) || (helm == 9 && Same(asset, "Tallnut"));
             if ((bodyTrack && helm < 8 || child) && z.ArmorHealth > 0 && Same(track, HelmTrack(helm)))
             {

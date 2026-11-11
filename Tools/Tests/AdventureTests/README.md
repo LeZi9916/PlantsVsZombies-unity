@@ -8,6 +8,12 @@
 
 `--reward-projectiles` 只运行胜利后棋盘投射物回归，覆盖直线、反向、斜向与抛物线运动、出界回收、奖励介绍阶段停止及独立模式胜利；同时检查不恢复伤害、掉落、植物攻击或波次推进。原版依据为 `Board.UpdateGameObjects` 在奖励落地及收取期间继续更新现有 `Projectile`。
 
+`--coin-feedback` checks silver, gold, and diamond collection against PC `Coin::UpdateCollected`
+(`0x43C570`): the `(39,558)` wallet target, one twenty-first movement per native tick,
+the twelve-pixel scoring threshold, shrinking and opacity, pause and duplicate-click guards,
+and retryable arrival-time persistence. It also checks the original currency kind notification
+used for the coin Foley or diamond pickup sample. These simulation checks do not verify audio output.
+
 Unity编译能力核对：`dotnet build Tools/Tests/AdventureTests/UnityCoreCompile/UnityCoreCompile.csproj -c Release`；这是netstandard2.1/C#9.0纯核心编译，不启动Unity，不写主工程Build、Library或ProjectSettings。
 
 接线、实现范围与近似项见项目根 ADVENTURE_HANDOFF.md。不能把该测试的通过解释为原版所有随机状态、动画或视觉已一致。
@@ -21,6 +27,17 @@ chomper state transitions, and huge-wave plant retention regressions with
 `dotnet run --project Tools/Tests/AdventureTests/AdventureTests.csproj -c Release -- --combat-fidelity`.
 These fixtures test the simulation and original image/track selection rules;
 they do not validate Unity rendering or platform Player behavior.
+
+The newspaper regressions also exercise the original paper-break gasp, independent
+question-mark clock, angry-head selection, and weighted roar admission. Their PC
+references are `0x54C7A0` and `0x541770`; Puff-shroom timing uses `0x46D240` and
+`0x472C70`. Grave emergence is checked in the Unity EditMode fixtures against
+`0x54DA20`, `0x544970`, `0x54990C`, and `0x548DAA`; original stone and soil geometry
+uses the local PC `GridItem.DrawGraveStone` at `0x4589E0`. Its source rectangles
+retain the full soil atlas cell and apply the shared -9-pixel baseline offset;
+the mobile reference implementation's cropped soil parameters do not apply.
+The original artwork, sound, and cropping
+fixtures and their opt-in resource directory are documented in `Assets/Tests/README.md`.
 
 
 ## 升级植物回归

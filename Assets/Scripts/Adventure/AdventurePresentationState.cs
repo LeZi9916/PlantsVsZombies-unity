@@ -43,5 +43,7 @@ namespace PlantsVsZombies.Adventure
         public int ZombiePartSoundSerial;
         /// <summary>Stores zombie sounds.</summary>
         public readonly List<AdventureZombieSoundEvent> ZombieSounds = new List<AdventureZombieSoundEvent>();
+        /// <summary>Retains original grave-rise particles for their independent two-second lifetime.</summary>
+        public readonly List<AdventureZombieRiseEffect> ZombieRiseEffects = new List<AdventureZombieRiseEffect>();
     }
 }

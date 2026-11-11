@@ -117,7 +117,27 @@ internal static class UpgradePlantTests
 
         Check(direct.Health==190&&nearby.Health==244&&direct.ChillRemaining>0&&nearby.ChillRemaining>0,"Winter direct/splash damage chills adjacent lane after the native lob reaches its target");
         var gold=Fixture(49,null,PlantKind.MagnetShroom,PlantKind.GoldMagnet,PlantKind.Marigold);gold.TryPlant(PlantKind.MagnetShroom,1,1);Check(gold.PlantAt(1,1).Asleep&&gold.TryPlant(PlantKind.GoldMagnet,1,1)&&!gold.PlantAt(1,1).Asleep,"Gold Magnet is active in daylight without coffee");var metal=Spawn(gold,ZombieKind.Buckethead,1,3);
-        for(int i=0;i<6;i++)Check(gold.SpawnAdventureCoin(AdventureCoinKind.Silver,0.5f+i,1)!=null,"host coin fixture");int sun=gold.SunAmount;gold.Update(1.1f);Check(gold.Adventure.Coins.Count(c=>c.IsBeingCollected)==5&&gold.Adventure.MoneyCollectedUnits==0,"Gold Magnet reserves at most five coins before delivery");gold.Update(0.6f);Check(gold.Adventure.MoneyCollectedUnits==5&&gold.Adventure.Coins.Count==1&&metal.ArmorHealth==1100,"Gold Magnet collects money, not enemy metal");var coin=gold.Adventure.Coins[0];Check(gold.CollectAdventureCoin(coin)&&!gold.CollectAdventureCoin(coin),"manual coin pickup cannot double collect");var gc=gold.SpawnAdventureCoin(AdventureCoinKind.Gold,1,1);var dc=gold.SpawnAdventureCoin(AdventureCoinKind.Diamond,2,1);gold.CollectAdventureCoin(gc);gold.CollectAdventureCoin(dc);Check(gold.Adventure.MoneyCollectedUnits==111&&gold.Adventure.MoneyDisplayValue==1110&&gold.SunAmount==sun,"currency units are 1/5/100 and remain separate from sun");
+        for (var i = 0; i < 6; i++)
+        {
+            Check(gold.SpawnAdventureCoin(AdventureCoinKind.Silver, .5f + i, 1) != null, "host coin fixture");
+        }
+
+        var sun = gold.SunAmount;
+        gold.Update(1.1f);
+        Check(gold.Adventure.Coins.Count(c => c.IsBeingCollected) == 5 && gold.Adventure.MoneyCollectedUnits == 0,
+            "Gold Magnet reserves at most five coins before delivery");
+        gold.Update(.6f);
+        Check(gold.Adventure.MoneyCollectedUnits == 5 && gold.Adventure.Coins.Count == 1 && metal.ArmorHealth == 1100,
+            "Gold Magnet collects money, not enemy metal");
+        var coin = gold.Adventure.Coins[0];
+        Check(gold.CollectAdventureCoin(coin) && !gold.CollectAdventureCoin(coin), "manual coin pickup cannot double collect");
+        var gc = gold.SpawnAdventureCoin(AdventureCoinKind.Gold, 1, 1);
+        var dc = gold.SpawnAdventureCoin(AdventureCoinKind.Diamond, 2, 1);
+        gold.CollectAdventureCoin(gc);
+        gold.CollectAdventureCoin(dc);
+        gold.Update(1.5f);
+        Check(gold.Adventure.MoneyCollectedUnits == 111 && gold.Adventure.MoneyDisplayValue == 1110 && gold.SunAmount == sun,
+            "currency units are 1/5/100 and remain separate from sun after their collection flights");
         Check(gold.TryPlant(PlantKind.Marigold,0,0),"Marigold is available as real coin source");gold.Update(5f);Check(gold.Adventure.MoneyCollectedUnits>111,"Gold Magnet collects actual Marigold production");
     }
     private static void Spikerock()

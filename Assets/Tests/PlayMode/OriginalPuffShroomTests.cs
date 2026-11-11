@@ -144,6 +144,72 @@ namespace PlantsVsZombies.Tests.PlayMode
             Assert.That(grown.yMax, Is.LessThanOrEqualTo(149f));
         }
 
+        /// <summary>Checks the production presenter displays the original shooting frames before the first spore launches.</summary>
+        /// <returns>Frame boundaries for native attack playback and camera comparisons.</returns>
+        [UnityTest]
+        public IEnumerator FirstAttackDisplaysOriginalWindupBeforeLaunching()
+        {
+            var game = new GameSimulation(new GameRules { AdventureLevel = 11 }, 7529);
+            _owner._game = game;
+            Assert.That(game.ChooseDefaultAdventureSeeds(), Is.True);
+            game.ResetAdventureWaveSchedule(100000, false, false);
+            var place = typeof(GameSimulation).GetMethod("PlaceAdventurePlant", BindingFlags.Instance | BindingFlags.NonPublic)!;
+            var plant = (Plant)place.Invoke(game, new object[] { PlantKind.PuffShroom, 0, 1 })!;
+            plant.Timing = PlantsVsZombies.Timing.PlantTiming.FromRaw(PlantsVsZombies.Timing.PlantKind.PuffShroom, 0, 0);
+            game.Zombies.Add(new Zombie
+            {
+                Id = 91,
+                Kind = ZombieKind.Normal,
+                Row = 0,
+                X = AdventureZombieNativeRules.GridX(264f),
+                Health = 270f,
+                StartingHealth = 270f,
+                FrozenRemaining = 1000f
+            });
+            game.Update(.01f);
+            Assert.That(plant.PresentationShotAge, Is.Zero, "The first attack begins at the first original shooting frame.");
+            Assert.That(game.Peas.Count, Is.Zero);
+            game.Update(.14f);
+            Assert.That(game.Peas.Count, Is.Zero, "Original shooting frames must be visible before projectile creation.");
+
+            // Suppress the shared ground shadow so this comparison isolates the original body animation.
+            _owner._textures["plantshadow2.png"] = null!;
+            var draw = typeof(GamePresenter).GetMethod("DrawAdventurePlant", BindingFlags.Instance | BindingFlags.NonPublic)!;
+            yield return Capture(() => draw.Invoke(_presenter, new object[] { plant }));
+            var actual = _pixels.GetPixels32();
+            Save("puff-first-attack-windup.png");
+            var origin = new Vector2(120f, 80f + AlmanacPortraitLayout.PlantHeightOffset(8));
+            yield return Capture(() => _animations.DrawNativePlayback("Puffshroom", origin, 1f,
+                plant.PresentationShotAge, "anim_shooting", false, 35f));
+            Assert.That(ChangedPixels(actual, _pixels.GetPixels32()), Is.LessThan(10),
+                "Production must select the original shooting clip at its original 35 fps before the first spore.");
+            yield return Capture(() => _animations.DrawNativePlayback("Puffshroom", origin, 1f,
+                plant.Age, "anim_idle", true, plant.PresentationRate));
+            Assert.That(ChangedPixels(actual, _pixels.GetPixels32()), Is.GreaterThan(30),
+                "The first windup must visibly differ from the idle body pose.");
+            game.Update(.14f);
+            Assert.That(game.Peas.Count, Is.EqualTo(1), "The first spore follows the full twenty-eight-tick body windup.");
+        }
+
+        /// <summary>Counts visible camera pixel differences while tolerating negligible channel rounding.</summary>
+        /// <param name="first">The production camera frame.</param>
+        /// <param name="second">The reference camera frame.</param>
+        /// <returns>The number of pixels with a visible difference.</returns>
+        private static int ChangedPixels(Color32[] first, Color32[] second)
+        {
+            var changed = 0;
+            for (var index = 0; index < first.Length; index++)
+            {
+                if (Math.Abs(first[index].r - second[index].r) + Math.Abs(first[index].g - second[index].g)
+                    + Math.Abs(first[index].b - second[index].b) > 12)
+                {
+                    changed++;
+                }
+            }
+
+            return changed;
+        }
+
         /// <summary>Compares a real plant draw with and without only its cached shadow to isolate visible ground pixels.</summary>
         /// <param name="level">The day or night adventure terrain used by the fixture.</param>
         /// <param name="shadowName">The original shadow resource expected on that terrain.</param>

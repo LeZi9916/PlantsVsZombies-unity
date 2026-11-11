@@ -168,7 +168,15 @@ namespace PlantsVsZombies.Game
                 : zombie.Kind == ZombieKind.ScreenDoor && zombie.ShieldHealth > 0 ? ZombieVariant.ScreenDoor : ZombieVariant.Normal;
             _plantHead = zombie.ModeHead >= 26 && zombie.ModeHead <= 31;
             _backwards = zombie.PresentationWalkingBackwards ?? (zombie.Hypnotized || zombie.Kind == ZombieKind.Digger && zombie.AbilityPhase == 2);
-            _renderer.DrawNativeZombieCombat(zombie, new Rect(origin.x - 160, origin.y - 160, 500, 460), _drawZombie, surfaceKey);
+            var viewport = new Rect(origin.x - 160, origin.y - 160, 500, 460);
+            if (zombie.GraveRiseTicks > 0)
+            {
+                var nativeY = origin.y + AdventureZombieRiseRules.Altitude(zombie.GraveRiseTicks)
+                    - 120f * (1f - scale) + 8f;
+                viewport.yMax = Math.Min(viewport.yMax, AdventureZombieRiseRules.ClipBottom(nativeY, zombie.GraveRiseTicks));
+            }
+
+            _renderer.DrawNativeZombieCombat(zombie, viewport, _drawZombie, surfaceKey);
         }
 
         /// <summary>Submits the configured plant without allocating callback captures.</summary>

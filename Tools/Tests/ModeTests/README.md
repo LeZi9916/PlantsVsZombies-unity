@@ -11,3 +11,8 @@ It covers survival persistence, puzzle actions, slot and aquarium rules,
 unlock gates, native wave timing, and rewards using the production simulation
 sources. It does not start Unity or prove rendered or interactive behavior.
 Build output stays in the ignored `bin` and `obj` directories beside this test.
+
+The focused advice regression checks all 55 mode introductions, suppresses repeated
+survival-stage tutorials, and resolves controlled slot results through the production
+slot update. Advice uses the original bracketed LawnStrings keys; modes without an
+original introduction keep an empty advice string.

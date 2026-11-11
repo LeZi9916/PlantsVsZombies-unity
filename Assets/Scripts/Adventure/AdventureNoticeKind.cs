@@ -44,6 +44,10 @@ namespace PlantsVsZombies.Adventure
         /// <summary>Identifies coin collected.</summary>
         CoinCollected,
         /// <summary>Identifies reward fade.</summary>
-        RewardFade
+        RewardFade,
+        /// <summary>Identifies the beginning of a manual money pickup and carries its coin kind.</summary>
+        CoinCollectionStarted,
+        /// <summary>Identifies a failed pickup persistence attempt and carries the retryable coin identifier.</summary>
+        CoinCollectionFailed
     }
 }

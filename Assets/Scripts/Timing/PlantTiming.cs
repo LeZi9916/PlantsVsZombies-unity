@@ -159,7 +159,8 @@ namespace PlantsVsZombies.Timing
         /// <exception cref = "ArgumentOutOfRangeException">The operation cannot satisfy its preconditions.</exception>
         private static void ValidateKind(PlantKind kind)
         {
-            if (kind != PlantKind.Peashooter && kind != PlantKind.Sunflower && kind != PlantKind.SnowPea && kind != PlantKind.Repeater)
+            if (kind != PlantKind.Peashooter && kind != PlantKind.Sunflower && kind != PlantKind.SnowPea && kind != PlantKind.Repeater
+                && kind != PlantKind.PuffShroom && kind != PlantKind.SeaShroom)
             {
                 throw new ArgumentOutOfRangeException(nameof(kind));
             }

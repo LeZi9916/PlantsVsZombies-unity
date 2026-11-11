@@ -15,7 +15,7 @@ namespace PlantsVsZombies.Adventure
         /// <returns>The resulting can be auto targeted.</returns>
         public static bool CanBeAutoTargeted(Zombie z, PlantKind kind = PlantKind.Peashooter)
         {
-            if (z == null || z.Health <= 0 || z.PresentationNativePhase >= 1 && z.PresentationNativePhase <= 3)
+            if (z == null || z.Health <= 0 || z.GraveRiseTicks > 0 || z.PresentationNativePhase >= 1 && z.PresentationNativePhase <= 3)
             {
                 return false;
             }
