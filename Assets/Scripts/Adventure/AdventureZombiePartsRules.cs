@@ -148,7 +148,10 @@ namespace PlantsVsZombies.Adventure
                 return false;
             }
 
-            if (kind == 3 && (Same(track, "Zombie_polevaulter_innerarm") || Same(track, "Zombie_polevaulter_innerhand") || Same(track, "Zombie_polevaulter_pole")))
+            // Original Zombie::DropPole hides prefixes, including both arm segments and pole2.
+            if (kind == 3 && (track.StartsWith("Zombie_polevaulter_innerarm", StringComparison.OrdinalIgnoreCase)
+                || track.StartsWith("Zombie_polevaulter_innerhand", StringComparison.OrdinalIgnoreCase)
+                || track.StartsWith("Zombie_polevaulter_pole", StringComparison.OrdinalIgnoreCase)))
             {
                 return false;
             }

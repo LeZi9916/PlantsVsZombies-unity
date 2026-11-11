@@ -6,11 +6,21 @@
 
 参数：`--unit`、`--playthrough`、`--all-levels`、`--level 38`、`--level 38 12345`。单关会产生 trace-<level>.txt 和 playthrough-<level>.csv；完整结果为 playthrough-results.csv。单元/连续进度文件只在本目录 artifacts/<GUID>/ 下生成，旧文件保留用于验证备份。
 
+`--reward-projectiles` 只运行胜利后棋盘投射物回归，覆盖直线、反向、斜向与抛物线运动、出界回收、奖励介绍阶段停止及独立模式胜利；同时检查不恢复伤害、掉落、植物攻击或波次推进。原版依据为 `Board.UpdateGameObjects` 在奖励落地及收取期间继续更新现有 `Projectile`。
+
 Unity编译能力核对：`dotnet build Tools/Tests/AdventureTests/UnityCoreCompile/UnityCoreCompile.csproj -c Release`；这是netstandard2.1/C#9.0纯核心编译，不启动Unity，不写主工程Build、Library或ProjectSettings。
 
 接线、实现范围与近似项见项目根 ADVENTURE_HANDOFF.md。不能把该测试的通过解释为原版所有随机状态、动画或视觉已一致。
 
 可选本机奖励机器码核对：`python Tools/Tests/AdventureTests/verify_native_awards.py`（需已安装Capstone）。这是解码后受限整数分支解释，不是CPU执行或完整原版游戏回放；外部首周目谓词由测试提供。
+
+可选本机阴影坐标核对：`python Tools/Tests/AdventureTests/verify_native_shadow.py`（需Capstone及仓库父目录中hash匹配的原版EXE）。该工具限域解释原版`0x527D20`图片绘制辅助的整数和x87指令，核对原图86×36、原尺寸半宽高偏移及正常/小体型/反向的最终边界；不运行原版进程，也不写入游戏内存。身体原点使用单独核实的`0x547FF0`公式，输出中明确区分这两类证据。
+
+Run the focused native mine contact/blast/death flags, zombie screen entry, defensive damage,
+chomper state transitions, and huge-wave plant retention regressions with
+`dotnet run --project Tools/Tests/AdventureTests/AdventureTests.csproj -c Release -- --combat-fidelity`.
+These fixtures test the simulation and original image/track selection rules;
+they do not validate Unity rendering or platform Player behavior.
 
 
 ## 升级植物回归

@@ -139,7 +139,7 @@ namespace PlantsVsZombies.Game
         /// <summary>Stores choosing seeds.</summary>
         internal bool _choosingSeeds;
         /// <summary>Stores pending seeds.</summary>
-        internal HashSet<PlantKind> _pendingSeeds;
+        internal AdventureSeedChooserState _pendingSeeds;
         /// <summary>Stores music volume.</summary>
         private float _musicVolume;
         /// <summary>Stores sound volume.</summary>
@@ -287,6 +287,12 @@ namespace PlantsVsZombies.Game
             {
                 _currentView = ScreenView.Import;
                 _progressionMessage = null;
+            }
+
+            if (_choosingSeeds && _pendingSeeds != null && _currentView == ScreenView.Board && !_optionsView.IsOpen
+                && !_confirmingQuit && _unavailableFeature == null && _game.State != MatchState.Paused)
+            {
+                _pendingSeeds.Advance(Time.deltaTime);
             }
 
             var openingBlocksSimulation = UpdateAdventureOpening(Time.deltaTime);
@@ -832,7 +838,7 @@ namespace PlantsVsZombies.Game
             if (!_game.IsExperimentalLevelOne && new Rect(596, 6, 100, 34).Contains(point))
             {
                 _choosingSeeds = true;
-                _pendingSeeds = new HashSet<PlantKind>(_deck);
+                _pendingSeeds = new AdventureSeedChooserState(_deck);
                 return;
             }
 
@@ -878,6 +884,10 @@ namespace PlantsVsZombies.Game
                     {
                         _selected = i;
                     }
+                    else
+                    {
+                        RejectSeedClick(_game.CooldownRemaining(_deck[i]) <= 0f && _game.SunAmount < GameSimulation.Cost(_deck[i]));
+                    }
 
                     _shovel = false;
                 }
@@ -885,6 +895,10 @@ namespace PlantsVsZombies.Game
                 {
                     _selected = _selected == i ? -1 : i;
                     _shovel = false;
+                }
+                else
+                {
+                    RejectSeedClick(_game.CooldownRemaining(_deck[i]) <= 0f && _game.SunAmount < GameSimulation.Cost(_deck[i]));
                 }
 
                 return;
@@ -1173,37 +1187,26 @@ namespace PlantsVsZombies.Game
         /// <param name = "point">The point.</param>
         private void HandleSeedChooserClick(Vector2 point)
         {
+            _pendingSeeds.LandFlyingSeeds();
+            if (ReturnSelectedChooserSeed(point, 7, false, true))
+            {
+                return;
+            }
+
             for (var i = 0; i < _availablePlants.Length; i++)
             {
-                if (!ChooserSeedRect(i).Contains(point))
+                var home = ChooserSeedRect(i);
+                if (home.Contains(point))
                 {
-                    continue;
+                    _pendingSeeds.Choose(_availablePlants[i], (int)home.x, (int)home.y, 7);
+                    return;
                 }
-
-                var kind = _availablePlants[i];
-                if (_pendingSeeds.Contains(kind))
-                {
-                    _pendingSeeds.Remove(kind);
-                }
-                else if (_pendingSeeds.Count < 7)
-                {
-                    _pendingSeeds.Add(kind);
-                }
-
-                return;
             }
 
             if (new Rect(322, 440, 156, 42).Contains(point) && _pendingSeeds.Count > 0)
             {
                 _deck.Clear();
-                foreach (PlantKind kind in _availablePlants)
-                {
-                    if (_pendingSeeds.Contains(kind))
-                    {
-                        _deck.Add(kind);
-                    }
-                }
-
+                _deck.AddRange(_pendingSeeds);
                 _choosingSeeds = false;
                 ResetGame();
             }
@@ -1213,18 +1216,77 @@ namespace PlantsVsZombies.Game
             }
         }
 
+        /// <summary>Returns a clicked bank packet and compacts the later packets in native order.</summary>
+        /// <param name="point">The logical pointer position.</param>
+        /// <param name="slots">The bank's configured capacity.</param>
+        /// <param name="mode">Whether the independent mode chooser supplies packet homes.</param>
+        /// <param name="simple">Whether the development chooser supplies packet homes.</param>
+        /// <returns>Whether a selected bank packet consumed the click.</returns>
+        private bool ReturnSelectedChooserSeed(Vector2 point, int slots, bool mode = false, bool simple = false)
+        {
+            for (var i = 0; i < _pendingSeeds.Count; i++)
+            {
+                var kind = _pendingSeeds[i];
+                var origin = simple ? Vector2.zero : AdventureSeedBankOrigin;
+                var bank = new Rect(origin.x + AdventureSeedSlotLayout.PositionX(i, slots), origin.y + 8f, 50, 70);
+                if (!bank.Contains(point))
+                {
+                    continue;
+                }
+
+                if (!mode && !simple && ContainsRequiredSeed(kind))
+                {
+                    PlaySeedBankBuzzer();
+                    return true;
+                }
+
+                var index = simple ? Array.IndexOf(_availablePlants, kind) : mode ? AdventureAvailableSeedIndex(kind) : -1;
+                var home = simple ? ChooserSeedRect(index) : mode ? AdventureChooserRect(index) : AdventureCampaignChooserRect(kind);
+                if (_pendingSeeds.Return(kind, (int)home.x, (int)home.y, slots))
+                {
+                    PlayAdventureRewardSound("tap2.ogg");
+                }
+
+                return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>Finds a seed's current chooser grid index without creating an intermediate list.</summary>
+        /// <param name="kind">The available seed to locate.</param>
+        /// <returns>The available seed index, or minus one if it is unavailable.</returns>
+        private int AdventureAvailableSeedIndex(PlantKind kind)
+        {
+            var seeds = _game.Adventure.AvailableSeeds;
+            for (var i = 0; i < seeds.Count; i++)
+            {
+                if (seeds[i] == kind)
+                {
+                    return i;
+                }
+            }
+
+            return -1;
+        }
+
         /// <summary>Performs seed rect.</summary>
         /// <param name = "index">The index.</param>
         /// <returns>The resulting seed rect.</returns>
         internal Rect SeedRect(int index)
         {
+            if (_game.IsAdventure)
+            {
+                return AdventureSeedRect(index);
+            }
+
             if (_game.IsExperimentalLevelOne)
             {
                 var slot = FirstAdventureBoardUi.FirstSeedSlot(0, 0);
                 return new Rect(slot.X + 59 * index, slot.Y, slot.Width, slot.Height);
             }
 
-            return new Rect(80 + 50 * index, 8, 50, 70);
+            return new Rect(AdventureSeedSlotLayout.PositionX(index, _choosingSeeds ? 7 : _deck.Count), 8, 50, 70);
         }
 
         /// <summary>Performs chooser seed rect.</summary>
@@ -1261,20 +1323,121 @@ namespace PlantsVsZombies.Game
                 return null;
             }
 
-            texture = new Texture2D(2, 2, TextureFormat.RGBA32, false);
-            if (!texture.LoadImage(File.ReadAllBytes(path)))
+            var maskPath = Path.Combine(Path.GetDirectoryName(path), Path.GetFileNameWithoutExtension(path) + "_.png");
+            if (string.Equals(Path.GetExtension(path), ".jpg", StringComparison.OrdinalIgnoreCase) && File.Exists(maskPath))
             {
-                Destroy(texture);
-                texture = null;
+                texture = LoadMaskedImage(path, maskPath);
             }
             else
             {
-                texture.filterMode = FilterMode.Bilinear;
-                texture.wrapMode = TextureWrapMode.Clamp;
+                texture = new Texture2D(2, 2, TextureFormat.RGBA32, false);
+                if (!texture.LoadImage(File.ReadAllBytes(path)))
+                {
+                    Destroy(texture);
+                    texture = null;
+                }
+                else
+                {
+                    texture.filterMode = FilterMode.Bilinear;
+                    texture.wrapMode = TextureWrapMode.Clamp;
+                }
             }
 
             _textures[name] = texture;
             return texture;
+        }
+
+        /// <summary>Loads and retains an original resources.xml image with an explicit alpha grid.</summary>
+        /// <param name="colorName">The original color image filename.</param>
+        /// <param name="maskName">The original alpha grid filename.</param>
+        /// <returns>The cached RGBA texture, or null when either source is missing.</returns>
+        internal Texture2D? TextureAlphaGrid(string colorName, string maskName)
+        {
+            var key = colorName + "|" + maskName;
+            if (_textures.TryGetValue(key, out var texture))
+            {
+                return texture;
+            }
+
+            var colorPath = Path.Combine(_root, "images", colorName);
+            var maskPath = Path.Combine(_root, "images", maskName);
+            if (!File.Exists(colorPath) || !File.Exists(maskPath))
+            {
+                _textures[key] = null;
+                return null;
+            }
+
+            texture = LoadMaskedImage(colorPath, maskPath);
+            _textures[key] = texture;
+            return texture;
+        }
+
+        /// <summary>Combines original color artwork with the red channel of its separate alpha image.</summary>
+        /// <param name="colorPath">The original RGB or RGBA image path.</param>
+        /// <param name="maskPath">The matching original grayscale alpha image path.</param>
+        /// <returns>A new RGBA texture owned by the caller.</returns>
+        /// <exception cref="IOException">A source image cannot be read.</exception>
+        /// <exception cref="InvalidDataException">An image is invalid or image dimensions differ.</exception>
+        internal static Texture2D LoadMaskedImage(string colorPath, string maskPath)
+        {
+            var color = new Texture2D(2, 2, TextureFormat.RGBA32, false);
+            var mask = new Texture2D(2, 2, TextureFormat.RGBA32, false);
+            Texture2D? merged = null;
+            try
+            {
+                if (!color.LoadImage(File.ReadAllBytes(colorPath)) || !mask.LoadImage(File.ReadAllBytes(maskPath))
+                    || color.width != mask.width || color.height != mask.height)
+                {
+                    throw new InvalidDataException("Original image alpha dimensions or image data are invalid: " + maskPath);
+                }
+
+                var colors = color.GetPixels32();
+                var alpha = mask.GetPixels32();
+                for (var i = 0; i < colors.Length; i++)
+                {
+                    colors[i].a = alpha[i].r;
+                }
+
+                // Loading JPEG changes the source to RGB24; a separate RGBA texture preserves the alpha.
+                merged = new Texture2D(color.width, color.height, TextureFormat.RGBA32, false)
+                {
+                    name = Path.GetFileName(colorPath) + "_masked",
+                    filterMode = FilterMode.Bilinear,
+                    wrapMode = TextureWrapMode.Clamp
+                };
+                merged.SetPixels32(colors);
+                merged.Apply(false, false);
+                return merged;
+            }
+            catch
+            {
+                ReleaseImageTexture(merged);
+                throw;
+            }
+            finally
+            {
+                ReleaseImageTexture(color);
+                ReleaseImageTexture(mask);
+            }
+        }
+
+        /// <summary>Releases a temporary decoded image on the current Unity lifecycle.</summary>
+        /// <param name="texture">The temporary texture to release, if any.</param>
+        private static void ReleaseImageTexture(Texture2D? texture)
+        {
+            if (texture == null)
+            {
+                return;
+            }
+
+            if (Application.isPlaying)
+            {
+                Destroy(texture);
+            }
+            else
+            {
+                DestroyImmediate(texture);
+            }
         }
 
         /// <summary>Reuses bounded sound voices for pitched explosions and zombie Foley.</summary>
@@ -1419,7 +1582,7 @@ namespace PlantsVsZombies.Game
                 var savedSelection = _adventureCampaign != null && _adventureCampaign.Progress.SelectedSeeds.Count > 0;
                 if (!savedSelection)
                 {
-                    _pendingSeeds = new HashSet<PlantKind>(_game.Adventure.RequiredSeeds);
+                    _pendingSeeds = new AdventureSeedChooserState(_game.Adventure.RequiredSeeds);
                 }
             }
 
@@ -1994,6 +2157,103 @@ namespace PlantsVsZombies.Game
         internal bool _choosingImitater;
         /// <summary>Stores adventure pointer.</summary>
         internal Vector2 _adventurePointer;
+        /// <summary>The board that received the most recent insufficient-sun click.</summary>
+        private GameSimulation? _sunWarningGame;
+        /// <summary>The native update at which the sun display began its seventy-tick warning.</summary>
+        private int _sunWarningStartTick;
+        /// <summary>Gets the native update used by input feedback, which stops while the board is paused.</summary>
+        private int SeedFeedbackTick => _game.IsAdventure ? _game.Adventure._ticks : Mathf.FloorToInt(_game.Elapsed * 100f);
+        /// <summary>Gets whether the native insufficient-sun counter currently requests red text.</summary>
+        internal bool SunMoneyWarningRed
+        {
+            get
+            {
+                var remaining = ReferenceEquals(_sunWarningGame, _game) ? Math.Max(0, 70 - (SeedFeedbackTick - _sunWarningStartTick)) : 0;
+                return remaining > 0 && remaining % 20 < 10;
+            }
+        }
+
+        /// <summary>Plays the original rejection sample for an unavailable seed or fixed chooser card.</summary>
+        internal void PlaySeedBankBuzzer()
+        {
+            PlayPresentationSound("buzzer");
+        }
+
+        /// <summary>Reports an unavailable seed using the original sound and optional sun-display warning.</summary>
+        /// <param name="missingSun">Whether the ready seed failed the native affordability check.</param>
+        private void RejectSeedClick(bool missingSun)
+        {
+            PlaySeedBankBuzzer();
+            if (missingSun)
+            {
+                _sunWarningGame = _game;
+                _sunWarningStartTick = SeedFeedbackTick;
+            }
+        }
+
+        /// <summary>Finds the exact plant highlighted and removed by the held shovel.</summary>
+        /// <param name="point">The logical pointer position on the board.</param>
+        /// <returns>The native tool target, or null when no removable plant is under the pointer.</returns>
+        internal Plant? AdventureShovelTarget(Vector2 point)
+        {
+            if (!_game.IsAdventure || point.y < 80f || point.x < 0f || point.x >= 800f || point.y >= 600f)
+            {
+                return null;
+            }
+
+            var column = Mathf.FloorToInt((point.x - AdventureGridX) / CellWidth);
+            var row = Mathf.FloorToInt((point.y - AdventureGridY - AdventureSlope(column)) / AdventurePitch);
+            Plant? main = null, support = null, pumpkin = null;
+            foreach (var plant in _game.Plants)
+            {
+                var x = AdventureGridX + plant.Column * CellWidth;
+                var y = AdventureCellY(plant.Row, plant.Column);
+                if (plant.Kind == PlantKind.Pumpkin)
+                {
+                    var hasMain = false;
+                    foreach (var other in _game.Plants)
+                    {
+                        if (other.Row == plant.Row && other.Layer == PlantLayer.Main && other.Column <= plant.Column && plant.Column < other.Column + other.ColumnSpan)
+                        {
+                            hasMain = true;
+                            break;
+                        }
+                    }
+
+                    var distance = (point - new Vector2(x + 40f, y + 40f)).sqrMagnitude;
+                    if (distance >= (hasMain ? 625f : 0f) && distance <= 2500f && point.y > y + 25f)
+                    {
+                        return plant;
+                    }
+                }
+
+                if (plant.Kind == PlantKind.CoffeeBean && (point - new Vector2(x + 40f, y)).sqrMagnitude < 225f)
+                {
+                    return plant;
+                }
+
+                if (plant.Row != row || plant.Column > column || column >= plant.Column + plant.ColumnSpan)
+                {
+                    continue;
+                }
+
+                if (plant.Layer == PlantLayer.Main)
+                {
+                    main = plant;
+                }
+                else if (plant.Layer == PlantLayer.Support)
+                {
+                    support = plant;
+                }
+                else if (plant.Kind == PlantKind.Pumpkin)
+                {
+                    pumpkin = plant;
+                }
+            }
+
+            var target = main ?? (pumpkin == null ? support : null);
+            return target?.Kind == PlantKind.GraveBuster ? null : target;
+        }
         /// <summary>Stores adventure action button.</summary>
         private static readonly Rect s_adventureActionButton = new Rect(316, 356, 168, 48);
         /// <summary>Stores adventure menu button.</summary>
@@ -2102,7 +2362,7 @@ namespace PlantsVsZombies.Game
             }
 
             _choosingSeeds = _game.Adventure.Phase == AdventurePhase.ChoosingSeeds;
-            _pendingSeeds = new HashSet<PlantKind>(_game.Adventure.SelectedSeeds);
+            _pendingSeeds = new AdventureSeedChooserState(_game.Adventure.SelectedSeeds);
             _selected = -1;
             _selectedAdventurePacket = -1;
             _shovel = false;
@@ -2189,7 +2449,44 @@ namespace PlantsVsZombies.Game
                 return new Rect(_game.AdventureConveyorCardX(index), 8, 50, 70);
             }
 
-            return new Rect(packet ? 8f + index * 50f : AdventureSeedSlotLayout.PositionX(index, _deck.Count), 8f, 50f, 70f);
+            if (packet)
+            {
+                return new Rect(8f + index * 50f, 8f, 50f, 70f);
+            }
+
+            var origin = AdventureSeedBankOrigin;
+            return new Rect(origin.x + AdventureSeedSlotLayout.PositionX(index, SeedBankCapacity), origin.y + 8f, 50f, 70f);
+        }
+
+        /// <summary>Gets the bank's configured capacity independently of how many cards are currently selected.</summary>
+        /// <remarks>Early first-adventure levels retain their original fixed packet counts.</remarks>
+        internal int SeedBankCapacity
+        {
+            get
+            {
+                if (IsModeBoard)
+                {
+                    return _modeSession.PacketSlots;
+                }
+
+                if (_game.IsAdventure)
+                {
+                    return _game.Adventure.Level.PacketSlots;
+                }
+
+                return _choosingSeeds ? 7 : _deck.Count;
+            }
+        }
+
+        /// <summary>Gets the native bank position, retaining the final introduction pose during the playing handoff.</summary>
+        internal Vector2 AdventureSeedBankOrigin
+        {
+            get
+            {
+                return !IsModeBoard && _game.IsAdventure && _adventureIntroFrame != null
+                    ? new Vector2(_adventureIntroFrame.SeedBankX, _adventureIntroFrame.SeedBankY)
+                    : Vector2.zero;
+            }
         }
 
         /// <summary>Performs adventure chooser rect.</summary>
@@ -2320,6 +2617,7 @@ namespace PlantsVsZombies.Game
             {
                 var unlocked = board.AvailableSeeds;
                 var required = Math.Min(board.Level.PacketSlots, unlocked.Count);
+                _pendingSeeds.LandFlyingSeeds();
                 if (_choosingImitater)
                 {
                     var targets = board.Level.UnlockedSeeds;
@@ -2327,7 +2625,9 @@ namespace PlantsVsZombies.Game
                     {
                         if (AdventureCampaignChooserRect(targets[i]).Contains(point) && _game.SetAdventureImitaterTarget(targets[i]))
                         {
-                            _pendingSeeds.Add(PlantKind.Imitater);
+                            var home = AdventureCampaignChooserRect(PlantKind.Imitater);
+                            _pendingSeeds.Choose(PlantKind.Imitater, (int)home.x, (int)home.y, SeedBankCapacity);
+                            PlayAdventureRewardSound("tap2.ogg");
                             _choosingImitater = false;
                             return;
                         }
@@ -2341,6 +2641,11 @@ namespace PlantsVsZombies.Game
                     return;
                 }
 
+                if (ReturnSelectedChooserSeed(point, SeedBankCapacity))
+                {
+                    return;
+                }
+
                 for (var i = 0; i < unlocked.Count; i++)
                 {
                     if (AdventureCampaignChooserRect(unlocked[i]).Contains(point))
@@ -2351,7 +2656,7 @@ namespace PlantsVsZombies.Game
                             return;
                         }
 
-                        if (!_pendingSeeds.Remove(unlocked[i]) && _pendingSeeds.Count < required)
+                        if (!_pendingSeeds.Contains(unlocked[i]) && _pendingSeeds.Count < required)
                         {
                             if (unlocked[i] == PlantKind.Imitater)
                             {
@@ -2359,7 +2664,9 @@ namespace PlantsVsZombies.Game
                             }
                             else
                             {
-                                _pendingSeeds.Add(unlocked[i]);
+                                var home = AdventureCampaignChooserRect(unlocked[i]);
+                                _pendingSeeds.Choose(unlocked[i], (int)home.x, (int)home.y, SeedBankCapacity);
+                                PlayAdventureRewardSound("tap2.ogg");
                             }
                         }
 
@@ -2369,14 +2676,7 @@ namespace PlantsVsZombies.Game
 
                 if (AdventureChooserStartRect.Contains(point) && _pendingSeeds.Count == required)
                 {
-                    var seeds = new List<PlantKind>();
-                    foreach (PlantKind kind in unlocked)
-                    {
-                        if (_pendingSeeds.Contains(kind))
-                        {
-                            seeds.Add(kind);
-                        }
-                    }
+                    var seeds = new List<PlantKind>(_pendingSeeds);
 
                     try
                     {
@@ -2476,9 +2776,15 @@ namespace PlantsVsZombies.Game
                 {
                     if (AdventureSeedRect(i).Contains(point))
                     {
-                        if (_game.CooldownRemaining(_deck[i]) <= 0 && _game.AdventureSunAvailable >= _game.AdventureSeedCost(_deck[i]) && (board.Level.Mode == AdventureMode.WhackAZombie || _game.SelectAdventureSeed(_deck[i])))
+                        var context = _game.AdventurePacketContext(_deck[i]);
+                        if (AdventureSeedBankPresentation.CanPickUp(context) && (board.Level.Mode == AdventureMode.WhackAZombie || _game.SelectAdventureSeed(_deck[i])))
                         {
                             _selected = _selected == i ? -1 : i;
+                            PlayPresentationSound("seedlift");
+                        }
+                        else
+                        {
+                            RejectSeedClick(context.Active && !context.CanAfford);
                         }
 
                         _shovel = false;
@@ -2492,6 +2798,7 @@ namespace PlantsVsZombies.Game
             if (board.Level.Number >= 5 && s_adventureShovelButton.Contains(point))
             {
                 _shovel = !_shovel;
+                PlayPresentationSound("shovel");
                 _selected = -1;
                 _selectedAdventurePacket = -1;
                 _game.CancelAdventureCobCannonAim();
@@ -2513,9 +2820,10 @@ namespace PlantsVsZombies.Game
 
             if (_shovel)
             {
-                if (_game.RemovePlant(row, col))
+                if (_game.TryShovelAdventurePlant(AdventureShovelTarget(point)))
                 {
                     _shovel = false;
+                    PlayPresentationSound("plant");
                 }
 
                 return;
@@ -2713,7 +3021,11 @@ namespace PlantsVsZombies.Game
                 "reverse_explosion",
                 "cherrybomb",
                 "juicy",
-                "dirt_rise"
+                "dirt_rise",
+                "buzzer",
+                "seedlift",
+                "shovel",
+                "plant"
             };
             _dynamicAudioTasks = (manifest == null || manifest.clips == null ? 0 : manifest.clips.Length) + cues.Length;
             if (manifest != null && manifest.clips != null)
@@ -3997,7 +4309,7 @@ namespace PlantsVsZombies.Game
                 _deck.AddRange(_game.Adventure.SelectedSeeds);
                 AdventureFeedback(_modeSession.Advice, 8f);
                 _choosingSeeds = _modeSession.Phase == ModePhase.ChoosingSeeds;
-                _pendingSeeds = new HashSet<PlantKind>(_game.Adventure.SelectedSeeds);
+                _pendingSeeds = new AdventureSeedChooserState(_game.Adventure.SelectedSeeds);
                 _currentView = ScreenView.Board;
                 return true;
             }
@@ -4140,7 +4452,7 @@ namespace PlantsVsZombies.Game
                         {
                             _animations.ResetNativePlayback();
                             _choosingSeeds = s.Phase == ModePhase.ChoosingSeeds;
-                            _pendingSeeds = new HashSet<PlantKind>(_game.Adventure.SelectedSeeds);
+                            _pendingSeeds = new AdventureSeedChooserState(_game.Adventure.SelectedSeeds);
                             _deck.Clear();
                             _deck.AddRange(_game.Adventure.SelectedSeeds);
                             _selected = -1;
@@ -4309,7 +4621,16 @@ namespace PlantsVsZombies.Game
                 {
                     if (ModeSeedRect(i).Contains(point))
                     {
-                        _selected = _selected == i ? -1 : i;
+                        var context = _game.AdventurePacketContext(_deck[i]);
+                        if (AdventureSeedBankPresentation.CanPickUp(context))
+                        {
+                            _selected = _selected == i ? -1 : i;
+                            PlayPresentationSound("seedlift");
+                        }
+                        else
+                        {
+                            RejectSeedClick(context.Active && !context.CanAfford);
+                        }
                         _selectedAdventurePacket = -1;
                         _shovel = false;
                         _game.CancelAdventureCobCannonAim();
@@ -4321,6 +4642,7 @@ namespace PlantsVsZombies.Game
             if (m != ModeMechanic.IZombie && m != ModeMechanic.Beghouled && m != ModeMechanic.BeghouledTwist && s_adventureShovelButton.Contains(point))
             {
                 _shovel = !_shovel;
+                PlayPresentationSound("shovel");
                 _selected = -1;
                 _selectedAdventurePacket = -1;
                 _game.CancelAdventureCobCannonAim();
@@ -4358,9 +4680,10 @@ namespace PlantsVsZombies.Game
 
             if (_shovel)
             {
-                if (_game.RemovePlant(row, col))
+                if (_game.TryShovelAdventurePlant(AdventureShovelTarget(point)))
                 {
                     _shovel = false;
+                    PlayPresentationSound("plant");
                 }
 
                 return true;
@@ -4441,13 +4764,16 @@ namespace PlantsVsZombies.Game
         {
             var unlocked = _game.Adventure.AvailableSeeds;
             var required = Math.Min(_modeSession.PacketSlots, unlocked.Count);
+            _pendingSeeds.LandFlyingSeeds();
             if (_modeChoosingImitater)
             {
                 for (var i = 0; i < 40; i++)
                 {
                     if (AdventureChooserRect(i).Contains(point) && _game.SetModeImitaterTarget((PlantKind)i))
                     {
-                        _pendingSeeds.Add(PlantKind.Imitater);
+                        var home = AdventureChooserRect(AdventureAvailableSeedIndex(PlantKind.Imitater));
+                        _pendingSeeds.Choose(PlantKind.Imitater, (int)home.x, (int)home.y, SeedBankCapacity);
+                        PlayAdventureRewardSound("tap2.ogg");
                         _modeChoosingImitater = false;
                         return;
                     }
@@ -4461,11 +4787,16 @@ namespace PlantsVsZombies.Game
                 return;
             }
 
+            if (ReturnSelectedChooserSeed(point, SeedBankCapacity, true))
+            {
+                return;
+            }
+
             for (var i = 0; i < unlocked.Count; i++)
             {
                 if (AdventureChooserRect(i).Contains(point))
                 {
-                    if (!_pendingSeeds.Remove(unlocked[i]) && _pendingSeeds.Count < required)
+                    if (!_pendingSeeds.Contains(unlocked[i]) && _pendingSeeds.Count < required)
                     {
                         if (unlocked[i] == PlantKind.Imitater)
                         {
@@ -4473,7 +4804,9 @@ namespace PlantsVsZombies.Game
                         }
                         else
                         {
-                            _pendingSeeds.Add(unlocked[i]);
+                            var home = AdventureChooserRect(i);
+                            _pendingSeeds.Choose(unlocked[i], (int)home.x, (int)home.y, SeedBankCapacity);
+                            PlayAdventureRewardSound("tap2.ogg");
                         }
                     }
 
@@ -4483,14 +4816,7 @@ namespace PlantsVsZombies.Game
 
             if (new Rect(300, 533, 200, 34).Contains(point) && _pendingSeeds.Count == required)
             {
-                var seeds = new List<PlantKind>();
-                foreach (var k in unlocked)
-                {
-                    if (_pendingSeeds.Contains(k))
-                    {
-                        seeds.Add(k);
-                    }
-                }
+                var seeds = new List<PlantKind>(_pendingSeeds);
 
                 if (_modeSession.ChooseSeeds(seeds))
                 {
@@ -4542,7 +4868,8 @@ namespace PlantsVsZombies.Game
         /// <returns>The resulting mode seed rect.</returns>
         internal Rect ModeSeedRect(int index)
         {
-            return new Rect(AdventureSeedSlotLayout.PositionX(index, _deck.Count), 8f, 50f, 70f);
+            var origin = AdventureSeedBankOrigin;
+            return new Rect(origin.x + AdventureSeedSlotLayout.PositionX(index, SeedBankCapacity), origin.y + 8f, 50f, 70f);
         }
 
         /// <summary>Performs mode zombie card rect.</summary>
@@ -5076,14 +5403,16 @@ namespace PlantsVsZombies.Game
                 return;
             }
 
-            // PC 0x52A560: 8 instances per type, a request within 10 native updates is suppressed.
+            // Keep native limits for ambient/chewing Foley; each projectile impact needs its own feedback.
+            var projectileImpact = evt.Foley == 1 || evt.Foley == 32 || evt.Foley == 38 || evt.Foley == 43
+                || evt.Foley == 46 || evt.Foley == 58 || evt.Foley == 62;
             int previous;
-            if (_zombieFoleyLastTick.TryGetValue(evt.Foley, out previous) && evt.Tick - previous < 10)
+            if (!projectileImpact && _zombieFoleyLastTick.TryGetValue(evt.Foley, out previous) && evt.Tick - previous < 10)
             {
                 return;
             }
 
-            if (!_soundVoices.CanPlay(evt.Foley, 8))
+            if (!_soundVoices.CanPlay(evt.Foley, 8, replaceOldest: projectileImpact))
             {
                 return;
             }
@@ -5099,7 +5428,7 @@ namespace PlantsVsZombies.Game
 
             // PC DSoundInstance::AdjustPitch 0x63E850, including native frequency limits.
             var frequency = Math.Max(100d, Math.Min(100000d, clip.frequency * Math.Pow(1.059463094359295d, semitones)));
-            if (_soundVoices.TryPlay(clip, _soundVolume, (float)(frequency / clip.frequency), evt.Foley, 8))
+            if (_soundVoices.TryPlay(clip, _soundVolume, (float)(frequency / clip.frequency), evt.Foley, 8, replaceOldest: projectileImpact))
             {
                 _zombieFoleyLastTick[evt.Foley] = evt.Tick;
             }

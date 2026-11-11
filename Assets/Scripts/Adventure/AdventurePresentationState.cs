@@ -8,6 +8,8 @@ namespace PlantsVsZombies.Adventure
     /// <summary>Defines adventure presentation state.</summary>
     public sealed class AdventurePresentationState
     {
+        /// <summary>Retains the original PC flag meter's native animation state.</summary>
+        public readonly AdventureProgressMeterState ProgressMeter = new AdventureProgressMeterState();
         /// <summary>Stores explosions.</summary>
         public readonly List<AdventureExplosion> Explosions = new List<AdventureExplosion>();
         /// <summary>Stores jalapeno fires.</summary>

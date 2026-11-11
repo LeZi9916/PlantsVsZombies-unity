@@ -1,5 +1,6 @@
 #nullable enable
 using PlantsVsZombies.Simulation;
+using PlantsVsZombies.BoardUI;
 
 namespace PlantsVsZombies.Adventure
 {
@@ -19,7 +20,29 @@ namespace PlantsVsZombies.Adventure
                 return false;
             }
 
+            // PC EffectedByDamage 0x54D810 tests the left edge of GetZombieRect,
+            // not the actor origin or the animation's visible pixels. Bobsled is exempt.
+            if (z.Kind != ZombieKind.Bobsled && BodyRectangle(z).X > 800)
+            {
+                return false;
+            }
+
             return !z.Headless || kind != PlantKind.PotatoMine && kind != PlantKind.Chomper && kind != PlantKind.TangleKelp;
+        }
+
+        /// <summary>Gets the native body rectangle used by plant targeting.</summary>
+        /// <param name="z">The zombie whose logical collision rectangle is required.</param>
+        /// <returns>The body rectangle in original board pixels; visual scaling does not shrink it.</returns>
+        public static NativeRect BodyRectangle(Zombie z)
+        {
+            var x = (int)AdventureZombieNativeRules.NativePositionX(z.X, z.IsSmall ? .5f : 1f);
+            var backwards = z.PresentationWalkingBackwards ?? (z.Hypnotized || z.Kind == ZombieKind.Digger && z.AbilityPhase == 2);
+            if (z.Kind == ZombieKind.Bobsled && (z.PresentationHasSled ?? !z.UsedAbility))
+            {
+                return new NativeRect(x + (backwards ? -105 : -50), 0, 275, 115);
+            }
+
+            return AdventureBowlingNativeRules.ZombieBounds((int)z.Kind, z.PresentationNativePhase, x, 0, backwards);
         }
     }
 }

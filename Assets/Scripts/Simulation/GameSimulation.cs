@@ -59,6 +59,8 @@ namespace PlantsVsZombies.Simulation
         public Action<GameEvent> EventRaised;
         /// <summary>Reuses the synchronous native reward animation callback.</summary>
         private readonly Action _rewardPresentationTick;
+        /// <summary>Accumulates decorative board ticks after independent modes finish without an adventure reward object.</summary>
+        private double _completedBoardAccumulated;
         /// <summary>Reuses the immediately consumed packet-ready feedback context.</summary>
         private readonly AdventureSeedBankContext _packetFeedbackContext = new AdventureSeedBankContext();
         /// <summary>Stores random.</summary>
@@ -2041,6 +2043,11 @@ namespace PlantsVsZombies.Simulation
         /// <returns>The resulting advance adventure native timed plant.</returns>
         private bool AdvanceAdventureNativeTimedPlant(Plant plant)
         {
+            if (plant.Kind == PlantKind.Chomper)
+            {
+                return AdvanceAdventureChomper(plant);
+            }
+
             if (plant.Kind == PlantKind.CherryBomb)
             {
                 return AdvanceAdventureCherryBomb(plant);
@@ -2555,6 +2562,28 @@ namespace PlantsVsZombies.Simulation
             }
         }
 
+        /// <summary>Removes the plant selected by the native shovel hit test.</summary>
+        /// <param name="plant">The highlighted tool target, or null when the pointer has no target.</param>
+        /// <returns>Whether the target was present and could be removed from the playing board.</returns>
+        public bool TryShovelAdventurePlant(Plant? plant)
+        {
+            if (!IsAdventure || State != MatchState.Playing || Adventure.Phase != AdventurePhase.Playing
+                || !Adventure.Level.IsReplay && Adventure.Level.Number < 5 || Adventure.Level.Mode == AdventureMode.WhackAZombie
+                || plant == null || plant.Kind == PlantKind.GraveBuster || !Plants.Contains(plant))
+            {
+                return false;
+            }
+
+            RemoveAdventurePlantAndStack(plant);
+            if (Adventure.Tutorial == AdventureTutorial.Shovel && !Plants.Exists(x => x.Row == 2 && x.Column >= 3 && x.Column <= 5 && x.Kind == PlantKind.Peashooter))
+            {
+                Adventure._removalTutorialDone = true;
+                Adventure.Tutorial = AdventureTutorial.Complete;
+            }
+
+            return true;
+        }
+
         /// <summary>Performs remove adventure plant and stack.</summary>
         /// <param name = "p">The p.</param>
         private void RemoveAdventurePlantAndStack(Plant p)
@@ -2781,26 +2810,6 @@ namespace PlantsVsZombies.Simulation
                             }
 
                             break;
-                        case PlantKind.Chomper:
-                            var meal = FindAdventureTarget(p.Row, x - 0.2f, x + 1.2f, false, false, PlantKind.Chomper);
-                            if (meal != null)
-                            {
-                                if (meal.Kind == ZombieKind.Gargantuar || meal.Kind == ZombieKind.Zomboni || meal.Kind == ZombieKind.Catapult)
-                                {
-                                    HitAdventureZombie(meal, 40f, true);
-                                    p.ActionTimer = 1.5f;
-                                }
-                                else
-                                {
-                                    meal.PresentationDeath = AdventureZombieDeathPresentation.Eaten;
-                                    KillAdventureZombie(meal);
-                                    p.ActionTimer = 42f;
-                                }
-
-                                p.ShootAge = 0;
-                            }
-
-                            break;
                         case PlantKind.Spikeweed:
                             foreach (Zombie z in new PooledSnapshot<Zombie>(Zombies))
                             {
@@ -2868,7 +2877,9 @@ namespace PlantsVsZombies.Simulation
                                 break;
                             }
 
-                            if (FindAdventureTarget(p.Row, x - 0.1f, x + range, air) != null || CanShootAdventureBoss(p))
+                            var shortPuff = AdventurePuffShroomRules.IsShortRange(p.Kind);
+                            var shooterTarget = shortPuff ? FindAdventurePuffTarget(p) : FindAdventureTarget(p.Row, x - 0.1f, x + range, air);
+                            if (shooterTarget != null || !shortPuff && CanShootAdventureBoss(p))
                             {
                                 var lob = p.Kind == PlantKind.CabbagePult || p.Kind == PlantKind.KernelPult || p.Kind == PlantKind.MelonPult;
                                 // Straight projectiles from the sloped left roof strike the slope, while lobbers clear it.
@@ -2877,7 +2888,7 @@ namespace PlantsVsZombies.Simulation
                                     var shot = FireAdventurePea(p, p.Row, false, lob ? p.Kind == PlantKind.MelonPult ? 80f : p.Kind == PlantKind.CabbagePult ? 40f : 20f : 20f);
                                     shot.IsSnow = p.Kind == PlantKind.SnowPea;
                                     shot.HitsAir = air;
-                                    shot.Range = range;
+                                    shot.Range = shortPuff ? float.MaxValue : range;
                                     shot.Lobbed = lob;
                                     shot.PiercesShield = p.Kind == PlantKind.FumeShroom || lob;
                                     shot.PiercesZombies = p.Kind == PlantKind.FumeShroom;
@@ -3005,9 +3016,38 @@ namespace PlantsVsZombies.Simulation
             shot.Backward = back;
             Peas.Add(shot);
             AdventurePresentationShot(p, shot);
+            if (AdventurePuffShroomRules.IsShortRange(p.Kind))
+            {
+                shot.X = AdventurePuffShroomRules.LaunchCenterX(p.Kind, p.Column);
+                shot.StartX = shot.X;
+                shot.PresentationPreviousX = shot.X;
+                shot.VelocityX = AdventurePuffShroomRules.GridSpeed;
+                var pitch = Adventure.Level.HasPool || Adventure.Level.HasRoof ? 85f : 100f;
+                var plantY = 80f + p.Row * pitch + (Adventure.Level.HasRoof ? Math.Max(0, 5 - p.Column) * 20f - 10f : 0f);
+                shot.PresentationLaunchY = AdventurePuffShroomRules.LaunchCenterY(p.Kind, plantY,
+                    HasPlantKindAt(PlantKind.FlowerPot, p.Row, p.Column));
+            }
+
             p.ShootAge = 0;
             Raise(GameEvent.Shoot);
             return shot;
+        }
+
+        /// <summary>Finds a short-range mushroom target using the original PC plant and zombie rectangles.</summary>
+        /// <param name="plant">The mushroom acquiring a target.</param>
+        /// <returns>The nearest eligible target, or null when its native attack interval is empty.</returns>
+        private Zombie? FindAdventurePuffTarget(Plant plant)
+        {
+            Zombie? target = null;
+            foreach (var zombie in Zombies)
+            {
+                if (AdventurePuffShroomRules.CanTarget(plant, zombie) && (target == null || zombie.X < target.X))
+                {
+                    target = zombie;
+                }
+            }
+
+            return target;
         }
 
         /// <summary>Performs find adventure target.</summary>
@@ -3064,7 +3104,8 @@ namespace PlantsVsZombies.Simulation
 
         /// <summary>Performs advance adventure projectiles.</summary>
         /// <param name = "dt">The dt.</param>
-        private void AdvanceAdventureProjectiles(float dt)
+        /// <param name="allowDamage">Whether live combat targets can receive hits before the level has completed.</param>
+        private void AdvanceAdventureProjectiles(float dt, bool allowDamage = true)
         {
             for (var i = Peas.Count - 1; i >= 0; i--)
             {
@@ -3074,8 +3115,14 @@ namespace PlantsVsZombies.Simulation
                 p.X += p.VelocityX * dt;
                 p.FlightRow += p.VelocityY * dt;
                 AdvanceAdventureProjectilePresentation(p, dt);
+                if (AdventurePuffShroomRules.IsShortRange(p.SourceKind) && AdventurePuffShroomRules.Expired(p.PresentationNativeAge))
+                {
+                    RemovePeaAt(i);
+                    continue;
+                }
+
                 p.Row = (int)Math.Round(p.FlightRow);
-                if (!p.Lobbed && !p.Homing && p.VelocityY == 0)
+                if (!p.Lobbed && !p.Homing && p.VelocityY == 0 && !AdventurePuffShroomRules.IsShortRange(p.SourceKind))
                 {
                     Plant? torch = null;
                     foreach (var plant in Plants)
@@ -3106,7 +3153,9 @@ namespace PlantsVsZombies.Simulation
                 Zombie hit = null;
                 foreach (Zombie z in Zombies)
                 {
-                    if (p.PresentationCanImpact && (!p.Homing || z.Id == p.TargetZombieId) && !z.Hypnotized && Math.Abs(z.Row - p.FlightRow) < 0.45f && !p.HitIds.Contains(z.Id) && (!z.Airborne || p.HitsAir) && (!z.Submerged || p.Lobbed) && z.X >= Math.Min(before, p.X) - 0.25f && z.X <= Math.Max(before, p.X) + 0.25f)
+                    if (allowDamage && p.PresentationCanImpact && (!p.Homing || z.Id == p.TargetZombieId) && !z.Hypnotized && Math.Abs(z.Row - p.FlightRow) < 0.45f && !p.HitIds.Contains(z.Id) && (!z.Airborne || p.HitsAir) && (!z.Submerged || p.Lobbed) && (AdventurePuffShroomRules.IsShortRange(p.SourceKind)
+                        ? AdventurePuffShroomRules.Collides(p, z)
+                        : z.X >= Math.Min(before, p.X) - 0.25f && z.X <= Math.Max(before, p.X) + 0.25f))
                     {
                         if (hit == null || Math.Abs(z.X - before) < Math.Abs(hit.X - before))
                         {
@@ -3152,7 +3201,7 @@ namespace PlantsVsZombies.Simulation
                     remove = !p.PiercesZombies;
                 }
 
-                if (!remove && p.X >= 8.25f && p.Lobbed && p.PresentationCanImpact && Adventure.BossHeadVulnerable && p.Row >= 1 && p.Row <= 3)
+                if (allowDamage && !remove && p.X >= 8.25f && p.Lobbed && p.PresentationCanImpact && Adventure.BossHeadVulnerable && p.Row >= 1 && p.Row <= 3)
                 {
                     AdventurePresentationImpact(p, null);
                     DamageAdventureBoss(p.Damage);
@@ -3179,11 +3228,16 @@ namespace PlantsVsZombies.Simulation
             }
 
             AdventurePresentationZombieHit(z, damage, bypassShield, damageFlags);
-            if (!bypassShield)
+            // PC TakeDamage bit 1 damages the held shield and also sends the full
+            // original damage to the helmet/body; ordinary piercing skips the shield.
+            if (!bypassShield || (damageFlags & 2U) != 0)
             {
                 var shield = Math.Min(z.ShieldHealth, damage);
                 z.ShieldHealth -= shield;
-                damage -= shield;
+                if ((damageFlags & 2U) == 0)
+                {
+                    damage -= shield;
+                }
             }
 
             var armor = Math.Min(z.ArmorHealth, damage);
@@ -3194,13 +3248,15 @@ namespace PlantsVsZombies.Simulation
             Raise(GameEvent.ZombieHit);
             if (z.Health <= 0)
             {
-                KillAdventureZombie(z);
+                z.Health = 0f;
+                KillAdventureZombie(z, damageFlags);
             }
         }
 
         /// <summary>Performs kill adventure zombie.</summary>
         /// <param name = "z">The z.</param>
-        private void KillAdventureZombie(Zombie z)
+        /// <param name="damageFlags">The original damage flags controlling whether death animation is permitted.</param>
+        private void KillAdventureZombie(Zombie z, uint damageFlags = 0)
         {
             if (!Zombies.Remove(z))
             {
@@ -3212,7 +3268,7 @@ namespace PlantsVsZombies.Simulation
                 RememberAdventureRewardPosition(z);
             }
 
-            AdventurePresentationZombieDeath(z);
+            AdventurePresentationZombieDeath(z, damageFlags);
             if (z.PresentationDeath != AdventureZombieDeathPresentation.Removed)
             {
                 DropAdventureLoot(z);
@@ -3234,6 +3290,190 @@ namespace PlantsVsZombies.Simulation
             p._presentationKind = PlantKind.PotatoMine;
             p.PresentationRate = 12f;
             p.ActionTimer = 15f;
+        }
+
+        /// <summary>Advances the original chomper state machine once per native simulation tick.</summary>
+        /// <param name="plant">The live chomper being updated.</param>
+        /// <returns>True because the native state machine owns this plant's attack timing.</returns>
+        private bool AdvanceAdventureChomper(Plant plant)
+        {
+            var state = plant.ChomperPresentation;
+            if (state == null)
+            {
+                state = new AdventureChomperState();
+                plant.ChomperPresentation = state;
+            }
+
+            state.PhaseTicks++;
+            if (state.Countdown > 0)
+            {
+                state.Countdown--;
+            }
+
+            // PC 0x46F6E0: bite at 24 fps, commit the meal after 70 ticks,
+            // chew for 4000 ticks at 15 fps, then swallow at 12 fps.
+            switch (state.NativePhase)
+            {
+                case 1:
+                    if (FindAdventureChomperTarget(plant, false) != null)
+                    {
+                        state.NativePhase = 10;
+                        state.Animation = "anim_bite";
+                        state.Rate = 24f;
+                        state.PhaseTicks = 0;
+                        state.Countdown = 70;
+                    }
+
+                    break;
+                case 10:
+                    if (state.Countdown != 0)
+                    {
+                        break;
+                    }
+
+                    RequestAdventureZombieFoley(61);
+                    var target = FindAdventureChomperTarget(plant, true);
+                    var phase = target == null ? -1 : AdventureZombieFeedbackPhase(target);
+                    if (target != null && (target.Kind == ZombieKind.Gargantuar || target.Kind == ZombieKind.Boss))
+                    {
+                        RequestAdventureZombieFoley(1);
+                        HitAdventureZombie(target, 40f, true);
+                        state.NativePhase = 12;
+                    }
+                    else if (target == null || target.FrozenRemaining <= 0 && target.PresentationButter <= 0 && (phase >= 20 && phase <= 28 || phase == 11 || phase == 12))
+                    {
+                        state.NativePhase = 12;
+                    }
+                    else
+                    {
+                        target.PresentationDeath = AdventureZombieDeathPresentation.Eaten;
+                        KillAdventureZombie(target);
+                        state.NativePhase = 11;
+                    }
+
+                    break;
+                case 11:
+                case 12:
+                    if (state.PhaseTicks * 24 >= 2500)
+                    {
+                        if (state.NativePhase == 11)
+                        {
+                            state.NativePhase = 13;
+                            state.Animation = "anim_chew";
+                            state.Rate = 15f;
+                            state.Countdown = 4000;
+                        }
+                        else
+                        {
+                            state.NativePhase = 1;
+                            state.Animation = "anim_idle";
+                            state.Rate = 0f;
+                        }
+
+                        state.PhaseTicks = 0;
+                    }
+
+                    break;
+                case 13:
+                    if (state.Countdown == 0)
+                    {
+                        state.NativePhase = 14;
+                        state.Animation = "anim_swallow";
+                        state.Rate = 12f;
+                        state.PhaseTicks = 0;
+                    }
+
+                    break;
+                case 14:
+                    if (state.PhaseTicks * 12 >= 2800)
+                    {
+                        state.NativePhase = 1;
+                        state.Animation = "anim_idle";
+                        state.Rate = 0f;
+                        state.PhaseTicks = 0;
+                    }
+
+                    break;
+            }
+
+            plant.PresentationBiteNativeState = state.NativePhase;
+            plant.ActionTimer = state.Countdown * .01f;
+            return true;
+        }
+
+        /// <summary>Finds the headed zombie overlapping the original chomper attack interval.</summary>
+        /// <param name="plant">The chomper performing the native target check.</param>
+        /// <param name="biting">Whether the active bite permits the original sixty-pixel tolerance.</param>
+        /// <returns>The leftmost eligible zombie, or null when the bite has no target.</returns>
+        private Zombie? FindAdventureChomperTarget(Plant plant, bool biting)
+        {
+            Zombie? best = null;
+            var left = 40 + plant.Column * 80 + 80;
+            var right = left + 40;
+            foreach (var zombie in Zombies)
+            {
+                var phase = AdventureZombieFeedbackPhase(zombie);
+                if (!AdventureZombieTargetingRules.CanBeAutoTargeted(zombie, PlantKind.Chomper) || zombie.Hypnotized || zombie.Row != plant.Row || zombie.Airborne || zombie.Submerged || zombie.DropRemaining > 0 || zombie.Kind == ZombieKind.Bungee || phase == 20 || zombie.Kind == ZombieKind.Digger && zombie.AbilityPhase == 0)
+                {
+                    continue;
+                }
+
+                var body = AdventureZombieTargetingRules.BodyRectangle(zombie);
+                var attackLeft = left + (phase == 37 ? 20 : 0);
+                var overlap = Math.Min(right, body.X + body.Width) - Math.Max(attackLeft, body.X);
+                if (overlap < (biting || zombie.Eating ? -60 : 0))
+                {
+                    continue;
+                }
+
+                if (best == null || body.X < AdventureZombieTargetingRules.BodyRectangle(best).X)
+                {
+                    best = zombie;
+                }
+            }
+
+            return best;
+        }
+
+        /// <summary>Updates defensive body animation without changing its phase when chewing slows it.</summary>
+        /// <param name="plant">The plant whose body and damage presentation is updated.</param>
+        /// <param name="delta">Elapsed native simulation time.</param>
+        private void AdvanceAdventureDefensivePlantPresentation(Plant plant, float delta)
+        {
+            if (AdventureDefensivePlantRules.DamageTrack(plant.Kind) == null)
+            {
+                return;
+            }
+
+            var stage = AdventureDefensivePlantRules.DamageStage(plant.Kind, plant.Health);
+            if (plant.Kind != PlantKind.Pumpkin && stage > 0 && stage != plant._presentationDefensiveDamageStage)
+            {
+                Presentation.PlantBiteEffects.Add(new AdventurePlantBiteEffect
+                {
+                    Id = ++Presentation._effectId,
+                    ParticleId = 36,
+                    Row = plant.Row,
+                    NativeX = 40 + plant.Column * 80 + 40,
+                    NativeY = 80 + plant.Row * (Adventure.Level.HasPool || Adventure.Level.HasRoof ? 85 : 100) + (Adventure.Level.HasRoof ? Math.Max(0f, 5f - plant.Column) * 20f - 10f : 0f) + (plant.Kind == PlantKind.TallNut ? -22 : 10),
+                    Seed = plant.Id * 397 ^ Presentation._effectId
+                });
+            }
+
+            plant._presentationDefensiveDamageStage = stage;
+            if (plant.Kind == PlantKind.Pumpkin)
+            {
+                return;
+            }
+
+            var chewing = plant.PresentationEatenFlashTicks > 0;
+            if (!chewing && plant._presentationDefensiveChewing)
+            {
+                plant.PresentationRate = 10f + (float)_random.NextDouble() * 5f;
+            }
+
+            plant._presentationDefensiveChewing = chewing;
+            plant.PresentationBodyRate = chewing ? .1f : plant.PresentationRate;
+            plant.PresentationBodyFrames += delta * plant.PresentationBodyRate;
         }
 
         /// <summary>Performs advance adventure potato mine.</summary>
@@ -3290,7 +3530,7 @@ namespace PlantsVsZombies.Simulation
                     if (touching)
                     {
                         var x = p.Column + .5f;
-                        BlastAdventure(x, p.Row, .8f, 0, 1800f, false, 0x12);
+                        DamageAdventurePotatoMine(p);
                         AdventurePresentationExplosion(PlantKind.PotatoMine, x, p.Row);
                         RemoveAdventurePlantAndStack(p);
                         Raise(GameEvent.MineExplosion);
@@ -3312,6 +3552,44 @@ namespace PlantsVsZombies.Simulation
             return true;
         }
 
+        /// <summary>Applies the original mine's sixty-pixel blast to eligible same-row body rectangles.</summary>
+        /// <param name="plant">The armed mine whose native detonation center is used.</param>
+        private void DamageAdventurePotatoMine(Plant plant)
+        {
+            // PC 0x474EE0 / 0x4294C0 / 0x428460: center is (mX+20,mY+40),
+            // radius is 60, row range is zero, and the damage target mask is 0x4D.
+            var centerX = 40 + plant.Column * 80 + 20;
+            var centerY = 80 + plant.Row * (Adventure.Level.HasPool || Adventure.Level.HasRoof ? 85 : 100)
+                + (Adventure.Level.HasRoof ? (int)(Math.Max(0f, 5f - plant.Column) * 20f - 10f) : 0) + 40;
+            foreach (var zombie in new PooledSnapshot<Zombie>(Zombies))
+            {
+                if (zombie.Row != plant.Row || zombie.Hypnotized || zombie.Airborne || zombie.DropRemaining > 0
+                    || zombie.Kind == ZombieKind.Bungee || zombie.Kind == ZombieKind.Boss || zombie.PresentationNativeHeight == 9
+                    || !AdventureZombieTargetingRules.CanBeAutoTargeted(zombie))
+                {
+                    continue;
+                }
+
+                var phase = AdventureZombieFeedbackPhase(zombie);
+                if (phase == 12 || phase == 71 || phase == 33 || phase == 34 || phase == 35 || phase == 52
+                    || phase == 54 || phase == 58 || phase == 74 || phase == 14 || phase == 19 || phase == 50)
+                {
+                    continue;
+                }
+
+                var body = AdventureZombieTargetingRules.BodyRectangle(zombie);
+                var nativeX = (int)AdventureZombieNativeRules.NativePositionX(zombie.X, zombie.IsSmall ? .5f : 1f);
+                var top = (int)AdventureBiteNativeY(zombie, nativeX) + body.Y + zombie.PresentationBiteBodyY;
+                var height = Math.Max(0, body.Height - (zombie.PresentationBiteClipHeight > -100 ? zombie.PresentationBiteClipHeight : 0));
+                var dx = Math.Max(0, Math.Max(body.X - centerX, centerX - body.X - body.Width));
+                var dy = Math.Max(0, Math.Max(top - centerY, centerY - top - height));
+                if (dx * dx + dy * dy <= 60 * 60)
+                {
+                    HitAdventureExplosionZombie(zombie, 1800f, false, 0x12);
+                }
+            }
+        }
+
         /// <summary>Performs adventure potato mine distance.</summary>
         /// <param name = "p">The p.</param>
         /// <param name = "touching">The touching.</param>
@@ -3319,26 +3597,29 @@ namespace PlantsVsZombies.Simulation
         private int AdventurePotatoMineDistance(Plant p, out bool touching)
         {
             touching = false;
-            // PC 475D90 uses horizontal GetRectOverlap, clamped to a nonnegative gap.
-            // Mine attack rect (PC Plant::GetPlantAttackRect): x=mX, width=80-25.
-            float left = 40f + p.Column * 80f, right = left + 55f;
+            // PC 475D90 measures the light's distance. The separate 475AA0 trigger
+            // admits edge contact and a 30-pixel gap for a zombie already eating.
+            var left = 40 + p.Column * 80;
+            var right = left + 55;
             var closest = 1000;
             foreach (var z in Zombies)
             {
-                if (!global::PlantsVsZombies.Adventure.AdventureZombieTargetingRules.CanBeAutoTargeted(z, PlantKind.PotatoMine) || z.Hypnotized || z.Airborne || z.Kind == ZombieKind.Bungee || z.Kind == ZombieKind.Boss || z.Row != p.Row || z.DropRemaining > 0)
+                if (!AdventureZombieTargetingRules.CanBeAutoTargeted(z) || z.Hypnotized || z.Airborne || z.Kind == ZombieKind.Bungee || z.Kind == ZombieKind.Boss || z.Row != p.Row || z.DropRemaining > 0 || z.PresentationNativeHeight == 9 || z.Kind == ZombieKind.Digger && z.AbilityPhase == 0)
                 {
                     continue;
                 }
 
-                float zl, zr;
-                AdventurePotatoMineZombieBounds(z, out zl, out zr);
-                var overlap = Math.Min(right, zr) - Math.Max(left, zl);
-                if (overlap > 0)
+                var body = AdventureZombieTargetingRules.BodyRectangle(z);
+                var overlap = Math.Min(right, body.X + body.Width) - Math.Max(left, body.X);
+                var phase = AdventureZombieFeedbackPhase(z);
+                var triggerLeft = left + (z.Kind == ZombieKind.PoleVaulter ? 40 : 0);
+                var triggerOverlap = Math.Min(right, body.X + body.Width) - Math.Max(triggerLeft, body.X);
+                if (!z.Headless && phase != 11 && phase != 12 && !(z.Kind == ZombieKind.Pogo && !z.UsedAbility) && triggerOverlap >= (z.Eating ? -30 : 0))
                 {
                     touching = true;
                 }
 
-                var gap = Math.Max(0, (int)-overlap);
+                var gap = Math.Max(0, -overlap);
                 if (gap < closest)
                 {
                     closest = gap;
@@ -3346,61 +3627,6 @@ namespace PlantsVsZombies.Simulation
             }
 
             return closest;
-        }
-
-        /// <summary>Performs adventure potato mine zombie bounds.</summary>
-        /// <param name = "z">The z.</param>
-        /// <param name = "left">The left.</param>
-        /// <param name = "right">The right.</param>
-        private static void AdventurePotatoMineZombieBounds(Zombie z, out float left, out float right)
-        {
-            // Literal PC ZombieInitialize body rectangles (53DD90), same coordinates
-            // used by the native corpse/reward placement. No sprite bounds or fitted size.
-            var scale = z.IsSmall ? .5f : 1f;
-            var center = 40f + z.X * 80f;
-            var source = center - 57f * scale - 20f * (1f - scale);
-            int x = 36, width = 42;
-            switch (z.Kind)
-            {
-                case ZombieKind.Football:
-                    x = 50;
-                    width = 57;
-                    break;
-                case ZombieKind.Digger:
-                    x = 50;
-                    width = 28;
-                    break;
-                case ZombieKind.Gargantuar:
-                    x = -17;
-                    width = 125;
-                    break;
-                case ZombieKind.Zomboni:
-                case ZombieKind.Catapult:
-                    x = 0;
-                    width = 153;
-                    break;
-                case ZombieKind.Snorkel:
-                    x = 12;
-                    width = 62;
-                    break;
-                case ZombieKind.Bobsled:
-                    if (z.PresentationHasSled ?? !z.UsedAbility)
-                    {
-                        x = -50;
-                        width = 275;
-                    }
-
-                    break;
-            }
-
-            var backwards = z.PresentationWalkingBackwards ?? (z.Kind == ZombieKind.Digger && z.AbilityPhase >= 1 && z.PresentationNativePhase != 38);
-            if (backwards)
-            {
-                x = 120 - x - width;
-            }
-
-            left = (int)source + x * scale + 20f * (1f - scale);
-            right = left + width * scale;
         }
 
         /// <summary>Gets or sets adventure presentation remainder.</summary>
@@ -3508,6 +3734,7 @@ namespace PlantsVsZombies.Simulation
                     continue;
                 }
 
+                AdvanceAdventureDefensivePlantPresentation(plant, dt);
                 plant.PresentationAwakeAge += dt;
                 if (plant.PresentationShotAge >= 0)
                 {
@@ -3557,6 +3784,12 @@ namespace PlantsVsZombies.Simulation
         /// <returns>The resulting can present adventure windup.</returns>
         private bool CanPresentAdventureWindup(Plant plant)
         {
+            if (AdventurePuffShroomRules.IsShortRange(plant.Kind))
+            {
+                // PC Plant::FindTargetZombie 0x475AA0 gates the body shooting animation with its attack rectangle.
+                return FindAdventurePuffTarget(plant) != null;
+            }
+
             switch (plant.Kind)
             {
                 case PlantKind.Peashooter:
@@ -3658,7 +3891,8 @@ namespace PlantsVsZombies.Simulation
 
         /// <summary>Performs adventure presentation zombie death.</summary>
         /// <param name = "zombie">The zombie.</param>
-        private void AdventurePresentationZombieDeath(Zombie zombie)
+        /// <param name="damageFlags">The original lethal hit flags passed to Zombie::DieWithLoot.</param>
+        private void AdventurePresentationZombieDeath(Zombie zombie, uint damageFlags = 0)
         {
             if (zombie.PresentationDeath == global::PlantsVsZombies.Adventure.AdventureZombieDeathPresentation.Mowed)
             {
@@ -3679,6 +3913,14 @@ namespace PlantsVsZombies.Simulation
             }
 
             if (zombie.PresentationDeath == global::PlantsVsZombies.Adventure.AdventureZombieDeathPresentation.Burned && CreateAdventureBurnPresentation(zombie))
+            {
+                return;
+            }
+
+            // PC 0x54F0F0..0x54F107 sends no-body-part deaths straight to Die.
+            // Gargantuars and the boss explicitly retain their own death animations.
+            var kind = zombie.ModeHead >= 26 ? zombie.ModeHead : (int)zombie.Kind;
+            if ((damageFlags & 16U) != 0 && kind != 23 && kind != 32 && kind != 25)
             {
                 return;
             }
@@ -4286,7 +4528,24 @@ namespace PlantsVsZombies.Simulation
         /// <param name = "delta">The delta.</param>
         private void AdvanceAdventureRewardPresentation(float delta)
         {
-            if (!IsAdventure || ModeSession != null || State != MatchState.Won || Adventure.RewardPresentation == null)
+            if (!IsAdventure || State != MatchState.Won || delta <= 0f || float.IsNaN(delta) || float.IsInfinity(delta))
+            {
+                return;
+            }
+
+            if (ModeSession != null)
+            {
+                _completedBoardAccumulated += delta;
+                while (_completedBoardAccumulated + 0.0000001 >= SimulationStep)
+                {
+                    AdvanceAdventureRewardTick();
+                    _completedBoardAccumulated -= SimulationStep;
+                }
+
+                return;
+            }
+
+            if (Adventure.RewardPresentation == null)
             {
                 return;
             }
@@ -4304,6 +4563,8 @@ namespace PlantsVsZombies.Simulation
         {
             Elapsed += .01f;
             AdventurePresentationTick(.01f);
+            // Original Board::UpdateGameObjects keeps existing projectiles moving through the award sequence.
+            AdvanceAdventureProjectiles(.01f, allowDamage: false);
             AdvanceAdventurePresentationSuns(.01f);
             foreach (var plant in Plants)
             {
@@ -4852,6 +5113,7 @@ namespace PlantsVsZombies.Simulation
             AdvanceAdventureMowers(dt);
             AdvanceAdventureSpecials(dt);
             AdvanceAdventureUpgradeWorld(dt);
+            AdvanceAdventureProgressMeter();
             for (var i = Flames.Count - 1; i >= 0; i--)
             {
                 Flames[i].Age += dt;
@@ -4890,6 +5152,29 @@ namespace PlantsVsZombies.Simulation
                     Raise(GameEvent.Won);
                 }
             }
+        }
+
+        /// <summary>Advances the original PC flag meter after this tick's combat and spawning updates.</summary>
+        private void AdvanceAdventureProgressMeter()
+        {
+            var board = Adventure;
+            if (board.Level.Mode == AdventureMode.Boss)
+            {
+                Presentation.ProgressMeter.SetBossHealth(board.BossHealth, board.BossMaxHealth);
+                return;
+            }
+
+            var schedule = WaveSchedule;
+            if (schedule == null)
+            {
+                return;
+            }
+
+            var hasFlags = global::PlantsVsZombies.Adventure.AdventureProgressMeterState.HasFlags(board.Level.Number, board.Level.IsReplay);
+            var wavesPerFlag = board.Level.IsReplay ? 10 : Math.Min(10, Math.Max(1, board.Waves.Count));
+            Presentation.ProgressMeter.Advance(board._ticks, board.CurrentWave, board.Waves.Count, wavesPerFlag, hasFlags,
+                schedule.InitialCountdownTicks, schedule.CountdownTicks, schedule.HealthAtWaveStart,
+                schedule.HealthToNextWave, ScheduledWaveHealth(board.CurrentWave - 1));
         }
 
         /// <summary>Performs contains seed.</summary>
@@ -7201,7 +7486,7 @@ namespace PlantsVsZombies.Simulation
             }
 
             var remaining = damage;
-            if (!bypassShield && z.ShieldHealth > 0f)
+            if ((!bypassShield || (damageFlags & 2U) != 0) && z.ShieldHealth > 0f)
             {
                 if ((damageFlags & 2U) == 0 && (z.Kind == ZombieKind.ScreenDoor || z.Kind == ZombieKind.Ladder))
                 {
@@ -7214,7 +7499,10 @@ namespace PlantsVsZombies.Simulation
                     z.PresentationShieldRecoil = .12f;
                 }
 
-                remaining -= Math.Min(remaining, z.ShieldHealth);
+                if ((damageFlags & 2U) == 0)
+                {
+                    remaining -= Math.Min(remaining, z.ShieldHealth);
+                }
             }
 
             // Helm damage uses the body's additive group, including the still attached helm.
@@ -10158,6 +10446,12 @@ namespace PlantsVsZombies.Simulation
                 return;
             }
 
+            if (State == MatchState.Won)
+            {
+                AdvanceAdventureRewardPresentation(dt);
+                return;
+            }
+
             if (State != MatchState.Playing || ModeSession.Phase != ModePhase.Playing)
             {
                 return;
@@ -10436,6 +10730,7 @@ namespace PlantsVsZombies.Simulation
             s.RainPackets.Clear();
             s.HeadShots.Clear();
             _modeAccumulated = 0;
+            _completedBoardAccumulated = 0;
             Adventure.CurrentWave = 0;
             Adventure.TotalWavesSpawned = 0;
             Adventure.FlagsSpawned = 0;

@@ -40,6 +40,8 @@ namespace PlantsVsZombies.Game
         private float _scale, _seconds, _rate, _remainder;
         /// <summary>Whether the current clip loops or the actor faces backwards.</summary>
         private bool _loop, _backwards;
+        /// <summary>Whether the current plant is the native shovel target.</summary>
+        private bool _highlighted;
         /// <summary>The blend duration used by the current plant pose.</summary>
         private int _blendTicks;
         /// <summary>The reused attached head buffer, or null for a single body animation.</summary>
@@ -76,8 +78,9 @@ namespace PlantsVsZombies.Game
         /// <param name="blendTicks">The clip transition blend duration.</param>
         /// <param name="remainder">The render interpolation remainder.</param>
         /// <param name="surfaceKey">The stable feedback surface identity.</param>
+        /// <param name="highlighted">Whether the held shovel highlights this plant.</param>
         internal void DrawPlant(Plant plant, string name, Vector2 origin, float scale, float seconds, string clip,
-            bool loop, float rate, HeadPlayback[]? heads, string key, Rect viewport, int blendTicks, float remainder, string surfaceKey)
+            bool loop, float rate, HeadPlayback[]? heads, string key, Rect viewport, int blendTicks, float remainder, string surfaceKey, bool highlighted = false)
         {
             _plant = plant;
             _name = name;
@@ -92,9 +95,10 @@ namespace PlantsVsZombies.Game
             _blendTicks = blendTicks;
             _remainder = remainder;
             _surfaceKey = surfaceKey;
-            if (AdventureProducerGlow.Visual(plant).Enabled || plant.IsImitated || plant.PresentationEatenFlashTicks > 0)
+            _highlighted = highlighted;
+            if (highlighted || AdventureProducerGlow.Visual(plant).Enabled || plant.IsImitated || plant.PresentationEatenFlashTicks > 0)
             {
-                _renderer.DrawNativePlantHitFeedback(key, viewport, _drawPlant, plant, _surfaceKey);
+                _renderer.DrawNativePlantHitFeedback(key, viewport, _drawPlant, plant, _surfaceKey, _highlighted);
             }
             else
             {
@@ -174,7 +178,9 @@ namespace PlantsVsZombies.Game
             var visible = _plant.Kind == PlantKind.KernelPult || _plant.Kind == PlantKind.PotatoMine ? _plantVisible : null;
             var drawn = _heads != null
                 ? _renderer.DrawNativeAttachedHeads(_name, _origin, _scale, _seconds, _rate, _heads, visible, _plant.ModeFacesLeft, _key, _blendTicks)
-                : _renderer.DrawNativePlayback(_name, _origin, _scale, _seconds, _clip, _loop, _rate, visible, null, null, _plant.ModeFacesLeft, _key, _blendTicks);
+                : _renderer.DrawNativePlayback(_name, _origin, _scale, _seconds, _clip, _loop, _rate, visible,
+                    AdventureDefensivePlantRules.DamageTrack(_plant.Kind), AdventureDefensivePlantRules.DamageImage(_plant.Kind, _plant.Health),
+                    _plant.ModeFacesLeft, _key, _blendTicks);
             var mine = _plant.PotatoMinePresentation;
             if (_plant.Kind == PlantKind.PotatoMine && mine != null && mine.LightCreated && _plant.MinePhase == MinePhase.Armed)
             {

@@ -1,3 +1,4 @@
+#nullable enable
 using System;
 using System.Linq;
 using System.IO;
@@ -34,7 +35,36 @@ internal static class Program
         string root=Workspace();Directory.SetCurrentDirectory(root);
         var outputDirectory = Path.Combine(root, "Tools", "Tests", "AdventureTests", "artifacts", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(outputDirectory);
-        if(args.Length==0 || args[0]=="--unit") {AdventureUnitTests.Run(root);UpgradePlantTests.Run(root);if(args.Length>0)return;}
+        if (args.Length > 0 && args[0] == "--reward-projectiles")
+        {
+            RewardProjectileRegressionTests.Run();
+            return;
+        }
+
+        if (args.Length > 0 && args[0] == "--combat-fidelity")
+        {
+            CombatFidelityRegressionTests.Run();
+            return;
+        }
+
+        if (args.Length > 0 && args[0] == "--puff-shroom")
+        {
+            PuffShroomRegressionTests.Run();
+            return;
+        }
+
+        if (args.Length == 0 || args[0] == "--unit")
+        {
+            AdventureUnitTests.Run(root);
+            UpgradePlantTests.Run(root);
+            CombatFidelityRegressionTests.Run();
+            RewardProjectileRegressionTests.Run();
+            PuffShroomRegressionTests.Run();
+            if (args.Length > 0)
+            {
+                return;
+            }
+        }
         int single=args.Length>=2 && args[0]=="--level"?int.Parse(args[1]):0;
         bool campaignMode=single==0 && (args.Length==0 || args[0]!="--all-levels");
         string header="level,mode,result,seconds,waves,spawned,plants,packets,tools,zombies_left,boss_health,seed,reward_committed,checkpoint_reloaded";

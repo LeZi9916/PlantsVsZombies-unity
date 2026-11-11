@@ -3,6 +3,7 @@ using PlantsVsZombies.Game;
 using PlantsVsZombies.Reanimation;
 using PlantsVsZombies.Simulation;
 using System;
+using PlantsVsZombies.Adventure;
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
@@ -72,7 +73,7 @@ namespace PlantsVsZombies.Diagnostics
             SmokeTestArtifacts.CaptureFrame(chooserPath);
             yield return null;
             click.Invoke(controller, new object[] { new Vector2(288, 269) });
-            var pending = (HashSet<PlantKind>)pendingField.GetValue(controller);
+            var pending = (AdventureSeedChooserState)pendingField.GetValue(controller);
             if (pending.Count != 7 || pending.Contains(PlantKind.Jalapeno))
             {
                 Fail("Seed selection accepted more than seven plants");
@@ -81,8 +82,8 @@ namespace PlantsVsZombies.Diagnostics
 
             foreach (Vector2 point in new[]
             {
-                new Vector2(223, 185),
-                new Vector2(288, 185),
+                new Vector2(110, 43),
+                new Vector2(110, 43),
                 new Vector2(288, 269),
                 new Vector2(353, 269),
                 new Vector2(400, 461)

@@ -243,8 +243,21 @@ namespace PlantsVsZombies.Diagnostics
             for (var i = 0; i < 6; i++)
             {
                 Call("HandleClick", new Vector2(47 + i * 53, 163));
+                if (i == 0)
+                {
+                    yield return new WaitForSecondsRealtime(.12f);
+                    yield return Capture("08b-native-packet-flying-to-bank");
+                }
             }
 
+            Call("HandleClick", new Vector2(AdventureSeedSlotLayout.PositionX(5, 6) + 25, 43));
+            Check(_controller._pendingSeeds.Count == 5 && !_controller._pendingSeeds.Contains(PlantKind.SnowPea),
+                "The visible bank packet could not be returned to the chooser");
+            yield return new WaitForSecondsRealtime(.12f);
+            yield return Capture("08c-native-packet-returning-to-chooser");
+            Call("HandleClick", new Vector2(47 + 5 * 53, 163));
+            Check(_controller._pendingSeeds.Count == 6 && _controller._pendingSeeds[5] == PlantKind.SnowPea,
+                "Reselection did not append the packet in click order");
             Call("HandleClick", new Vector2(232, 566));
             Check(!Opening.WaitingForSeeds && Opening.NativeTime >= 4260 && Sim.Elapsed == 0, "Chooser confirmation started the battle before returning");
             Call("UpdateAdventureOpening", .9f);
@@ -307,6 +320,40 @@ namespace PlantsVsZombies.Diagnostics
             progress.Import(catalog.SelectedId.Value, 1, 1);
             Check((bool)Call("StartIndependentMode", 61), "Zombie-card mode did not open");
             yield return Capture("19-original-zombie-seed-cards");
+
+            // Explicit presentation fixture: this verifies the original note artwork without claiming an earned 1-9 victory.
+            _controller.StartAdventureTestLevel(9);
+            _controller._choosingSeeds = false;
+            typeof(GameSimulation).GetProperty("State").SetValue(Sim, MatchState.Won);
+            Sim.Adventure.Phase = AdventurePhase.Finished;
+            var note = new AdventureRewardPresentation(15, 400, 250, 50, 70, .5f, 0f, 0);
+            Check(note.BeginCollection(), "The original note fixture could not start its normal collection transition");
+            note.Update(7f);
+            Sim.Adventure.RewardPresentation = note;
+            Check(note.Stage == AdventureAwardStage.Introduction && note.IntroductionAlpha == 0f,
+                "The note fixture did not reach its fully visible introduction");
+            yield return Capture("20-original-1-9-note-alpha-grid");
+            var paper = _controller.Texture("ZombieNote.jpg");
+            var ink = _controller.TextureAlphaGrid("ZombieNoteBlack1.png", "ZombieNote1.png");
+            Check(paper != null && paper.GetPixels32()[0].a < 10, "The original JPEG paper border is opaque");
+            Check(ink != null, "The original resources.xml note alpha grid did not load");
+            var inkPixels = ink.GetPixels32();
+            var transparentPixels = 0;
+            var blackInkPixels = 0;
+            foreach (var pixel in inkPixels)
+            {
+                if (pixel.a == 0)
+                {
+                    transparentPixels++;
+                }
+                else if (pixel.a > 128 && pixel.r == 0 && pixel.g == 0 && pixel.b == 0)
+                {
+                    blackInkPixels++;
+                }
+            }
+
+            Check(transparentPixels > inkPixels.Length / 2 && blackInkPixels > 100,
+                "Original note glyphs are not black ink over a transparent alpha grid");
             Check(_errorLog == null, "Player logged an error");
         }
     }

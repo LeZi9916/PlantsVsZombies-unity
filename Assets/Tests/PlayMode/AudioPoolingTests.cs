@@ -1,8 +1,12 @@
 #nullable enable
 using System;
 using System.Collections;
+using System.Collections.Generic;
+using System.Reflection;
 using NUnit.Framework;
+using PlantsVsZombies.Adventure;
 using PlantsVsZombies.Audio;
+using PlantsVsZombies.Game;
 using UnityEngine;
 using UnityEngine.TestTools;
 
@@ -70,6 +74,116 @@ namespace PlantsVsZombies.Tests.PlayMode
             Assert.That(before[1].clip, Is.SameAs(_clip));
             Assert.That(before[2].clip, Is.SameAs(_clip));
             Assert.That(before[3].clip, Is.SameAs(_clip));
+        }
+
+        /// <summary>Replaces the oldest matching hit voice by start order rather than sample end time.</summary>
+        [Test]
+        public void SaturatedImpactCategoryReplacesItsOldestVoiceWithoutInterruptingOtherSounds()
+        {
+            var sources = _owner.GetComponents<AudioSource>();
+            Assert.That(_pool.TryPlay(_clip, .1f, .5f, group: 1, groupLimit: 2), Is.True);
+            Assert.That(_pool.TryPlay(_clip, .2f, 2f, group: 1, groupLimit: 2), Is.True);
+            Assert.That(_pool.TryPlay(_clip, .3f, group: 25), Is.True);
+            Assert.That(_pool.CanPlay(1, 2), Is.False);
+            Assert.That(_pool.CanPlay(1, 2, replaceOldest: true), Is.True);
+            Assert.That(_pool.TryPlay(_clip, .9f, 1.2f, 1, 2, replaceOldest: true), Is.True);
+            Assert.That(sources[1].volume, Is.EqualTo(.9f).Within(.0001f));
+            Assert.That(sources[1].pitch, Is.EqualTo(1.2f).Within(.0001f));
+            Assert.That(sources[2].volume, Is.EqualTo(.2f).Within(.0001f));
+            Assert.That(sources[3].volume, Is.EqualTo(.3f).Within(.0001f));
+            Assert.That(_pool.CanPlay(58, 8, replaceOldest: true), Is.False);
+            Assert.That(_pool.TryPlay(_clip, 1f, group: 58, groupLimit: 8, replaceOldest: true), Is.False);
+            Assert.That(_owner.GetComponents<AudioSource>(), Is.EqualTo(sources));
+        }
+
+        /// <summary>Admits every request in a rapid hit burst while retaining eight original-category voices.</summary>
+        [Test]
+        public void RapidImpactBurstReusesEightVoicesWithoutGrowingThePool()
+        {
+            using var impacts = new AudioVoicePool(_owner, _template, 8);
+            var sources = _owner.GetComponents<AudioSource>();
+            for (var request = 0; request < 64; request++)
+            {
+                Assert.That(impacts.CanPlay(1, 8, replaceOldest: true), Is.True);
+                Assert.That(impacts.TryPlay(_clip, request / 64f, group: 1, groupLimit: 8, replaceOldest: true), Is.True);
+            }
+
+            var active = 0;
+            foreach (var source in sources)
+            {
+                if (source.clip != null)
+                {
+                    active++;
+                    Assert.That(source.volume, Is.GreaterThanOrEqualTo(56f / 64f));
+                }
+            }
+
+            Assert.That(active, Is.EqualTo(8));
+            Assert.That(_owner.GetComponents<AudioSource>(), Is.EqualTo(sources));
+        }
+
+        /// <summary>Passes consecutive projectile hits through the game Foley route without the ambient ten-tick suppression.</summary>
+        /// <param name="foley">The original projectile-impact sample category.</param>
+        [TestCase(1)]
+        [TestCase(32)]
+        [TestCase(38)]
+        [TestCase(43)]
+        [TestCase(46)]
+        [TestCase(58)]
+        [TestCase(62)]
+        public void GameFoleyRoutePlaysEveryRapidProjectileImpact(int foley)
+        {
+            using var impacts = new AudioVoicePool(_owner, _template, 8);
+            var game = CreateFoleyFixture(impacts, out var host);
+            try
+            {
+                for (var request = 0; request < 64; request++)
+                {
+                    typeof(PvZGame).GetField("_soundVolume", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(game, request / 64f);
+                    PlayFoley(game, foley, 100);
+                }
+
+                var active = 0;
+                foreach (var source in _owner.GetComponents<AudioSource>())
+                {
+                    if (source.clip != null)
+                    {
+                        active++;
+                        Assert.That(source.volume, Is.GreaterThanOrEqualTo(56f / 64f));
+                    }
+                }
+
+                Assert.That(active, Is.EqualTo(8));
+            }
+            finally
+            {
+                ((Dictionary<string, AudioClip>)typeof(PvZGame).GetField("_presentationSounds", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(game)!).Clear();
+                UnityEngine.Object.Destroy(host);
+            }
+        }
+
+        /// <summary>Preserves the original ten-update boundary for chewing and body-part Foley.</summary>
+        /// <param name="foley">The category whose native admission window remains in effect.</param>
+        [TestCase(5)]
+        [TestCase(25)]
+        public void GameFoleyRoutePreservesNonImpactSuppressionBoundary(int foley)
+        {
+            var game = CreateFoleyFixture(_pool, out var host);
+            try
+            {
+                PlayFoley(game, foley, 100);
+                PlayFoley(game, foley, 109);
+                var sources = _owner.GetComponents<AudioSource>();
+                Assert.That(sources[1].clip, Is.SameAs(_clip));
+                Assert.That(sources[2].clip, Is.Null);
+                PlayFoley(game, foley, 110);
+                Assert.That(sources[2].clip, Is.SameAs(_clip));
+            }
+            finally
+            {
+                ((Dictionary<string, AudioClip>)typeof(PvZGame).GetField("_presentationSounds", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(game)!).Clear();
+                UnityEngine.Object.Destroy(host);
+            }
         }
 
         /// <summary>Releases occupied categories and resets gain, pitch, and listener settings on reuse.</summary>
@@ -178,6 +292,61 @@ namespace PlantsVsZombies.Tests.PlayMode
 
             var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
             Assert.That(allocated, Is.Zero);
+        }
+
+        /// <summary>Keeps saturated hit replacement free of managed allocation after the fixed voices are initialized.</summary>
+        [Test]
+        public void RepeatedImpactReplacementDoesNotAllocateManagedMemory()
+        {
+            for (var request = 0; request < 8; request++)
+            {
+                _pool.TryPlay(_clip, .5f, group: 1, groupLimit: 2, replaceOldest: true);
+            }
+
+            var admitted = true;
+            var before = GC.GetAllocatedBytesForCurrentThread();
+            for (var request = 0; request < 128; request++)
+            {
+                admitted &= _pool.CanPlay(1, 2, replaceOldest: true);
+                admitted &= _pool.TryPlay(_clip, .5f, group: 1, groupLimit: 2, replaceOldest: true);
+            }
+
+            var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+            Assert.That(admitted, Is.True);
+            Assert.That(allocated, Is.Zero);
+        }
+
+        /// <summary>Creates an inactive game coordinator with synthetic samples and the caller's active voice pool.</summary>
+        /// <param name="pool">The fixed voice pool receiving Foley requests.</param>
+        /// <param name="host">The inactive object owned by the test.</param>
+        /// <returns>The coordinator configured without bootstrapping scenes, resources, or saved progress.</returns>
+        private PvZGame CreateFoleyFixture(AudioVoicePool pool, out GameObject host)
+        {
+            host = new GameObject("Inactive Foley route regression");
+            host.SetActive(false);
+            var game = host.AddComponent<PvZGame>();
+            typeof(PvZGame).GetField("_soundVoices", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(game, pool);
+            typeof(PvZGame).GetField("_soundVolume", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(game, .7f);
+            var samples = (Dictionary<string, AudioClip>)typeof(PvZGame).GetField("_presentationSounds", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(game)!;
+            foreach (var definition in AdventureZombieFoleyData.Definitions.Values)
+            {
+                foreach (var sample in definition.Samples)
+                {
+                    samples[sample] = _clip;
+                }
+            }
+
+            return game;
+        }
+
+        /// <summary>Invokes the production Foley admission and native sample selection path.</summary>
+        /// <param name="game">The inactive coordinator configured by the fixture.</param>
+        /// <param name="foley">The native sample category.</param>
+        /// <param name="tick">The native simulation update associated with the request.</param>
+        private static void PlayFoley(PvZGame game, int foley, int tick)
+        {
+            typeof(PvZGame).GetMethod("PlayAdventureZombieFoley", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .Invoke(game, new object[] { new AdventureZombieSoundEvent { Foley = foley, Tick = tick } });
         }
 
         /// <summary>Destroys only leased components and tolerates repeated disposal.</summary>

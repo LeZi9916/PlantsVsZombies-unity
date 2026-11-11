@@ -8,7 +8,7 @@ namespace PlantsVsZombies.Adventure
         // PC Board::GetSeedPacketPositionX 0x427E20 and SeedBank::RefreshAll 0x49F720.
         /// <summary>Performs position x.</summary>
         /// <param name = "index">The index.</param>
-        /// <param name = "count">The count.</param>
+        /// <param name = "count">The configured bank capacity, including slots that have no selected card.</param>
         /// <returns>The resulting position x.</returns>
         public static int PositionX(int index, int count)
         {

@@ -1,3 +1,4 @@
+#nullable enable
 using System;
 using System.IO;
 using System.Linq;
@@ -17,7 +18,10 @@ internal static class UpgradePlantTests
         var deck=wanted.ToList();foreach(var k in g.Adventure.AvailableSeeds)if(deck.Count<6 && !deck.Contains(k))deck.Add(k);
         Check(g.ChooseAdventureSeeds(deck),"fixture selects six earned/explicitly granted seeds");
         g.Adventure.CurrentWave=g.Adventure.Waves.Count;g.Adventure._finalAmbush=false;g.Adventure._nextSkySun=float.MaxValue;
-        var sun=new Sun{Value=9990};g.Suns.Add(sun);Check(g.CollectSun(sun),"isolated unit fixture credit");return g;
+        // Explicit isolated fixture funding is independent of native collectible sun denominations.
+        typeof(GameSimulation).GetProperty(nameof(GameSimulation.SunAmount))!.SetValue(g, 9990);
+        Check(g.SunAmount == 9990, "isolated unit fixture credit");
+        return g;
     }
     private static Zombie Spawn(GameSimulation g,ZombieKind kind,int row,float x)
     {
@@ -85,10 +89,15 @@ internal static class UpgradePlantTests
         Check(!g.TryPlant(PlantKind.GatlingPea,0,2)&&g.LastAdventurePlantingFailure==AdventurePlantingFailure.NeedsUpgrade,"Gatling requires Repeater");Check(g.SunAmount==before&&g.CooldownRemaining(PlantKind.GatlingPea)==0,"failed upgrade spends neither sun nor cooldown");
         Check(g.TryPlant(PlantKind.Repeater,0,2),"plant prerequisite Repeater");before=g.SunAmount;Check(g.TryPlant(PlantKind.GatlingPea,0,2),"replace Repeater with Gatling");
         Check(g.SunAmount==before-250&&g.Plants.Count(p=>p.Row==0&&p.Column==2)==1&&g.PlantAt(0,2).Kind==PlantKind.GatlingPea,"upgrade pays extra price and consumes prerequisite once");
-        Spawn(g,ZombieKind.Buckethead,0,11);g.Update(1.4f);Check(g.Peas.Count==4&&g.Peas.All(p=>p.Damage==20&&p.SourceKind==PlantKind.GatlingPea&&!p.SourceIsImitated),"four distinct Gatling burst projectiles");
+        var target = Spawn(g, ZombieKind.Buckethead, 0, 9f);
+        Check(AdventureZombieTargetingRules.CanBeAutoTargeted(target), "burst fixture starts with a visible zombie body instead of native right-edge birth");
+        g.Update(1.4f);
+        Check(g.Peas.Count==4&&g.Peas.All(p=>p.Damage==20&&p.SourceKind==PlantKind.GatlingPea&&!p.SourceIsImitated),"four distinct Gatling burst projectiles against a visible target");
         Check(g.CooldownRemaining(PlantKind.GatlingPea)>48f&&g.CooldownRemaining(PlantKind.Repeater)>6f,"base and upgrade packet cooldowns are independent");
         var twin=Fixture(39,null,PlantKind.Sunflower,PlantKind.TwinSunflower);Check(twin.TryPlant(PlantKind.Sunflower,0,1)&&twin.TryPlant(PlantKind.TwinSunflower,0,1),"Twin consumes Sunflower");twin.Update(8f);
-        Check(twin.Suns.Count==2&&twin.Suns.Sum(s=>s.Value)==50,"Twin creates two collectible normal suns");int cash=twin.SunAmount;foreach(var s in twin.Suns.ToArray())Check(twin.CollectSun(s),"Twin sun can be collected");Check(twin.SunAmount==Math.Min(9990,cash+50),"double sun enters normal economy");
+        Check(twin.Suns.Count==2&&twin.Suns.Sum(s=>s.Value)==50,"Twin creates two collectible normal suns");int cash=twin.SunAmount;foreach(var s in twin.Suns.ToArray())Check(twin.CollectSun(s),"Twin sun can be collected");
+        twin.Update(1f);
+        Check(twin.SunAmount==Math.Min(9990,cash+50),"double sun enters normal economy after the original collection flight");
     }
     private static void GloomAndCattail()
     {
@@ -100,7 +109,13 @@ internal static class UpgradePlantTests
     }
     private static void WinterAndGold()
     {
-        var winter=Fixture(49,null,PlantKind.MelonPult,PlantKind.WinterMelon);Check(winter.TryPlant(PlantKind.MelonPult,2,1)&&winter.TryPlant(PlantKind.WinterMelon,2,1),"Winter consumes Melon");var direct=Spawn(winter,ZombieKind.Normal,2,5);var nearby=Spawn(winter,ZombieKind.Normal,1,5);winter.Update(1.5f);Check(direct.Health==190&&nearby.Health==244&&direct.ChillRemaining>0&&nearby.ChillRemaining>0,"Winter direct/splash damage chills adjacent lane");
+        var winter=Fixture(49,null,PlantKind.MelonPult,PlantKind.WinterMelon);Check(winter.TryPlant(PlantKind.MelonPult,2,1)&&winter.TryPlant(PlantKind.WinterMelon,2,1),"Winter consumes Melon");var direct=Spawn(winter,ZombieKind.Normal,2,5);var nearby=Spawn(winter,ZombieKind.Normal,1,5);
+        for (var tick = 0; tick < 300 && direct.Health == 270; tick++)
+        {
+            winter.Update(.01f);
+        }
+
+        Check(direct.Health==190&&nearby.Health==244&&direct.ChillRemaining>0&&nearby.ChillRemaining>0,"Winter direct/splash damage chills adjacent lane after the native lob reaches its target");
         var gold=Fixture(49,null,PlantKind.MagnetShroom,PlantKind.GoldMagnet,PlantKind.Marigold);gold.TryPlant(PlantKind.MagnetShroom,1,1);Check(gold.PlantAt(1,1).Asleep&&gold.TryPlant(PlantKind.GoldMagnet,1,1)&&!gold.PlantAt(1,1).Asleep,"Gold Magnet is active in daylight without coffee");var metal=Spawn(gold,ZombieKind.Buckethead,1,3);
         for(int i=0;i<6;i++)Check(gold.SpawnAdventureCoin(AdventureCoinKind.Silver,0.5f+i,1)!=null,"host coin fixture");int sun=gold.SunAmount;gold.Update(1.1f);Check(gold.Adventure.Coins.Count(c=>c.IsBeingCollected)==5&&gold.Adventure.MoneyCollectedUnits==0,"Gold Magnet reserves at most five coins before delivery");gold.Update(0.6f);Check(gold.Adventure.MoneyCollectedUnits==5&&gold.Adventure.Coins.Count==1&&metal.ArmorHealth==1100,"Gold Magnet collects money, not enemy metal");var coin=gold.Adventure.Coins[0];Check(gold.CollectAdventureCoin(coin)&&!gold.CollectAdventureCoin(coin),"manual coin pickup cannot double collect");var gc=gold.SpawnAdventureCoin(AdventureCoinKind.Gold,1,1);var dc=gold.SpawnAdventureCoin(AdventureCoinKind.Diamond,2,1);gold.CollectAdventureCoin(gc);gold.CollectAdventureCoin(dc);Check(gold.Adventure.MoneyCollectedUnits==111&&gold.Adventure.MoneyDisplayValue==1110&&gold.SunAmount==sun,"currency units are 1/5/100 and remain separate from sun");
         Check(gold.TryPlant(PlantKind.Marigold,0,0),"Marigold is available as real coin source");gold.Update(5f);Check(gold.Adventure.MoneyCollectedUnits>111,"Gold Magnet collects actual Marigold production");
@@ -110,18 +125,24 @@ internal static class UpgradePlantTests
         var g=Fixture(29,null,PlantKind.Spikeweed,PlantKind.Spikerock);Check(g.TryPlant(PlantKind.Spikeweed,0,3)&&g.TryPlant(PlantKind.Spikerock,0,3),"Spikerock replaces ground Spikeweed");Plant rock=g.PlantAt(0,3);Check(rock.Health==450,"native Spikerock durability");var normal=Spawn(g,ZombieKind.Normal,0,3.5f);g.Update(1.01f);Check(normal.Health==230&&rock.Health==450&&!normal.Eating,"Spikerock damages twice per second and cannot be eaten");
         for(int i=1;i<=9;i++) {var z=Spawn(g,ZombieKind.Zomboni,0,3.5f);g.Update(0.05f);Check(!g.Zombies.Contains(z),"Spikerock punctures vehicle "+i);Check(i==9?!g.Plants.Contains(rock):g.Plants.Contains(rock)&&rock.Health==450-i*50,"vehicle durability hit "+i);}
         Check(rock.VehicleHitsTaken==9,"exactly nine vehicle hits consumed");
-        var smash=Fixture(29,null,PlantKind.Spikeweed,PlantKind.Spikerock);smash.TryPlant(PlantKind.Spikeweed,0,3);smash.TryPlant(PlantKind.Spikerock,0,3);var garg=Spawn(smash,ZombieKind.Gargantuar,0,3.5f);smash.Update(0.05f);Check(smash.PlantAt(0,3).Health==400,"Gargantuar smash removes one rock durability hit");
+        var smash=Fixture(29,null,PlantKind.Spikeweed,PlantKind.Spikerock);smash.TryPlant(PlantKind.Spikeweed,0,3);smash.TryPlant(PlantKind.Spikerock,0,3);var garg=Spawn(smash,ZombieKind.Gargantuar,0,3.75f);
+        Check(AdventureZombieBiteRules.Reaches(smash.AdventureZombieAttackRectangle(garg), smash.AdventurePlantEatingRectangle(smash.PlantAt(0,3))), "smash fixture starts with the original twenty-pixel attack overlap");
+        smash.Update(0.05f);Check(smash.PlantAt(0,3).Health==400,"Gargantuar smash removes one rock durability hit");
     }
     private static void Cannon()
     {
         var g=Fixture(49,null,PlantKind.KernelPult,PlantKind.CobCannon,PlantKind.Pumpkin,PlantKind.Peashooter,PlantKind.FlowerPot);g.TryPlant(PlantKind.KernelPult,2,1);Check(!g.TryPlant(PlantKind.CobCannon,2,1),"cannon requires second adjacent Kernel");g.Update(8f);g.TryPlant(PlantKind.KernelPult,2,2);
         Check(g.TryPlant(PlantKind.Pumpkin,2,2),"pre-cannon kernel can have armor");int armorCash=g.SunAmount;Check(!g.TryPlant(PlantKind.CobCannon,2,1)&&g.SunAmount==armorCash&&g.AdventurePlantAt(2,1,PlantLayer.Main).Kind==PlantKind.KernelPult&&g.AdventurePlantAt(2,2,PlantLayer.Main).Kind==PlantKind.KernelPult,"armor prevents upgrade without consuming either kernel");Check(g.RemovePlant(2,2)&&g.AdventurePlantAt(2,2,PlantLayer.Main).Kind==PlantKind.KernelPult,"shovel removes armor before prerequisite");
         int cash=g.SunAmount;Check(g.TryPlant(PlantKind.CobCannon,2,1)&&g.SunAmount==cash-500,"cannon consumes both kernels and extra 500 sun");Plant cannon=g.AdventurePlantAt(2,1,PlantLayer.Main);Check(cannon.ColumnSpan==2&&object.ReferenceEquals(g.AdventurePlantAt(2,2,PlantLayer.Main),cannon)&&object.ReferenceEquals(g.PlantAt(2,2),cannon),"two-cell footprint resolves from either cell");Check(!g.TryPlant(PlantKind.Peashooter,2,2)&&!g.TryPlant(PlantKind.Pumpkin,2,2),"right cannon cell blocks plants and pumpkin");Check(!g.TryAimAdventureCobCannon(cannon.Id),"unloaded cannon cannot aim");g.Update(7.6f);Check(cannon.CannonPhase==CobCannonPhase.Ready&&g.TryAimAdventureCobCannon(2,2),"first arming/loading completes and right cell selects cannon");Check(g.CancelAdventureCobCannonAim()&&cannon.CannonPhase==CobCannonPhase.Ready,"cancel aim preserves loaded cannon");Check(!g.TryFireAdventureCobCannonAtCell(2,6)&&g.TryAimAdventureCobCannon(cannon.Id),"fire requires explicit aim");g.TogglePause();Check(!g.TryFireAdventureCobCannonAtCell(2,6),"paused cannon cannot fire");g.TogglePause();Check(!g.TryFireAdventureCobCannon(float.NaN,2),"invalid aim cannot consume loaded cannon");var target=Spawn(g,ZombieKind.Gargantuar,2,6.5f);target.ThrownImp=true; // Isolate reload from the unrelated imp-summoning behavior.
-        var near=Spawn(g,ZombieKind.Buckethead,1,6.5f);var far=Spawn(g,ZombieKind.Normal,4,6.5f);Check(g.TryFireAdventureCobCannonAtCell(2,6)&&!g.TryFireAdventureCobCannonAtCell(2,6),"one aim emits one shot");g.Update(2f);Check(g.Adventure.CobShells.Count==0,"cannon waits for native 206-tick launch phase");g.Update(0.1f);Check(g.Adventure.CobShells.Count==1&&cannon.CannonPhase==CobCannonPhase.Reloading,"launch creates independent shell and reload");g.Update(1.6f);Check(target.Health==1200&&!g.Zombies.Contains(near)&&far.Health==270,"targeted 1800 blast hits target neighborhood only");Check(!g.TryAimAdventureCobCannon(cannon.Id),"reloading cannon rejects aim");g.Update(31.1f);Check(cannon.CannonPhase==CobCannonPhase.Ready&&g.CooldownRemaining(PlantKind.CobCannon)>0&&g.TryAimAdventureCobCannon(cannon.Id),"weapon reload is independent of seed packet recharge");Check(g.RemovePlant(2,2)&&g.Adventure.SelectedCobCannonId==null&&g.AdventurePlantAt(2,1,PlantLayer.Main)==null&&g.AdventurePlantAt(2,1,PlantLayer.Support)!=null,"right-cell shovel removes entire cannon and clears aim while retaining pots");
+        var near=Spawn(g,ZombieKind.Buckethead,1,6.5f);var far=Spawn(g,ZombieKind.Normal,4,6.5f);Check(g.TryFireAdventureCobCannonAtCell(2,6)&&!g.TryFireAdventureCobCannonAtCell(2,6),"one aim emits one shot");g.Update(2f);Check(g.Adventure.CobShells.Count==0,"cannon waits for native 206-tick launch phase");g.Update(0.1f);Check(g.Adventure.CobShells.Count==1&&cannon.CannonPhase==CobCannonPhase.Reloading,"launch creates independent shell and reload");g.Update(GameSimulation.AdventureCobFlightSeconds);Check(target.Health==1200&&!g.Zombies.Contains(near)&&far.Health==270,"targeted 1800 blast hits target neighborhood only after the native shell flight");Check(!g.TryAimAdventureCobCannon(cannon.Id),"reloading cannon rejects aim");g.Update(31.1f);Check(cannon.CannonPhase==CobCannonPhase.Ready&&g.CooldownRemaining(PlantKind.CobCannon)>0&&g.TryAimAdventureCobCannon(cannon.Id),"weapon reload is independent of seed packet recharge");Check(g.RemovePlant(2,2)&&g.Adventure.SelectedCobCannonId==null&&g.AdventurePlantAt(2,1,PlantLayer.Main)==null&&g.AdventurePlantAt(2,1,PlantLayer.Support)!=null,"right-cell shovel removes entire cannon and clears aim while retaining pots");
     }
     private static void Imitater()
     {
-        var g=Fixture(39,PlantKind.Peashooter,PlantKind.Imitater,PlantKind.Peashooter);int cash=g.SunAmount;Check(g.TryPlant(PlantKind.Imitater,1,1)&&g.SunAmount==cash-100,"Imitater pays copied seed price");Plant mimic=g.PlantAt(1,1);int id=mimic.Id;Check(mimic.Kind==PlantKind.Imitater&&mimic.ImitaterTarget==PlantKind.Peashooter&&g.CooldownRemaining(PlantKind.Imitater)>7.5f&&g.CooldownRemaining(PlantKind.Peashooter)==0,"morph placeholder has separate target-derived cooldown");Check(g.TryPlant(PlantKind.Peashooter,0,1),"original and imitation packets can be used independently");Spawn(g,ZombieKind.Normal,1,7);g.Update(3.1f);Check(g.PlantAt(1,1).Kind==PlantKind.Imitater&&!g.Peas.Any(p=>p.Row==1),"placeholder does not fire before transformation");g.Update(0.2f);Plant copy=g.PlantAt(1,1);Check(copy.Kind==PlantKind.Peashooter&&copy.Id==id&&copy.IsImitated&&copy.ImitaterTarget==PlantKind.Peashooter,"morph keeps stable identity and exposes gray-copy metadata");g.Update(0.6f);Check(g.Peas.Any(p=>p.Row==1&&p.SourceKind==PlantKind.Peashooter&&p.SourceIsImitated),"transformed shooter attacks with immutable copied-source metadata");Check(!g.SetAdventureImitaterTarget(PlantKind.CherryBomb),"cannot change copied type after deck confirmation");
+        var g=Fixture(39,PlantKind.Peashooter,PlantKind.Imitater,PlantKind.Peashooter);int cash=g.SunAmount;Check(g.TryPlant(PlantKind.Imitater,1,1)&&g.SunAmount==cash-100,"Imitater pays copied seed price");Plant mimic=g.PlantAt(1,1);int id=mimic.Id;Check(mimic.Kind==PlantKind.Imitater&&mimic.ImitaterTarget==PlantKind.Peashooter&&g.CooldownRemaining(PlantKind.Imitater)>7.5f&&g.CooldownRemaining(PlantKind.Peashooter)==0,"morph placeholder has separate target-derived cooldown");Check(g.TryPlant(PlantKind.Peashooter,0,1),"original and imitation packets can be used independently");Spawn(g,ZombieKind.Normal,1,7);g.Update(3.1f);Check(g.PlantAt(1,1).Kind==PlantKind.Imitater&&!g.Peas.Any(p=>p.Row==1),"placeholder does not fire before transformation");g.Update(0.2f);Plant copy=g.PlantAt(1,1);Check(copy.Kind==PlantKind.Peashooter&&copy.Id==id&&copy.IsImitated&&copy.ImitaterTarget==PlantKind.Peashooter,"morph keeps stable identity and exposes gray-copy metadata");for (var tick = 0; tick < 200 && !g.Peas.Any(p => p.Row == 1); tick++)
+        {
+            g.Update(.01f);
+        }
+        Check(g.Peas.Any(p=>p.Row==1&&p.SourceKind==PlantKind.Peashooter&&p.SourceIsImitated),"transformed shooter attacks with immutable copied-source metadata after its native randomized initial countdown");Check(!g.SetAdventureImitaterTarget(PlantKind.CherryBomb),"cannot change copied type after deck confirmation");
         var bomb=Fixture(49,PlantKind.CherryBomb,PlantKind.Imitater,PlantKind.CherryBomb);Check(bomb.AdventureSeedCost(PlantKind.Imitater)==150&&bomb.AdventureSeedRechargeTime(PlantKind.Imitater)>50f,"slow copied packet uses Cherry price and recharge");var z=Spawn(bomb,ZombieKind.Normal,2,3.5f);bomb.TryPlant(PlantKind.Imitater,2,2);bomb.Update(3.1f);Check(bomb.Zombies.Contains(z)&&bomb.CooldownRemaining(PlantKind.CherryBomb)==0,"imitation bomb waits through morph and leaves original packet ready");bomb.Update(1.3f);Check(!bomb.Zombies.Contains(z),"copied instant plant starts its own fuse after morph");
         var water=Fixture(39,PlantKind.LilyPad,PlantKind.Imitater,PlantKind.LilyPad,PlantKind.Peashooter);Check(water.TryPlant(PlantKind.Imitater,2,3)&&!water.TryPlant(PlantKind.Peashooter,2,3)&&water.LastAdventurePlantingFailure==AdventurePlantingFailure.NeedsLilyPad,"imitation lily does not support plants while transforming");water.Update(3.3f);Check(water.AdventurePlantAt(2,3,PlantLayer.Support).Kind==PlantKind.LilyPad&&water.TryPlant(PlantKind.Peashooter,2,3),"transformed lily becomes real support");
         var coffee=Fixture(49,PlantKind.CoffeeBean,PlantKind.FumeShroom,PlantKind.Imitater);coffee.TryPlant(PlantKind.FumeShroom,1,1);Plant mushroom=coffee.AdventurePlantAt(1,1,PlantLayer.Main);Check(coffee.TryPlant(PlantKind.Imitater,1,1)&&coffee.AdventurePlantAt(1,1,PlantLayer.Effect)!=null&&object.ReferenceEquals(mushroom,coffee.AdventurePlantAt(1,1,PlantLayer.Main)),"imitation coffee occupies separate effect layer");coffee.Update(3.3f);Check(mushroom.Asleep&&mushroom.WakeTimer>0&&coffee.AdventurePlantAt(1,1,PlantLayer.Effect)==null,"imitation coffee morphs before waking target");coffee.Update(2.1f);Check(!mushroom.Asleep&&!mushroom.IsImitated,"coffee wakes real mushroom without incorrectly retagging it");
@@ -130,11 +151,35 @@ internal static class UpgradePlantTests
     {
         var g=Fixture(39,null,PlantKind.PuffShroom,PlantKind.SeaShroom,PlantKind.FumeShroom,PlantKind.Cactus,PlantKind.Starfruit,PlantKind.Peashooter);
         Check(g.TryPlant(PlantKind.PuffShroom,0,1)&&g.TryPlant(PlantKind.SeaShroom,2,1)&&g.TryPlant(PlantKind.FumeShroom,1,1)&&g.TryPlant(PlantKind.Cactus,4,1)&&g.TryPlant(PlantKind.Starfruit,5,1)&&g.TryPlant(PlantKind.Peashooter,4,2),"source metadata fixture plants six real projectile producers");
-        Spawn(g,ZombieKind.Normal,0,3);Spawn(g,ZombieKind.Normal,2,3);Spawn(g,ZombieKind.ScreenDoor,1,3);Spawn(g,ZombieKind.Balloon,4,7);Spawn(g,ZombieKind.Normal,4,8);g.Update(0.6f);
-        foreach(var k in new[]{PlantKind.PuffShroom,PlantKind.SeaShroom,PlantKind.FumeShroom,PlantKind.Cactus,PlantKind.Starfruit,PlantKind.Peashooter})Check(g.Peas.Any(p=>p.SourceKind==k),"projectile captures source "+k);
-        var lob=Fixture(49,null,PlantKind.CabbagePult,PlantKind.KernelPult,PlantKind.MelonPult);lob.TryPlant(PlantKind.CabbagePult,0,1);lob.TryPlant(PlantKind.KernelPult,1,1);lob.TryPlant(PlantKind.MelonPult,2,1);for(int row=0;row<3;row++)Spawn(lob,ZombieKind.Buckethead,row,10);lob.Update(0.6f);
-        foreach(var k in new[]{PlantKind.CabbagePult,PlantKind.KernelPult,PlantKind.MelonPult})Check(lob.Peas.Any(p=>p.SourceKind==k&&p.Lobbed),"lobbed projectile captures source "+k);
+        Spawn(g,ZombieKind.Normal,0,3);Spawn(g,ZombieKind.Normal,2,3);Spawn(g,ZombieKind.ScreenDoor,1,3);Spawn(g,ZombieKind.Balloon,4,7);Spawn(g,ZombieKind.Normal,4,8);
+        var sources = ObserveProjectileSources(g);
+        foreach(var k in new[]{PlantKind.PuffShroom,PlantKind.SeaShroom,PlantKind.FumeShroom,PlantKind.Cactus,PlantKind.Starfruit,PlantKind.Peashooter})Check(sources.Contains(k),"projectile captures source "+k);
+        var lob=Fixture(49,null,PlantKind.CabbagePult,PlantKind.KernelPult,PlantKind.MelonPult);lob.TryPlant(PlantKind.CabbagePult,0,1);lob.TryPlant(PlantKind.KernelPult,1,1);lob.TryPlant(PlantKind.MelonPult,2,1);for(int row=0;row<3;row++)Spawn(lob,ZombieKind.Buckethead,row,9f);
+        var lobbedSources = ObserveProjectileSources(lob, true);
+        foreach(var k in new[]{PlantKind.CabbagePult,PlantKind.KernelPult,PlantKind.MelonPult})Check(lobbedSources.Contains(k),"lobbed projectile captures source "+k);
         var legacy=new GameSimulation(new GameRules{StartingSun=1000,ZombieCount=0,SkySunInterval=0});legacy.TryPlant(PlantKind.SnowPea,2,2);legacy.Zombies.Add(new Zombie{Kind=ZombieKind.Normal,Row=2,X=9,Health=270});legacy.Update(2.1f);Check(legacy.Peas.Count>0&&legacy.Peas.All(p=>p.SourceKind==PlantKind.SnowPea&&p.IsSnow),"legacy timed projectile also records source");
+    }
+
+    /// <summary>Observes projectile metadata across native randomized launch times and transient impacts.</summary>
+    /// <param name="game">The isolated producer fixture with visible targets.</param>
+    /// <param name="lobbedOnly">Whether only native lobbed projectiles count toward the result.</param>
+    /// <returns>The source species observed during the bounded three-second simulation window.</returns>
+    private static HashSet<PlantKind> ObserveProjectileSources(GameSimulation game, bool lobbedOnly = false)
+    {
+        var sources = new HashSet<PlantKind>();
+        for (var tick = 0; tick < 300; tick++)
+        {
+            game.Update(.01f);
+            foreach (var projectile in game.Peas)
+            {
+                if (!lobbedOnly || projectile.Lobbed)
+                {
+                    sources.Add(projectile.SourceKind);
+                }
+            }
+        }
+
+        return sources;
     }
 
 }

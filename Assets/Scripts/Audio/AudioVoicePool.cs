@@ -17,6 +17,10 @@ namespace PlantsVsZombies.Audio
         private readonly double[] _endTimes;
         /// <summary>Selects a clock that continues while listener-independent sounds play.</summary>
         private readonly bool[] _ignoreListenerPause;
+        /// <summary>Orders active leases independently of sample length, pitch, and audio clock selection.</summary>
+        private readonly long[] _startVersions;
+        /// <summary>Assigns monotonically increasing identities to newly started voices.</summary>
+        private long _nextStartVersion;
         /// <summary>Prevents reuse after the owned native components have been released.</summary>
         private bool _disposed;
 
@@ -51,6 +55,7 @@ namespace PlantsVsZombies.Audio
             _groups = new int[capacity];
             _endTimes = new double[capacity];
             _ignoreListenerPause = new bool[capacity];
+            _startVersions = new long[capacity];
             for (var i = 0; i < capacity; i++)
             {
                 var voice = owner.AddComponent<AudioSource>();
@@ -63,14 +68,15 @@ namespace PlantsVsZombies.Audio
             }
         }
 
-        /// <summary>Starts a sound on an idle voice; full pools discard the new request without interrupting playback.</summary>
+        /// <summary>Starts a sound on an idle voice, optionally replacing the oldest active voice in the same category.</summary>
         /// <param name="clip">The loaded sound to play.</param>
         /// <param name="volume">The gain applied to this sound.</param>
         /// <param name="pitch">The positive playback rate, clamped to Unity's supported range.</param>
         /// <param name="group">The category used to enforce a native sound-instance limit.</param>
         /// <param name="groupLimit">The category limit, or zero to use only the total pool capacity.</param>
+        /// <param name="replaceOldest">Whether a saturated category can reuse its oldest voice without interrupting another category.</param>
         /// <returns>Whether the sound acquired a voice and started playback.</returns>
-        public bool TryPlay(AudioClip clip, float volume, float pitch = 1f, int group = 0, int groupLimit = 0)
+        public bool TryPlay(AudioClip clip, float volume, float pitch = 1f, int group = 0, int groupLimit = 0, bool replaceOldest = false)
         {
             if (_disposed || _template == null || clip == null || clip.samples <= 0 || clip.frequency <= 0)
             {
@@ -79,13 +85,14 @@ namespace PlantsVsZombies.Audio
 
             var dsp = AudioSettings.dspTime;
             var realtime = Time.realtimeSinceStartupAsDouble;
-            var available = FindAvailableVoice(group, groupLimit, dsp, realtime);
+            var available = FindAvailableVoice(group, groupLimit, dsp, realtime, replaceOldest);
             if (available < 0)
             {
                 return false;
             }
 
             var source = _voices[available];
+            source.Stop();
             source.outputAudioMixerGroup = _template.outputAudioMixerGroup;
             source.ignoreListenerPause = _template.ignoreListenerPause;
             source.priority = _template.priority;
@@ -93,6 +100,7 @@ namespace PlantsVsZombies.Audio
             source.pitch = Mathf.Clamp(pitch, .01f, 3f);
             source.clip = clip;
             _groups[available] = group;
+            _startVersions[available] = ++_nextStartVersion;
             _ignoreListenerPause[available] = source.ignoreListenerPause;
             // DSP time freezes with the listener, so paused requests retain their leases.
             var start = _ignoreListenerPause[available] ? realtime : dsp;
@@ -104,11 +112,12 @@ namespace PlantsVsZombies.Audio
         /// <summary>Checks admission before a caller consumes random sample or pitch choices.</summary>
         /// <param name="group">The category used to enforce a native sound-instance limit.</param>
         /// <param name="groupLimit">The category limit, or zero to use only the total pool capacity.</param>
+        /// <param name="replaceOldest">Whether the oldest same-category voice may be replaced when admission is otherwise blocked.</param>
         /// <returns>Whether an immediately following sound request can acquire a voice.</returns>
-        public bool CanPlay(int group = 0, int groupLimit = 0)
+        public bool CanPlay(int group = 0, int groupLimit = 0, bool replaceOldest = false)
         {
             return !_disposed && _template != null
-                && FindAvailableVoice(group, groupLimit, AudioSettings.dspTime, Time.realtimeSinceStartupAsDouble) >= 0;
+                && FindAvailableVoice(group, groupLimit, AudioSettings.dspTime, Time.realtimeSinceStartupAsDouble, replaceOldest) >= 0;
         }
 
         /// <summary>Reclaims completed voices and finds a slot respecting both global and category limits.</summary>
@@ -116,11 +125,13 @@ namespace PlantsVsZombies.Audio
         /// <param name="groupLimit">The category limit, or zero for no additional category limit.</param>
         /// <param name="dsp">The current listener-sensitive audio clock.</param>
         /// <param name="realtime">The current listener-independent clock.</param>
-        /// <returns>The idle slot index, or minus one when the request must be discarded.</returns>
-        private int FindAvailableVoice(int group, int groupLimit, double dsp, double realtime)
+        /// <param name="replaceOldest">Whether to reuse the oldest matching category when no idle slot can be admitted.</param>
+        /// <returns>The admitted idle or replacement slot index, or minus one when the request must be discarded.</returns>
+        private int FindAvailableVoice(int group, int groupLimit, double dsp, double realtime, bool replaceOldest)
         {
             var available = -1;
             var groupCount = 0;
+            var oldest = -1;
             for (var i = 0; i < _voices.Length; i++)
             {
                 var voice = _voices[i];
@@ -135,6 +146,10 @@ namespace PlantsVsZombies.Audio
                     if (_groups[i] == group)
                     {
                         groupCount++;
+                        if (oldest < 0 || _startVersions[i] < _startVersions[oldest])
+                        {
+                            oldest = i;
+                        }
                     }
 
                     continue;
@@ -154,7 +169,7 @@ namespace PlantsVsZombies.Audio
 
             if (available < 0 || (groupLimit > 0 && groupCount >= groupLimit))
             {
-                return -1;
+                return replaceOldest ? oldest : -1;
             }
 
             return available;

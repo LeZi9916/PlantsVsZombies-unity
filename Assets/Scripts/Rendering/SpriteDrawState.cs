@@ -10,6 +10,9 @@ namespace PlantsVsZombies.Rendering
         /// <summary>The next order assigned to a visible scene or interface element.</summary>
         private static int s_order;
 
+        /// <summary>Gets the complete presentation identity used to defer reuse of textures still submitted this frame.</summary>
+        internal static int FrameVersion { get; private set; }
+
         /// <summary>Gets or sets the source-to-screen pixel transform used by the current presenter.</summary>
         public static Matrix4x4 Matrix { get; set; } = Matrix4x4.identity;
 
@@ -22,6 +25,7 @@ namespace PlantsVsZombies.Rendering
         /// <summary>Resets painter order and inherited drawing state before presenting a complete frame.</summary>
         public static void BeginFrame()
         {
+            FrameVersion++;
             s_order = 0;
             Matrix = Matrix4x4.identity;
             Color = Color.white;

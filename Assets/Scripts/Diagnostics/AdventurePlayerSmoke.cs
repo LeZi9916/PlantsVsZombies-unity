@@ -278,10 +278,24 @@ namespace PlantsVsZombies.Diagnostics
         /// <summary>Performs clear chosen cards.</summary>
         private void ClearChosenCards()
         {
-            var selected = new List<PlantKind>((HashSet<PlantKind>)Field("_pendingSeeds"));
-            foreach (PlantKind seed in selected)
+            var selected = new List<PlantKind>((IEnumerable<PlantKind>)Field("_pendingSeeds"));
+            foreach (var seed in selected)
             {
-                ChooseCard(seed);
+                if (_controller.ContainsRequiredSeed(seed))
+                {
+                    continue;
+                }
+
+                var pending = _controller._pendingSeeds;
+                for (var i = 0; i < pending.Count; i++)
+                {
+                    if (pending[i] == seed)
+                    {
+                        var slots = Math.Min(Sim.Adventure.Level.PacketSlots, Sim.Adventure.AvailableSeeds.Count);
+                        Click(AdventureSeedSlotLayout.PositionX(i, slots) + 25, 43);
+                        break;
+                    }
+                }
             }
         }
 

@@ -88,6 +88,10 @@ namespace PlantsVsZombies.Adventure
                 new AdventureZombieFoleyDefinition(5.0f, new[] { "plastichit", "plastichit2" })
             },
             {
+                61,
+                new AdventureZombieFoleyDefinition(-2.0f, new[] { "bigchomp" })
+            },
+            {
                 62,
                 new AdventureZombieFoleyDefinition(-5.0f, new[] { "melonimpact", "melonimpact2" })
             },

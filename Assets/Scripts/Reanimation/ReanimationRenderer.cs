@@ -16,6 +16,10 @@ namespace PlantsVsZombies.Reanimation
     {
         /// <summary>Limits dictionary buffers retained after actors leave the visible presentation.</summary>
         private const int MaximumRetainedPoseBlends = 256;
+        /// <summary>Bounds inactive capture textures after temporary combat feedback ends.</summary>
+        private const int MaximumRetainedNativeSurfaces = 16;
+        /// <summary>Bounds inactive color and depth attachment storage to roughly 32 MiB.</summary>
+        private const long MaximumRetainedNativePixels = 4L * 1024 * 1024;
         /// <summary>Defines frame.</summary>
         private struct Frame
         {
@@ -135,24 +139,45 @@ namespace PlantsVsZombies.Reanimation
         /// <summary>Defines native surface.</summary>
         private sealed class NativeSurface
         {
-            /// <summary>Stores texture.</summary>
-            public RenderTexture Texture;
-            /// <summary>Stores renderer.</summary>
-            public readonly ObjectSpriteRenderer Renderer;
-            /// <summary>Creates a cropped surface sharing its owner's texture opacity classifications.</summary>
-            /// <param name="textureOpacity">The classifications shared with other animation surfaces.</param>
-            public NativeSurface(TextureOpacityCache textureOpacity)
+            /// <summary>The color and depth attachments retained with this capture's mesh pool.</summary>
+            public readonly RenderTexture Texture;
+            /// <summary>Creates the independent attachments retained by a cropped actor image.</summary>
+            /// <param name="width">The capture width in source pixels.</param>
+            /// <param name="height">The capture height in source pixels.</param>
+            public NativeSurface(int width, int height)
             {
-                Renderer = new ObjectSpriteRenderer(textureOpacity);
+                Texture = new RenderTexture(width, height, 24, RenderTextureFormat.ARGB32)
+                {
+                    hideFlags = HideFlags.HideAndDontSave,
+                    filterMode = FilterMode.Bilinear,
+                    wrapMode = TextureWrapMode.Clamp
+                };
+                Texture.Create();
             }
             /// <summary>Stores ready.</summary>
             public bool Ready;
+            /// <summary>The complete scene frame still referencing this texture from a composite quad.</summary>
+            public int LastPresentedFrame;
         }
 
         /// <summary>Stores native surfaces.</summary>
         private readonly Dictionary<string, NativeSurface> _nativeSurfaces = new Dictionary<string, NativeSurface>();
         /// <summary>Gets the number of local capture surfaces retained by this animation renderer.</summary>
         internal int NativeSurfaceCount => _nativeSurfaces.Count;
+        /// <summary>Reuses capture textures after their logical actors expire.</summary>
+        private readonly List<NativeSurface> _inactiveNativeSurfaces = new List<NativeSurface>();
+        /// <summary>The number of source pixels retained in inactive capture attachments.</summary>
+        private long _inactiveNativePixels;
+        /// <summary>Gets the bounded number of inactive capture resources awaiting another actor.</summary>
+        internal int InactiveNativeSurfaceCount => _inactiveNativeSurfaces.Count;
+        /// <summary>Gets the number of independent capture textures created during this renderer's lifetime.</summary>
+        internal int NativeSurfaceCreationCount { get; private set; }
+        /// <summary>Shares synchronous capture cameras and mesh buffers across actors, retaining one pool for each nesting depth.</summary>
+        private readonly List<ObjectSpriteRenderer> _nativeCaptureRenderers = new List<ObjectSpriteRenderer>();
+        /// <summary>The number of capture callbacks currently producing an image before its synchronous render completes.</summary>
+        private int _nativeCaptureDepth;
+        /// <summary>Gets the number of capture cameras and mesh pools retained independently of actor count.</summary>
+        internal int NativeCaptureRendererCount => _nativeCaptureRenderers.Count;
         /// <summary>Caches stable blend identities for attached heads between presentation frames.</summary>
         private readonly Dictionary<(string Instance, int Head), string> _headInstanceKeys = new Dictionary<(string Instance, int Head), string>();
         /// <summary>Collects expired head identities without mutating their dictionary during traversal.</summary>
@@ -760,14 +785,7 @@ namespace PlantsVsZombies.Reanimation
             int width = Mathf.CeilToInt(viewport.width), height = Mathf.CeilToInt(viewport.height);
             if (!_nativeSurfaces.TryGetValue(key, out surface))
             {
-                surface = new NativeSurface(_textureOpacity)
-                {
-                    Texture = new RenderTexture(width, height, 24, RenderTextureFormat.ARGB32)
-                };
-                surface.Texture.hideFlags = HideFlags.HideAndDontSave;
-                surface.Texture.filterMode = FilterMode.Bilinear;
-                surface.Texture.wrapMode = TextureWrapMode.Clamp;
-                surface.Texture.Create();
+                surface = RentNativeSurface(width, height);
                 _nativeSurfaces.Add(key, surface);
             }
 
@@ -786,21 +804,24 @@ namespace PlantsVsZombies.Reanimation
                 var previousGrayscale = _nativePortraitMaterial.GetFloat("_Grayscale");
                 var previousProducer = _nativePortraitMaterial.GetFloat("_ProducerAdditive");
                 var previousRenderer = _nativeObjectRenderer;
-                surface.Renderer.BeginBatch();
+                var captureRenderer = GetNativeCaptureRenderer();
+                captureRenderer.BeginBatch();
+                _nativeCaptureDepth++;
                 try
                 {
                     SpriteDrawState.Matrix = Matrix4x4.identity;
                     _nativeSurfaceMatrix = NativeMatrix(new Vector2(-viewport.x, -viewport.y), 1f);
                     _renderingNativeSurface = true;
-                    _nativeObjectRenderer = surface.Renderer;
+                    _nativeObjectRenderer = captureRenderer;
                     _nativePortraitMaterial.SetFloat("_Grayscale", grayscale ? 1f : 0f);
                     _nativePortraitMaterial.SetFloat("_ProducerAdditive", producerAdditive);
                     _nativeSurfaceAdditive = Math.Max(0f, additive);
                     surface.Ready = draw();
-                    surface.Renderer.RenderTo(surface.Texture);
+                    captureRenderer.RenderTo(surface.Texture);
                 }
                 finally
                 {
+                    _nativeCaptureDepth--;
                     _renderingNativeSurface = previousCapture;
                     _nativeSurfaceMatrix = previousSurfaceMatrix;
                     _nativeSurfaceAdditive = previousAdditive;
@@ -812,6 +833,7 @@ namespace PlantsVsZombies.Reanimation
                 }
             }
 
+            surface.LastPresentedFrame = SpriteDrawState.FrameVersion;
             var surfaceColor = SpriteDrawState.Color;
             SpriteDrawState.Color = Color.white;
             if (topCrop >= 0f)
@@ -1394,19 +1416,23 @@ namespace PlantsVsZombies.Reanimation
 
             foreach (NativeSurface surface in _nativeSurfaces.Values)
             {
-                surface.Renderer.Dispose();
-                surface.Texture.Release();
-                if (Application.isPlaying)
-                {
-                    UnityEngine.Object.Destroy(surface.Texture);
-                }
-                else
-                {
-                    UnityEngine.Object.DestroyImmediate(surface.Texture);
-                }
+                DestroyNativeSurface(surface);
+            }
+
+            foreach (var surface in _inactiveNativeSurfaces)
+            {
+                DestroyNativeSurface(surface);
             }
 
             _nativeSurfaces.Clear();
+            _inactiveNativeSurfaces.Clear();
+            _inactiveNativePixels = 0;
+            foreach (var renderer in _nativeCaptureRenderers)
+            {
+                renderer.Dispose();
+            }
+
+            _nativeCaptureRenderers.Clear();
             if (_nativePortraitMaterial != null)
             {
                 if (Application.isPlaying)
@@ -2972,14 +2998,16 @@ namespace PlantsVsZombies.Reanimation
             _headInstanceKeys.Clear();
             _expiredNativePoseBlends.Clear();
             _expiredHeadInstanceKeys.Clear();
-            foreach (string key in new List<string>(_nativeSurfaces.Keys))
+            foreach (var surface in _nativeSurfaces.Values)
             {
-                ReleaseNativeSurface(key);
+                ReturnNativeSurface(surface);
             }
+
+            _nativeSurfaces.Clear();
         }
 
-        /// <summary>Performs release native surface.</summary>
-        /// <param name = "key">The key.</param>
+        /// <summary>Retires a logical capture identity and returns its resources to the bounded inactive pool.</summary>
+        /// <param name="key">The capture identity no longer used by the presentation.</param>
         public void ReleaseNativeSurface(string key)
         {
             NativeSurface surface;
@@ -2988,7 +3016,67 @@ namespace PlantsVsZombies.Reanimation
                 return;
             }
 
-            surface.Renderer.Dispose();
+            _nativeSurfaces.Remove(key);
+            ReturnNativeSurface(surface);
+        }
+
+        /// <summary>Finds a reusable capture with matching attachments without rewriting a texture still visible this frame.</summary>
+        /// <param name="width">The requested source width.</param>
+        /// <param name="height">The requested source height.</param>
+        /// <returns>A cleared capture pool with matching color and depth attachments.</returns>
+        private NativeSurface RentNativeSurface(int width, int height)
+        {
+            for (var index = _inactiveNativeSurfaces.Count - 1; index >= 0; index--)
+            {
+                var surface = _inactiveNativeSurfaces[index];
+                if (surface.Texture.width != width || surface.Texture.height != height
+                    || surface.LastPresentedFrame == SpriteDrawState.FrameVersion)
+                {
+                    continue;
+                }
+
+                _inactiveNativeSurfaces.RemoveAt(index);
+                _inactiveNativePixels -= (long)width * height;
+                return surface;
+            }
+
+            NativeSurfaceCreationCount++;
+            return new NativeSurface(width, height);
+        }
+
+        /// <summary>Gets the synchronous capture pool reserved for the current nested callback.</summary>
+        /// <returns>The camera and mesh pool reused by all sequential captures at this nesting depth.</returns>
+        private ObjectSpriteRenderer GetNativeCaptureRenderer()
+        {
+            if (_nativeCaptureDepth == _nativeCaptureRenderers.Count)
+            {
+                _nativeCaptureRenderers.Add(new ObjectSpriteRenderer(_textureOpacity));
+            }
+
+            return _nativeCaptureRenderers[_nativeCaptureDepth];
+        }
+
+        /// <summary>Clears actor-specific capture state while retaining a bounded set of reusable GPU attachments.</summary>
+        /// <param name="surface">The capture returned by its former logical owner.</param>
+        private void ReturnNativeSurface(NativeSurface surface)
+        {
+            surface.Ready = false;
+            var pixels = (long)surface.Texture.width * surface.Texture.height;
+            if (_inactiveNativeSurfaces.Count < MaximumRetainedNativeSurfaces
+                && pixels <= MaximumRetainedNativePixels - _inactiveNativePixels)
+            {
+                _inactiveNativeSurfaces.Add(surface);
+                _inactiveNativePixels += pixels;
+                return;
+            }
+
+            DestroyNativeSurface(surface);
+        }
+
+        /// <summary>Releases the independent color and depth attachments of one actor capture.</summary>
+        /// <param name="surface">The capture whose resources are no longer retained.</param>
+        private static void DestroyNativeSurface(NativeSurface surface)
+        {
             surface.Texture.Release();
             if (Application.isPlaying)
             {
@@ -2998,8 +3086,6 @@ namespace PlantsVsZombies.Reanimation
             {
                 UnityEngine.Object.DestroyImmediate(surface.Texture);
             }
-
-            _nativeSurfaces.Remove(key);
         }
 
         // PC loop types 1/4 sample count*time, holding the complete last frame.
@@ -3053,11 +3139,20 @@ namespace PlantsVsZombies.Reanimation
         /// <param name = "draw">The draw.</param>
         /// <param name = "plant">The plant.</param>
         /// <param name="surfaceKey">The cached full surface identity, or null to derive it from the playback key.</param>
+        /// <param name="highlighted">Whether the original shovel target highlight is active.</param>
         /// <returns>The resulting draw native plant hit feedback.</returns>
-        public bool DrawNativePlantHitFeedback(string key, Rect viewport, Func<bool> draw, Plant plant, string? surfaceKey = null)
+        public bool DrawNativePlantHitFeedback(string key, Rect viewport, Func<bool> draw, Plant plant, string? surfaceKey = null, bool highlighted = false)
         {
             using var objectScope = BeginObjectScope();
-            return DrawProducerGlow(key, viewport, draw, AdventurePlantHitRules.Combined(plant), plant.IsImitated, surfaceKey);
+            var visual = AdventurePlantHitRules.Combined(plant);
+            if (highlighted)
+            {
+                // Original Plant::UpdateReanimColor uses additive alpha 196, or 92 for Imitater.
+                var brightness = Math.Max(visual.AdditiveRgb, plant.IsImitated ? 92 : 196);
+                visual = new AdventureProducerGlowVisual(true, visual.FlashTicks, (byte)brightness);
+            }
+
+            return DrawProducerGlow(key, viewport, draw, visual, plant.IsImitated, surfaceKey);
         }
 
         /// <summary>Performs draw native potato mine light.</summary>
@@ -3520,7 +3615,18 @@ namespace PlantsVsZombies.Reanimation
 
             var sample = SampleFrame(body, NativeSeconds(body, seconds, bodyRate, parent.Fps, true), parent.Fps, false);
             var pose = Interpolate(GetFrame(anchor, sample.Current), GetFrame(anchor, sample.Next), sample.Fraction);
-            return DrawClipPose(child, flag, NativeSeconds(flag, flagSeconds, 15f, child.Fps, true), child.Fps, false, SpriteMatrix * CombatPlacement(origin, scale, backwards, 90f) * PartMatrix(pose) * inverse, SpriteDrawState.Color);
+            var previous = SpriteMatrix;
+            var color = SpriteDrawState.Color;
+            try
+            {
+                return DrawClipPose(child, flag, NativeSeconds(flag, flagSeconds, 15f, child.Fps, true), child.Fps, false,
+                    previous * CombatPlacement(origin, scale, backwards, 90f) * PartMatrix(pose) * inverse, color);
+            }
+            finally
+            {
+                SpriteMatrix = previous;
+                SpriteDrawState.Color = color;
+            }
         }
 
         /// <summary>Performs draw native sprite pass.</summary>

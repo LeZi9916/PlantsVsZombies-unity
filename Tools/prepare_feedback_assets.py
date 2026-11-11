@@ -29,8 +29,8 @@ for name in ['SeedPacket','Award','Starburst','AwardPickupArrow']:
  for image in xml.findall('.//Image'):
   if image.text.upper() not in images:raise KeyError(image.text)
   copy(images[image.text.upper()])
-for name in ['SeedPacket_Larger.png','AwardScreen_Back_new.jpg','Shovel_hi_res.png','Shovel.png','Almanac.png','CarKeys.png','WateringCan.png','Taco.png','ZombieNoteSmall.png','ZombieNote.jpg','ZombieNote_.png','ZombieNote1.png','ZombieNote2.png','ZombieNote3.png','ZombieNote4.png','Credits_ZombieNote.png','moneybag.png','moneybag_hi_res.png','Sunflower_trophy.png','SeedChooser_Button.png','Almanac_CloseButton.png']:
+for name in ['FlagMeterLevelProgress.png','SeedPacket_Larger.png','AwardScreen_Back_new.jpg','Shovel_hi_res.png','Shovel.png','Almanac.png','CarKeys.png','WateringCan.png','Taco.png','ZombieNoteSmall.png','ZombieNote.jpg','ZombieNote_.png','ZombieNote1.png','ZombieNote2.png','ZombieNote3.png','ZombieNote4.png','Credits_ZombieNote.png','ZombieNoteBlack1.png','ZombieNoteBlack2.png','ZombieNoteBlack3.png','ZombieNoteBlack4.png','Credits_ZombieNoteBlack.png','moneybag.png','moneybag_hi_res.png','Sunflower_trophy.png','SeedChooser_Button.png','Almanac_CloseButton.png']:
  copy(Path('images')/name)
 copy(Path('images/ad/game_pass.jpg'))
-for name in ['seedlift.ogg','tap2.ogg','lightfill.ogg','paper.ogg','shovel.ogg','buttonclick.ogg']:copy(Path('sounds')/name)
+for name in ['seedlift.ogg','tap2.ogg','lightfill.ogg','paper.ogg','shovel.ogg','buttonclick.ogg','buzzer.ogg']:copy(Path('sounds')/name)
 out=root/'analysis/ida/adventure_rewards/imported-assets.json';out.write_text(json.dumps(records,ensure_ascii=False,indent=2),encoding='utf-8');print('Copied or verified %d original asset references'%len(records))

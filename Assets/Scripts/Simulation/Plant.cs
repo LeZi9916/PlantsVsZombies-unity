@@ -13,6 +13,14 @@ namespace PlantsVsZombies.Simulation
         internal bool _kernelWeaponPrepared;
         /// <summary>Stores presentation eaten flash ticks.</summary>
         public int PresentationEatenFlashTicks;
+        /// <summary>Stores accumulated defensive body animation frames and the current native frame rate.</summary>
+        public float PresentationBodyFrames, PresentationBodyRate;
+        /// <summary>Stores the last damage stage already presented for defensive plants.</summary>
+        internal int _presentationDefensiveDamageStage;
+        /// <summary>Records whether the defensive body clock is slowed by recent chewing.</summary>
+        internal bool _presentationDefensiveChewing;
+        /// <summary>Gets or sets the native chomper bite, digestion, and swallowing presentation.</summary>
+        public AdventureChomperState? ChomperPresentation { get; internal set; }
         /// <summary>Gets or sets potato mine presentation.</summary>
         public global::PlantsVsZombies.Adventure.AdventurePotatoMineState PotatoMinePresentation { get; internal set; }
 

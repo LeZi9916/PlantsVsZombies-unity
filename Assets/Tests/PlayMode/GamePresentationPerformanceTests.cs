@@ -4,6 +4,7 @@ using System.Collections;
 using System.IO;
 using System.Reflection;
 using NUnit.Framework;
+using PlantsVsZombies.Adventure;
 using PlantsVsZombies.Game;
 using PlantsVsZombies.Reanimation;
 using PlantsVsZombies.Rendering;
@@ -67,7 +68,23 @@ namespace PlantsVsZombies.Tests.PlayMode
                 "<fps>12</fps>" + Marker("anim_walk")
                 + ImageTrack("Zombie_body", "blue", 0, 0)
                 + ImageTrack("anim_head", "red", 0, 10)
-                + ImageTrack("anim_hair", "green", 10, 10));
+                + ImageTrack("anim_hair", "green", 10, 10)
+                + "<track><name>Zombie_flaghand</name><t><x>30</x><y>0</y><f>0</f></t><t/></track>");
+            File.WriteAllText(Path.Combine(reanim, "Zombie_FlagPole.reanim"),
+                "<fps>12</fps>" + ImageTrack("flagpole", "green", 30, 0));
+            File.WriteAllText(Path.Combine(reanim, "Zombie_polevaulter.reanim"),
+                "<fps>12</fps>" + Marker("anim_walk")
+                + ImageTrack("Zombie_polevaulter_body1", "blue", 0, 0)
+                + ImageTrack("anim_head1", "red", 0, 10)
+                + ImageTrack("Zombie_polevaulter_innerarm_upper", "green", 10, 10)
+                + ImageTrack("Zombie_polevaulter_innerarm_lower", "yellow", 20, 10)
+                + ImageTrack("Zombie_polevaulter_innerhand", "green", 10, 20)
+                + ImageTrack("Zombie_polevaulter_pole", "red", 20, 20)
+                + ImageTrack("Zombie_polevaulter_pole2", "yellow", 30, 20));
+            var particles = Directory.CreateDirectory(Path.Combine(_root, "particles")).FullName;
+            File.WriteAllText(Path.Combine(particles, "Burst.xml"),
+                "<Emitter><Image>IMAGE_REANIM_green</Image><SpawnMinActive>1</SpawnMinActive>"
+                + "<ParticleDuration>100</ParticleDuration><SystemDuration>100</SystemDuration></Emitter>");
             _renderer = new ReanimationRenderer(_root);
             _actors = new AdventureActorRenderer(_renderer);
             _keys = new PresentationKeyCache();
@@ -161,6 +178,192 @@ namespace PlantsVsZombies.Tests.PlayMode
             AssertColor(Pixel(55, 15), Color.black);
         }
 
+        /// <summary>Prevents a directly drawn flag attachment from translating all subsequently submitted lawn rows.</summary>
+        [Test]
+        public void DirectFlagAttachmentPreservesFollowingPlantPlacement()
+        {
+            _zombie.Kind = ZombieKind.Flag;
+            BeginFrame();
+            var matrix = SpriteDrawState.Matrix;
+            var color = SpriteDrawState.Color;
+            _actors.DrawZombie(_zombie, "Zombie", "anim_walk", new Vector2(4f, 4f), 1f, 0f, 12f, true,
+                "flag-body", "flag-combat");
+            Assert.That(SpriteDrawState.Matrix, Is.EqualTo(matrix), "The native flag callback must restore its caller's placement matrix.");
+            Assert.That(SpriteDrawState.Color, Is.EqualTo(color));
+            DrawKernel(new Vector2(44f, 24f));
+            _renderer.EndObjectFrame();
+            Capture();
+            AssertColor(Pixel(45, 25), Color.red);
+            AssertColor(Pixel(55, 25), Color.yellow);
+        }
+
+        /// <summary>Matches original DropPole prefix hiding after decapitation, while preserving the remaining body.</summary>
+        [Test]
+        public void HeadlessPolevaulterHidesBothArmSegmentsAndBothPoles()
+        {
+            _zombie.Kind = ZombieKind.PoleVaulter;
+            _zombie.Headless = true;
+            BeginFrame();
+            _actors.DrawZombie(_zombie, "Zombie_polevaulter", "anim_walk", new Vector2(4f, 4f), 1f, 0f, 12f, true,
+                "pole-body", "pole-combat");
+            _renderer.EndObjectFrame();
+            Capture();
+            AssertColor(Pixel(5, 5), Color.blue);
+            AssertColor(Pixel(5, 15), Color.black);
+            AssertColor(Pixel(15, 15), Color.black);
+            AssertColor(Pixel(25, 15), Color.black);
+            AssertColor(Pixel(15, 25), Color.black);
+            AssertColor(Pixel(25, 25), Color.black);
+            AssertColor(Pixel(35, 25), Color.black);
+        }
+
+        /// <summary>Reuses capture cameras and mesh pools across repeated feedback identities and level playback resets.</summary>
+        [Test]
+        public void ReleasedCaptureSurfacesReuseResourcesAcrossFeedbackAndPlaybackReset()
+        {
+            Func<bool> draw = () => _renderer.DrawResourceSprite("IMAGE_REANIM_red", new Vector2(8f, 8f), 1f);
+            for (var actor = 0; actor < 32; actor++)
+            {
+                var key = "feedback-" + actor;
+                BeginFrame();
+                Assert.That(_renderer.DrawNativeClipped(key, new Rect(0f, 0f, 32f, 32f), draw), Is.True);
+                _renderer.EndObjectFrame();
+                _renderer.ReleaseNativeSurface(key);
+                Assert.That(_renderer.NativeSurfaceCount, Is.Zero);
+                Assert.That(_renderer.InactiveNativeSurfaceCount, Is.EqualTo(1));
+            }
+
+            Assert.That(_renderer.NativeSurfaceCreationCount, Is.EqualTo(1), "Completed feedback must reuse its capture GameObjects.");
+            Assert.That(_renderer.NativeCaptureRendererCount, Is.EqualTo(1));
+            BeginFrame();
+            Assert.That(_renderer.DrawNativeClipped("next-level", new Rect(0f, 0f, 32f, 32f), draw), Is.True);
+            _renderer.EndObjectFrame();
+            _renderer.ResetNativePlayback();
+            Assert.That(_renderer.NativeSurfaceCount, Is.Zero);
+            Assert.That(_renderer.InactiveNativeSurfaceCount, Is.EqualTo(1));
+            Assert.That(_renderer.NativeSurfaceCreationCount, Is.EqualTo(1));
+        }
+
+        /// <summary>Redraws reused frozen captures instead of displaying the former actor's cached pixels.</summary>
+        [Test]
+        public void ReusedFrozenCaptureClearsThePreviousActorsReadyState()
+        {
+            BeginFrame();
+            Assert.That(_renderer.DrawNativeClipped("red-capture", new Rect(0f, 0f, 32f, 32f),
+                () => _renderer.DrawResourceSprite("IMAGE_REANIM_red", new Vector2(8f, 8f), 1f), freeze: true), Is.True);
+            _renderer.EndObjectFrame();
+            _renderer.ReleaseNativeSurface("red-capture");
+            BeginFrame();
+            Assert.That(_renderer.DrawNativeClipped("blue-capture", new Rect(0f, 0f, 32f, 32f),
+                () => _renderer.DrawResourceSprite("IMAGE_REANIM_blue", new Vector2(8f, 8f), 1f), freeze: true), Is.True);
+            _renderer.EndObjectFrame();
+            Capture();
+            AssertColor(Pixel(8, 8), Color.blue);
+            Assert.That(_renderer.NativeSurfaceCreationCount, Is.EqualTo(1));
+        }
+
+        /// <summary>Preserves two composites when a logical capture is retired before the current scene frame renders.</summary>
+        [Test]
+        public void CapturesSubmittedThisFrameAreNotRewrittenForAnotherActor()
+        {
+            BeginFrame();
+            Assert.That(_renderer.DrawNativeClipped("first-capture", new Rect(0f, 0f, 32f, 32f),
+                () => _renderer.DrawResourceSprite("IMAGE_REANIM_red", new Vector2(8f, 8f), 1f)), Is.True);
+            _renderer.ReleaseNativeSurface("first-capture");
+            Assert.That(_renderer.DrawNativeClipped("second-capture", new Rect(44f, 0f, 32f, 32f),
+                () => _renderer.DrawResourceSprite("IMAGE_REANIM_blue", new Vector2(52f, 8f), 1f)), Is.True);
+            _renderer.EndObjectFrame();
+            Capture();
+            AssertColor(Pixel(8, 8), Color.red);
+            AssertColor(Pixel(52, 8), Color.blue);
+            Assert.That(_renderer.NativeSurfaceCreationCount, Is.EqualTo(2));
+            Assert.That(_renderer.NativeCaptureRendererCount, Is.EqualTo(1), "Independent capture textures share one synchronous mesh pool.");
+        }
+
+        /// <summary>Uses a separate nested capture pool while preserving both inner composition and earlier scene artwork.</summary>
+        [Test]
+        public void NestedCapturesSharePoolsByDepthWithoutOverwritingOuterGeometry()
+        {
+            BeginFrame();
+            DrawKernel(new Vector2(4f, 4f));
+            Assert.That(_renderer.DrawNativeClipped("outer-capture", new Rect(40f, 0f, 40f, 32f), () =>
+            {
+                var drawn = _renderer.DrawResourceSprite("IMAGE_REANIM_blue", new Vector2(48f, 8f), 1f);
+                drawn |= _renderer.DrawNativeClipped("inner-capture", new Rect(56f, 0f, 24f, 32f),
+                    () => _renderer.DrawResourceSprite("IMAGE_REANIM_green", new Vector2(64f, 8f), 1f));
+                return drawn;
+            }), Is.True);
+            _renderer.EndObjectFrame();
+            Capture();
+            AssertColor(Pixel(5, 5), Color.red);
+            AssertColor(Pixel(48, 8), Color.blue);
+            AssertColor(Pixel(64, 8), Color.green);
+            Assert.That(_renderer.NativeCaptureRendererCount, Is.EqualTo(2));
+            Assert.That(_renderer.NativeSurfaceCount, Is.EqualTo(2));
+        }
+
+        /// <summary>Preserves complete plant rows when a large wave interleaves nested zombie captures and particle submissions.</summary>
+        [Test]
+        public void ZombieFeedbackAndParticlesPreservePreviouslySubmittedPlantRows()
+        {
+            var particles = new OriginalParticleRenderer(_root, _renderer);
+            for (var frame = 0; frame < 3; frame++)
+            {
+                BeginFrame();
+                particles.BeginFrame();
+                _renderer.BeginObjectFrame();
+                for (var row = 0; row < 3; row++)
+                {
+                    for (var column = 0; column < 3; column++)
+                    {
+                        DrawKernel(new Vector2(4f + column * 24f, 4f + row * 20f));
+                    }
+
+                    for (var actor = 0; actor < 4; actor++)
+                    {
+                        _zombie.Id = row * 4 + actor + 100;
+                        _zombie.PresentationFlash = .5f;
+                        _actors.DrawZombie(_zombie, "Zombie", "anim_walk", new Vector2(100f, 4f + row * 20f),
+                            1f, .1f, 12f, true, "burst-body-" + _zombie.Id, "burst-feedback-" + _zombie.Id);
+                        Assert.That(particles.Draw("burst-" + _zombie.Id, "Burst", .1f, new Vector2(88f, 4f + row * 20f), _zombie.Id), Is.True);
+                    }
+                }
+
+                _renderer.EndObjectFrame();
+                particles.EndFrame();
+                _renderer.EndObjectFrame();
+                Capture();
+                for (var row = 0; row < 3; row++)
+                {
+                    for (var column = 0; column < 3; column++)
+                    {
+                        AssertColor(Pixel(5 + column * 24, 5 + row * 20), Color.red);
+                        AssertColor(Pixel(15 + column * 24, 5 + row * 20), Color.yellow);
+                    }
+                }
+            }
+        }
+
+        /// <summary>Bounds idle resources after a transient burst and destroys both live and idle captures on disposal.</summary>
+        [Test]
+        public void CapturePoolBoundsIdleResourcesAndDisposesAllAttachments()
+        {
+            Func<bool> draw = () => _renderer.DrawResourceSprite("IMAGE_REANIM_red", new Vector2(8f, 8f), 1f);
+            BeginFrame();
+            for (var actor = 0; actor < 24; actor++)
+            {
+                Assert.That(_renderer.DrawNativeClipped("burst-" + actor, new Rect(0f, 0f, 32f, 32f), draw), Is.True);
+            }
+
+            _renderer.EndObjectFrame();
+            _renderer.ResetNativePlayback();
+            Assert.That(_renderer.NativeSurfaceCount, Is.Zero);
+            Assert.That(_renderer.InactiveNativeSurfaceCount, Is.EqualTo(16));
+            _renderer.Dispose();
+            Assert.That(_renderer.NativeSurfaceCount, Is.Zero);
+            Assert.That(_renderer.InactiveNativeSurfaceCount, Is.Zero);
+        }
+
         /// <summary>Renders independent head artwork through the same reusable plant callback.</summary>
         [Test]
         public void PreservesAttachedPlantHeadArtwork()
@@ -171,6 +374,120 @@ namespace PlantsVsZombies.Tests.PlayMode
             Capture();
             AssertColor(Pixel(5, 25), Color.red);
             AssertColor(Pixel(15, 25), Color.green);
+        }
+
+        /// <summary>Uses each original defensive damage image only on its specified body or pumpkin front track.</summary>
+        [Test]
+        public void DefensiveDamageReplacesOnlyTheOriginalBodyTrack()
+        {
+            WriteDefensiveFixture();
+            var kinds = new[] { PlantKind.Wallnut, PlantKind.TallNut, PlantKind.Pumpkin };
+            var names = new[] { "Wallnut", "Tallnut", "Pumpkin" };
+            BeginFrame();
+            for (var species = 0; species < kinds.Length; species++)
+            {
+                var maximum = kinds[species] == PlantKind.TallNut ? 8000 : 4000;
+                for (var stage = 0; stage < 3; stage++)
+                {
+                    var plant = new Plant
+                    {
+                        Id = 500 + species * 10 + stage,
+                        Kind = kinds[species],
+                        Health = stage == 0 ? maximum : stage == 1 ? maximum * 2 / 3 - 1 : maximum / 3 - 1
+                    };
+                    var origin = new Vector2(4f + species * 40f, 4f + stage * 20f);
+                    _actors.DrawPlant(plant, names[species], origin, 1f, 0f, "anim_idle", true, 12f, null,
+                        _keys.Get("plant-", plant.Id), new Rect(0f, 0f, 128f, 64f), 0, 0f, _keys.Get("producer-plant-", plant.Id));
+                }
+            }
+
+            _renderer.EndObjectFrame();
+            Capture();
+            for (var species = 0; species < kinds.Length; species++)
+            {
+                AssertColor(Pixel(15 + species * 40, 5), new Color(.25f, .25f, .25f));
+                AssertColor(Pixel(15 + species * 40, 25), Color.green);
+                AssertColor(Pixel(15 + species * 40, 45), Color.blue);
+                for (var stage = 0; stage < 3; stage++)
+                {
+                    AssertColor(Pixel(5 + species * 40, 5 + stage * 20), Color.yellow);
+                }
+            }
+        }
+
+        /// <summary>Routes the real shovel hover through the presenter and preserves the unselected adjacent plant's pixels.</summary>
+        [Test]
+        public void ShovelHoverHighlightsOnlyTheCurrentProductionTarget()
+        {
+            WriteDefensiveFixture();
+            var ownerObject = new GameObject("Inactive shovel pixel regression");
+            ownerObject.SetActive(false);
+            GamePresenter? presenter = null;
+            var previous = SpriteDrawState.Matrix;
+            try
+            {
+                var owner = ownerObject.AddComponent<PvZGame>();
+                owner._root = _root;
+                owner._animations = _renderer;
+                owner._game = new GameSimulation(new GameRules { AdventureLevel = 9 }, 9151);
+                Assert.That(owner._game.ChooseDefaultAdventureSeeds(), Is.True);
+                owner._game.ResetAdventureWaveSchedule(100000, false, false);
+                var first = new Plant { Id = 601, Kind = PlantKind.Wallnut, Layer = PlantLayer.Main, Row = 0, Column = 0, Health = 4000 };
+                var second = new Plant { Id = 602, Kind = PlantKind.Wallnut, Layer = PlantLayer.Main, Row = 0, Column = 1, Health = 4000 };
+                owner._game.Plants.Add(first);
+                owner._game.Plants.Add(second);
+                owner._shovel = true;
+                presenter = new GamePresenter(owner);
+                var draw = typeof(GamePresenter).GetMethod("DrawAdventurePlant", BindingFlags.Instance | BindingFlags.NonPublic)!;
+                for (var frame = 0; frame < 2; frame++)
+                {
+                    owner._adventurePointer = new Vector2(80f + frame * 80f, 120f);
+                    Assert.That(owner.AdventureShovelTarget(owner._adventurePointer), Is.SameAs(frame == 0 ? first : second));
+                    BeginFrame();
+                    SpriteDrawState.Matrix = Matrix4x4.Translate(new Vector3(-36f, -76f));
+                    draw.Invoke(presenter, new object[] { first });
+                    draw.Invoke(presenter, new object[] { second });
+                    _renderer.EndObjectFrame();
+                    Capture();
+                    var highlighted = Pixel(frame == 0 ? 15 : 95, 5);
+                    var ordinary = Pixel(frame == 0 ? 95 : 15, 5);
+                    AssertColor(ordinary, new Color(.25f, .25f, .25f));
+                    Assert.That(highlighted.r, Is.GreaterThan(ordinary.r + .08f), "The current shovel target receives the original source-colored additive pass.");
+                    Assert.That(highlighted.g, Is.EqualTo(highlighted.r).Within(.02f));
+                    Assert.That(highlighted.b, Is.EqualTo(highlighted.r).Within(.02f));
+                }
+            }
+            finally
+            {
+                SpriteDrawState.Matrix = previous;
+                presenter?.Dispose();
+                UnityEngine.Object.DestroyImmediate(ownerObject);
+            }
+        }
+
+        /// <summary>Writes isolated defensive body and damage colors using original resource and track identifiers.</summary>
+        private void WriteDefensiveFixture()
+        {
+            var reanim = Path.Combine(_root, "reanim");
+            WriteImage(reanim, "defensive_intact", new Color(.25f, .25f, .25f));
+            foreach (var name in new[] { "Wallnut_cracked1", "Tallnut_cracked1", "Pumpkin_damage1" })
+            {
+                WriteImage(reanim, name, Color.green);
+            }
+
+            foreach (var name in new[] { "Wallnut_cracked2", "Tallnut_cracked2", "Pumpkin_damage3" })
+            {
+                WriteImage(reanim, name, Color.blue);
+            }
+
+            File.WriteAllText(Path.Combine(reanim, "Wallnut.reanim"),
+                "<fps>12</fps>" + Marker("anim_idle")
+                + ImageTrack("anim_face", "defensive_intact", 10, 0) + ImageTrack("unreplaced_leaf", "yellow", 0, 0));
+            File.WriteAllText(Path.Combine(reanim, "Tallnut.reanim"),
+                "<fps>12</fps>" + ImageTrack("anim_idle", "defensive_intact", 10, 0) + ImageTrack("unreplaced_leaf", "yellow", 0, 0));
+            File.WriteAllText(Path.Combine(reanim, "Pumpkin.reanim"),
+                "<fps>12</fps>" + Marker("anim_idle")
+                + ImageTrack("Pumpkin_front", "defensive_intact", 10, 0) + ImageTrack("Pumpkin_back", "yellow", 0, 0));
         }
 
         /// <summary>Prevents actor closures, head arrays, and repeated identity formatting after warmup.</summary>
@@ -272,6 +589,93 @@ namespace PlantsVsZombies.Tests.PlayMode
                 presenter?.Dispose();
                 options?.Dispose();
                 selector?.Dispose();
+                UnityEngine.Object.Destroy(ownerObject);
+            }
+        }
+
+        /// <summary>Checks the real board presenter lets a zombie overlap the native bank instead of hiding behind it.</summary>
+        /// <returns>Frame boundaries for Canvas and URP rendering before reading the overlap pixel.</returns>
+        [UnityTest]
+        public IEnumerator PlayingSeedBankIsBehindZombieArtwork()
+        {
+            WriteOptionsFixture();
+            var ownerObject = new GameObject("Inactive board layer regression");
+            ownerObject.SetActive(false);
+            var bank = new Texture2D(446, 87, TextureFormat.RGBA32, false);
+            var colors = new Color32[446 * 87];
+            for (var i = 0; i < colors.Length; i++)
+            {
+                colors[i] = new Color32(255, 0, 0, 255);
+            }
+
+            bank.SetPixels32(colors);
+            bank.Apply();
+            var target = new RenderTexture(Screen.width, Screen.height, 24, RenderTextureFormat.ARGB32);
+            target.Create();
+            var pixels = new Texture2D(Screen.width, Screen.height, TextureFormat.RGBA32, false);
+            OptionsView? options = null;
+            GamePresenter? presenter = null;
+            PvZGame? owner = null;
+            try
+            {
+                owner = ownerObject.AddComponent<PvZGame>();
+                owner._game = new GameSimulation(new GameRules { AdventureLevel = 8 }, randomSeed: 12345);
+                owner._root = _root;
+                owner._deck.Clear();
+                owner._textures.Add("SeedBank.png", bank);
+                owner._animations = _renderer;
+                owner._currentView = PvZGame.ScreenView.Board;
+                owner._smokeMode = true;
+                owner._adventurePointer = new Vector2(-1000f, -1000f);
+                options = new OptionsView(_root);
+                owner._optionsView = options;
+                foreach (var mower in owner._game.Mowers)
+                {
+                    mower.Available = false;
+                    mower.Active = false;
+                }
+
+                owner._game.Zombies.Add(new Zombie
+                {
+                    Id = 333,
+                    Kind = ZombieKind.Normal,
+                    Row = 0,
+                    X = 1f,
+                    Health = 200f,
+                    StartingHealth = 200f
+                });
+                presenter = new GamePresenter(owner);
+                ObjectSpriteRenderer.SceneCamera.targetTexture = target;
+                presenter.Present();
+                yield return null;
+                yield return null;
+                var previous = RenderTexture.active;
+                RenderTexture.active = target;
+                pixels.ReadPixels(new Rect(0, 0, target.width, target.height), 0, 0);
+                pixels.Apply();
+                RenderTexture.active = previous;
+                var scale = Mathf.Min(Screen.width / 800f, Screen.height / 600f);
+                var x = Mathf.RoundToInt((Screen.width - 800f * scale) * .5f + 65f * scale);
+                var y = Mathf.RoundToInt((Screen.height - 600f * scale) * .5f + 44f * scale);
+                AssertColor(pixels.GetPixel(x, target.height - y - 1), Color.blue);
+                var bankX = Mathf.RoundToInt((Screen.width - 800f * scale) * .5f + 200f * scale);
+                var bankY = Mathf.RoundToInt((Screen.height - 600f * scale) * .5f + 20f * scale);
+                AssertColor(pixels.GetPixel(bankX, target.height - bankY - 1), Color.red);
+            }
+            finally
+            {
+                ObjectSpriteRenderer.SceneCamera.targetTexture = null;
+                if (owner != null)
+                {
+                    owner._textures.Clear();
+                }
+
+                presenter?.Dispose();
+                options?.Dispose();
+                target.Release();
+                UnityEngine.Object.Destroy(target);
+                UnityEngine.Object.Destroy(pixels);
+                UnityEngine.Object.Destroy(bank);
                 UnityEngine.Object.Destroy(ownerObject);
             }
         }
