@@ -139,6 +139,13 @@ internal static class AdventureUnitTests
     }
     private static void Specials()
     {
+        var vaultFixture=Fixture(9);
+        var vault=SpawnFixture(vaultFixture,ZombieKind.PoleVaulter,2,5f);
+        vault.UsedAbility=true;vault.AbilityTimer=.75f;
+        Check(vaultFixture.AdventurePresentationZombieAnimation(vault)=="anim_jump","pole vaulter uses the native jump animation during the vault");
+        Check(Math.Abs(vaultFixture.AdventurePresentationZombieRate(vault)-24f)<0.00001f,"pole vaulter jump uses the native 24 fps rate");
+        Check(AdventureZombieGroundData.TryGet("Zombie_polevaulter","anim_jump",out var jump)&&jump.Count==43&&Math.Abs(jump.SourceRate-24f)<0.00001f&&Math.Abs(jump.GroundDistance)<0.00001f,"pole vaulter jump ground clip matches the native marker interval");
+        vault.AbilityTimer=0;Check(vaultFixture.AdventurePresentationZombieAnimation(vault)=="anim_walk","pole vaulter returns to walking after the vault");
         var bowling=Fixture(5);var packet=bowling.Adventure.Packets[0];Check(!bowling.TryUseAdventurePacket(packet.Id,2,3),"bowling placement line enforced");Check(bowling.TryUseAdventurePacket(packet.Id,2,2),"bowling emits moving nut");Check(!bowling.TryUseAdventurePacket(packet.Id,2,2),"packet cannot be spent twice");var victim=SpawnFixture(bowling,ZombieKind.Normal,2,4);bowling.Update(1);Check(!bowling.Zombies.Contains(victim),"bowling collision kills actual zombie");
         var hammer=Fixture(15);var cone=SpawnFixture(hammer,ZombieKind.Conehead,2,5);hammer.Update(0.5f);Check(hammer.HammerAdventureZombie(cone.Id),"hammer accepts live emerged zombie");
         var vase=Fixture(35);Check(vase.Adventure.Vases.Count==15,"first vase stage has actual fifteen objects");var shown=vase.Adventure.Vases.First(v=>v.ShowsPlant);Check(vase.SmashAdventureVase(shown.Row,shown.Column)&&vase.Adventure.Packets.Count==1,"green vase creates usable seed packet");Check(!vase.SmashAdventureVase(shown.Row,shown.Column),"vase cannot be smashed twice");

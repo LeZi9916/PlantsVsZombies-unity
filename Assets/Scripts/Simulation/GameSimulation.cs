@@ -7683,6 +7683,11 @@ namespace PlantsVsZombies.Simulation
                 return 59;
             }
 
+            if (z.Kind == ZombieKind.PoleVaulter && z.UsedAbility && z.AbilityTimer > 0)
+            {
+                return 12;
+            }
+
             if (z.Kind == ZombieKind.PoleVaulter && !z.UsedAbility)
             {
                 return 11;
@@ -7739,6 +7744,10 @@ namespace PlantsVsZombies.Simulation
             else if (z.Eating)
             {
                 clip = "anim_eat";
+            }
+            else if (z.Kind == ZombieKind.PoleVaulter && z.UsedAbility && z.AbilityTimer > 0)
+            {
+                clip = "anim_jump";
             }
             else if (z.Kind == ZombieKind.PoleVaulter && !z.UsedAbility)
             {
@@ -7817,6 +7826,11 @@ namespace PlantsVsZombies.Simulation
             if (z.PresentationNewspaperGaspRemaining > 0f)
             {
                 return 8f;
+            }
+
+            if (z.Kind == ZombieKind.PoleVaulter && z.UsedAbility && z.AbilityTimer > 0)
+            {
+                return 24f;
             }
 
             if (z.Eating)

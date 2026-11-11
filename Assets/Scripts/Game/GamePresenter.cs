@@ -2294,6 +2294,15 @@ namespace PlantsVsZombies.Game
             var loop = true;
             var rate = plant.PresentationRate > 0 ? plant.PresentationRate : 12f;
             var age = plant.Age + AdventureRenderRemainder;
+            if (plant.Kind == PlantKind.GraveBuster)
+            {
+                var landing = plant.ActionTimer > 4f;
+                clip = landing ? "anim_land" : "anim_idle";
+                age = landing ? plant.Age + AdventureRenderRemainder : Math.Max(0f, plant.Age - .5f) + AdventureRenderRemainder;
+                rate = 12f;
+                loop = !landing;
+            }
+
             if (plant.Kind == PlantKind.PotatoMine)
             {
                 clip = plant.MinePhase == MinePhase.Buried ? "anim_idle" : plant.MinePhase == MinePhase.Rising ? "anim_rise" : "anim_armed";
@@ -2451,6 +2460,10 @@ namespace PlantsVsZombies.Game
             {
                 clip = "anim_eat";
             }
+            else if (zombie.Kind == ZombieKind.PoleVaulter && zombie.UsedAbility && zombie.AbilityTimer > 0)
+            {
+                clip = "anim_jump";
+            }
             else if (zombie.Kind == ZombieKind.PoleVaulter && !zombie.UsedAbility)
             {
                 clip = "anim_run";
@@ -2504,6 +2517,11 @@ namespace PlantsVsZombies.Game
         /// <returns>The resulting adventure zombie rate.</returns>
         private float AdventureZombieRate(Zombie zombie, string name, string clip, float size)
         {
+            if (zombie.Kind == ZombieKind.PoleVaulter && zombie.UsedAbility && zombie.AbilityTimer > 0)
+            {
+                return 24f;
+            }
+
             if (zombie.Eating)
             {
                 return zombie.Kind == ZombieKind.PoleVaulter || zombie.Kind == ZombieKind.Balloon || zombie.Kind == ZombieKind.Imp || zombie.Kind == ZombieKind.Digger || zombie.Kind == ZombieKind.JackInTheBox || zombie.Kind == ZombieKind.Snorkel || zombie.Kind == ZombieKind.Yeti ? 20f : 36f;
@@ -2547,7 +2565,8 @@ namespace PlantsVsZombies.Game
 
             var age = zombie.PresentationAnimationAge + (zombie.FrozenRemaining > 0 ? 0 : AdventureRenderRemainder * (zombie.ChillRemaining > 0 ? .5f : 1f));
             var rate = _owner._game.AdventurePresentationZombieRate(zombie);
-            DrawAdventureZombiePose(zombie, name, clip, origin, size, age, rate, zombie.PresentationNewspaperGaspRemaining <= 0f);
+            DrawAdventureZombiePose(zombie, name, clip, origin, size, age, rate,
+                zombie.PresentationNewspaperGaspRemaining <= 0f && !string.Equals(clip, "anim_jump", StringComparison.Ordinal));
             if (zombie.PresentationNewspaperSurpriseAge >= 0f)
             {
                 // PC 0x54E050 attaches at mPosX-11,mPosY, independently of the body's +15,-8 overlay.
