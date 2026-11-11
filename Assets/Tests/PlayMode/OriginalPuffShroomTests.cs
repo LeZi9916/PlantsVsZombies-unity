@@ -191,6 +191,49 @@ namespace PlantsVsZombies.Tests.PlayMode
             Assert.That(game.Peas.Count, Is.EqualTo(1), "The first spore follows the full twenty-eight-tick body windup.");
         }
 
+        /// <summary>Checks the Fume-shroom body animation and its instant area damage use the original attack clock.</summary>
+        /// <returns>Frame boundaries for native attack playback and camera comparison.</returns>
+        [UnityTest]
+        public IEnumerator FumeAttackAnimatesBeforeInstantAreaDamage()
+        {
+            var game = new GameSimulation(new GameRules { AdventureLevel = 11 }, 7529);
+            _owner._game = game;
+            Assert.That(game.ChooseDefaultAdventureSeeds(), Is.True);
+            game.ResetAdventureWaveSchedule(100000, false, false);
+            var place = typeof(GameSimulation).GetMethod("PlaceAdventurePlant", BindingFlags.Instance | BindingFlags.NonPublic)!;
+            var plant = (Plant)place.Invoke(game, new object[] { PlantKind.FumeShroom, 0, 1 })!;
+            plant.Timing = PlantsVsZombies.Timing.PlantTiming.FromRaw(PlantsVsZombies.Timing.PlantKind.FumeShroom, 0, 0);
+            var zombie = new Zombie
+            {
+                Id = 92,
+                Kind = ZombieKind.Normal,
+                Row = 0,
+                X = AdventureZombieNativeRules.GridX(264f),
+                Health = 270f,
+                StartingHealth = 270f,
+                FrozenRemaining = 1000f
+            };
+            game.Zombies.Add(zombie);
+            game.Update(.01f);
+            game.Update(.14f);
+            Assert.That(zombie.Health, Is.EqualTo(270f));
+            Assert.That(game.Peas.Count, Is.Zero);
+
+            _owner._textures["plantshadow.png"] = null!;
+            var draw = typeof(GamePresenter).GetMethod("DrawAdventurePlant", BindingFlags.Instance | BindingFlags.NonPublic)!;
+            yield return Capture(() => draw.Invoke(_presenter, new object[] { plant }));
+            var actual = _pixels.GetPixels32();
+            var origin = new Vector2(120f, 80f + AlmanacPortraitLayout.PlantHeightOffset(10));
+            yield return Capture(() => _animations.DrawNativePlayback("Fumeshroom", origin, 1f,
+                plant.PresentationShotAge, "anim_shooting", false, 35f));
+            Assert.That(ChangedPixels(actual, _pixels.GetPixels32()), Is.LessThan(10),
+                "Fume-shroom must display its original body shooting clip before damage.");
+
+            game.Update(.35f);
+            Assert.That(zombie.Health, Is.EqualTo(250f), "The original firing tick immediately damages the entire row area.");
+            Assert.That(game.Peas.Count, Is.Zero, "Fume-shroom does not create a travelling projectile.");
+        }
+
         /// <summary>Counts visible camera pixel differences while tolerating negligible channel rounding.</summary>
         /// <param name="first">The production camera frame.</param>
         /// <param name="second">The reference camera frame.</param>

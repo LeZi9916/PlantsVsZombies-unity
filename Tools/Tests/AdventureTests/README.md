@@ -8,6 +8,12 @@
 
 `--reward-projectiles` 只运行胜利后棋盘投射物回归，覆盖直线、反向、斜向与抛物线运动、出界回收、奖励介绍阶段停止及独立模式胜利；同时检查不恢复伤害、掉落、植物攻击或波次推进。原版依据为 `Board.UpdateGameObjects` 在奖励落地及收取期间继续更新现有 `Projectile`。
 
+`--fume-shroom` 只运行大喷菇回归：原版 340 像素攻击矩形的触边瞄准与正重叠伤害、50 计数器第 49 tick 的瞬时多目标穿盾结算、无 Pea、目标变动后的已排定攻击，以及无目标时不播放攻击动画。默认和 `--unit` 也运行这些断言。
+
+`--multi-head` 只运行三线射手与分裂豌豆的 PC 计时回归：35/26 tick 共用射击计数、有效头部的独立发射、目标消失后的待发射结算，以及旧发射先于新攻击尝试的顺序。默认和 `--unit` 也运行这些断言；目标搜索和动画状态由调用方输入，测试不执行原版 EXE。
+
+`--starfruit` 运行杨桃的原版五方向目标路径、40 计数器与第 39 tick 发射、目标消失后的待发射、射击期间的独立攻击周期和最近被啃食回归。默认和 `--unit` 也运行这些断言；该测试不执行原版 EXE。
+
 `--coin-feedback` checks silver, gold, and diamond collection against PC `Coin::UpdateCollected`
 (`0x43C570`): the `(39,558)` wallet target, one twenty-first movement per native tick,
 the twelve-pixel scoring threshold, shrinking and opacity, pause and duplicate-click guards,

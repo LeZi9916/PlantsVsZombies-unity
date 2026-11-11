@@ -53,6 +53,24 @@ internal static class Program
             return;
         }
 
+        if (args.Length > 0 && args[0] == "--fume-shroom")
+        {
+            FumeShroomRegressionTests.Run();
+            return;
+        }
+
+        if (args.Length > 0 && args[0] == "--multi-head")
+        {
+            MultiHeadTimingRegressionTests.Run();
+            return;
+        }
+
+        if (args.Length > 0 && args[0] == "--starfruit")
+        {
+            StarfruitRegressionTests.Run();
+            return;
+        }
+
         if (args.Length > 0 && args[0] == "--coin-feedback")
         {
             CoinFeedbackRegressionTests.Run();
@@ -66,6 +84,9 @@ internal static class Program
             CombatFidelityRegressionTests.Run();
             RewardProjectileRegressionTests.Run();
             PuffShroomRegressionTests.Run();
+            FumeShroomRegressionTests.Run();
+            MultiHeadTimingRegressionTests.Run();
+            StarfruitRegressionTests.Run();
             CoinFeedbackRegressionTests.Run();
             if (args.Length > 0)
             {

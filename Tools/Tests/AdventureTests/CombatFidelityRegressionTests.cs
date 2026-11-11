@@ -14,6 +14,8 @@ internal static class CombatFidelityRegressionTests
         MineContact();
         MineExplosionDamageAndDeath();
         TargetEntry();
+        ShooterWindupMatchesLaunch();
+        NativeShooterTiming();
         DefensiveDamage();
         DefensivePresentation();
         ChomperTransitions();
@@ -46,9 +48,9 @@ internal static class CombatFidelityRegressionTests
 
     /// <summary>Creates an explicitly isolated legal adventure fixture with distant wave scheduling.</summary>
     /// <returns>The fixture simulation.</returns>
-    private static GameSimulation Fixture()
+    private static GameSimulation Fixture(int level = 9)
     {
-        var game = new GameSimulation(new GameRules { AdventureLevel = 9 }, 7529);
+        var game = new GameSimulation(new GameRules { AdventureLevel = level }, 7529);
         Check(game.ChooseDefaultAdventureSeeds(), "Fixture chooses its earned seed bank.");
         game.ResetAdventureWaveSchedule(100000, false, false);
         return game;
@@ -231,6 +233,198 @@ internal static class CombatFidelityRegressionTests
         shooter.ActionTimer = 0;
         Invoke(game, "AdvanceAdventurePlants", .01f);
         Check(game.Peas.Count == 0 && shooter.PresentationShotAge < 0, "An offscreen spawn cannot start a peashooter windup or projectile.");
+    }
+
+    /// <summary>Checks that attack windup follows the same target gates as the actual projectile branches.</summary>
+    private static void ShooterWindupMatchesLaunch()
+    {
+        CheckShooterWindup(PlantKind.Peashooter, 9, 2, 4, 2, 4.2f, false, "A target behind the shooter does not start a forward attack.");
+        CheckShooterWindup(PlantKind.Peashooter, 9, 2, 4, 2, 6f, true, "A forward ground target starts a shot.");
+        CheckShooterWindup(PlantKind.Peashooter, 9, 2, 4, 2, 6f, false, "A submerged target cannot start a pea shot.", submerged: true);
+        CheckShooterWindup(PlantKind.Peashooter, 9, 2, 4, 2, 6f, false, "A dropping target cannot start a pea shot.", dropRemaining: 1f);
+        CheckShooterWindup(PlantKind.Peashooter, 9, 2, 4, 2, 3f, true, "A left-facing pea acquires a rear target.", modeFacesLeft: true);
+        CheckShooterWindup(PlantKind.Peashooter, 9, 2, 4, 2, 6f, false, "A left-facing pea ignores a target in front.", modeFacesLeft: true);
+        CheckShooterWindup(PlantKind.Cactus, 9, 2, 4, 2, 6f, true, "Cactus can acquire an airborne target.", airborne: true);
+        CheckShooterWindup(PlantKind.ScaredyShroom, 11, 2, 4, 2, 5f, false, "Scaredy-shroom retracts when a zombie is near.");
+        CheckShooterWindup(PlantKind.Threepeater, 9, 2, 4, 1, 6f, true, "Threepeater fires for an adjacent lane.");
+        CheckShooterWindup(PlantKind.Threepeater, 9, 2, 4, 0, 6f, false, "Threepeater ignores a lane two rows away.");
+        CheckShooterWindup(PlantKind.SplitPea, 9, 2, 4, 2, 3f, true, "Split pea fires backward within its acquisition interval.");
+        CheckShooterWindup(PlantKind.SplitPea, 9, 2, 4, 2, -2f, false, "Split pea ignores targets beyond its rear acquisition interval.");
+        CheckShooterWindup(PlantKind.Starfruit, 9, 2, 4, 2, 3f, true, "Starfruit fires for a target on its reverse path.");
+        CheckShooterWindup(PlantKind.Starfruit, 9, 2, 4, 0, 10f, false, "Starfruit excludes targets at its far x limit.");
+        CheckShooterWindup(PlantKind.Peashooter, 41, 2, 3, 2, 6f, true, "A forward pea begins its attack on the sloped roof.");
+        CheckShooterWindup(PlantKind.CabbagePult, 41, 2, 3, 2, 6f, true, "A lobber clears the sloped roof.");
+    }
+
+    /// <summary>Compares the windup decision with the production launch branch for one controlled zombie.</summary>
+    /// <param name="kind">The shooter kind.</param>
+    /// <param name="level">The adventure level supplying the terrain.</param>
+    /// <param name="plantRow">The shooter's lane.</param>
+    /// <param name="column">The shooter's column.</param>
+    /// <param name="zombieRow">The target's lane.</param>
+    /// <param name="zombieX">The target's board x position.</param>
+    /// <param name="expected">Whether the shooter should launch.</param>
+    /// <param name="reason">The behavior being checked.</param>
+    /// <param name="airborne">Whether the target is airborne.</param>
+    /// <param name="submerged">Whether the target is underwater.</param>
+    /// <param name="dropRemaining">The target's remaining drop time.</param>
+    /// <param name="modeFacesLeft">Whether the plant is facing the rear lane direction.</param>
+    private static void CheckShooterWindup(PlantKind kind, int level, int plantRow, int column, int zombieRow, float zombieX, bool expected, string reason,
+        bool airborne = false, bool submerged = false, float dropRemaining = 0f, bool modeFacesLeft = false)
+    {
+        var game = Fixture(level);
+        var plant = new Plant { Kind = kind, Row = plantRow, Column = column, ActionTimer = 0f, ModeFacesLeft = modeFacesLeft };
+        var nativeTimed = kind == PlantKind.Peashooter || kind == PlantKind.SnowPea || kind == PlantKind.Repeater
+            || kind == PlantKind.ScaredyShroom || kind == PlantKind.Cactus || kind == PlantKind.CabbagePult
+            || kind == PlantKind.KernelPult || kind == PlantKind.MelonPult || kind == PlantKind.WinterMelon
+            || kind == PlantKind.Threepeater || kind == PlantKind.SplitPea || kind == PlantKind.Starfruit;
+        var multiHeadTimed = kind == PlantKind.Threepeater || kind == PlantKind.SplitPea;
+        if (multiHeadTimed)
+        {
+            plant.MultiHeadTiming = AdventureMultiHeadTimingRules.FromRaw(kind, 0, 0, AdventureShootingHeads.None);
+        }
+        else if (kind == PlantKind.Starfruit)
+        {
+            plant.StarfruitLaunchCountdown = 0;
+        }
+        else if (nativeTimed)
+        {
+            plant.Timing = PlantsVsZombies.Timing.PlantTiming.FromRaw((PlantsVsZombies.Timing.PlantKind)(int)kind, 0, 0);
+        }
+
+        game.Plants.Add(plant);
+        game.Zombies.Add(new Zombie
+        {
+            Kind = ZombieKind.Normal,
+            Row = zombieRow,
+            X = zombieX,
+            Health = 270,
+            StartingHealth = 270,
+            Airborne = airborne,
+            Submerged = submerged,
+            DropRemaining = dropRemaining
+        });
+
+        var windup = nativeTimed ? (bool?)null : (bool)Invoke(game, "CanPresentAdventureWindup", plant)!;
+        Invoke(game, "AdvanceAdventurePlants", .01f);
+        var attackStarted = nativeTimed
+            ? plant.PresentationShotAge >= 0f || Array.Exists(plant.PresentationHeadAge, age => age >= 0f)
+            : game.Peas.Count > 0;
+        Check((!windup.HasValue || windup.Value == expected) && attackStarted == expected, reason);
+    }
+
+    /// <summary>Checks the native initial periods, separate shooting delays, and shots after target loss.</summary>
+    private static void NativeShooterTiming()
+    {
+        var cases = new[]
+        {
+            (PlantKind.ScaredyShroom, 150, 25),
+            (PlantKind.Cactus, 150, 35),
+            (PlantKind.CabbagePult, 300, 32),
+            (PlantKind.KernelPult, 300, 30),
+            (PlantKind.MelonPult, 300, 36),
+            (PlantKind.WinterMelon, 300, 36)
+        };
+
+        foreach (var item in cases)
+        {
+            var kind = (PlantsVsZombies.Timing.PlantKind)(int)item.Item1;
+            Check(PlantsVsZombies.Timing.PlantTiming.AttackPeriod(kind) == item.Item2
+                && PlantsVsZombies.Timing.PlantTiming.InitialRandomBound(kind) == item.Item2 + 1,
+                "Native attack period and first randomized countdown: " + item.Item1);
+            var initial = PlantsVsZombies.Timing.PlantTiming.Initialize(kind, 0);
+            var last = PlantsVsZombies.Timing.PlantTiming.Initialize(kind, item.Item2);
+            Check(initial.Countdown == 0 && last.Countdown == item.Item2,
+                "An original first attack may be immediate or use the full base period: " + item.Item1);
+
+            var lateGame = Fixture(item.Item1 == PlantKind.ScaredyShroom ? 11 : 49);
+            var latePlant = new Plant { Kind = item.Item1, Row = 2, Column = 4,
+                Timing = PlantsVsZombies.Timing.PlantTiming.FromRaw(kind, 0, 0) };
+            lateGame.Plants.Add(latePlant);
+            Invoke(lateGame, "AdvanceAdventurePlants", .01f);
+            Check(latePlant.Timing!.Value.Countdown >= item.Item2 - 14 && latePlant.Timing.Value.ShootingCountdown == 0,
+                "An empty attack attempt resets the original full cycle: " + item.Item1);
+            lateGame.Zombies.Add(new Zombie { Kind = ZombieKind.Normal, Row = 2, X = 6f, Health = 270, StartingHealth = 270 });
+            for (var tick = 0; tick < item.Item3; tick++)
+            {
+                Invoke(lateGame, "AdvanceAdventurePlants", .01f);
+            }
+
+            Check(latePlant.Timing!.Value.ShootingCountdown == 0 && lateGame.Peas.Count == 0,
+                "A newly arriving target cannot cause an immediate shot after a missed attack attempt: " + item.Item1);
+
+            var game = Fixture(item.Item1 == PlantKind.ScaredyShroom ? 11 : 49);
+            var plant = new Plant { Kind = item.Item1, Row = 2, Column = 4,
+                Timing = PlantsVsZombies.Timing.PlantTiming.FromRaw(kind, 0, 0) };
+            game.Plants.Add(plant);
+            var target = new Zombie { Kind = ZombieKind.Normal, Row = 2, X = 6f, Health = 270, StartingHealth = 270 };
+            game.Zombies.Add(target);
+            Invoke(game, "AdvanceAdventurePlants", .01f);
+            var delay = plant.Timing!.Value.ShootingCountdown;
+            Check(delay == item.Item3,
+                "The first valid target starts the species-specific shooting delay: " + item.Item1);
+            Check(plant.PresentationShotAge == 0f && game.Peas.Count == 0,
+                "An attack starts its complete animation before creating a projectile: " + item.Item1);
+
+            game.Zombies.Remove(target);
+            for (var tick = 0; tick < delay - 2; tick++)
+            {
+                Invoke(game, "AdvanceAdventurePlants", .01f);
+                Check(game.Peas.Count == 0, "A pending projectile cannot launch early: " + item.Item1);
+            }
+
+            Invoke(game, "AdvanceAdventurePlants", .01f);
+            Check(game.Peas.Count == 1 && game.Peas[0].SourceKind == item.Item1,
+                "The scheduled projectile launches after its original target leaves: " + item.Item1);
+            var shot = game.Peas[0];
+            var lob = item.Item2 == 300;
+            Check(shot.Lobbed == lob && shot.PiercesShield == lob, "The delayed projectile preserves its attack type: " + item.Item1);
+            if (item.Item1 == PlantKind.KernelPult)
+            {
+                Check(shot.Butter == plant.PresentationButter, "Kernel-pult preserves the selected butter state through its fixed shooting delay.");
+            }
+            else if (item.Item1 == PlantKind.WinterMelon)
+            {
+                Check(shot.IsSnow && shot.ChillSplash && shot.Splash, "Winter Melon retains its chilling lob.");
+            }
+
+            if (lob)
+            {
+                Invoke(game, "AdvanceAdventureProjectilePresentation", shot, .01f);
+                Check(shot.PresentationMotionInitialized, "A lob launched after target loss takes its original fallback path.");
+
+                var movedGame = Fixture(49);
+                var movedPlant = new Plant { Kind = item.Item1, Row = 2, Column = 4,
+                    Timing = PlantsVsZombies.Timing.PlantTiming.FromRaw(kind, 0, 0) };
+                movedGame.Plants.Add(movedPlant);
+                var oldTarget = new Zombie { Kind = ZombieKind.Normal, Row = 2, X = 6f, Health = 270, StartingHealth = 270 };
+                movedGame.Zombies.Add(oldTarget);
+                Invoke(movedGame, "AdvanceAdventurePlants", .01f);
+                movedGame.Zombies.Remove(oldTarget);
+                movedGame.Zombies.Add(new Zombie { Kind = ZombieKind.Normal, Row = 2, X = 7f, Health = 270, StartingHealth = 270 });
+                var movedDelay = movedPlant.Timing!.Value.ShootingCountdown;
+                for (var tick = 0; tick < movedDelay - 1; tick++)
+                {
+                    Invoke(movedGame, "AdvanceAdventurePlants", .01f);
+                }
+
+                Check(movedGame.Peas.Count == 1, "A pending lob launches after its target changes: " + item.Item1);
+                var movedShot = movedGame.Peas[0];
+                Invoke(movedGame, "AdvanceAdventureProjectilePresentation", movedShot, .01f);
+                Check(movedShot.PresentationMotionInitialized && movedShot.VelocityX < shot.VelocityX,
+                    "A pending lob aims at the replacement target instead of the original or fallback position: " + item.Item1);
+            }
+        }
+
+        var kernel = PlantsVsZombies.Timing.PlantTiming.FromRaw(PlantsVsZombies.Timing.PlantKind.KernelPult, 0, 0);
+        var butter = PlantsVsZombies.Timing.PlantTiming.Tick(kernel,
+            new PlantsVsZombies.Timing.PlantTimingInput(true, true, true, true, true, PlantsVsZombies.Timing.ShootingTrack.Body, true, 0, kernelButter: true));
+        Check(butter.State.ShootingCountdown == 30, "The PC butter branch schedules thirty ticks.");
+        var cactus = PlantsVsZombies.Timing.PlantTiming.FromRaw(PlantsVsZombies.Timing.PlantKind.Cactus, 0, 0);
+        var high = PlantsVsZombies.Timing.PlantTiming.Tick(cactus,
+            new PlantsVsZombies.Timing.PlantTimingInput(true, true, true, true, true, PlantsVsZombies.Timing.ShootingTrack.Body, true, 0, cactusHigh: true));
+        Check(high.State.ShootingCountdown == 23, "An extended Cactus uses its twenty-three-tick high shot.");
+
     }
 
     /// <summary>Checks strict integer health boundaries and original per-track damage images.</summary>

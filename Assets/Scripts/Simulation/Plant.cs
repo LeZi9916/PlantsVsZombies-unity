@@ -70,6 +70,14 @@ namespace PlantsVsZombies.Simulation
         public float ImitaterTransformRemaining;
         /// <summary>Stores upgrade burst ticks.</summary>
         public int UpgradeBurstTicks;
+        /// <summary>Stores the original shared shooting counter and head states for multi-head shooters.</summary>
+        public AdventureMultiHeadTimingState? MultiHeadTiming;
+        /// <summary>Stores the original Starfruit launch countdown; negative means it has not been initialized.</summary>
+        public int StarfruitLaunchCountdown = -1;
+        /// <summary>Stores the original Starfruit body shooting countdown.</summary>
+        public int StarfruitShootingCountdown;
+        /// <summary>Stores native ticks remaining since the plant was last chewed.</summary>
+        public int RecentlyEatenTicks;
         /// <summary>Stores cannon phase.</summary>
         public CobCannonPhase CannonPhase;
         /// <summary>Stores cannon reload remaining.</summary>

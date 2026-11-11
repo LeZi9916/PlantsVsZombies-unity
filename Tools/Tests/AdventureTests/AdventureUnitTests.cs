@@ -127,7 +127,7 @@ internal static class AdventureUnitTests
         Check(roof.TryPlant(PlantKind.HypnoShroom,2,1)&&roof.AdventurePlantAt(2,1,PlantLayer.Main).Asleep,"day mushroom sleeps");
         Check(roof.TryPlant(PlantKind.CoffeeBean,2,1),"coffee targets sleeping mushroom");roof.Update(2.1f);Check(!roof.AdventurePlantAt(2,1,PlantLayer.Main).Asleep,"coffee wakes after delay");
         var combat=Fixture(19,PlantKind.FumeShroom,PlantKind.GraveBuster,PlantKind.PuffShroom,PlantKind.IceShroom,PlantKind.HypnoShroom,PlantKind.SunShroom);CreditFixture(combat);
-        Check(combat.TryPlant(PlantKind.FumeShroom,2,2),"night fume active");var door=SpawnFixture(combat,ZombieKind.ScreenDoor,2,5f);combat.Update(1f);Check(door.ShieldHealth==1100&&door.Health<270,"fume passes screen shield");
+        Check(combat.TryPlant(PlantKind.FumeShroom,2,2),"night fume active");var door=SpawnFixture(combat,ZombieKind.ScreenDoor,2,5f);combat.Update(2.1f);Check(door.ShieldHealth<1100&&door.Health<270,"fume damages screen shield and body");
         var basic=Fixture(9,PlantKind.Peashooter,PlantKind.Sunflower,PlantKind.PotatoMine,PlantKind.SnowPea,PlantKind.CherryBomb,PlantKind.Wallnut);CreditFixture(basic);
         var normal=SpawnFixture(basic,ZombieKind.Normal,2,4f);Invoke(basic,"HitAdventureZombie",normal,200f,false);Check(normal.Headless,"body threshold causes real decapitation");float health=normal.Health;basic.Update(1f);Check(normal.Health<health||!basic.Zombies.Contains(normal),"headless zombie bleeds");
         var diver=SpawnFixture(pool,ZombieKind.Snorkel,3,5);Check(diver.Submerged,"snorkel has submerged state");

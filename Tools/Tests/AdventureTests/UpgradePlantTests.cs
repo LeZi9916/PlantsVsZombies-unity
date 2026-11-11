@@ -171,9 +171,10 @@ internal static class UpgradePlantTests
     {
         var g=Fixture(39,null,PlantKind.PuffShroom,PlantKind.SeaShroom,PlantKind.FumeShroom,PlantKind.Cactus,PlantKind.Starfruit,PlantKind.Peashooter);
         Check(g.TryPlant(PlantKind.PuffShroom,0,1)&&g.TryPlant(PlantKind.SeaShroom,2,1)&&g.TryPlant(PlantKind.FumeShroom,1,1)&&g.TryPlant(PlantKind.Cactus,4,1)&&g.TryPlant(PlantKind.Starfruit,5,1)&&g.TryPlant(PlantKind.Peashooter,4,2),"source metadata fixture plants six real projectile producers");
-        Spawn(g,ZombieKind.Normal,0,3);Spawn(g,ZombieKind.Normal,2,3);Spawn(g,ZombieKind.ScreenDoor,1,3);Spawn(g,ZombieKind.Balloon,4,7);Spawn(g,ZombieKind.Normal,4,8);
+        Spawn(g,ZombieKind.Normal,0,3);Spawn(g,ZombieKind.Normal,2,3);Spawn(g,ZombieKind.ScreenDoor,1,3);Spawn(g,ZombieKind.Balloon,4,7);Spawn(g,ZombieKind.Normal,4,8);Spawn(g,ZombieKind.Normal,5,0.2f);
         var sources = ObserveProjectileSources(g);
-        foreach(var k in new[]{PlantKind.PuffShroom,PlantKind.SeaShroom,PlantKind.FumeShroom,PlantKind.Cactus,PlantKind.Starfruit,PlantKind.Peashooter})Check(sources.Contains(k),"projectile captures source "+k);
+        foreach(var k in new[]{PlantKind.PuffShroom,PlantKind.SeaShroom,PlantKind.Cactus,PlantKind.Starfruit,PlantKind.Peashooter})Check(sources.Contains(k),"projectile captures source "+k);
+        Check(!sources.Contains(PlantKind.FumeShroom),"Fume-shroom applies area damage without creating a projectile");
         var lob=Fixture(49,null,PlantKind.CabbagePult,PlantKind.KernelPult,PlantKind.MelonPult);lob.TryPlant(PlantKind.CabbagePult,0,1);lob.TryPlant(PlantKind.KernelPult,1,1);lob.TryPlant(PlantKind.MelonPult,2,1);for(int row=0;row<3;row++)Spawn(lob,ZombieKind.Buckethead,row,9f);
         var lobbedSources = ObserveProjectileSources(lob, true);
         foreach(var k in new[]{PlantKind.CabbagePult,PlantKind.KernelPult,PlantKind.MelonPult})Check(lobbedSources.Contains(k),"lobbed projectile captures source "+k);

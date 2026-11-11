@@ -2036,8 +2036,24 @@ namespace PlantsVsZombies.Simulation
                 return;
             }
 
+            if (plant.Kind == PlantKind.Starfruit)
+            {
+                plant.StarfruitLaunchCountdown = _random.Next(151);
+                plant.ActionTimer = plant.StarfruitLaunchCountdown * .01f;
+                return;
+            }
+
+            if (plant.Kind == PlantKind.Threepeater || plant.Kind == PlantKind.SplitPea)
+            {
+                plant.MultiHeadTiming = AdventureMultiHeadTimingRules.Initialize(plant.Kind, _random.Next(151));
+                plant.ActionTimer = plant.MultiHeadTiming.Value.Countdown * .01f;
+                return;
+            }
+
             if (plant.Kind != PlantKind.Peashooter && plant.Kind != PlantKind.SnowPea && plant.Kind != PlantKind.Repeater && plant.Kind != PlantKind.Sunflower
-                && !AdventurePuffShroomRules.IsShortRange(plant.Kind))
+                && plant.Kind != PlantKind.FumeShroom && plant.Kind != PlantKind.ScaredyShroom && plant.Kind != PlantKind.Cactus
+                && plant.Kind != PlantKind.CabbagePult && plant.Kind != PlantKind.KernelPult && plant.Kind != PlantKind.MelonPult
+                && plant.Kind != PlantKind.WinterMelon && !AdventurePuffShroomRules.IsShortRange(plant.Kind))
             {
                 return;
             }
@@ -2067,8 +2083,22 @@ namespace PlantsVsZombies.Simulation
                 return AdvanceAdventurePotatoMine(plant);
             }
 
+            if (plant.Kind == PlantKind.Starfruit)
+            {
+                AdvanceAdventureStarfruit(plant);
+                return true;
+            }
+
+            if ((plant.Kind == PlantKind.Threepeater || plant.Kind == PlantKind.SplitPea) && plant.ActionTimer < 100000f)
+            {
+                AdvanceAdventureMultiHeadPlant(plant);
+                return true;
+            }
+
             if (plant.Kind != PlantKind.Peashooter && plant.Kind != PlantKind.SnowPea && plant.Kind != PlantKind.Repeater && plant.Kind != PlantKind.Sunflower
-                && !AdventurePuffShroomRules.IsShortRange(plant.Kind))
+                && plant.Kind != PlantKind.FumeShroom && plant.Kind != PlantKind.ScaredyShroom && plant.Kind != PlantKind.Cactus
+                && plant.Kind != PlantKind.CabbagePult && plant.Kind != PlantKind.KernelPult && plant.Kind != PlantKind.MelonPult
+                && plant.Kind != PlantKind.WinterMelon && !AdventurePuffShroomRules.IsShortRange(plant.Kind))
             {
                 return false;
             }
@@ -2085,19 +2115,36 @@ namespace PlantsVsZombies.Simulation
 
             var sunflower = plant.Kind == PlantKind.Sunflower;
             var shortPuff = AdventurePuffShroomRules.IsShortRange(plant.Kind);
-            var target = shortPuff ? FindAdventurePuffTarget(plant) != null
-                : !sunflower && (plant.ModeFacesLeft ? FindAdventureTarget(plant.Row, -1f, plant.Column + .5f, false) != null : FindAdventureTarget(plant.Row, plant.Column + .4f, 20f, false) != null || CanShootAdventureBoss(plant));
+            var fume = plant.Kind == PlantKind.FumeShroom;
+            var cactus = plant.Kind == PlantKind.Cactus;
+            var kernel = plant.Kind == PlantKind.KernelPult;
+            var scaredy = plant.Kind == PlantKind.ScaredyShroom;
+            var targetZombie = fume || shortPuff || sunflower ? null : FindAdventureTarget(plant.Row,
+                plant.ModeFacesLeft ? -1f : plant.Column + .4f, plant.ModeFacesLeft ? plant.Column + .5f : 20f, cactus);
+            var target = fume ? FindAdventureFumeTarget(plant) != null : shortPuff ? FindAdventurePuffTarget(plant) != null
+                : !sunflower && (targetZombie != null || !plant.ModeFacesLeft && CanShootAdventureBoss(plant))
+                    && (!scaredy || !HasZombieNear(plant.Row, plant.Column + .5f, 1, 1.5f, true));
             var state = plant.Timing.Value;
-            // PC 0x46D240 starts the mushroom body animation and its 29-tick shooting counter together.
-            var track = shortPuff ? global::PlantsVsZombies.Timing.ShootingTrack.Body : global::PlantsVsZombies.Timing.ShootingTrack.Head;
+            // PC 0x46D240 starts the body animation and its species-specific shooting counter together.
+            var track = shortPuff || fume || scaredy || cactus || plant.Kind == PlantKind.CabbagePult || kernel
+                || plant.Kind == PlantKind.MelonPult || plant.Kind == PlantKind.WinterMelon
+                ? global::PlantsVsZombies.Timing.ShootingTrack.Body : global::PlantsVsZombies.Timing.ShootingTrack.Head;
             var input = new global::PlantsVsZombies.Timing.PlantTimingInput(true, true, true, true, target, track, true, 0);
             var bound = global::PlantsVsZombies.Timing.PlantTiming.RequiredRandomBound(state, input);
             var draw = bound == 0 ? 0 : _random.Next(bound);
-            var result = global::PlantsVsZombies.Timing.PlantTiming.Tick(state, new global::PlantsVsZombies.Timing.PlantTimingInput(true, true, true, true, target, track, true, draw));
+            var butter = kernel && state.Countdown <= 1 && target && _random.Next(4) == 0;
+            var result = global::PlantsVsZombies.Timing.PlantTiming.Tick(state,
+                new global::PlantsVsZombies.Timing.PlantTimingInput(true, true, true, true, target, track, true, draw, butter));
             plant.Timing = result.State;
             plant.ActionTimer = result.State.Countdown * .01f;
             if (result.AnimationStarted)
             {
+                if (kernel)
+                {
+                    plant.PresentationButter = butter;
+                    plant._kernelWeaponPrepared = true;
+                }
+
                 plant.PresentationShotAge = 0;
                 plant.PresentationHeadAge[0] = 0;
                 plant._presentationPrefiring = true;
@@ -2111,6 +2158,18 @@ namespace PlantsVsZombies.Simulation
 
             for (var i = 0; i < result.ProjectilesCreated; i++)
             {
+                if (fume)
+                {
+                    FireAdventureFume(plant);
+                    continue;
+                }
+
+                if (scaredy || cactus || plant.Kind == PlantKind.CabbagePult || kernel || plant.Kind == PlantKind.MelonPult || plant.Kind == PlantKind.WinterMelon)
+                {
+                    FireAdventureNativeTimedProjectile(plant);
+                    continue;
+                }
+
                 var shot = FireAdventurePea(plant, plant.Row, plant.ModeFacesLeft, 20f);
                 shot.IsSnow = plant.Kind == PlantKind.SnowPea;
                 if (shortPuff)
@@ -2126,6 +2185,146 @@ namespace PlantsVsZombies.Simulation
             }
 
             return true;
+        }
+
+        /// <summary>Advances the original shared shooting countdown of a multi-head plant.</summary>
+        /// <param name="plant">The Threepeater or Split Pea being updated.</param>
+        private void AdvanceAdventureMultiHeadPlant(Plant plant)
+        {
+            if (!plant.MultiHeadTiming.HasValue)
+            {
+                InitializeAdventureNativePlantTiming(plant);
+            }
+
+            var available = plant.Kind == PlantKind.SplitPea ? AdventureMultiHeadTimingRules.SplitPeaHeads : AdventureShootingHeads.Second;
+            var targets = AdventureShootingHeads.None;
+            if (plant.Kind == PlantKind.Threepeater)
+            {
+                if (plant.Row + 1 < RowCount)
+                {
+                    available |= AdventureShootingHeads.First;
+                }
+
+                if (plant.Row > 0)
+                {
+                    available |= AdventureShootingHeads.Third;
+                }
+            }
+
+            foreach (var zombie in Zombies)
+            {
+                if (zombie.Hypnotized || zombie.Airborne || zombie.Submerged || zombie.DropRemaining > 0f || zombie.Kind == ZombieKind.Bungee
+                    || !AdventureZombieTargetingRules.CanBeAutoTargeted(zombie, plant.Kind))
+                {
+                    continue;
+                }
+
+                var body = AdventureZombieTargetingRules.BodyRectangle(zombie);
+                var plantX = 40 + plant.Column * 80;
+                var forward = body.X + body.Width >= plantX + 60 && body.X <= plantX + 860;
+                if (plant.Kind == PlantKind.SplitPea && zombie.Row == plant.Row)
+                {
+                    if (forward)
+                    {
+                        targets |= AdventureShootingHeads.First;
+                    }
+
+                    if (body.X + body.Width >= 0 && body.X <= plantX + 16)
+                    {
+                        targets |= AdventureShootingHeads.Second;
+                    }
+                }
+                else if (plant.Kind == PlantKind.Threepeater && forward)
+                {
+                    if (zombie.Row == plant.Row + 1)
+                    {
+                        targets |= AdventureShootingHeads.First;
+                    }
+                    else if (zombie.Row == plant.Row)
+                    {
+                        targets |= AdventureShootingHeads.Second;
+                    }
+                    else if (zombie.Row == plant.Row - 1)
+                    {
+                        targets |= AdventureShootingHeads.Third;
+                    }
+                }
+            }
+
+            var state = plant.MultiHeadTiming.Value;
+            var input = new AdventureMultiHeadTimingInput(true, true, true, targets, available, true, 0);
+            var bound = AdventureMultiHeadTimingRules.RequiredRandomBound(state, input);
+            var result = AdventureMultiHeadTimingRules.Tick(state,
+                new AdventureMultiHeadTimingInput(true, true, true, targets, available, true, bound == 0 ? 0 : _random.Next(bound)));
+            plant.MultiHeadTiming = result.State;
+            plant.ActionTimer = result.State.Countdown * .01f;
+            for (var head = 0; head < 3; head++)
+            {
+                var mask = (AdventureShootingHeads)(1 << head);
+                if ((result.FiredHeads & mask) != 0)
+                {
+                    var row = plant.Kind == PlantKind.Threepeater ? plant.Row + 1 - head : plant.Row;
+                    var back = plant.Kind == PlantKind.SplitPea && head == 1;
+                    var shot = FireAdventurePea(plant, row, back, 20f);
+                    if (!back && Adventure.Level.HasRoof && plant.Column < 5)
+                    {
+                        shot.Range = Math.Max(.1f, 5 - plant.Column - .5f);
+                    }
+                }
+
+                if ((result.StoppedHeads & mask) != 0)
+                {
+                    plant.PresentationHeadAge[head] = -1f;
+                }
+
+                if ((result.StartedHeads & mask) != 0)
+                {
+                    plant.PresentationHeadAge[head] = 0f;
+                    plant.PresentationShotAge = 0f;
+                    plant.ShootAge = 0f;
+                }
+            }
+        }
+
+        /// <summary>Advances the original Starfruit launch and forty-tick body shooting counters.</summary>
+        /// <param name="plant">The Starfruit being updated.</param>
+        private void AdvanceAdventureStarfruit(Plant plant)
+        {
+            if (plant.StarfruitLaunchCountdown < 0)
+            {
+                InitializeAdventureNativePlantTiming(plant);
+            }
+
+            if (plant.StarfruitShootingCountdown > 0)
+            {
+                var countdown = plant.StarfruitShootingCountdown;
+                if (AdventureStarfruitRules.AdvanceAttack(ref countdown, true))
+                {
+                    FireAdventureStarfruit(plant);
+                }
+
+                plant.StarfruitShootingCountdown = countdown;
+            }
+
+            plant.StarfruitLaunchCountdown--;
+            plant.ActionTimer = Math.Max(0, plant.StarfruitLaunchCountdown) * .01f;
+            if (plant.StarfruitLaunchCountdown > 0)
+            {
+                return;
+            }
+
+            plant.StarfruitLaunchCountdown = 150 - _random.Next(15);
+            plant.ActionTimer = plant.StarfruitLaunchCountdown * .01f;
+            if (plant.RecentlyEatenTicks <= 0 && FindAdventureStarfruitTarget(plant) == null)
+            {
+                return;
+            }
+
+            plant.StarfruitShootingCountdown = AdventureStarfruitRules.ShootingCountdown;
+            plant.PresentationShotAge = 0;
+            plant.PresentationHeadAge[0] = 0;
+            plant._presentationPrefiring = true;
+            plant.ShootAge = 0;
         }
 
         /// <summary>Stores native plant hit tick remainder.</summary>
@@ -2151,6 +2350,7 @@ namespace PlantsVsZombies.Simulation
             foreach (var p in Plants)
             {
                 p.PresentationEatenFlashTicks = Math.Max(0, p.PresentationEatenFlashTicks - ticks);
+                p.RecentlyEatenTicks = Math.Max(0, p.RecentlyEatenTicks - ticks);
             }
 
             for (var i = Presentation.PlantBiteEffects.Count - 1; i >= 0; i--)
@@ -2707,12 +2907,6 @@ namespace PlantsVsZombies.Simulation
                         continue;
                     }
 
-                    if (p.Kind == PlantKind.KernelPult && !p._kernelWeaponPrepared && p.ActionTimer <= AdventurePresentationRules.LaunchAge(p.Kind) && (FindAdventureTarget(p.Row, p.Column + .4f, 20f, false, true) != null || CanShootAdventureBoss(p)))
-                    {
-                        p.PresentationButter = _random.Next(4) == 0;
-                        p._kernelWeaponPrepared = true;
-                    }
-
                     if (p.ActionTimer > 0.000001f)
                     {
                         continue;
@@ -2883,13 +3077,7 @@ namespace PlantsVsZombies.Simulation
                         case PlantKind.Repeater:
                         case PlantKind.PuffShroom:
                         case PlantKind.SeaShroom:
-                        case PlantKind.FumeShroom:
-                        case PlantKind.ScaredyShroom:
-                        case PlantKind.Cactus:
-                        case PlantKind.CabbagePult:
-                        case PlantKind.KernelPult:
-                        case PlantKind.MelonPult:
-                            var range = p.Kind == PlantKind.PuffShroom || p.Kind == PlantKind.SeaShroom ? 3f : p.Kind == PlantKind.FumeShroom ? 4f : 20f;
+                            var range = p.Kind == PlantKind.PuffShroom || p.Kind == PlantKind.SeaShroom ? 3f : 20f;
                             var air = p.Kind == PlantKind.Cactus;
                             if (p.Kind == PlantKind.ScaredyShroom && HasZombieNear(p.Row, x, 1, 1.5f, true))
                             {
@@ -2902,15 +3090,14 @@ namespace PlantsVsZombies.Simulation
                             {
                                 var lob = p.Kind == PlantKind.CabbagePult || p.Kind == PlantKind.KernelPult || p.Kind == PlantKind.MelonPult;
                                 // Straight projectiles from the sloped left roof strike the slope, while lobbers clear it.
-                                if (!Adventure.Level.HasRoof || p.Column >= 5 || lob || p.Kind == PlantKind.FumeShroom)
+                                if (!Adventure.Level.HasRoof || p.Column >= 5 || lob)
                                 {
                                     var shot = FireAdventurePea(p, p.Row, false, lob ? p.Kind == PlantKind.MelonPult ? 80f : p.Kind == PlantKind.CabbagePult ? 40f : 20f : 20f);
                                     shot.IsSnow = p.Kind == PlantKind.SnowPea;
                                     shot.HitsAir = air;
                                     shot.Range = shortPuff ? float.MaxValue : range;
                                     shot.Lobbed = lob;
-                                    shot.PiercesShield = p.Kind == PlantKind.FumeShroom || lob;
-                                    shot.PiercesZombies = p.Kind == PlantKind.FumeShroom;
+                                    shot.PiercesShield = lob;
                                     shot.Splash = p.Kind == PlantKind.MelonPult;
                                     if (p.Kind == PlantKind.KernelPult)
                                     {
@@ -2968,37 +3155,6 @@ namespace PlantsVsZombies.Simulation
 
                             if (front || back)
                             {
-                                p.ActionTimer = 1.425f;
-                            }
-
-                            break;
-                        case PlantKind.Starfruit:
-                            if (Zombies.Exists(z => !z.Hypnotized && !z.Airborne && z.X < 10f))
-                            {
-                                float[] dx =
-                                {
-                                    -4.5f,
-                                    0,
-                                    0,
-                                    3.5f,
-                                    3.5f
-                                }, dy =
-                                {
-                                    0,
-                                    -4.5f,
-                                    4.5f,
-                                    -2.5f,
-                                    2.5f
-                                };
-                                for (var i = 0; i < 5; i++)
-                                {
-                                    var star = FireAdventurePea(p, p.Row, false, 20f);
-                                    star.X = x;
-                                    star.VelocityX = dx[i];
-                                    star.VelocityY = dy[i];
-                                    star.Backward = dx[i] < 0;
-                                }
-
                                 p.ActionTimer = 1.425f;
                             }
 
@@ -3067,6 +3223,136 @@ namespace PlantsVsZombies.Simulation
             }
 
             return target;
+        }
+
+        /// <summary>Finds a Fume-shroom target using the original PC attack rectangle.</summary>
+        /// <param name="plant">The Fume-shroom acquiring a target.</param>
+        /// <returns>The nearest eligible target, or null when its attack rectangle is empty.</returns>
+        private Zombie? FindAdventureFumeTarget(Plant plant)
+        {
+            Zombie? target = null;
+            foreach (var zombie in Zombies)
+            {
+                if (AdventureFumeShroomRules.CanTarget(plant, zombie)
+                    && (target == null || AdventureZombieTargetingRules.BodyRectangle(zombie).X < AdventureZombieTargetingRules.BodyRectangle(target).X))
+                {
+                    target = zombie;
+                }
+            }
+
+            return target;
+        }
+
+        /// <summary>Finds a Starfruit target using the original five projectile paths.</summary>
+        /// <param name="plant">The Starfruit acquiring a target.</param>
+        /// <returns>The nearest eligible target, or null when no path intersects a target.</returns>
+        private Zombie? FindAdventureStarfruitTarget(Plant plant)
+        {
+            var pitch = Adventure.Level.HasPool || Adventure.Level.HasRoof ? 85f : 100f;
+            var plantY = 80f + plant.Row * pitch + (Adventure.Level.HasRoof ? Math.Max(0f, 5f - plant.Column) * 20f - 10f : 0f);
+            Zombie? target = null;
+            var targetLeft = float.MaxValue;
+            foreach (var zombie in Zombies)
+            {
+                if (!AdventureZombieTargetingRules.CanBeAutoTargeted(zombie, plant.Kind) || zombie.Hypnotized
+                    || zombie.Airborne || zombie.Submerged || zombie.DropRemaining > 0f
+                    || zombie.Kind == ZombieKind.Digger && zombie.AbilityPhase == 0)
+                {
+                    continue;
+                }
+
+                var nativeX = AdventureZombieNativeRules.NativePositionX(zombie.X, zombie.IsSmall ? .5f : 1f);
+                var bodyY = (int)AdventureBiteNativeY(zombie, nativeX);
+                var body = AdventureZombieTargetingRules.BodyRectangle(zombie, bodyY);
+                var velocity = zombie.Eating || zombie.FrozenRemaining > 0f || zombie.PresentationButter > 0f
+                    ? 0f : zombie.PresentationNativeVelocity * (zombie.ChillRemaining > 0f ? .5f : 1f);
+                if (zombie.PresentationWalkingBackwards ?? (zombie.Hypnotized || zombie.Kind == ZombieKind.Digger && zombie.AbilityPhase == 2))
+                {
+                    velocity = -velocity;
+                }
+
+                if (AdventureStarfruitRules.CanTarget(plant, zombie, body, (int)plantY, velocity, true)
+                    && body.X < targetLeft)
+                {
+                    target = zombie;
+                    targetLeft = body.X;
+                }
+            }
+
+            return target;
+        }
+
+        /// <summary>Applies the original Fume-shroom row-area attack at the scheduled firing tick.</summary>
+        /// <param name="plant">The Fume-shroom whose attack has reached its firing tick.</param>
+        private void FireAdventureFume(Plant plant)
+        {
+            foreach (var zombie in new PooledSnapshot<Zombie>(Zombies))
+            {
+                if (AdventureFumeShroomRules.CanDamage(plant, zombie))
+                {
+                    HitAdventureZombie(zombie, 20f, true, 2U);
+                }
+            }
+
+            plant._presentationPrefiring = false;
+            Raise(GameEvent.Shoot);
+        }
+
+        /// <summary>Creates a projectile when a native body shooting countdown reaches its firing tick.</summary>
+        /// <param name="plant">The plant with a pending attack.</param>
+        private void FireAdventureNativeTimedProjectile(Plant plant)
+        {
+            var lob = plant.Kind == PlantKind.CabbagePult || plant.Kind == PlantKind.KernelPult
+                || plant.Kind == PlantKind.MelonPult || plant.Kind == PlantKind.WinterMelon;
+            var melon = plant.Kind == PlantKind.MelonPult || plant.Kind == PlantKind.WinterMelon;
+            var shot = FireAdventurePea(plant, plant.Row, false, melon ? 80f : plant.Kind == PlantKind.CabbagePult ? 40f : 20f);
+            shot.HitsAir = plant.Kind == PlantKind.Cactus;
+            shot.Range = 20f;
+            shot.Lobbed = lob;
+            shot.PiercesShield = lob;
+            shot.Splash = melon;
+            if (plant.Kind == PlantKind.WinterMelon)
+            {
+                shot.IsSnow = true;
+                shot.ChillSplash = true;
+            }
+
+            if (plant.Kind == PlantKind.KernelPult)
+            {
+                shot.Butter = plant._kernelWeaponPrepared && plant.PresentationButter;
+                plant._kernelWeaponPrepared = false;
+                if (shot.Butter)
+                {
+                    shot.Damage = 40f;
+                }
+
+                plant.PresentationShotAge = .29f;
+            }
+
+            if (!lob && Adventure.Level.HasRoof && plant.Column < 5)
+            {
+                shot.Range = Math.Max(.1f, 5 - plant.Column - .5f);
+            }
+        }
+
+        /// <summary>Fires the five original Starfruit projectiles at the scheduled tick.</summary>
+        /// <param name="plant">The Starfruit whose body shooting counter has expired.</param>
+        private void FireAdventureStarfruit(Plant plant)
+        {
+            var rowPitch = Adventure.Level.HasPool || Adventure.Level.HasRoof ? 85f : 100f;
+            for (var index = 0; index < 5; index++)
+            {
+                var star = FireAdventurePea(plant, plant.Row, false, 20f);
+                star.X = plant.Column + 25f / 80f;
+                star.StartX = star.X;
+                star.PresentationPreviousX = star.X;
+                star.VelocityX = AdventureStarfruitRules.VelocityX(index) * 100f / 80f;
+                star.VelocityY = AdventureStarfruitRules.VelocityY(index) * 100f / rowPitch;
+                star.Backward = star.VelocityX < 0f;
+                star.Range = float.MaxValue;
+            }
+
+            plant._presentationPrefiring = false;
         }
 
         /// <summary>Performs find adventure target.</summary>
@@ -3791,8 +4077,20 @@ namespace PlantsVsZombies.Simulation
                     continue;
                 }
 
+                if (plant.MultiHeadTiming.HasValue)
+                {
+                    continue;
+                }
+
+                if (plant.Kind == PlantKind.Starfruit && plant.StarfruitLaunchCountdown >= 0)
+                {
+                    continue;
+                }
+
                 if (plant.Timing.HasValue && (plant.Kind == PlantKind.Peashooter || plant.Kind == PlantKind.SnowPea || plant.Kind == PlantKind.Repeater || plant.Kind == PlantKind.Sunflower
-                    || AdventurePuffShroomRules.IsShortRange(plant.Kind)))
+                    || plant.Kind == PlantKind.FumeShroom || plant.Kind == PlantKind.ScaredyShroom || plant.Kind == PlantKind.Cactus
+                    || plant.Kind == PlantKind.CabbagePult || plant.Kind == PlantKind.KernelPult || plant.Kind == PlantKind.MelonPult
+                    || plant.Kind == PlantKind.WinterMelon || AdventurePuffShroomRules.IsShortRange(plant.Kind)))
                 {
                     continue;
                 }
@@ -3810,9 +4108,9 @@ namespace PlantsVsZombies.Simulation
             }
         }
 
-        /// <summary>Performs can present adventure windup.</summary>
-        /// <param name = "plant">The plant.</param>
-        /// <returns>The resulting can present adventure windup.</returns>
+        /// <summary>Checks whether the plant's next adventure attack can launch a projectile.</summary>
+        /// <param name = "plant">The plant whose attack animation may begin.</param>
+        /// <returns>Whether the current firing rules admit an attack.</returns>
         private bool CanPresentAdventureWindup(Plant plant)
         {
             if (AdventurePuffShroomRules.IsShortRange(plant.Kind))
@@ -3821,32 +4119,30 @@ namespace PlantsVsZombies.Simulation
                 return FindAdventurePuffTarget(plant) != null;
             }
 
+            var x = plant.Column + 0.5f;
             switch (plant.Kind)
             {
                 case PlantKind.Peashooter:
                 case PlantKind.SnowPea:
                 case PlantKind.Repeater:
+                    return plant.ModeFacesLeft
+                        ? FindAdventureTarget(plant.Row, -1f, x, false) != null
+                        : FindAdventureTarget(plant.Row, plant.Column + 0.4f, 20f, false) != null || CanShootAdventureBoss(plant);
                 case PlantKind.Threepeater:
-                case PlantKind.SplitPea:
-                case PlantKind.PuffShroom:
-                case PlantKind.FumeShroom:
-                case PlantKind.ScaredyShroom:
-                case PlantKind.SeaShroom:
-                case PlantKind.CabbagePult:
-                case PlantKind.KernelPult:
-                case PlantKind.MelonPult:
-                case PlantKind.WinterMelon:
-                case PlantKind.Cactus:
-                case PlantKind.Starfruit:
-                    foreach (var zombie in Zombies)
+                    for (var row = Math.Max(0, plant.Row - 1); row <= Math.Min(RowCount - 1, plant.Row + 1); row++)
                     {
-                        if (!zombie.Hypnotized && AdventureZombieTargetingRules.CanBeAutoTargeted(zombie, plant.Kind) && (!zombie.Airborne || plant.Kind == PlantKind.Cactus) && (plant.Kind == PlantKind.Threepeater ? Math.Abs(zombie.Row - plant.Row) <= 1 : zombie.Row == plant.Row) && (zombie.X > plant.Column || plant.Kind == PlantKind.SplitPea))
+                        if (FindAdventureTarget(row, x - 0.1f, 20f, false) != null)
                         {
                             return true;
                         }
                     }
 
                     return false;
+                case PlantKind.SplitPea:
+                    return FindAdventureTarget(plant.Row, x, 20f, false) != null
+                        || FindAdventureTarget(plant.Row, -1f, x, false) != null;
+                case PlantKind.Starfruit:
+                    return FindAdventureStarfruitTarget(plant) != null;
                 default:
                     return false;
             }
@@ -6066,6 +6362,7 @@ namespace PlantsVsZombies.Simulation
                 CannonPhase = CobCannonPhase.Arming,
                 CannonReloadRemaining = kind == PlantKind.CobCannon ? 5f : 0
             };
+            InitializeAdventureNativePlantTiming(result);
             Plants.Add(result);
             Raise(GameEvent.Planted);
             return result;
@@ -6161,22 +6458,6 @@ namespace PlantsVsZombies.Simulation
                     Suns.Add(CreateAdventurePresentationSun(p, 25));
                     p.ActionCount++;
                     p.ActionTimer = (2350 + _random.Next(151)) * 0.01f;
-                }
-
-                return true;
-            }
-
-            if (p.Kind == PlantKind.WinterMelon)
-            {
-                if (p.ActionTimer <= 0.000001f && (FindAdventureTarget(p.Row, p.Column + 0.4f, 20f, false) != null || CanShootAdventureBoss(p)))
-                {
-                    var melon = FireAdventurePea(p, p.Row, false, 80f);
-                    melon.Lobbed = true;
-                    melon.PiercesShield = true;
-                    melon.Splash = true;
-                    melon.IsSnow = true;
-                    melon.ChillSplash = true;
-                    p.ActionTimer = 2.9f;
                 }
 
                 return true;
@@ -6855,6 +7136,7 @@ namespace PlantsVsZombies.Simulation
             if (target != null && checks > 0 && Plants.Contains(target) && !AdventurePlantBiteImmune(target) && z.PresentationGarlicCounter < 0)
             {
                 target.Health -= 4f * checks;
+                target.RecentlyEatenTicks = 50;
                 if (target.Health <= 0)
                 {
                     RequestAdventureZombieFoley(-1);

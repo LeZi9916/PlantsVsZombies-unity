@@ -13,7 +13,17 @@ namespace PlantsVsZombies.Timing
         public static int InitialRandomBound(PlantKind kind)
         {
             ValidateKind(kind);
-            return kind == PlantKind.Sunflower ? 951 : 151;
+            return kind == PlantKind.Sunflower ? 951 : AttackPeriod(kind) + 1;
+        }
+
+        /// <summary>Gets the original base attack period from the plant definition table.</summary>
+        /// <param name="kind">The plant whose attack period is required.</param>
+        /// <returns>The base attack period in native updates.</returns>
+        public static int AttackPeriod(PlantKind kind)
+        {
+            ValidateKind(kind);
+            return kind == PlantKind.Sunflower ? 2500
+                : kind == PlantKind.CabbagePult || kind == PlantKind.KernelPult || kind == PlantKind.MelonPult || kind == PlantKind.WinterMelon ? 300 : 150;
         }
 
         /// <summary>Performs initialize.</summary>
@@ -121,7 +131,7 @@ namespace PlantsVsZombies.Timing
                     if (countdown <= 0)
                     {
                         CheckDraw(input.RandomDraw, 15);
-                        countdown = 150 - input.RandomDraw;
+                        countdown = AttackPeriod(state.Kind) - input.RandomDraw;
                         attempt = AttackAttempt.CountdownExpired;
                     }
                     else if (state.Kind == PlantKind.Repeater && countdown == 25)
@@ -138,7 +148,7 @@ namespace PlantsVsZombies.Timing
                                 animation = true;
                                 break;
                             case ShootingTrack.Body:
-                                shooting = 29;
+                                shooting = BodyShootingCountdown(state.Kind, input);
                                 animation = true;
                                 break;
                             case ShootingTrack.None:
@@ -154,13 +164,41 @@ namespace PlantsVsZombies.Timing
             return new PlantTimingResult(new PlantTimingState(state.Kind, countdown, shooting), attempt, animation, projectiles, sun);
         }
 
+        /// <summary>Gets the original body-animation delay set when an attack starts.</summary>
+        /// <param name="kind">The attacking plant.</param>
+        /// <param name="input">The selected attack variant.</param>
+        /// <returns>The shooting countdown before the first decrement.</returns>
+        private static int BodyShootingCountdown(PlantKind kind, PlantTimingInput input)
+        {
+            switch (kind)
+            {
+                case PlantKind.FumeShroom:
+                    return 50;
+                case PlantKind.ScaredyShroom:
+                    return 25;
+                case PlantKind.Cactus:
+                    return input.CactusHigh ? 23 : 35;
+                case PlantKind.CabbagePult:
+                    return 32;
+                case PlantKind.KernelPult:
+                    return 30;
+                case PlantKind.MelonPult:
+                case PlantKind.WinterMelon:
+                    return 36;
+                default:
+                    return 29;
+            }
+        }
+
         /// <summary>Performs validate kind.</summary>
         /// <param name = "kind">The kind.</param>
         /// <exception cref = "ArgumentOutOfRangeException">The operation cannot satisfy its preconditions.</exception>
         private static void ValidateKind(PlantKind kind)
         {
             if (kind != PlantKind.Peashooter && kind != PlantKind.Sunflower && kind != PlantKind.SnowPea && kind != PlantKind.Repeater
-                && kind != PlantKind.PuffShroom && kind != PlantKind.SeaShroom)
+                && kind != PlantKind.PuffShroom && kind != PlantKind.SeaShroom && kind != PlantKind.FumeShroom
+                && kind != PlantKind.ScaredyShroom && kind != PlantKind.Cactus && kind != PlantKind.CabbagePult
+                && kind != PlantKind.KernelPult && kind != PlantKind.MelonPult && kind != PlantKind.WinterMelon)
             {
                 throw new ArgumentOutOfRangeException(nameof(kind));
             }

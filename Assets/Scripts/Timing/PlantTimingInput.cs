@@ -22,6 +22,10 @@ namespace PlantsVsZombies.Timing
         public bool AnimationResetReady { get; }
         /// <summary>Gets or sets random draw.</summary>
         public int RandomDraw { get; }
+        /// <summary>Whether Kernel-pult selected butter for this attack attempt.</summary>
+        public bool KernelButter { get; }
+        /// <summary>Whether Cactus uses its extended anti-air shooting state.</summary>
+        public bool CactusHigh { get; }
 
         /// <summary>Initializes plant timing input.</summary>
         /// <param name = "plantUpdateEnabled">The plant update enabled.</param>
@@ -32,7 +36,9 @@ namespace PlantsVsZombies.Timing
         /// <param name = "track">The track.</param>
         /// <param name = "animationResetReady">The animation reset ready.</param>
         /// <param name = "randomDraw">The random draw.</param>
-        public PlantTimingInput(bool plantUpdateEnabled, bool shootingCountdownEnabled, bool mainActionEnabled, bool sunProductionEnabled, bool hasTarget, ShootingTrack track, bool animationResetReady, int randomDraw)
+        /// <param name="kernelButter">Whether the kernel attack uses butter.</param>
+        /// <param name="cactusHigh">Whether Cactus is extended for an airborne target.</param>
+        public PlantTimingInput(bool plantUpdateEnabled, bool shootingCountdownEnabled, bool mainActionEnabled, bool sunProductionEnabled, bool hasTarget, ShootingTrack track, bool animationResetReady, int randomDraw, bool kernelButter = false, bool cactusHigh = false)
         {
             PlantUpdateEnabled = plantUpdateEnabled;
             ShootingCountdownEnabled = shootingCountdownEnabled;
@@ -42,6 +48,8 @@ namespace PlantsVsZombies.Timing
             Track = track;
             AnimationResetReady = animationResetReady;
             RandomDraw = randomDraw;
+            KernelButter = kernelButter;
+            CactusHigh = cactusHigh;
         }
     }
 }
