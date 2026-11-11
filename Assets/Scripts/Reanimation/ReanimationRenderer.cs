@@ -2484,6 +2484,48 @@ namespace PlantsVsZombies.Reanimation
             return DrawInternal(name, new Rect(0, 0, 1, 1), NativeSeconds(clip, seconds, rate, asset.Fps, loop), animation, false, ZombieVariant.Normal, false, visible, overrideTrack, image, placement, false, PrepareNativeBlend(instanceKey, animation, seconds, blendTicks));
         }
 
+        /// <summary>Draws Dave's original blink attached to the current head pose.</summary>
+        /// <param name="origin">Dave's native drawing origin.</param>
+        /// <param name="scale">Dave's drawing scale.</param>
+        /// <param name="parentAnimation">Dave's current animation.</param>
+        /// <param name="parentSeconds">Elapsed time of the current animation.</param>
+        /// <param name="parentRate">The current animation rate in frames per second.</param>
+        /// <param name="parentLoop">Whether the current animation loops.</param>
+        /// <param name="blinkSeconds">Elapsed time of the blink animation.</param>
+        /// <returns>Whether the blink was drawn.</returns>
+        public bool DrawNativeCrazyDaveBlink(Vector2 origin, float scale, string parentAnimation, float parentSeconds, float parentRate, bool parentLoop, float blinkSeconds)
+        {
+            using var objectScope = BeginObjectScope();
+            if (!TryGetClip("CrazyDave", parentAnimation, out var asset, out var parent)
+                || !TryGetClip("CrazyDave", "anim_idle_handing", out _, out var basePose)
+                || !TryGetClip("CrazyDave", "anim_blink", out _, out var blink))
+            {
+                return false;
+            }
+
+            var head = FindTrack(asset, "Dave_head");
+            if (head == null || !TryInverseAffine(PartMatrix(GetFrame(head, basePose.Start)), out var inverse))
+            {
+                return false;
+            }
+
+            var time = SampleFrame(parent, NativeSeconds(parent, parentSeconds, parentRate, asset.Fps, parentLoop), asset.Fps, false);
+            var pose = Interpolate(GetFrame(head, time.Current), GetFrame(head, time.Next), time.Fraction);
+            var previous = SpriteMatrix;
+            var color = SpriteDrawState.Color;
+            try
+            {
+                var placement = previous * CombatPlacement(origin, scale, false, 80f) * PartMatrix(pose) * inverse;
+                return DrawClipPose(asset, blink, NativeSeconds(blink, blinkSeconds, 15f, asset.Fps, false), asset.Fps, false,
+                    placement, color, trackVisible: name => TrackIs(name, "Dave_blink"));
+            }
+            finally
+            {
+                SpriteMatrix = previous;
+                SpriteDrawState.Color = color;
+            }
+        }
+
         /// <summary>Performs draw zombie playback.</summary>
         /// <param name = "origin">The origin.</param>
         /// <param name = "scale">The scale.</param>

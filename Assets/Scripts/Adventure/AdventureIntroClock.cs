@@ -70,6 +70,12 @@ namespace PlantsVsZombies.Adventure
 
             var previous = NativeTime;
             NativeTime = Math.Min(Plan.End, NativeTime + AdventureIntroPresentation.NativeUpdate);
+            // PC CutScene::AnimateBoard skips the street pan after Dave exits a non-scrolling level.
+            if (Plan.NonScrolling && Plan.DaveTime > 0 && NativeTime == 4000)
+            {
+                NativeTime = Math.Min(Plan.End, Plan.PanLeftEnd);
+            }
+
             if (Plan.ChooseSeeds && previous < Plan.ChooserOnEnd && NativeTime >= Plan.ChooserOnEnd)
             {
                 NativeTime = Plan.ChooserOnEnd;

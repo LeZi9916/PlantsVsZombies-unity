@@ -143,6 +143,8 @@ namespace PlantsVsZombies.Game
         private CanvasBitmapFont? _levelNameFont;
         /// <summary>Stores label.</summary>
         private GUIStyle _label;
+        /// <summary>Wraps the localized original dialogue inside the speech bubble.</summary>
+        private GUIStyle? _crazyDaveLabel;
 
         /// <summary>Submits the scene and Canvas presentation once after simulation.</summary>
         internal void Present()
@@ -196,8 +198,10 @@ namespace PlantsVsZombies.Game
                     case PvZGame.ScreenView.Board:
                         DrawBoard();
                         DrawInterface();
+                        DrawAdventureCrazyDave();
                         DrawAdventurePlantCursor();
                         DrawAdventureShovelCursor();
+                        DrawAdventureHammerCursor();
                         break;
                 }
 
@@ -1105,6 +1109,24 @@ namespace PlantsVsZombies.Game
             }
         }
 
+        /// <summary>Draws the original hammer attached to the logical pointer in Whack-a-Zombie boards.</summary>
+        private void DrawAdventureHammerCursor()
+        {
+            if (_owner._game == null || !_owner._game.IsAdventure || _owner._game.Adventure.Level.Mode != AdventureMode.WhackAZombie
+                || _owner._choosingSeeds || _owner.AdventureIntroActive || _owner._game.State != MatchState.Playing
+                || _owner._optionsView.IsOpen || _owner._confirmingQuit || _owner._unavailableFeature != null
+                || !new Rect(0, 0, 800, 600).Contains(_owner._adventurePointer))
+            {
+                return;
+            }
+
+            // PC CursorObject::Update 0x444100 stores (mouse-25,-35); the Hammer
+            // reanimation is then drawn at that origin with anim_whack_zombie held.
+            _owner._animations.DrawNativePlayback("Hammer",
+                new Vector2(_owner._adventurePointer.x - 25f, _owner._adventurePointer.y - 35f),
+                1f, 1f, "anim_whack_zombie", false, 24f);
+        }
+
         /// <summary>Draws the original holder with its shovel removed while the tool is held.</summary>
         /// <param name="rect">The native holder rectangle.</param>
         private void DrawShovelBank(Rect rect)
@@ -1333,6 +1355,57 @@ namespace PlantsVsZombies.Game
                 _adventureParticles.Draw("opening-" + particle.Asset + "-" + particle.Y, particle.Asset, particle.Seconds, new Vector2(particle.X, particle.Y), (int)particle.Y + 137);
             }
         }
+
+        /// <summary>Draws the original opening conversation bubble and Dave reanimation.</summary>
+        private void DrawAdventureCrazyDave()
+        {
+            if (!_owner.AdventureIntroActive || _owner._crazyDaveAnimation == null)
+            {
+                return;
+            }
+
+            if (_owner._crazyDaveMessageIndex >= 0)
+            {
+                DrawNativeProgressionImage("Store_SpeechBubble2.png", 285, 20);
+                _crazyDaveLabel ??= new GUIStyle();
+                _crazyDaveLabel.font = _owner._font;
+                _crazyDaveLabel.fontSize = 16;
+                _crazyDaveLabel.alignment = TextAnchor.MiddleCenter;
+                _crazyDaveLabel.wordWrap = true;
+                _crazyDaveLabel.normal.textColor = Color.black;
+                CanvasUI.Label(new Rect(310, 26, 233, 144), _owner._crazyDaveText, _crazyDaveLabel);
+                Label(new Rect(340, 148, 168, 16), OriginalProgressionText("CLICK_TO_CONTINUE"), 10, Color.black, TextAnchor.MiddleCenter, false);
+            }
+
+            DrawCrazyDaveAt(Vector2.zero);
+        }
+
+        /// <summary>Draws Dave and his attached blink at the supplied original-screen position.</summary>
+        /// <param name="origin">The original-screen drawing origin.</param>
+        private void DrawCrazyDaveAt(Vector2 origin)
+        {
+            var animation = _owner._crazyDaveAnimation;
+            if (animation == null)
+            {
+                return;
+            }
+
+            var blinking = _owner._crazyDaveBlinkAge >= 0f;
+            var idle = animation == "anim_idle" || animation == "anim_idle_handing";
+            _owner._animations.DrawNativePlayback("CrazyDave", origin, 1f, _owner._crazyDaveAnimationAge,
+                animation, _owner._crazyDaveAnimationLoop, _owner._crazyDaveAnimationRate,
+                visible: blinking ? s_crazyDaveBlinkVisible : null,
+                overrideTrack: idle && _owner._crazyDaveIdleMouth != null ? "Dave_mouths" : null,
+                overrideImage: idle ? _owner._crazyDaveIdleMouth : null);
+            if (blinking)
+            {
+                _owner._animations.DrawNativeCrazyDaveBlink(origin, 1f, animation, _owner._crazyDaveAnimationAge,
+                    _owner._crazyDaveAnimationRate, _owner._crazyDaveAnimationLoop, _owner._crazyDaveBlinkAge);
+            }
+        }
+
+        /// <summary>Hides Dave's eye while the attached blink animation is drawn.</summary>
+        private static readonly Func<string, bool> s_crazyDaveBlinkVisible = track => track != "Dave_eye";
 
         /// <summary>Performs draw adventure opening interface.</summary>
         /// <returns>The resulting draw adventure opening interface.</returns>
@@ -4815,7 +4888,22 @@ namespace PlantsVsZombies.Game
             DrawNativeProgressionImage("Store_Car.png", 196, 138);
             DrawNativeProgressionImage("Store_HatchbackOpen.png", 299, 0);
             DrawNativeProgressionImage("Store_Sign.png", 285, 0);
-            _owner._animations.DrawNative("CrazyDave", new Vector2(-42, 68), 1f, Time.unscaledTime, "anim_idle");
+            if (_owner._crazyDaveAnimation != null)
+            {
+                if (_owner._crazyDaveMessageIndex >= 0)
+                {
+                    DrawNativeProgressionImage("Store_SpeechBubble.png", 63, 10);
+                    _crazyDaveLabel ??= new GUIStyle();
+                    _crazyDaveLabel.font = _owner._font;
+                    _crazyDaveLabel.fontSize = 16;
+                    _crazyDaveLabel.alignment = TextAnchor.MiddleCenter;
+                    _crazyDaveLabel.wordWrap = true;
+                    _crazyDaveLabel.normal.textColor = Color.black;
+                    CanvasUI.Label(new Rect(88, 16, 233, 144), _owner._crazyDaveText, _crazyDaveLabel);
+                }
+
+                DrawCrazyDaveAt(new Vector2(-42, 68));
+            }
             var page = PvZGame.s_originalShopPages[_owner._shopPage];
             for (var i = 0; i < page.Length; i++)
             {

@@ -126,6 +126,10 @@ namespace PlantsVsZombies.Game
         private bool _almanacReturnsToOptions;
         /// <summary>Stores audio source.</summary>
         private AudioSource _audioSource;
+        /// <summary>Plays Dave's currently active original voice independently of other effects.</summary>
+        private AudioSource _crazyDaveVoice = null!;
+        /// <summary>Whether the current voice delays a timed store bubble.</summary>
+        private bool _crazyDaveWaitForBubbleVoice;
         /// <summary>Stores music source.</summary>
         private AudioSource _musicSource;
         /// <summary>Stores font.</summary>
@@ -197,12 +201,14 @@ namespace PlantsVsZombies.Game
             _almanacView = new AlmanacView(_root, _animations);
             _helpView = new HelpView(_root);
             _audioSource = gameObject.AddComponent<AudioSource>();
+            _crazyDaveVoice = gameObject.AddComponent<AudioSource>();
             _musicSource = gameObject.AddComponent<AudioSource>();
             _musicSource.loop = true;
             _musicVolume = Mathf.Clamp01(PlayerPrefs.GetFloat("PvZReplica.Music", 0.35f));
             _soundVolume = Mathf.Clamp01(PlayerPrefs.GetFloat("PvZReplica.Sound", 0.7f));
             _musicSource.volume = _musicVolume;
             _audioSource.volume = _soundVolume;
+            _crazyDaveVoice.volume = _soundVolume;
             _soundVoices = new AudioVoicePool(gameObject, _audioSource, 64);
             _font = Font.CreateDynamicFontFromOSFont(new[] { "Microsoft YaHei", "Arial" }, 16);
             _modeView = new ModeSelectionView(_root, Texture, _font);
@@ -697,6 +703,16 @@ namespace PlantsVsZombies.Game
                 return;
             }
 
+            if (_currentView == ScreenView.Board && _crazyDaveMessageIndex >= 0 && !_confirmingQuit && _unavailableFeature == null)
+            {
+                if ((input.Pressed && input.InsideViewport) || input.EnterPressed || Input.GetKeyDown(KeyCode.Space))
+                {
+                    AdvanceCrazyDaveDialogue();
+                }
+
+                return;
+            }
+
             if (_currentView == ScreenView.Almanac)
             {
                 if (input.ScrollDelta != 0f)
@@ -1162,6 +1178,7 @@ namespace PlantsVsZombies.Game
             _soundVolume = _optionsView.SoundVolume;
             _musicSource.volume = _musicVolume;
             _audioSource.volume = _soundVolume;
+            _crazyDaveVoice.volume = _soundVolume;
             if (!_smokeMode)
             {
                 PlayerPrefs.SetFloat("PvZReplica.Music", _musicVolume);
@@ -1524,6 +1541,28 @@ namespace PlantsVsZombies.Game
         internal float _adventureIntroVisualAge;
         /// <summary>Stores adventure intro drawn.</summary>
         internal bool _adventureIntroDrawn;
+        /// <summary>The first supported original opening entry, or -1 when absent.</summary>
+        private int _crazyDaveStartIndex = -1;
+        /// <summary>The currently displayed original entry, or -1 outside dialogue.</summary>
+        internal int _crazyDaveMessageIndex = -1;
+        /// <summary>The displayed text with original control markers removed.</summary>
+        internal string _crazyDaveText = "";
+        /// <summary>The currently displayed native animation.</summary>
+        internal string? _crazyDaveAnimation;
+        /// <summary>The elapsed time of Dave's current animation.</summary>
+        internal float _crazyDaveAnimationAge;
+        /// <summary>The playback rate of Dave's current animation.</summary>
+        internal float _crazyDaveAnimationRate;
+        /// <summary>Whether Dave's current animation repeats.</summary>
+        internal bool _crazyDaveAnimationLoop;
+        /// <summary>Whether the current animation is a handing pose.</summary>
+        private bool _crazyDaveHanding;
+        /// <summary>Stores the current message's mouth override for Dave's idle pose.</summary>
+        internal string? _crazyDaveIdleMouth;
+        /// <summary>Stores the original update ticks until the next blink.</summary>
+        private int _crazyDaveBlinkTicks;
+        /// <summary>Stores the active blink age, or -1 when Dave is not blinking.</summary>
+        internal float _crazyDaveBlinkAge = -1f;
         /// <summary>Gets or sets adventure intro active.</summary>
         internal bool AdventureIntroActive
         {
@@ -1551,6 +1590,14 @@ namespace PlantsVsZombies.Game
             _adventureIntroRemainder = 0;
             _adventureIntroVisualAge = 0;
             _adventureIntroDrawn = false;
+            _crazyDaveStartIndex = -1;
+            _crazyDaveMessageIndex = -1;
+            _crazyDaveText = "";
+            _crazyDaveAnimation = null;
+            _crazyDaveIdleMouth = null;
+            _crazyDaveBlinkAge = -1f;
+            _crazyDaveBlinkTicks = UnityEngine.Random.Range(400, 801);
+            _crazyDaveVoice.Stop();
             // Older explicitly isolated feature probes start at the battle they are inspecting.
             // The new opening probe and normal player always use the complete original opening.
             if (_game == null || !_game.IsAdventure || _game.ModeSession != null || _adventureTestBoard || _smokeMode && Array.IndexOf(Environment.GetCommandLineArgs(), "-pvz-intro-audio-smoke") < 0)
@@ -1559,6 +1606,23 @@ namespace PlantsVsZombies.Game
             }
 
             var level = _game.Adventure.Level;
+            var start = CrazyDaveDialogue.SelectAdventureStart(level.Number, !level.IsReplay, level.Mode, false, false, false);
+            // These conversations do not require the unfinished shovel, purchase, item-attachment,
+            // or boss interactions used by the other original sequences.
+            if (CrazyDaveDialogue.IsPlainAdventureOpening(start))
+            {
+                var key = "CRAZY_DAVE_" + start;
+                var first = _presenter.OriginalProgressionText(key);
+                if (!string.IsNullOrEmpty(first) && first != key)
+                {
+                    _crazyDaveStartIndex = start;
+                }
+                else
+                {
+                    Debug.LogWarning($"{nameof(PvZGame)}: Original Crazy Dave text {key} is missing.");
+                }
+            }
+
             var context = new AdventureIntroContext
             {
                 Level = level.Number,
@@ -1572,7 +1636,7 @@ namespace PlantsVsZombies.Game
                 HasGraveStones = _game.Adventure.Graves.Count > 0,
                 CanShowAlmanacOrStore = level.IsReplay || level.Number >= 15,
                 ChooseSeedsOverride = level.ChoosesSeeds,
-                HasCrazyDaveDialog = false
+                HasCrazyDaveDialog = _crazyDaveStartIndex >= 0
             };
             _adventureIntro = new AdventureIntroClock(AdventureIntroPresentation.CreatePlan(context));
             _game.Adventure.GravesEnabled = _adventureIntro.Plan.GraveStoneTime == 0;
@@ -1633,12 +1697,186 @@ namespace PlantsVsZombies.Game
             {
                 _adventureIntroRemainder -= (double).01f;
                 _adventureIntroVisualAge += .01f;
+                UpdateCrazyDaveAnimation(.01f);
                 _game.AdvanceAdventureGraves();
-                _adventureIntro.Tick(emit: _adventureIntroEventHandler);
+                _adventureIntro.Tick(dialogActive: _crazyDaveMessageIndex >= 0, emit: _adventureIntroEventHandler);
+                if (_crazyDaveStartIndex >= 0 && _adventureIntro.NativeTime == 2000 && _crazyDaveAnimation == null)
+                {
+                    SetCrazyDaveAnimation("anim_enter", 24f, false);
+                }
+
+                if (_crazyDaveStartIndex >= 0 && _adventureIntro.NativeTime == 2750 && _crazyDaveMessageIndex < 0)
+                {
+                    var index = _crazyDaveStartIndex;
+                    _crazyDaveStartIndex = -1;
+                    ShowCrazyDaveMessage(index);
+                }
+
                 _adventureIntroFrame = _adventureIntro.Frame;
             }
 
             return true;
+        }
+
+        /// <summary>Starts one original Dave animation at its native playback rate.</summary>
+        /// <param name="animation">The original reanimation track.</param>
+        /// <param name="rate">The track playback rate in frames per second.</param>
+        /// <param name="loop">Whether the track repeats.</param>
+        private void SetCrazyDaveAnimation(string animation, float rate, bool loop)
+        {
+            _crazyDaveAnimation = animation;
+            _crazyDaveAnimationRate = rate;
+            _crazyDaveAnimationLoop = loop;
+            _crazyDaveAnimationAge = 0f;
+        }
+
+        /// <summary>Advances the Dave pose independently while the cutscene clock is paused.</summary>
+        /// <param name="delta">The elapsed unpaused time in seconds.</param>
+        private void UpdateCrazyDaveAnimation(float delta)
+        {
+            if (_crazyDaveAnimation == null)
+            {
+                return;
+            }
+
+            _crazyDaveAnimationAge += delta;
+            if (_crazyDaveBlinkAge >= 0f)
+            {
+                _crazyDaveBlinkAge += delta;
+                if (_animations.TryGetNativeAnimationInfo("CrazyDave", "anim_blink", out var blink)
+                    && _crazyDaveBlinkAge * 15f >= blink.Count)
+                {
+                    _crazyDaveBlinkAge = -1f;
+                }
+            }
+
+            if (_crazyDaveAnimation == "anim_idle" || _crazyDaveAnimation == "anim_idle_handing"
+                || _crazyDaveAnimation == "anim_smalltalk" || _crazyDaveAnimation == "anim_mediumtalk"
+                || _crazyDaveAnimation == "anim_blahblah" || _crazyDaveAnimation == "anim_crazy"
+                || _crazyDaveAnimation == "anim_talk_handing")
+            {
+                _crazyDaveBlinkTicks--;
+                if (_crazyDaveBlinkTicks <= 0)
+                {
+                    _crazyDaveBlinkTicks = UnityEngine.Random.Range(400, 801);
+                    _crazyDaveBlinkAge = 0f;
+                }
+            }
+
+            if ((_crazyDaveAnimationLoop && _crazyDaveAnimation != "anim_talk_handing") || !_animations.TryGetNativeAnimationInfo("CrazyDave", _crazyDaveAnimation, out var info)
+                || _crazyDaveAnimationAge * _crazyDaveAnimationRate < Math.Max(1, info.Count))
+            {
+                return;
+            }
+
+            if (_crazyDaveAnimation == "anim_leave")
+            {
+                _crazyDaveAnimation = null;
+                return;
+            }
+
+            SetCrazyDaveAnimation(_crazyDaveHanding ? "anim_idle_handing" : "anim_idle", 12f, true);
+        }
+
+        /// <summary>Resolves and presents one numbered original conversation entry.</summary>
+        /// <param name="index">The original conversation entry number.</param>
+        private void ShowCrazyDaveMessage(int index)
+        {
+            var message = _presenter.OriginalProgressionText("CRAZY_DAVE_" + index);
+            if (_profiles != null && _profiles.SelectedId.HasValue)
+            {
+                foreach (var profile in _profiles.Profiles)
+                {
+                    if (profile.Id == _profiles.SelectedId.Value)
+                    {
+                        message = message.Replace("{PLAYER_NAME}", profile.Name);
+                        break;
+                    }
+                }
+            }
+
+            var account = GetSelectedAccount();
+            if (account != null)
+            {
+                message = message.Replace("{MONEY}", CrazyDaveDialogue.FormatMoney(account.DisplayCoins));
+                message = message.Replace("{UPGRADE_COST}", CrazyDaveDialogue.FormatMoney((long)ShopCatalog.Price(ShopCatalog.Get(21), account) * 10));
+            }
+
+            _crazyDaveIdleMouth = CrazyDaveDialogue.IdleMouthImage(message);
+            var talking = _crazyDaveAnimation == "anim_smalltalk" || _crazyDaveAnimation == "anim_mediumtalk" || _crazyDaveAnimation == "anim_blahblah" || _crazyDaveAnimation == "anim_crazy";
+            var speech = CrazyDaveSpeech.Select(message, talking);
+            if (speech.StopPreviousSound)
+            {
+                _crazyDaveVoice.Stop();
+            }
+
+            if (speech.AnimationName != null)
+            {
+                _crazyDaveHanding = speech.Handing;
+                SetCrazyDaveAnimation(speech.AnimationName, speech.AnimationFramesPerSecond, speech.LoopAnimation);
+            }
+
+            if (speech.SoundVariantCount > 0)
+            {
+                var sound = speech.GetSoundName(UnityEngine.Random.Range(0, speech.SoundVariantCount));
+                if (_presentationSounds.TryGetValue(sound, out var clip) && clip != null)
+                {
+                    _crazyDaveVoice.volume = _soundVolume;
+                    _crazyDaveVoice.clip = clip;
+                    _crazyDaveWaitForBubbleVoice = sound.StartsWith("crazydaveshort", StringComparison.Ordinal)
+                        || sound.StartsWith("crazydavelong", StringComparison.Ordinal)
+                        || sound.StartsWith("crazydaveextralong", StringComparison.Ordinal);
+                    _crazyDaveVoice.Play();
+                }
+                else
+                {
+                    Debug.LogWarning($"{nameof(PvZGame)}: Original Crazy Dave sound {sound} is missing.");
+                }
+            }
+
+            var visible = new StringBuilder(message.Length);
+            var control = false;
+            foreach (var character in message)
+            {
+                if (character == '{')
+                {
+                    control = true;
+                }
+                else if (character == '}')
+                {
+                    control = false;
+                }
+                else if (!control)
+                {
+                    visible.Append(character);
+                }
+            }
+
+            _crazyDaveMessageIndex = index;
+            _crazyDaveText = visible.ToString();
+        }
+
+        /// <summary>Advances the displayed opening dialogue or starts Dave's departure.</summary>
+        private void AdvanceCrazyDaveDialogue()
+        {
+            var next = CrazyDaveDialogue.NextMessageIndex(_crazyDaveMessageIndex, index =>
+            {
+                var key = "CRAZY_DAVE_" + index;
+                var value = _presenter.OriginalProgressionText(key);
+                return !string.IsNullOrEmpty(value) && value != key;
+            });
+            if (next >= 0)
+            {
+                ShowCrazyDaveMessage(next);
+                return;
+            }
+
+            _crazyDaveMessageIndex = -1;
+            _crazyDaveText = "";
+            _crazyDaveHanding = false;
+            _crazyDaveIdleMouth = null;
+            _crazyDaveVoice.Stop();
+            SetCrazyDaveAnimation("anim_leave", 24f, false);
         }
 
         /// <summary>Performs handle adventure intro event.</summary>
@@ -3035,7 +3273,11 @@ namespace PlantsVsZombies.Game
                 "shovel",
                 "plant",
                 "coin",
-                "diamond"
+                "diamond",
+                "crazydaveshort1", "crazydaveshort2", "crazydaveshort3",
+                "crazydavelong1", "crazydavelong2", "crazydavelong3",
+                "crazydaveextralong1", "crazydaveextralong2", "crazydaveextralong3",
+                "crazydavecrazy", "crazydavescream", "crazydavescream2"
             };
             _dynamicAudioTasks = (manifest == null || manifest.clips == null ? 0 : manifest.clips.Length) + cues.Length;
             if (manifest != null && manifest.clips != null)
@@ -3083,6 +3325,12 @@ namespace PlantsVsZombies.Game
             {
                 var diamond = cue == "diamond";
                 var path = Path.Combine(_root, "sounds", cue + (diamond ? ".wav" : ".ogg"));
+#if UNITY_EDITOR
+                if (!File.Exists(path) && cue.StartsWith("crazydave", StringComparison.Ordinal))
+                {
+                    path = Path.Combine(Application.dataPath, "OriginalPvZ", "Raw", "sounds", cue + ".ogg");
+                }
+#endif
                 if (File.Exists(path))
                 {
                     using (var request = UnityWebRequestMultimedia.GetAudioClip(new Uri(path).AbsoluteUri, diamond ? AudioType.WAV : AudioType.OGGVORBIS))
@@ -4910,6 +5158,16 @@ namespace PlantsVsZombies.Game
         internal PlayerAccount _displayAccountSnapshot;
         /// <summary>Stores account error.</summary>
         private string _accountError;
+        /// <summary>Tracks Crazy Dave's timed store messages.</summary>
+        private CrazyDaveStoreSpeechClock? _storeSpeechClock;
+        /// <summary>Stores the fractional original store update time.</summary>
+        private float _storeSpeechRemainder;
+        /// <summary>Starts one store speech message without per-tick delegate allocation.</summary>
+        private Action<int>? _storeSpeak;
+        /// <summary>Stops store speech without per-tick delegate allocation.</summary>
+        private Action? _storeStopSpeech;
+        /// <summary>Selects an original store speech random value.</summary>
+        private static readonly Func<int, int> s_storeRandomBelow = limit => UnityEngine.Random.Range(0, limit);
         /// <summary>Stores shop page.</summary>
         internal int _shopPage;
         /// <summary>Stores selected shop item.</summary>
@@ -5060,6 +5318,18 @@ namespace PlantsVsZombies.Game
             _shopPage = 0;
             _selectedShopItem = -1;
             _progressionMessage = null;
+            _storeSpeechClock = new CrazyDaveStoreSpeechClock();
+            _storeSpeechRemainder = 0f;
+            _storeSpeak ??= ShowCrazyDaveMessage;
+            _storeStopSpeech ??= StopCrazyDaveStoreSpeech;
+            _crazyDaveMessageIndex = -1;
+            _crazyDaveText = "";
+            _crazyDaveHanding = false;
+            _crazyDaveIdleMouth = null;
+            _crazyDaveBlinkAge = -1f;
+            _crazyDaveBlinkTicks = UnityEngine.Random.Range(400, 801);
+            _crazyDaveVoice.Stop();
+            SetCrazyDaveAnimation("anim_enter", 24f, false);
         }
 
         /// <summary>Performs open zen garden.</summary>
@@ -5114,11 +5384,83 @@ namespace PlantsVsZombies.Game
         /// <summary>Performs update progression.</summary>
         private void UpdateProgression()
         {
+            UpdateCrazyDaveStore(Time.unscaledDeltaTime);
             if (_currentView == ScreenView.Garden && _accountStore != null && UtcSeconds != _gardenUpdateUtc)
             {
                 _gardenUpdateUtc = UtcSeconds;
                 ProgressionAction(() => _accountStore.UpdateGarden(_profiles.SelectedId.Value, _gardenUpdateUtc));
             }
+        }
+
+        /// <summary>Advances the original store speech and releases it when the store closes.</summary>
+        /// <param name="delta">Elapsed unscaled time in seconds.</param>
+        private void UpdateCrazyDaveStore(float delta)
+        {
+            var clock = _storeSpeechClock;
+            if (clock == null)
+            {
+                return;
+            }
+
+            if (_currentView != ScreenView.Store)
+            {
+                StopCrazyDaveStoreSpeech();
+                _crazyDaveAnimation = null;
+                _storeSpeechClock = null;
+                return;
+            }
+
+            if (_optionsView.IsOpen || (_profileDialog != null && _profileDialog.IsOpen) || _unavailableFeature != null)
+            {
+                return;
+            }
+
+            _storeSpeechRemainder += Mathf.Max(0f, delta);
+            var account = GetSelectedAccount();
+            if (account == null)
+            {
+                return;
+            }
+
+            var progress = _adventureStore.Get(_profiles.SelectedId.Value);
+            var completed = progress.CompletedRuns > 0;
+            int? hoveredMessage = null;
+            if (_selectedShopItem < 0 && GameInput.Current.InsideViewport)
+            {
+                var page = s_originalShopPages[_shopPage];
+                for (var index = 0; index < page.Length; index++)
+                {
+                    var rect = ShopItemRect(index);
+                    var hoverRect = new Rect(rect.x, rect.y, 50, 87);
+                    var itemId = page[index];
+                    if (hoverRect.Contains(_adventurePointer) && CrazyDaveStoreDialog.CanHover(itemId, progress.NextLevel, completed))
+                    {
+                        hoveredMessage = CrazyDaveStoreDialog.GetHoverMessageIndex(itemId, account.PurchaseCount(21));
+                        break;
+                    }
+                }
+            }
+
+            while (_storeSpeechRemainder >= .01f)
+            {
+                _storeSpeechRemainder -= .01f;
+                UpdateCrazyDaveAnimation(.01f);
+                clock.Advance(true, _crazyDaveAnimation == "anim_enter", _selectedShopItem >= 0,
+                    false, false, false, false, _crazyDaveWaitForBubbleVoice && _crazyDaveVoice.isPlaying,
+                    hoveredMessage, completed, s_storeRandomBelow, _storeSpeak!, _storeStopSpeech!);
+            }
+        }
+
+        /// <summary>Stops a timed store message and returns Dave to his idle pose.</summary>
+        private void StopCrazyDaveStoreSpeech()
+        {
+            _storeSpeechClock?.ClearMessage();
+            _crazyDaveMessageIndex = -1;
+            _crazyDaveText = "";
+            _crazyDaveHanding = false;
+            _crazyDaveIdleMouth = null;
+            _crazyDaveVoice.Stop();
+            SetCrazyDaveAnimation("anim_idle", 12f, true);
         }
 
         /// <summary>Performs shop item rect.</summary>
@@ -5154,6 +5496,12 @@ namespace PlantsVsZombies.Game
                         ProgressionAction(() =>
                         {
                             _accountStore.Purchase(_profiles.SelectedId.Value, _selectedShopItem, progress.NextLevel, progress.CompletedRuns, UtcSeconds);
+                            if (_selectedShopItem == 29)
+                            {
+                                _storeSpeechClock?.SetMessage(3400, 800);
+                                ShowCrazyDaveMessage(3400);
+                            }
+
                             _selectedShopItem = -1;
                             _displayAccountSnapshot = null;
                         });
@@ -5175,6 +5523,7 @@ namespace PlantsVsZombies.Game
 
                 if (new Rect(252, 402, 96, 75).Contains(point))
                 {
+                    StopCrazyDaveStoreSpeech();
                     _shopPage = (_shopPage + 3) % 4;
                     _selectedShopItem = -1;
                     return true;
@@ -5182,6 +5531,7 @@ namespace PlantsVsZombies.Game
 
                 if (new Rect(596, 402, 136, 83).Contains(point))
                 {
+                    StopCrazyDaveStoreSpeech();
                     _shopPage = (_shopPage + 1) % 4;
                     _selectedShopItem = -1;
                     return true;
@@ -5197,6 +5547,7 @@ namespace PlantsVsZombies.Game
                         var account = GetSelectedAccount();
                         if (ShopCatalog.IsUnlocked(item, progress.NextLevel, progress.CompletedRuns) && !ShopCatalog.SoldOut(item, account, UtcSeconds))
                         {
+                            StopCrazyDaveStoreSpeech();
                             _selectedShopItem = page[i];
                         }
 
