@@ -243,6 +243,12 @@ namespace PlantsVsZombies.BoardUI
         {
             get
             {
+                if (!_owner.IndependentModes.IsModeBoard && _owner._game.IsAdventure && _owner._game.Adventure.Level.Mode == AdventureMode.WhackAZombie)
+                {
+                    var x = _owner.Opening._adventureIntroFrame == null ? 0f : _owner.Opening._adventureIntroFrame.SeedBankX;
+                    return new Vector2(x, _owner._game.Adventure._whackSeedBankY);
+                }
+
                 return !_owner.IndependentModes.IsModeBoard && _owner._game.IsAdventure && _owner.Opening._adventureIntroFrame != null
                     ? new Vector2(_owner.Opening._adventureIntroFrame.SeedBankX, _owner.Opening._adventureIntroFrame.SeedBankY)
                     : Vector2.zero;

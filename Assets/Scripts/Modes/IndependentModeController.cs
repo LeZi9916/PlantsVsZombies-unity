@@ -735,16 +735,7 @@ namespace PlantsVsZombies.Modes
 
             if (m == ModeMechanic.Whack)
             {
-                _owner.AdventureBoard._hammerAnimationAge = 0.2f;
-                for (var i = _owner._game.Zombies.Count - 1; i >= 0; i--)
-                {
-                    var z = _owner._game.Zombies[i];
-                    if (new Rect(BoardLayout.AdventureGridX + z.X * BoardLayout.CellWidth - 48, _owner.Layout.AdventureCellY(z.Row, z.X) - 35, 96, 140).Contains(point))
-                    {
-                        _owner._game.HammerAdventureZombie(z.Id);
-                        break;
-                    }
-                }
+                _owner.AdventureBoard.TryHammerAdventureZombie(point);
             }
 
             return true;

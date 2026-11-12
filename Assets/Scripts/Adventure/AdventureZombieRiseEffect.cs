@@ -10,5 +10,8 @@ namespace PlantsVsZombies.Adventure
 
         /// <summary>Stores the original world-space particle origin and its elapsed lifetime.</summary>
         public float X, Y, Age;
+
+        /// <summary>Gets whether this is the Whack-a-Zombie rise particle.</summary>
+        public bool Whack;
     }
 }

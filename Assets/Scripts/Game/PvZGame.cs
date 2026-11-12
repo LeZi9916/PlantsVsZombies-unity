@@ -234,6 +234,8 @@ namespace PlantsVsZombies.Game
         internal bool _experimentalLevelOne;
         /// <summary>Stores quit requested.</summary>
         private bool _quitRequested;
+        /// <summary>Stores whether the system cursor visibility has been synchronized.</summary>
+        private bool _cursorVisibilityInitialized;
         /// <summary>Performs bootstrap.</summary>
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void Bootstrap()
@@ -353,6 +355,7 @@ namespace PlantsVsZombies.Game
             AdventureBoard.PreserveAdventureFeedbackDuringPause(Time.unscaledDeltaTime);
             if (Loading.UpdateOriginalLoading(Time.unscaledDeltaTime))
             {
+                UpdateCursorVisibility();
                 Music.UpdateDynamicAudio();
                 return;
             }
@@ -381,7 +384,25 @@ namespace PlantsVsZombies.Game
             Rewards.UpdateAdventureRewardContinuation();
             Router.HandleEscape();
 
+            UpdateCursorVisibility();
             Music.UpdateDynamicAudio();
+        }
+
+        /// <summary>Synchronizes the system cursor with the original adventure board presentation.</summary>
+        private void UpdateCursorVisibility()
+        {
+            var whackBoard = _game != null && _game.IsAdventure
+                && (_game.Adventure.Level.Mode == AdventureMode.WhackAZombie
+                    || IndependentModes.IsModeBoard && IndependentModes._modeSession != null && IndependentModes._modeSession.Definition.Mechanic == ModeMechanic.Whack);
+            var hidden = _currentView == ScreenView.Board && _game != null && _game.IsAdventure
+                && whackBoard
+                && !_optionsView.IsOpen && !_confirmingQuit && _unavailableFeature == null && !Loading._originalLoadingActive;
+            var visible = !hidden;
+            if (!_cursorVisibilityInitialized || UnityEngine.Cursor.visible != visible)
+            {
+                UnityEngine.Cursor.visible = visible;
+                _cursorVisibilityInitialized = true;
+            }
         }
 
         /// <summary>Updates presentation after gameplay has consumed the frame input.</summary>
@@ -435,6 +456,7 @@ namespace PlantsVsZombies.Game
         /// <summary>Performs on destroy.</summary>
         private void OnDestroy()
         {
+            UnityEngine.Cursor.visible = true;
             _presenter?.Dispose();
             Music.DisposeDynamicAudio();
             Loading.DisposeOriginalLoading();

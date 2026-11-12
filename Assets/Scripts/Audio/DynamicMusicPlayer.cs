@@ -171,6 +171,8 @@ namespace PlantsVsZombies.Audio
                 "cherrybomb",
                 "juicy",
                 "dirt_rise",
+                "swing",
+                "bonk",
                 "buzzer",
                 "seedlift",
                 "shovel",
@@ -231,7 +233,7 @@ namespace PlantsVsZombies.Audio
                 var diamond = cue == "diamond";
                 var path = Path.Combine(_owner._root, "sounds", cue + (diamond ? ".wav" : ".ogg"));
 #if UNITY_EDITOR
-                if (!File.Exists(path) && (cue.StartsWith("crazydave", StringComparison.Ordinal) || cue == "bungee_scream" || cue == "hatchback_open"))
+                if (!File.Exists(path) && (cue.StartsWith("crazydave", StringComparison.Ordinal) || cue == "bungee_scream" || cue == "hatchback_open" || cue == "swing" || cue == "bonk"))
                 {
                     path = Path.Combine(Application.dataPath, "OriginalPvZ", "Raw", "sounds", cue + ".ogg");
                 }

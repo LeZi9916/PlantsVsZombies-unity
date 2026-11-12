@@ -444,16 +444,58 @@ namespace PlantsVsZombies.Adventure
 
             if (board.Level.Mode == AdventureMode.WhackAZombie)
             {
-                _hammerAnimationAge = 0.2f;
-                for (var i = _owner._game.Zombies.Count - 1; i >= 0; i--)
+                TryHammerAdventureZombie(point);
+            }
+        }
+
+        /// <summary>Performs the original Whack-a-Zombie circular hammer hit test.</summary>
+        /// <param name="point">The board-space click point.</param>
+        internal void TryHammerAdventureZombie(Vector2 point)
+        {
+            _hammerAnimationAge = 0.2f;
+            _owner.Sounds.PlayPresentationSound("swing");
+            var hitPoint = new Vector2(point.x, point.y - 20f);
+            Zombie? target = null;
+            var targetRow = -1;
+            for (var i = 0; i < _owner._game.Zombies.Count; i++)
+            {
+                var zombie = _owner._game.Zombies[i];
+                var bodyY = 50 + zombie.Row * 100;
+                if (zombie.GraveRiseTicks > 0)
                 {
-                    var zombie = _owner._game.Zombies[i];
-                    var x = BoardLayout.AdventureGridX + zombie.X * BoardLayout.CellWidth;
-                    if (new Rect(x - 48, _owner.Layout.AdventureCellY(zombie.Row, zombie.X) - 35, 96, 140).Contains(point))
-                    {
-                        _owner._game.HammerAdventureZombie(zombie.Id);
-                        return;
-                    }
+                    bodyY += (int)-AdventureZombieRiseRules.Altitude(zombie.GraveRiseTicks);
+                }
+
+                var body = AdventureZombieTargetingRules.BodyRectangle(zombie, bodyY);
+                var height = body.Height - 50;
+                if (zombie.GraveRiseTicks > 0)
+                {
+                    height -= (int)(-AdventureZombieRiseRules.Altitude(zombie.GraveRiseTicks) + Math.Min(40, zombie.GraveRiseTicks));
+                }
+
+                // PC 0x428460 retains negative rise heights and checks the near edge first.
+                var dx = hitPoint.x < body.X ? body.X - hitPoint.x
+                    : hitPoint.x > body.X + body.Width ? hitPoint.x - body.X - body.Width : 0f;
+                var dy = hitPoint.y < body.Y ? body.Y - hitPoint.y
+                    : hitPoint.y > body.Y + height ? hitPoint.y - body.Y - height : 0f;
+                if (dx * dx + dy * dy > 45f * 45f)
+                {
+                    continue;
+                }
+
+                if (target == null || zombie.Row >= targetRow)
+                {
+                    target = zombie;
+                    targetRow = zombie.Row;
+                }
+            }
+
+            if (target != null)
+            {
+                var hadArmor = target.ArmorHealth > 0f;
+                if (_owner._game.HammerAdventureZombie(target.Id, point.x, point.y) && !hadArmor)
+                {
+                    _owner.Sounds.PlayPresentationSound("bonk");
                 }
             }
         }

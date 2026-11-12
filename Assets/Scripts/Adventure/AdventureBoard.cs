@@ -228,6 +228,8 @@ namespace PlantsVsZombies.Adventure
         internal int _bossCycle;
         /// <summary>Stores next hammer sun.</summary>
         internal float _nextHammerSun;
+        /// <summary>Stores the Whack-a-Zombie seed-bank vertical position.</summary>
+        internal float _whackSeedBankY = -87f;
         /// <summary>Stores whack-a-zombie spawn timer.</summary>
         internal float _whackSpawnTimer;
         /// <summary>Stores whether whack-a-zombie graves were raised for the current wave.</summary>

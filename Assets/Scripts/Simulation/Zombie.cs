@@ -19,6 +19,8 @@ namespace PlantsVsZombies.Simulation
         public float PresentationHealthBeforeHit = -1f;
         /// <summary>Stores presentation native phase.</summary>
         public int PresentationNativePhase = -1;
+        /// <summary>Stores whether the Whack-a-Zombie native speed must remain fixed through grave emergence.</summary>
+        public bool PresentationWhackSpeed;
         /// <summary>Stores presentation in pool, presentation has sled, presentation walking backwards.</summary>
         public bool? PresentationInPool, PresentationHasSled, PresentationWalkingBackwards;
         /// <summary>Stores id.</summary>

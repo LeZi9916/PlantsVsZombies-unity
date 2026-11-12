@@ -399,8 +399,8 @@ namespace PlantsVsZombies.Audio
 
         /// <summary>Stores zombie part audio game.</summary>
         private GameSimulation _zombiePartAudioGame;
-        /// <summary>Stores zombie part audio serial,  zombie sound read index.</summary>
-        private int _zombiePartAudioSerial, _zombieSoundReadIndex;
+        /// <summary>Stores zombie part audio serial, rise sound serial, and zombie sound read index.</summary>
+        private int _zombiePartAudioSerial, _zombieRiseSoundSerial, _zombieSoundReadIndex;
         /// <summary>Stores zombie part audio loading,  zombie foley ready.</summary>
         private bool _zombiePartAudioLoading, _zombieFoleyReady;
         /// <summary>Stores zombie foley random.</summary>
@@ -415,6 +415,7 @@ namespace PlantsVsZombies.Audio
             {
                 _zombiePartAudioGame = _owner._game;
                 _zombiePartAudioSerial = 0;
+                _zombieRiseSoundSerial = 0;
                 _zombieSoundReadIndex = 0;
                 _zombieFoleyLastTick.Clear();
             }
@@ -425,7 +426,22 @@ namespace PlantsVsZombies.Audio
                 _owner.StartCoroutine(LoadAdventureZombiePartAudio());
             }
 
-            if (!_zombieFoleyReady || _owner._game == null || _audioSource == null)
+            if (_owner._game == null || _audioSource == null)
+            {
+                return;
+            }
+
+            if (_owner._game.IsAdventure)
+            {
+                var riseSerial = _owner._game.Presentation.ZombieRiseSoundSerial;
+                while (_zombieRiseSoundSerial < riseSerial)
+                {
+                    _zombieRiseSoundSerial++;
+                    PlayPresentationSound("dirt_rise");
+                }
+            }
+
+            if (!_zombieFoleyReady)
             {
                 return;
             }
