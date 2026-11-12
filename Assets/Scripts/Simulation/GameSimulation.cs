@@ -5462,7 +5462,7 @@ namespace PlantsVsZombies.Simulation
             }
             else if (Adventure.Level.Mode == AdventureMode.Vasebreaker)
             {
-                cleared &= Adventure.VaseStage == 2 && Adventure._vases.Count == 0;
+                cleared &= Adventure.VaseStage == 2 && !Adventure.VaseInterludeActive && Adventure._vases.Count == 0;
             }
             else
             {
@@ -5999,7 +5999,8 @@ namespace PlantsVsZombies.Simulation
         /// <returns>The resulting smash adventure vase.</returns>
         public bool SmashAdventureVase(int row, int column)
         {
-            if (!IsAdventure || State != MatchState.Playing || Adventure.Phase != AdventurePhase.Playing || Adventure.Level.Mode != AdventureMode.Vasebreaker)
+            if (!IsAdventure || State != MatchState.Playing || Adventure.Phase != AdventurePhase.Playing || Adventure.Level.Mode != AdventureMode.Vasebreaker
+                || Adventure.VaseInterludeActive && Adventure._vaseInterludePopulated)
             {
                 return false;
             }
@@ -6028,10 +6029,35 @@ namespace PlantsVsZombies.Simulation
         /// <param name = "dt">The dt.</param>
         private void AdvanceAdventureSpecials(float dt)
         {
-            if (Adventure.Level.Mode == AdventureMode.Vasebreaker && Adventure._vases.Count == 0 && Zombies.Count == 0 && Adventure.VaseStage < 2)
+            if (ModeSession == null && Adventure.Level.Mode == AdventureMode.Vasebreaker && Adventure.VaseInterludeActive)
             {
-                Adventure.VaseStage++;
-                InitializeVaseStage();
+                if (Adventure._vaseInterludeTicks > 0 && --Adventure._vaseInterludeTicks == 0)
+                {
+                    var message = Adventure.VaseStage == 0 ? 2700 : 2800;
+                    Adventure.VaseStage++;
+                    Adventure._packets.Clear();
+                    Plants.Clear();
+                    ClearPeas();
+                    ClearSuns();
+                    Adventure.RakeRow = -1;
+                    Adventure.RakeAttracting = false;
+                    Adventure.RakeTriggered = false;
+                    Adventure.RakeAge = 0f;
+                    Adventure._rakeDamageDone = false;
+                    Adventure.Notice(AdventureNoticeKind.VaseInterludeStarted, message);
+                    if (!Adventure.VaseInterludeDialogueEnabled)
+                    {
+                        PopulateAdventureVaseInterlude(message == 2700 ? 2702 : 2801);
+                        FinishAdventureVaseInterlude();
+                    }
+                }
+            }
+            else if (ModeSession == null && Adventure.Level.Mode == AdventureMode.Vasebreaker && Adventure._vases.Count == 0 && Zombies.Count == 0 && Adventure.VaseStage < 2)
+            {
+                // Board::UpdateLevelEndSequence starts at 500 and presents Dave at 300.
+                Adventure.VaseInterludeActive = true;
+                Adventure._vaseInterludeTicks = 200;
+                Adventure._vaseInterludePopulated = false;
             }
 
             for (var i = Adventure._nuts.Count - 1; i >= 0; i--)
@@ -6042,6 +6068,36 @@ namespace PlantsVsZombies.Simulation
                     Adventure._nuts.RemoveAt(i);
                 }
             }
+        }
+
+        /// <summary>Populates the next adventure vase stage at the original dialogue entry.</summary>
+        /// <param name="messageIndex">The original Crazy Dave message being presented.</param>
+        /// <returns>Whether this entry populated the next stage.</returns>
+        public bool PopulateAdventureVaseInterlude(int messageIndex)
+        {
+            if (!Adventure.VaseInterludeActive || Adventure._vaseInterludeTicks != 0 || Adventure._vaseInterludePopulated
+                || (Adventure.VaseStage == 1 ? messageIndex != 2702 : Adventure.VaseStage == 2 ? messageIndex != 2801 : true))
+            {
+                return false;
+            }
+
+            Adventure._vaseInterludePopulated = true;
+            InitializeVaseStage();
+            InitializeAdventurePurchases();
+            return true;
+        }
+
+        /// <summary>Finishes the vase transition after Dave has departed.</summary>
+        /// <returns>Whether an already populated transition was finished.</returns>
+        public bool FinishAdventureVaseInterlude()
+        {
+            if (!Adventure.VaseInterludeActive || !Adventure._vaseInterludePopulated)
+            {
+                return false;
+            }
+
+            Adventure.VaseInterludeActive = false;
+            return true;
         }
 
         /// <summary>Performs advance adventure boss.</summary>

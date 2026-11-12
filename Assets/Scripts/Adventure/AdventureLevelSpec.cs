@@ -117,6 +117,19 @@ namespace PlantsVsZombies.Adventure
             }
         }
 
+        /// <summary>Updates the purchased seed slot capacity before the chooser opens.</summary>
+        /// <param name="slots">The account's current purchased slot capacity.</param>
+        /// <exception cref="ArgumentOutOfRangeException">The capacity is outside the supported range.</exception>
+        internal void SetPacketSlots(int slots)
+        {
+            if (slots < 6 || slots > 10)
+            {
+                throw new ArgumentOutOfRangeException(nameof(slots));
+            }
+
+            _purchasedSlots = slots;
+        }
+
         /// <summary>Gets or sets reward kind.</summary>
         public AdventureRewardKind RewardKind { get; private set; }
         /// <summary>Gets or sets reward seed.</summary>

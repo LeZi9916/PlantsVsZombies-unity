@@ -1,6 +1,7 @@
 #nullable enable
 using NUnit.Framework;
 using PlantsVsZombies.Adventure;
+using PlantsVsZombies.Audio;
 using PlantsVsZombies.Game;
 using PlantsVsZombies.Inputs;
 using PlantsVsZombies.Reanimation;
@@ -229,6 +230,153 @@ namespace PlantsVsZombies.Tests.PlayMode
             Click();
             Tick(1.26f);
             Assert.That(_game._adventureIntro.NativeTime, Is.GreaterThanOrEqualTo(_game._adventureIntro.Plan.PanLeftEnd));
+        }
+
+        /// <summary>Checks the production level 2-5 opening and the original grave reveal.</summary>
+        [Test]
+        public void WhackOpeningShowsOriginalConversationBeforeRevealingGraves()
+        {
+            File.WriteAllText(Path.Combine(_root, "properties", "LawnStrings.txt"),
+                "[CRAZY_DAVE_401]\nOne.\n[CRAZY_DAVE_402]\nTwo.\n[CRAZY_DAVE_403]\nThree.\n" +
+                "[CRAZY_DAVE_404]\nFour.\n[CRAZY_DAVE_405]\n{SHOW_HAMMER}Five.\n[CRAZY_DAVE_406]\nSix.\n");
+            _game._game = new GameSimulation(new GameRules { AdventureLevel = 15 }, 1);
+            var sounds = (Dictionary<string, AudioClip>)typeof(PvZGame).GetField("_presentationSounds", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(_game)!;
+            foreach (var prefix in new[] { "crazydaveshort", "crazydavelong", "crazydaveextralong" })
+            {
+                for (var variant = 1; variant <= 3; variant++)
+                {
+                    sounds[prefix + variant] = _clip;
+                }
+            }
+
+            typeof(PvZGame).GetMethod("InitializeAdventureOpening", BindingFlags.NonPublic | BindingFlags.Instance)!.Invoke(_game, null);
+            Assert.That(_game._adventureIntro.Plan.NonScrolling, Is.True);
+            Assert.That(_game._game.Adventure.GravesEnabled, Is.False);
+            _game._adventureIntroDrawn = true;
+            Tick(2.75f);
+            Assert.That(_game._crazyDaveMessageIndex, Is.EqualTo(401));
+            for (var expected = 402; expected <= 405; expected++)
+            {
+                Click();
+                Assert.That(_game._crazyDaveMessageIndex, Is.EqualTo(expected));
+                Assert.That(_game._game.Adventure.GravesEnabled, Is.False);
+            }
+
+            Assert.That(_game._crazyDaveHeldItem, Is.EqualTo("HAMMER"));
+            Click();
+            Assert.That(_game._crazyDaveMessageIndex, Is.EqualTo(406));
+            Assert.That(_game._crazyDaveHeldItem, Is.Null);
+            Assert.That(_game._game.Adventure.GravesEnabled, Is.True);
+            Click();
+            Assert.That(_game._crazyDaveMessageIndex, Is.EqualTo(-1));
+            Tick(1.26f);
+            Assert.That(_game._adventureIntro.NativeTime, Is.GreaterThanOrEqualTo(_game._adventureIntro.Plan.PanLeftEnd));
+        }
+
+        /// <summary>Checks both Vasebreaker conversations through the production host and input routing.</summary>
+        [Test]
+        public void VaseStagesPopulateAtTheirOriginalDialogueEntries()
+        {
+            File.WriteAllText(Path.Combine(_root, "properties", "LawnStrings.txt"),
+                "[CRAZY_DAVE_2700]\nFirst.\n[CRAZY_DAVE_2701]\nSecond.\n[CRAZY_DAVE_2702]\nThird.\n" +
+                "[CRAZY_DAVE_2703]\nFourth.\n[CRAZY_DAVE_2704]\nFifth.\n" +
+                "[CRAZY_DAVE_2800]\nFirst.\n[CRAZY_DAVE_2801]\nSecond.\n[CRAZY_DAVE_2802]\nThird.\n");
+            _game._game = new GameSimulation(new GameRules { AdventureLevel = 35 }, 1);
+            _game._game.Adventure.VaseInterludeDialogueEnabled = true;
+            var notice = typeof(PvZGame).GetMethod("AdventureNotice", BindingFlags.NonPublic | BindingFlags.Instance)!;
+            _game._game.Adventure.NoticeRaised = item => notice.Invoke(_game, new object[] { item });
+            _game._adventureIntro = null;
+            var sounds = (Dictionary<string, AudioClip>)typeof(PvZGame).GetField("_presentationSounds", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(_game)!;
+            for (var variant = 1; variant <= 3; variant++)
+            {
+                sounds["crazydaveshort" + variant] = _clip;
+            }
+
+            for (var stage = 0; stage < 2; stage++)
+            {
+                var start = stage == 0 ? 2700 : 2800;
+                var populate = stage == 0 ? 2702 : 2801;
+                var end = stage == 0 ? 2704 : 2802;
+                _game._game.Adventure._vases.Clear();
+                _game._game.Update(2.01f);
+                Assert.That(_game._crazyDaveMessageIndex, Is.EqualTo(start));
+                Assert.That(_game._game.Adventure.Vases, Is.Empty);
+                for (var index = start + 1; index <= end; index++)
+                {
+                    Click();
+                    Assert.That(_game._crazyDaveMessageIndex, Is.EqualTo(index));
+                    Assert.That(_game._game.Adventure.Vases.Count > 0, Is.EqualTo(index >= populate));
+                }
+
+                Click();
+                Assert.That(_game._game.Adventure.VaseInterludeActive, Is.True);
+                typeof(PvZGame).GetMethod("UpdateVaseInterlude", BindingFlags.NonPublic | BindingFlags.Instance)!.Invoke(_game, new object[] { 1f });
+                Assert.That(_game._game.Adventure.VaseInterludeActive, Is.False);
+                Assert.That(_game._vaseDialogueActive, Is.False);
+            }
+        }
+
+        /// <summary>Checks that the native handing marker preserves an existing item until normal speech resumes.</summary>
+        [Test]
+        public void HandingContinuationKeepsTheHammerUntilOrdinarySpeech()
+        {
+            File.WriteAllText(Path.Combine(_root, "properties", "LawnStrings.txt"),
+                "[CRAZY_DAVE_405]\n{SHOW_HAMMER}Hammer.\n[CRAZY_DAVE_406]\n{HANDING}Keep.\n[CRAZY_DAVE_407]\nDone.\n");
+            var sounds = (Dictionary<string, AudioClip>)typeof(PvZGame).GetField("_presentationSounds", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(_game)!;
+            for (var variant = 1; variant <= 3; variant++)
+            {
+                sounds["crazydavelong" + variant] = _clip;
+                sounds["crazydaveshort" + variant] = _clip;
+            }
+
+            var show = typeof(PvZGame).GetMethod("ShowCrazyDaveMessage", BindingFlags.NonPublic | BindingFlags.Instance)!;
+            show.Invoke(_game, new object[] { 405 });
+            Assert.That(_game._crazyDaveHeldItem, Is.EqualTo("HAMMER"));
+            show.Invoke(_game, new object[] { 406 });
+            Assert.That(_game._crazyDaveHeldItem, Is.EqualTo("HAMMER"));
+            show.Invoke(_game, new object[] { 407 });
+            Assert.That(_game._crazyDaveHeldItem, Is.Null);
+        }
+
+        /// <summary>Checks the final-boss conversation, abduction, music transition, and restart condition.</summary>
+        [Test]
+        public void FinalBossOpeningPlaysDialogueAndSkipsItAfterRestart()
+        {
+            var strings = new System.Text.StringBuilder();
+            for (var index = 2300; index <= 2310; index++)
+            {
+                strings.Append("[CRAZY_DAVE_").Append(index).Append("]\nText.\n");
+            }
+
+            File.WriteAllText(Path.Combine(_root, "properties", "LawnStrings.txt"), strings.ToString());
+            _game._game = new GameSimulation(new GameRules { AdventureLevel = 50 }, 1);
+            var sounds = (Dictionary<string, AudioClip>)typeof(PvZGame).GetField("_presentationSounds", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(_game)!;
+            for (var variant = 1; variant <= 3; variant++)
+            {
+                sounds["crazydaveshort" + variant] = _clip;
+            }
+
+            var initialize = typeof(PvZGame).GetMethod("InitializeAdventureOpening", BindingFlags.NonPublic | BindingFlags.Instance)!;
+            var music = typeof(PvZGame).GetMethod("ResolveOriginalMusicCue", BindingFlags.NonPublic | BindingFlags.Instance)!;
+            initialize.Invoke(_game, null);
+            Assert.That(_game._adventureIntro.Plan.DaveTime, Is.EqualTo(6500));
+            Assert.That(music.Invoke(_game, null), Is.EqualTo(MusicCue.Title));
+            _game._adventureIntroDrawn = true;
+            Tick(2.75f);
+            for (var index = 2300; index <= 2310; index++)
+            {
+                Assert.That(_game._crazyDaveMessageIndex, Is.EqualTo(index));
+                Click();
+            }
+
+            Assert.That(_game._crazyDaveMessageIndex, Is.EqualTo(-1));
+            Assert.That(_game._crazyDaveAnimation, Is.EqualTo("anim_grab"));
+            Tick(.51f);
+            Assert.That(music.Invoke(_game, null), Is.EqualTo(MusicCue.None));
+            SetField("_adventureOpeningIsRestart", true);
+            initialize.Invoke(_game, null);
+            Assert.That(_game._adventureIntro.Plan.DaveTime, Is.Zero);
+            Assert.That(music.Invoke(_game, null), Is.EqualTo(MusicCue.None));
         }
 
         /// <summary>Runs the real opening update with elapsed game time.</summary>

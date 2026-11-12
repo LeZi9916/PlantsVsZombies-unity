@@ -140,13 +140,13 @@ namespace PlantsVsZombies.Adventure
             return -1;
         }
 
-        /// <summary>Determines whether an opening can use ordinary numbered-message progression.</summary>
+        /// <summary>Determines whether an opening has implemented its required interactions.</summary>
         /// <param name="start">The selected original starting message index.</param>
-        /// <returns>Whether all dialogue advances use the normal conversation path.</returns>
-        public static bool IsPlainAdventureOpening(int start)
+        /// <returns>Whether the opening is supported by the current coordinator.</returns>
+        public static bool IsSupportedAdventureOpening(int start)
         {
-            return start == 201 || start == 1401 || start == 501 || start == 701 || start == 801
-                || start == 1101 || start == 1201 || start == 1301 || start == 1304 || start == 1601 || start == 2500;
+            return start == 201 || start == 1401 || start == 1501 || start == 1551 || start == 401 || start == 501 || start == 701 || start == 801
+                || start == 1101 || start == 1201 || start == 1301 || start == 1304 || start == 1601 || start == 2300 || start == 2400 || start == 2411 || start == 2500;
         }
 
         /// <summary>Advances to the next numbered entry only if it exists in the original string table.</summary>

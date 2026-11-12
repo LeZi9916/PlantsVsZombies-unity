@@ -199,6 +199,10 @@ namespace PlantsVsZombies.Game
                         DrawBoard();
                         DrawInterface();
                         DrawAdventureCrazyDave();
+                        if (_owner._packetUpgradeOfferActive)
+                        {
+                            DrawPacketUpgradeOffer();
+                        }
                         DrawAdventurePlantCursor();
                         DrawAdventureShovelCursor();
                         DrawAdventureHammerCursor();
@@ -1094,7 +1098,7 @@ namespace PlantsVsZombies.Game
         /// <summary>Draws the original shovel attached to the logical pointer.</summary>
         private void DrawAdventureShovelCursor()
         {
-            if (!_owner._shovel || _owner._choosingSeeds || _owner.AdventureIntroActive || _owner._game.State != MatchState.Playing
+            if (!_owner._shovel || _owner._choosingSeeds || _owner.AdventureIntroActive && !_owner._bowlingShovelLessonActive || _owner._game.State != MatchState.Playing
                 || _owner._optionsView.IsOpen || _owner._confirmingQuit || _owner._unavailableFeature != null
                 || !new Rect(0, 0, 800, 600).Contains(_owner._adventurePointer))
             {
@@ -1362,7 +1366,7 @@ namespace PlantsVsZombies.Game
         /// <summary>Draws the original opening conversation bubble and Dave reanimation.</summary>
         private void DrawAdventureCrazyDave()
         {
-            if (!_owner.AdventureIntroActive || _owner._crazyDaveAnimation == null)
+            if ((!_owner.AdventureIntroActive && !_owner._vaseDialogueActive && !_owner._treeDaveIntroActive && !_owner._gardenDaveIntroActive && !_owner._gardenSaleDaveActive) || _owner._crazyDaveAnimation == null)
             {
                 return;
             }
@@ -1377,7 +1381,10 @@ namespace PlantsVsZombies.Game
                 _crazyDaveLabel.wordWrap = true;
                 _crazyDaveLabel.normal.textColor = Color.black;
                 CanvasUI.Label(new Rect(310, 26, 233, 144), _owner._crazyDaveText, _crazyDaveLabel);
-                Label(new Rect(340, 148, 168, 16), OriginalProgressionText("CLICK_TO_CONTINUE"), 10, Color.black, TextAnchor.MiddleCenter, false);
+                if (!_owner._gardenSalePlant.HasValue)
+                {
+                    Label(new Rect(340, 148, 168, 16), OriginalProgressionText("CLICK_TO_CONTINUE"), 10, Color.black, TextAnchor.MiddleCenter, false);
+                }
             }
 
             DrawCrazyDaveAt(Vector2.zero);
@@ -1399,7 +1406,8 @@ namespace PlantsVsZombies.Game
                 animation, _owner._crazyDaveAnimationLoop, _owner._crazyDaveAnimationRate,
                 visible: blinking ? s_crazyDaveBlinkVisible : null,
                 overrideTrack: idle && _owner._crazyDaveIdleMouth != null ? "Dave_mouths" : null,
-                overrideImage: idle ? _owner._crazyDaveIdleMouth : null);
+                overrideImage: idle ? _owner._crazyDaveIdleMouth : null,
+                crazyDaveHeldItem: _owner._crazyDaveHeldItem, crazyDaveHeldItemAge: _owner._crazyDaveHeldItemAge);
             if (blinking)
             {
                 _owner._animations.DrawNativeCrazyDaveBlink(origin, 1f, animation, _owner._crazyDaveAnimationAge,
@@ -1421,6 +1429,19 @@ namespace PlantsVsZombies.Game
 
             var frame = _owner._adventureIntroFrame;
             _owner._adventureIntroDrawn = true;
+
+            if (_owner._game.ModeSession == null && _owner._game.Adventure.Level.Mode == AdventureMode.Bowling)
+            {
+                DrawShovelBank(PvZGame.s_adventureShovelButton);
+                if (_owner._bowlingShovelLessonActive)
+                {
+                    var advice = _owner.AdventureTutorialText(_owner._game.Adventure.Tutorial);
+                    if (!string.IsNullOrEmpty(advice))
+                    {
+                        DrawOriginalBoardAdvice(advice, false);
+                    }
+                }
+            }
 
             if (_owner._adventureIntro.Plan.DrawSeedBank && frame.SeedBankY > -87)
             {
@@ -1686,7 +1707,7 @@ namespace PlantsVsZombies.Game
                     DrawImage("ice.png", new Rect(PvZGame.AdventureGridX + ice.Column * PvZGame.CellWidth, _owner.AdventureCellY(ice.Row, ice.Column) + 44, 84, 42));
                 }
 
-                if (level.Mode == AdventureMode.Bowling)
+                if (level.Mode == AdventureMode.Bowling && (!_owner.AdventureIntroActive || _owner._bowlingLineVisible))
                 {
                     Fill(new Rect(278, 90, 4, 475), new Color(0.9f, 0.08f, 0.04f));
                 }
@@ -4384,6 +4405,12 @@ namespace PlantsVsZombies.Game
                 return false;
             }
 
+            if (_owner.AdventureIntroActive)
+            {
+                _owner._adventureIntroDrawn = true;
+                return true;
+            }
+
             var s = _owner._modeSession;
             var d = s.Definition;
             if (d.Mechanic == ModeMechanic.Aquarium)
@@ -4888,9 +4915,20 @@ namespace PlantsVsZombies.Game
 
             var progress = _owner._adventureStore.Get(_owner._profiles.SelectedId.Value);
             DrawImage("Store_Background.jpg", new Rect(0, 0, 800, 600));
-            DrawNativeProgressionImage("Store_Car.png", 196, 138);
-            DrawNativeProgressionImage("Store_HatchbackOpen.png", 299, 0);
+            if (_owner._storeHatchOpen && _owner._storeHatchTicks == 0)
+            {
+                DrawNativeProgressionImage("Store_Car.png", 196, 138);
+                DrawNativeProgressionImage("Store_HatchbackOpen.png", 299, 0);
+            }
+            else
+            {
+                DrawNativeProgressionImage("Store_CarClosed.png", 196, 138);
+            }
             DrawNativeProgressionImage("Store_Sign.png", 285, 0);
+            if (_owner._storeTacoDiamondVisible)
+            {
+                _owner._animations.DrawNative("Diamond", new Vector2(77, _owner.StoreTacoDiamondY + 4f), 1f, _owner._storeTacoDiamondAge);
+            }
             if (_owner._crazyDaveAnimation != null)
             {
                 if (_owner._crazyDaveMessageIndex >= 0)
@@ -4908,7 +4946,7 @@ namespace PlantsVsZombies.Game
                 DrawCrazyDaveAt(new Vector2(-42, 68));
             }
             var page = PvZGame.s_originalShopPages[_owner._shopPage];
-            for (var i = 0; i < page.Length; i++)
+            for (var i = 0; i < page.Length && _owner._storeHatchOpen && _owner._storeHatchTicks == 0; i++)
             {
                 var item = ShopCatalog.Get(page[i]);
                 var rect = PvZGame.ShopItemRect(i);
@@ -4962,7 +5000,7 @@ namespace PlantsVsZombies.Game
             OriginalUiWidgets.ImageButton(_textureLookup, new Rect(252, 402, _owner.Texture("Store_PrevButton.png").width, _owner.Texture("Store_PrevButton.png").height), "Store_PrevButton.png", "Store_PrevButtonHighlight.png", null, OriginalUiWidgets.Hovered(new Rect(252, 402, 96, 75)), OriginalUiWidgets.Pressed(new Rect(252, 402, 96, 75)), true);
             OriginalUiWidgets.ImageButton(_textureLookup, new Rect(596, 402, _owner.Texture("Store_NextButton.png").width, _owner.Texture("Store_NextButton.png").height), "Store_NextButton.png", "Store_NextButtonHighlight.png", null, OriginalUiWidgets.Hovered(new Rect(596, 402, 136, 83)), OriginalUiWidgets.Pressed(new Rect(596, 402, 136, 83)), true);
             OriginalUiWidgets.ImageButton(_textureLookup, new Rect(366, 512, 138, 80), "Store_MainMenuButton.png", "Store_MainMenuButtonHighlight.png", "Store_MainMenuButtonDown.png", OriginalUiWidgets.Hovered(new Rect(366, 512, 138, 80)), OriginalUiWidgets.Pressed(new Rect(366, 512, 138, 80)));
-            Label(new Rect(366, 512, 138, 80), "主菜单", 15, new Color(98f / 255f, 153f / 255f, 235f / 255f), TextAnchor.MiddleCenter, true);
+            Label(new Rect(366, 512, 138, 80), OriginalProgressionText(_owner._storeIntroNextLabel ? "STORE_NEXT_LEVEL_BUTTON" : "STORE_MAIN_MENU_BUTTON"), 15, new Color(98f / 255f, 153f / 255f, 235f / 255f), TextAnchor.MiddleCenter, true);
             DrawNativeProgressionImage("coinbank.png", 650, 559);
             Label(new Rect(650, 559, 116, 30), p.DisplayCoins.ToString(), 23, new Color(0.7f, 1f, 0.35f), TextAnchor.MiddleRight, true);
             Label(new Rect(330, 475, 280, 26), "疯狂戴夫的商店  " + (_owner._shopPage + 1) + " / 4", 19, Color.white, TextAnchor.MiddleCenter, true);
@@ -4971,6 +5009,25 @@ namespace PlantsVsZombies.Game
             {
                 DrawStorePurchaseDialog();
             }
+        }
+
+        /// <summary>Draws the original wallet and packet upgrade confirmation.</summary>
+        private void DrawPacketUpgradeOffer()
+        {
+            var account = _owner.GetSelectedAccount();
+            if (account == null)
+            {
+                return;
+            }
+
+            var amount = CrazyDaveDialogue.FormatMoney(account.DisplayCoins);
+            DrawImage("coinbank.png", new Rect(16, 559, 128, 31));
+            Label(new Rect(22, 561, 112, 26), amount, 17, new Color(.7f, 1f, .35f), TextAnchor.MiddleRight, true);
+            var body = OriginalProgressionText("UPGRADE_DIALOG_BODY").Replace("{SLOTS}", (account.PacketSlots + 1).ToString());
+            DrawOriginalUiDialog(new Rect(320, 166, 400, 270), amount,
+                string.IsNullOrEmpty(_owner._progressionMessage) ? body : _owner._progressionMessage);
+            DrawOriginalUiButton(PvZGame.s_packetOfferYes, OriginalProgressionText("DIALOG_BUTTON_YES"));
+            DrawOriginalUiButton(PvZGame.s_packetOfferNo, OriginalProgressionText("DIALOG_BUTTON_NO"));
         }
 
         /// <summary>Performs draw store purchase dialog.</summary>
@@ -5075,10 +5132,21 @@ namespace PlantsVsZombies.Game
                 }
             }
 
-            DrawOriginalUiButton(new Rect(674, 6, 120, 36), "主菜单");
-            DrawOriginalUiButton(new Rect(654, 540, 136, 42), "商店");
-            DrawOriginalUiButton(new Rect(8, 540, 155, 42), "下一个花园");
-            DrawOriginalUiButton(new Rect(175, 540, 120, 42), "智慧树");
+            if (!_owner._gardenReturnToAdventure || _owner._gardenTutorialStage == 6)
+            {
+                DrawOriginalUiButton(new Rect(674, 6, 120, 36), _owner._gardenReturnToAdventure ? OriginalProgressionText("CONTINUE_BUTTON") : "主菜单");
+            }
+
+            if (!_owner._gardenReturnToAdventure || _owner._gardenTutorialStage >= 4)
+            {
+                DrawOriginalUiButton(new Rect(654, 540, 136, 42), "商店");
+            }
+
+            if (!_owner._gardenReturnToAdventure)
+            {
+                DrawOriginalUiButton(new Rect(8, 540, 155, 42), "下一个花园");
+                DrawOriginalUiButton(new Rect(175, 540, 120, 42), "智慧树");
+            }
             Label(new Rect(310, 548, 200, 28), "金币：" + p.DisplayCoins, 19, Color.yellow, TextAnchor.MiddleCenter, true);
             if (p.PurchaseCount(20) > 0)
             {
@@ -5086,6 +5154,13 @@ namespace PlantsVsZombies.Game
                 Label(new Rect(490, 551, 105, 22), "点击唤醒蜗牛", 13, Color.white, TextAnchor.MiddleCenter, true);
             }
 
+            DrawAdventureCrazyDave();
+            if (_owner._gardenSalePlant.HasValue)
+            {
+                DrawOriginalUiDialog(new Rect(320, 226, 400, 270), OriginalProgressionText("ZEN_SELL_HEADER"), OriginalProgressionText("ZEN_SELL_LINES"));
+                DrawOriginalUiButton(PvZGame.s_gardenSaleYes, OriginalProgressionText("DIALOG_BUTTON_YES"));
+                DrawOriginalUiButton(PvZGame.s_gardenSaleNo, OriginalProgressionText("DIALOG_BUTTON_NO"));
+            }
             DrawProgressionMessage();
         }
 
@@ -5187,20 +5262,28 @@ namespace PlantsVsZombies.Game
             var fps = _owner._animations.TryGetAnimationInfo("TreeOfWisdom", "anim_grow" + pose, out treeInfo) ? treeInfo.FramesPerSecond : 12f;
             var age = _owner._treeGrowStarted < 0 ? 100f : (Time.unscaledTime - _owner._treeGrowStarted) * 8f / fps;
             _owner._animations.DrawNative("TreeOfWisdom", Vector2.zero, 1f, age, "anim_grow" + pose, false);
-            DrawOriginalUiButton(new Rect(655, 8, 138, 40), "禅境花园");
-            DrawOriginalUiButton(new Rect(655, 548, 138, 42), "商店");
-            DrawImage("TreeFood.png", new Rect(24, 505, 68, 80));
-            DrawOriginalUiButton(new Rect(102, 539, 175, 44), "施肥（" + p.PurchaseCount(28) + "）");
+            if (!_owner._treeDaveIntroPending)
+            {
+                DrawOriginalUiButton(new Rect(655, 8, 138, 40), "禅境花园");
+                DrawOriginalUiButton(new Rect(655, 548, 138, 42), "商店");
+                DrawImage("TreeFood.png", new Rect(24, 505, 68, 80));
+                DrawOriginalUiButton(new Rect(102, 539, 175, 44), "施肥（" + p.PurchaseCount(28) + "）");
+            }
             if (p.TreeHeight >= 50)
             {
                 Label(new Rect(250, 8, 300, 30), OriginalProgressionText("TREE_OF_WISDOM_HIEGHT").Replace("{HEIGHT}", p.TreeHeight.ToString()), 20, Color.white, TextAnchor.MiddleCenter, true);
             }
 
-            var wisdom = p.TreeHeight == 100 ? 800 : p.TreeHeight == 500 ? 900 : p.TreeHeight == 1000 ? 1000 : p.TreeHeight > 1000 ? 1100 : Math.Max(1, Math.Min(49, p.TreeHeight - 1));
-            var advice = OriginalProgressionText("TREE_OF_WISDOM_" + wisdom);
-            float speechX = p.TreeHeight < 7 ? 400 : p.TreeHeight < 12 ? 395 : 390, speechY = p.TreeHeight < 7 ? 152 : p.TreeHeight < 12 ? 60 : 52;
-            DrawNativeProgressionImage("Store_SpeechBubble2.png", speechX, speechY);
-            Label(new Rect(speechX + 25, speechY + 6, 233, 144), advice, 16, Color.black, TextAnchor.MiddleCenter, false);
+            var wisdom = _owner._treeSpeechClock?.MessageIndex ?? -1;
+            if (wisdom >= 0 && !_owner._treeDaveIntroPending)
+            {
+                var advice = OriginalProgressionText("TREE_OF_WISDOM_" + wisdom);
+                float speechX = p.TreeHeight < 7 ? 400 : p.TreeHeight < 12 ? 395 : 390, speechY = p.TreeHeight < 7 ? 152 : p.TreeHeight < 12 ? 60 : 52;
+                DrawNativeProgressionImage("Store_SpeechBubble2.png", speechX, speechY);
+                Label(new Rect(speechX + 25, speechY + 6, 233, 144), advice, 16, Color.black, TextAnchor.MiddleCenter, false);
+            }
+
+            DrawAdventureCrazyDave();
             DrawProgressionMessage();
         }
 

@@ -48,6 +48,8 @@ namespace PlantsVsZombies.Adventure
         /// <summary>Identifies the beginning of a manual money pickup and carries its coin kind.</summary>
         CoinCollectionStarted,
         /// <summary>Identifies a failed pickup persistence attempt and carries the retryable coin identifier.</summary>
-        CoinCollectionFailed
+        CoinCollectionFailed,
+        /// <summary>Requests the original adventure vase transition dialogue; the value is its first message index.</summary>
+        VaseInterludeStarted
     }
 }

@@ -88,6 +88,24 @@ namespace PlantsVsZombies.Adventure
             return Game;
         }
 
+        /// <summary>Applies a purchased slot upgrade to the active level and its next saved selection.</summary>
+        /// <param name="slots">The updated account slot capacity.</param>
+        /// <exception cref="ArgumentOutOfRangeException">The capacity is outside the supported range.</exception>
+        public void UpdatePacketSlots(int slots)
+        {
+            if (slots < 6 || slots > 10)
+            {
+                throw new ArgumentOutOfRangeException(nameof(slots));
+            }
+
+            _packetSlots = slots;
+            if (Game != null)
+            {
+                Game.Rules.AdventurePacketSlots = slots;
+                Game.Adventure.Level.SetPacketSlots(slots);
+            }
+        }
+
         /// <summary>Performs choose seeds.</summary>
         /// <param name = "seeds">The seeds.</param>
         /// <returns>The resulting choose seeds.</returns>

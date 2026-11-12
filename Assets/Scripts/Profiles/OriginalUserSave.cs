@@ -43,6 +43,14 @@ namespace PlantsVsZombies.Profiles
         public bool PuzzleUnlocked { get; internal set; }
         /// <summary>Gets whether the original survival menu has been unlocked.</summary>
         public bool SurvivalUnlocked { get; internal set; }
+        /// <summary>Gets whether the original garden introduction has already produced plants or fertilizer.</summary>
+        public bool GardenGiftClaimed { get; internal set; }
+        /// <summary>Gets whether the original garden fertilizer counter has been initialized.</summary>
+        public bool GardenFertilizerInitialized { get; internal set; }
+        /// <summary>Gets whether the original tree-food counter has been initialized by Dave.</summary>
+        public bool TreeFoodGiftClaimed { get; internal set; }
+        /// <summary>Gets the original number of declined seed-slot upgrade offers.</summary>
+        public int PacketUpgradeDeclines { get; internal set; }
         /// <summary>Gets normalized purchase counters indexed by original shop-item identifiers.</summary>
         public int[] Purchases { get; }
         /// <summary>Gets stored challenge records indexed by original mode identifiers.</summary>

@@ -85,6 +85,13 @@ namespace PlantsVsZombies.Adventure
             AdventureIntroPresentation.EventsBetween(Plan, previous, NativeTime, emit);
         }
 
+        /// <summary>Restarts Dave's entrance after the level-five shovel lesson.</summary>
+        public void RestartAfterShovelTutorial()
+        {
+            // PC Board::SetTutorialState(TUTORIAL_SHOVEL_COMPLETED) resets this time to 1500.
+            NativeTime = 1500;
+        }
+
         /// <summary>Performs begin return.</summary>
         public void BeginReturn()
         {

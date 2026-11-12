@@ -142,6 +142,14 @@ namespace PlantsVsZombies.Adventure
         public float WaveCountdown { get; internal set; }
         /// <summary>Gets or sets vase stage.</summary>
         public int VaseStage { get; internal set; }
+        /// <summary>Gets whether the adventure vase stage transition is in progress.</summary>
+        public bool VaseInterludeActive { get; internal set; }
+        /// <summary>Gets or sets whether a presentation host handles the vase dialogue.</summary>
+        internal bool VaseInterludeDialogueEnabled { get; set; }
+        /// <summary>Stores native ticks remaining before the vase transition dialogue.</summary>
+        internal int _vaseInterludeTicks;
+        /// <summary>Stores whether the next vase stage has been populated during the dialogue.</summary>
+        internal bool _vaseInterludePopulated;
         /// <summary>Gets or sets fog blown remaining.</summary>
         public float FogBlownRemaining { get; internal set; }
         /// <summary>Gets or sets storm flash.</summary>

@@ -23,8 +23,31 @@ namespace PlantsVsZombies.Progression
             }
         }
 
+        /// <summary>Gets whether the magic taco diamond is waiting to be collected.</summary>
+        public bool HasPendingTacoReward
+        {
+            get
+            {
+                return _receipts.ContainsKey("taco:pending");
+            }
+        }
+
+        /// <summary>Gets whether Dave has presented the pending taco diamond.</summary>
+        public bool TacoDiamondPresented
+        {
+            get
+            {
+                return _receipts.TryGetValue("taco:pending", out var state) && state == 2;
+            }
+        }
+
+        /// <summary>Gets the number of adventure packet upgrade offers declined.</summary>
+        public int PacketUpgradeDeclines { get; internal set; }
+
         /// <summary>Gets or sets tree height.</summary>
         public int TreeHeight { get; internal set; }
+        /// <summary>Gets whether Dave has provided the first five bags of tree food.</summary>
+        public bool TreeFoodGiftClaimed { get; internal set; } = true;
         /// <summary>Gets or sets snail awake until utc.</summary>
         public long SnailAwakeUntilUtc { get; internal set; }
         /// <summary>Gets or sets garden gift claimed.</summary>
@@ -48,6 +71,35 @@ namespace PlantsVsZombies.Progression
         internal List<GardenPlant> _garden = new List<GardenPlant>();
         /// <summary>Stores receipts.</summary>
         internal Dictionary<string, int> _receipts = new Dictionary<string, int>();
+        /// <summary>Gets the persisted Zen tutorial stage, or zero when no tutorial is pending.</summary>
+        public int ZenGardenTutorialStage
+        {
+            get
+            {
+                return _receipts.TryGetValue("zen:tutorial", out var stage) ? stage : 0;
+            }
+        }
+
+        /// <summary>Gets whether the original garden fertilizer counter has been initialized.</summary>
+        public bool GardenFertilizerInitialized
+        {
+            get
+            {
+                if (PurchaseCount(14) > 0)
+                {
+                    return true;
+                }
+
+                if (_receipts.TryGetValue("zen:fertilizer", out var initialized))
+                {
+                    return initialized != 0;
+                }
+
+                // Older accounts predate this marker. A completed tutorial has already granted fertilizer.
+                return GardenGiftClaimed && (ZenGardenTutorialStage == 0 || ZenGardenTutorialStage >= 6);
+            }
+        }
+
         /// <summary>Gets or sets plants.</summary>
         public IReadOnlyList<GardenPlant> Plants
         {

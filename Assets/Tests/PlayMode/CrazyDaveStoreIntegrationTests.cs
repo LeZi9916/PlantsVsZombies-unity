@@ -40,7 +40,11 @@ namespace PlantsVsZombies.Tests.PlayMode
         {
             _root = Path.Combine(Application.temporaryCachePath, "dave-store-" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(Path.Combine(_root, "properties"));
-            File.WriteAllText(Path.Combine(_root, "properties", "LawnStrings.txt"), "[CRAZY_DAVE_2000]\nFirst.\n[CRAZY_DAVE_2001]\n{NO_SOUND}{NO_CLICK}Second.\n");
+            File.WriteAllText(Path.Combine(_root, "properties", "LawnStrings.txt"),
+                "[CRAZY_DAVE_2000]\nFirst.\n[CRAZY_DAVE_2001]\n{NO_SOUND}{NO_CLICK}Second.\n" +
+                "[CRAZY_DAVE_301]\nOne.\n[CRAZY_DAVE_302]\nTwo.\n[CRAZY_DAVE_303]\nThree.\n[CRAZY_DAVE_304]\nFour.\n" +
+                "[CRAZY_DAVE_601]\nOne.\n[CRAZY_DAVE_602]\nTwo.\n[CRAZY_DAVE_603]\nThree.\n[CRAZY_DAVE_604]\nFour.\n[CRAZY_DAVE_605]\nFive.\n[CRAZY_DAVE_606]\nSix.\n" +
+                "[CRAZY_DAVE_3100]\nOne.\n[CRAZY_DAVE_2500]\nOne.\n");
             _host = new GameObject("Inactive Dave store fixture");
             _host.SetActive(false);
             _game = _host.AddComponent<PvZGame>();
@@ -118,6 +122,196 @@ namespace PlantsVsZombies.Tests.PlayMode
             Tick(.02f);
             Assert.That(_game._crazyDaveMessageIndex, Is.EqualTo(-1));
             Assert.That(_game._crazyDaveAnimation, Is.EqualTo("anim_idle"));
+        }
+
+        /// <summary>Checks the original reward screen's first-adventure store interludes.</summary>
+        /// <param name="level">The level whose reward was collected.</param>
+        /// <param name="replay">Whether this is a later adventure.</param>
+        /// <param name="expected">The first original message index, or -1.</param>
+        [TestCase(24, false, 301)]
+        [TestCase(34, false, 601)]
+        [TestCase(41, false, 3100)]
+        [TestCase(24, true, -1)]
+        [TestCase(34, true, -1)]
+        [TestCase(41, true, -1)]
+        [TestCase(23, false, -1)]
+        public void SelectsRewardStoreIntroduction(int level, bool replay, int expected)
+        {
+            Assert.That(CrazyDaveStoreDialog.AdventureRewardIntroduction(level, replay), Is.EqualTo(expected));
+        }
+
+        /// <summary>Checks click-controlled original reward introductions without hover interruption.</summary>
+        /// <param name="first">The first original message index.</param>
+        /// <param name="last">The last original message index.</param>
+        [TestCase(301, 304)]
+        [TestCase(601, 606)]
+        [TestCase(3100, 3100)]
+        public void RewardIntroductionAdvancesOnlyOnClick(int first, int last)
+        {
+            var id = _game._profiles.SelectedId!.Value;
+            if (first == 601)
+            {
+                _game._accountStore.ClaimAdventureReward(id, 1, 34);
+            }
+
+            Invoke("OpenStoreForAdventureIntro", first);
+            _game._crazyDaveAnimation = "anim_idle";
+            Tick(.02f);
+            Assert.That(_game._crazyDaveMessageIndex, Is.EqualTo(first));
+            Assert.That(_game._storeHatchOpen, Is.False);
+            SetPointer(new Vector2(373, 311));
+            Tick(3f);
+            Assert.That(_game._crazyDaveMessageIndex, Is.EqualTo(first));
+            for (var index = first + 1; index <= last; index++)
+            {
+                Invoke("HandleProgressionClick", new Vector2(400, 300));
+                Assert.That(_game._crazyDaveMessageIndex, Is.EqualTo(index));
+                if (index == 303 || index == 606)
+                {
+                    Assert.That(_game._storeHatchOpen, Is.True);
+                    Assert.That(_game._storeHatchTicks, Is.EqualTo(150));
+                }
+            }
+
+            Invoke("HandleProgressionClick", new Vector2(400, 300));
+            Assert.That(_game._crazyDaveMessageIndex, Is.EqualTo(-1));
+            if (first == 3100)
+            {
+                Assert.That(_game._storeHatchOpen, Is.True);
+                Assert.That(_game._storeHatchTicks, Is.EqualTo(150));
+            }
+            if (first == 601)
+            {
+                Assert.That(_game._storeTacoDiamondVisible, Is.True);
+                Assert.That(_game._accountStore.Get(id).Coins, Is.EqualTo(0));
+                Invoke("HandleProgressionClick", new Vector2(90, 530));
+                Assert.That(_game._accountStore.Get(id).Coins, Is.EqualTo(100));
+                Assert.That(_game._accountStore.Get(id).HasPendingTacoReward, Is.False);
+                Invoke("HandleProgressionClick", new Vector2(90, 480));
+                Assert.That(_game._accountStore.Get(id).Coins, Is.EqualTo(100));
+            }
+        }
+
+        /// <summary>Checks that the taco diamond persists and automatically collects after its original flight.</summary>
+        [Test]
+        public void TacoDiamondAutomaticallyCollectsOnce()
+        {
+            var id = _game._profiles.SelectedId!.Value;
+            _game._accountStore.ClaimAdventureReward(id, 1, 34);
+            var reopened = new PlayerAccountStore(Path.Combine(_root, "fixture.account"));
+            Assert.That(reopened.Get(id).HasPendingTacoReward, Is.True);
+            Invoke("OpenStoreForAdventureIntro", 601);
+            _game._crazyDaveAnimation = "anim_idle";
+            Tick(.02f);
+            Invoke("HandleProgressionClick", new Vector2(400, 300));
+            Invoke("HandleProgressionClick", new Vector2(400, 300));
+            Tick(.81f);
+            Assert.That(_game._accountStore.Get(id).Coins, Is.EqualTo(100));
+            Assert.That(_game._storeTacoDiamondVisible, Is.False);
+            Assert.That(_game._crazyDaveMessageIndex, Is.EqualTo(603));
+            reopened = new PlayerAccountStore(Path.Combine(_root, "fixture.account"));
+            Assert.That(reopened.Get(id).HasPendingTacoReward, Is.False);
+            Assert.That(reopened.Get(id).Coins, Is.EqualTo(100));
+        }
+
+        /// <summary>Checks that entering the ordinary store cannot skip the pending taco conversation.</summary>
+        [Test]
+        public void OrdinaryStoreDoesNotRedeemTacoBeforeDavePresentsIt()
+        {
+            var id = _game._profiles.SelectedId!.Value;
+            _game._adventureStore.Import(id, 35, 0);
+            _game._accountStore.ClaimAdventureReward(id, 1, 34);
+            Invoke("OpenStore");
+            _game._crazyDaveAnimation = "anim_idle";
+            Tick(1f);
+            Assert.That(_game._storeTacoDiamondVisible, Is.False);
+            Assert.That(_game._accountStore.Get(id).Coins, Is.Zero);
+            Assert.That(_game._accountStore.Get(id).HasPendingTacoReward, Is.True);
+            Assert.That(_game._accountStore.CollectTacoReward(id), Is.False);
+            Invoke("StartAdventureCampaign");
+            _game._crazyDaveAnimation = "anim_idle";
+            Tick(.02f);
+            Assert.That(_game._crazyDaveMessageIndex, Is.EqualTo(601));
+        }
+
+        /// <summary>Checks that a presented but uncollected diamond survives interruption exactly once.</summary>
+        [Test]
+        public void PresentedTacoDiamondSurvivesStoreReentry()
+        {
+            var id = _game._profiles.SelectedId!.Value;
+            _game._accountStore.ClaimAdventureReward(id, 1, 34);
+            _game._accountStore.PresentTacoReward(id);
+            _game._accountStore = new PlayerAccountStore(Path.Combine(_root, "fixture.account"));
+            Invoke("OpenStore");
+            _game._crazyDaveAnimation = "anim_idle";
+            Assert.That(_game._storeTacoDiamondVisible, Is.True);
+            Tick(.81f);
+            Assert.That(_game._accountStore.Get(id).Coins, Is.EqualTo(100));
+            Assert.That(_game._accountStore.Get(id).HasPendingTacoReward, Is.False);
+            Invoke("OpenStore");
+            _game._crazyDaveAnimation = "anim_idle";
+            Tick(1f);
+            Assert.That(_game._accountStore.Get(id).Coins, Is.EqualTo(100));
+        }
+
+        /// <summary>Checks that failed taco persistence remains retryable without advancing or double crediting.</summary>
+        [Test]
+        public void TacoPersistenceFailuresCanBeRetried()
+        {
+            var id = _game._profiles.SelectedId!.Value;
+            _game._accountStore.ClaimAdventureReward(id, 1, 34);
+            Invoke("OpenStoreForAdventureIntro", 601);
+            _game._crazyDaveAnimation = "anim_idle";
+            Tick(.02f);
+            Invoke("HandleProgressionClick", new Vector2(400, 300));
+            var lockPath = Path.Combine(_root, "fixture.account.lock");
+            using (new FileStream(lockPath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None))
+            {
+                Invoke("HandleProgressionClick", new Vector2(400, 300));
+                Assert.That(_game._crazyDaveMessageIndex, Is.EqualTo(602));
+                Assert.That(_game._storeTacoDiamondVisible, Is.False);
+                Assert.That(_game._accountStore.Get(id).TacoDiamondPresented, Is.False);
+            }
+
+            Invoke("HandleProgressionClick", new Vector2(400, 300));
+            Assert.That(_game._crazyDaveMessageIndex, Is.EqualTo(603));
+            using (new FileStream(lockPath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None))
+            {
+                Tick(.81f);
+                Assert.That(_game._storeTacoDiamondVisible, Is.True);
+                Assert.That(_game._accountStore.Get(id).Coins, Is.Zero);
+            }
+
+            Tick(.02f);
+            Assert.That(_game._storeTacoDiamondVisible, Is.False);
+            Assert.That(_game._accountStore.Get(id).Coins, Is.EqualTo(100));
+            Tick(1f);
+            Assert.That(_game._accountStore.Get(id).Coins, Is.EqualTo(100));
+        }
+
+        /// <summary>Checks that an interrupted taco reward resumes before the next adventure board.</summary>
+        [Test]
+        public void PendingTacoResumesStoreBeforeAdventure()
+        {
+            var id = _game._profiles.SelectedId!.Value;
+            _game._adventureStore.Import(id, 35, 0);
+            _game._accountStore.ClaimAdventureReward(id, 1, 34);
+            Invoke("StartAdventureCampaign");
+            Assert.That(_game._currentView, Is.EqualTo(PvZGame.ScreenView.Store));
+            Assert.That(_game._storeAdventureIntro, Is.True);
+            Assert.That(_game._game.Adventure.Level.Number, Is.EqualTo(35));
+            _game._crazyDaveAnimation = "anim_idle";
+            Tick(.02f);
+            Assert.That(_game._crazyDaveMessageIndex, Is.EqualTo(601));
+            for (var index = 0; index < 6; index++)
+            {
+                Invoke("HandleProgressionClick", new Vector2(400, 300));
+            }
+
+            Tick(1.51f);
+            Invoke("LeaveStore");
+            Assert.That(_game._currentView, Is.EqualTo(PvZGame.ScreenView.Board));
+            Assert.That(_game._game.Adventure.Level.Number, Is.EqualTo(35));
         }
 
         /// <summary>Supplies a pointer snapshot to the real store hover calculation.</summary>

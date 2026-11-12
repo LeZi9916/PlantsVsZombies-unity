@@ -5,6 +5,20 @@ namespace PlantsVsZombies.Progression
     /// <summary>Maps original store items to Crazy Dave's item descriptions.</summary>
     public static class CrazyDaveStoreDialog
     {
+        /// <summary>Selects the original store introduction after an adventure reward screen.</summary>
+        /// <param name="completedLevel">The one-based level whose reward was collected.</param>
+        /// <param name="isReplay">Whether this is a later adventure run.</param>
+        /// <returns>The first original dialogue index, or -1 when no interlude occurs.</returns>
+        public static int AdventureRewardIntroduction(int completedLevel, bool isReplay)
+        {
+            if (isReplay)
+            {
+                return -1;
+            }
+
+            return completedLevel == 24 ? 301 : completedLevel == 34 ? 601 : completedLevel == 41 ? 3100 : -1;
+        }
+
         /// <summary>Checks the original full-version availability rule for item descriptions.</summary>
         /// <param name="itemId">The original store item identifier.</param>
         /// <param name="level">The player's current adventure level.</param>

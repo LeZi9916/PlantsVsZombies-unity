@@ -307,6 +307,7 @@ namespace PlantsVsZombies.Game
             }
 
             var openingBlocksSimulation = UpdateAdventureOpening(Time.deltaTime);
+            UpdateVaseInterlude(Time.deltaTime);
             if (!openingBlocksSimulation && _currentView == ScreenView.Board && !_choosingSeeds && !_optionsView.IsOpen && (_profileDialog == null || !_profileDialog.IsOpen))
             {
                 if (!TickModes(Time.deltaTime))
@@ -347,7 +348,7 @@ namespace PlantsVsZombies.Game
                 }
                 else if (_currentView == ScreenView.Store)
                 {
-                    _currentView = _storeReturnView;
+                    LeaveStore();
                 }
                 else if (_currentView == ScreenView.Tree)
                 {
@@ -707,6 +708,30 @@ namespace PlantsVsZombies.Game
                 return;
             }
 
+            if (_currentView == ScreenView.Store && _storeIntroTalking && !_confirmingQuit && _unavailableFeature == null
+                && (input.EnterPressed || Input.GetKeyDown(KeyCode.Space)))
+            {
+                AdvanceStoreIntro();
+                return;
+            }
+
+            if (_currentView == ScreenView.Board && _packetUpgradeOfferActive && !_confirmingQuit && _unavailableFeature == null)
+            {
+                if (input.Pressed && input.InsideViewport)
+                {
+                    if (s_packetOfferYes.Contains(mouse))
+                    {
+                        ResolvePacketUpgradeOffer(true);
+                    }
+                    else if (s_packetOfferNo.Contains(mouse))
+                    {
+                        ResolvePacketUpgradeOffer(false);
+                    }
+                }
+
+                return;
+            }
+
             if (_currentView == ScreenView.Board && _crazyDaveMessageIndex >= 0 && !_confirmingQuit && _unavailableFeature == null)
             {
                 if ((input.Pressed && input.InsideViewport) || input.EnterPressed || Input.GetKeyDown(KeyCode.Space))
@@ -714,6 +739,48 @@ namespace PlantsVsZombies.Game
                     AdvanceCrazyDaveDialogue();
                 }
 
+                return;
+            }
+
+            if (_currentView == ScreenView.Garden && _gardenSalePlant.HasValue && !_confirmingQuit && _unavailableFeature == null)
+            {
+                if (input.Pressed && input.InsideViewport)
+                {
+                    if (s_gardenSaleYes.Contains(mouse))
+                    {
+                        ResolveGardenSale(true);
+                    }
+                    else if (s_gardenSaleNo.Contains(mouse))
+                    {
+                        ResolveGardenSale(false);
+                    }
+                }
+
+                return;
+            }
+
+            if (_currentView == ScreenView.Garden && _gardenDaveIntroActive && _crazyDaveMessageIndex >= 0)
+            {
+                if ((input.Pressed && input.InsideViewport) || input.EnterPressed || Input.GetKeyDown(KeyCode.Space))
+                {
+                    AdvanceZenGardenIntroduction();
+                }
+
+                return;
+            }
+
+            if (_currentView == ScreenView.Tree && _treeDaveIntroPending)
+            {
+                if (_crazyDaveMessageIndex == 3200 && ((input.Pressed && input.InsideViewport) || input.EnterPressed || Input.GetKeyDown(KeyCode.Space)))
+                {
+                    CompleteWisdomTreeIntroduction();
+                }
+
+                return;
+            }
+
+            if (_currentView == ScreenView.Board && _vaseDialogueActive)
+            {
                 return;
             }
 
@@ -1561,12 +1628,34 @@ namespace PlantsVsZombies.Game
         internal bool _crazyDaveAnimationLoop;
         /// <summary>Whether the current animation is a handing pose.</summary>
         private bool _crazyDaveHanding;
+        /// <summary>Whether Dave is presenting an adventure vase stage transition.</summary>
+        internal bool _vaseDialogueActive;
+        /// <summary>Stores fractional native ticks for the vase transition animation.</summary>
+        private double _vaseDialogueRemainder;
+        /// <summary>The original item attached to Dave's hand, or null when he holds nothing.</summary>
+        internal string? _crazyDaveHeldItem;
+        /// <summary>Elapsed time of the item currently attached to Dave's hand.</summary>
+        internal float _crazyDaveHeldItemAge;
         /// <summary>Stores the current message's mouth override for Dave's idle pose.</summary>
         internal string? _crazyDaveIdleMouth;
         /// <summary>Stores the original update ticks until the next blink.</summary>
         private int _crazyDaveBlinkTicks;
         /// <summary>Stores the active blink age, or -1 when Dave is not blinking.</summary>
         internal float _crazyDaveBlinkAge = -1f;
+        /// <summary>Whether the original packet upgrade confirmation is awaiting a choice.</summary>
+        internal bool _packetUpgradeOfferActive;
+        /// <summary>The original packet upgrade confirmation's affirmative button bounds.</summary>
+        internal static readonly Rect s_packetOfferYes = new Rect(365, 346, 135, 46);
+        /// <summary>The original packet upgrade confirmation's negative button bounds.</summary>
+        internal static readonly Rect s_packetOfferNo = new Rect(540, 346, 135, 46);
+        /// <summary>Whether Dave has left while the player completes the first shovel lesson.</summary>
+        internal bool _bowlingShovelLessonActive;
+        /// <summary>Whether Dave has introduced the adventure bowling boundary.</summary>
+        internal bool _bowlingLineVisible;
+        /// <summary>Whether the current adventure board follows a loss or restart.</summary>
+        private bool _adventureOpeningIsRestart;
+        /// <summary>Whether the final-boss introduction has reached Dave's abduction.</summary>
+        private bool _bossDaveGrabbed;
         /// <summary>Gets or sets adventure intro active.</summary>
         internal bool AdventureIntroActive
         {
@@ -1598,22 +1687,40 @@ namespace PlantsVsZombies.Game
             _crazyDaveMessageIndex = -1;
             _crazyDaveText = "";
             _crazyDaveAnimation = null;
+            _bowlingShovelLessonActive = false;
+            _packetUpgradeOfferActive = false;
+            _bowlingLineVisible = false;
+            _bossDaveGrabbed = false;
+            _vaseDialogueActive = false;
+            _vaseDialogueRemainder = 0;
+            _crazyDaveHeldItem = null;
             _crazyDaveIdleMouth = null;
             _crazyDaveBlinkAge = -1f;
             _crazyDaveBlinkTicks = UnityEngine.Random.Range(400, 801);
             _crazyDaveVoice.Stop();
             // Older explicitly isolated feature probes start at the battle they are inspecting.
             // The new opening probe and normal player always use the complete original opening.
-            if (_game == null || !_game.IsAdventure || _game.ModeSession != null || _adventureTestBoard || _smokeMode && Array.IndexOf(Environment.GetCommandLineArgs(), "-pvz-intro-audio-smoke") < 0)
+            if (_game == null || !_game.IsAdventure || _adventureTestBoard || _smokeMode && Array.IndexOf(Environment.GetCommandLineArgs(), "-pvz-intro-audio-smoke") < 0)
             {
                 return;
             }
 
+            if (_game.ModeSession != null)
+            {
+                InitializeIndependentPuzzleOpening();
+                return;
+            }
+
             var level = _game.Adventure.Level;
-            var start = CrazyDaveDialogue.SelectAdventureStart(level.Number, !level.IsReplay, level.Mode, false, false, false);
-            // These conversations do not require the unfinished shovel, purchase, item-attachment,
-            // or boss interactions used by the other original sequences.
-            if (CrazyDaveDialogue.IsPlainAdventureOpening(start))
+            _bowlingLineVisible = level.Mode == AdventureMode.Bowling && level.IsReplay;
+            var account = GetSelectedAccount();
+            var upgradeCount = account?.PurchaseCount(21) ?? -1;
+            var canOffer = account != null && account.PacketUpgradeDeclines < 2
+                && account.Coins >= ShopCatalog.Price(ShopCatalog.Get(21), account);
+            var start = CrazyDaveDialogue.SelectAdventureStart(level.Number, !level.IsReplay, level.Mode,
+                canOffer && upgradeCount == 0, canOffer && upgradeCount == 1, _adventureOpeningIsRestart);
+            // Enable sequences whose original opening actions are implemented.
+            if (CrazyDaveDialogue.IsSupportedAdventureOpening(start))
             {
                 var key = "CRAZY_DAVE_" + start;
                 var first = _presenter.OriginalProgressionText(key);
@@ -1643,7 +1750,8 @@ namespace PlantsVsZombies.Game
                 HasCrazyDaveDialog = _crazyDaveStartIndex >= 0
             };
             _adventureIntro = new AdventureIntroClock(AdventureIntroPresentation.CreatePlan(context));
-            _game.Adventure.GravesEnabled = _adventureIntro.Plan.GraveStoneTime == 0;
+            _game.Adventure.GravesEnabled = _adventureIntro.Plan.GraveStoneTime == 0
+                && !(level.Mode == AdventureMode.WhackAZombie && _crazyDaveStartIndex == 401);
             _adventureIntroFrame = _adventureIntro.Frame;
             if (_adventureIntro.Plan.ChooseSeeds)
             {
@@ -1672,6 +1780,40 @@ namespace PlantsVsZombies.Game
             var previewRandom = new OriginalRandomAdapter(unchecked((uint)(level.Number * 104729 + level.Cycle * 31)));
             _adventurePreview.AddRange(AdventureIntroPresentation.CreateStreetPreview(context, waves, bound => previewRandom.Next(bound), limit => (float)previewRandom.NextDouble() * limit, (kind, clip) => kind < 26 && AdventureClipExists(AdventureZombieAnimation((ZombieKind)kind), clip)));
             _adventurePreview.Sort((a, b) => a.RenderOrder.CompareTo(b.RenderOrder));
+        }
+
+        /// <summary>Starts original dialogue for the first independent puzzle levels.</summary>
+        private void InitializeIndependentPuzzleOpening()
+        {
+            var mode = _game.ModeSession.Definition.Id;
+            // PC CutScene::StartLevelIntro 0x43A900: I, Zombie always speaks;
+            // Vasebreaker speaks only while its first level has not been beaten.
+            var start = mode == 61 ? 2200 : mode == 51 && _modeFirstClear ? 3000 : -1;
+            if (start < 0)
+            {
+                return;
+            }
+
+            var key = "CRAZY_DAVE_" + start;
+            var first = _presenter.OriginalProgressionText(key);
+            if (string.IsNullOrEmpty(first) || first == key)
+            {
+                Debug.LogWarning($"{nameof(PvZGame)}: Original Crazy Dave text {key} is missing.");
+                return;
+            }
+
+            _crazyDaveStartIndex = start;
+            var context = new AdventureIntroContext
+            {
+                Level = 0,
+                NativeMode = mode,
+                NativeBackground = (int)_game.Adventure.Level.Terrain,
+                FirstAdventure = false,
+                ChooseSeedsOverride = false,
+                HasCrazyDaveDialog = true
+            };
+            _adventureIntro = new AdventureIntroClock(AdventureIntroPresentation.CreatePlan(context));
+            _adventureIntroFrame = _adventureIntro.Frame;
         }
 
         /// <summary>Reuses the intro event callback across native simulation ticks.</summary>
@@ -1703,7 +1845,7 @@ namespace PlantsVsZombies.Game
                 _adventureIntroVisualAge += .01f;
                 UpdateCrazyDaveAnimation(.01f);
                 _game.AdvanceAdventureGraves();
-                _adventureIntro.Tick(dialogActive: _crazyDaveMessageIndex >= 0, emit: _adventureIntroEventHandler);
+                _adventureIntro.Tick(dialogActive: _crazyDaveMessageIndex >= 0, shovelTutorialActive: _bowlingShovelLessonActive, emit: _adventureIntroEventHandler);
                 if (_crazyDaveStartIndex >= 0 && _adventureIntro.NativeTime == 2000 && _crazyDaveAnimation == null)
                 {
                     SetCrazyDaveAnimation("anim_enter", 24f, false);
@@ -1744,6 +1886,17 @@ namespace PlantsVsZombies.Game
             }
 
             _crazyDaveAnimationAge += delta;
+            if (_crazyDaveHeldItem != null)
+            {
+                _crazyDaveHeldItemAge += delta;
+            }
+
+            if ((_vaseDialogueActive || _bowlingShovelLessonActive) && _crazyDaveAnimation == "anim_leave" && _crazyDaveAnimationAge >= .75f
+                && !_animations.TryGetNativeAnimationInfo("CrazyDave", "anim_leave", out _))
+            {
+                _crazyDaveAnimation = null;
+                return;
+            }
             if (_crazyDaveBlinkAge >= 0f)
             {
                 _crazyDaveBlinkAge += delta;
@@ -1773,7 +1926,7 @@ namespace PlantsVsZombies.Game
                 return;
             }
 
-            if (_crazyDaveAnimation == "anim_leave")
+            if (_crazyDaveAnimation == "anim_leave" || _crazyDaveAnimation == "anim_grab")
             {
                 _crazyDaveAnimation = null;
                 return;
@@ -1786,7 +1939,14 @@ namespace PlantsVsZombies.Game
         /// <param name="index">The original conversation entry number.</param>
         private void ShowCrazyDaveMessage(int index)
         {
-            var message = _presenter.OriginalProgressionText("CRAZY_DAVE_" + index);
+            ShowCrazyDaveResolvedMessage(index, _presenter.OriginalProgressionText("CRAZY_DAVE_" + index));
+        }
+
+        /// <summary>Presents an original message after replacing its context-specific values.</summary>
+        /// <param name="index">The original conversation entry number.</param>
+        /// <param name="message">The original message with context-specific values resolved.</param>
+        private void ShowCrazyDaveResolvedMessage(int index, string message)
+        {
             if (_profiles != null && _profiles.SelectedId.HasValue)
             {
                 foreach (var profile in _profiles.Profiles)
@@ -1809,6 +1969,12 @@ namespace PlantsVsZombies.Game
             _crazyDaveIdleMouth = CrazyDaveDialogue.IdleMouthImage(message);
             var talking = _crazyDaveAnimation == "anim_smalltalk" || _crazyDaveAnimation == "anim_mediumtalk" || _crazyDaveAnimation == "anim_blahblah" || _crazyDaveAnimation == "anim_crazy";
             var speech = CrazyDaveSpeech.Select(message, talking);
+            if (message.IndexOf("{HANDING}", StringComparison.Ordinal) < 0)
+            {
+                _crazyDaveHeldItem = speech.HeldItem;
+                _crazyDaveHeldItemAge = 0f;
+            }
+
             if (speech.StopPreviousSound)
             {
                 _crazyDaveVoice.Stop();
@@ -1863,6 +2029,14 @@ namespace PlantsVsZombies.Game
         /// <summary>Advances the displayed opening dialogue or starts Dave's departure.</summary>
         private void AdvanceCrazyDaveDialogue()
         {
+            if (AdventureIntroActive && _game.ModeSession == null && _crazyDaveMessageIndex == 2406)
+            {
+                // PC CutScene::AdvanceCrazyDaveDialog starts the shovel lesson here.
+                _bowlingShovelLessonActive = true;
+                LeaveCrazyDaveDialogue();
+                return;
+            }
+
             var next = CrazyDaveDialogue.NextMessageIndex(_crazyDaveMessageIndex, index =>
             {
                 var key = "CRAZY_DAVE_" + index;
@@ -1871,16 +2045,142 @@ namespace PlantsVsZombies.Game
             });
             if (next >= 0)
             {
+                if (next == 2411 && AdventureIntroActive && _game.ModeSession == null)
+                {
+                    _bowlingLineVisible = true;
+                }
+
+                if (next == 406 && _game.Adventure.Level.Mode == AdventureMode.WhackAZombie)
+                {
+                    _game.Adventure.GravesEnabled = true;
+                }
+
+                if (_vaseDialogueActive && _game.PopulateAdventureVaseInterlude(next))
+                {
+                    PlayPresentationSound("plant");
+                }
+
                 ShowCrazyDaveMessage(next);
+                if (next == 1503 || next == 1553)
+                {
+                    _packetUpgradeOfferActive = true;
+                }
+
                 return;
             }
 
+            if (_vaseDialogueActive)
+            {
+                // If an incomplete string table omitted the population entry, do not strand the level.
+                _game.PopulateAdventureVaseInterlude(_game.Adventure.VaseStage == 1 ? 2702 : 2801);
+            }
+
+            if (_game.Adventure.Level.Mode == AdventureMode.WhackAZombie && !_game.Adventure.GravesEnabled)
+            {
+                // A truncated original string table must not leave the graves permanently hidden.
+                _game.Adventure.GravesEnabled = true;
+            }
+
+            var bossOpening = AdventureIntroActive && _game.ModeSession == null && _game.Adventure.Level.Mode == AdventureMode.Boss;
+            LeaveCrazyDaveDialogue();
+            if (bossOpening)
+            {
+                // PC CutScene::AdvanceCrazyDaveDialog replaces Dave's exit with the bungee grab.
+                _bossDaveGrabbed = true;
+                SetCrazyDaveAnimation("anim_grab", 18f, false);
+                PlayPresentationSound("bungee_scream");
+            }
+        }
+
+        /// <summary>Persists an upgrade answer before continuing Dave's original response.</summary>
+        /// <param name="accepted">Whether the player accepted the upgrade.</param>
+        private void ResolvePacketUpgradeOffer(bool accepted)
+        {
+            if (!_packetUpgradeOfferActive || _accountStore == null || _profiles == null || !_profiles.SelectedId.HasValue)
+            {
+                return;
+            }
+
+            var offer = _crazyDaveMessageIndex;
+            try
+            {
+                _accountStore.ResolveAdventurePacketOffer(_profiles.SelectedId.Value, accepted);
+                if (accepted)
+                {
+                    var account = _accountStore.Get(_profiles.SelectedId.Value);
+                    _adventureCampaign?.UpdatePacketSlots(account.PacketSlots);
+                    _game.Rules.AdventurePacketSlots = account.PacketSlots;
+                    _game.Adventure.Level.SetPacketSlots(account.PacketSlots);
+                    _pendingSeeds = new AdventureSeedChooserState(_game.Adventure.RequiredSeeds);
+                }
+
+                _packetUpgradeOfferActive = false;
+                _displayAccountSnapshot = null;
+                _progressionMessage = null;
+                ShowCrazyDaveMessage(offer == 1503 ? accepted ? 1510 : 1520 : accepted ? 1560 : 1570);
+            }
+            catch (Exception e)
+            {
+                _progressionMessage = e.Message;
+                Debug.LogWarning($"{nameof(PvZGame)}: Failed to save the packet upgrade choice: {e.Message}");
+            }
+        }
+
+        /// <summary>Clears the current message and starts Dave's departure animation.</summary>
+        private void LeaveCrazyDaveDialogue()
+        {
             _crazyDaveMessageIndex = -1;
             _crazyDaveText = "";
             _crazyDaveHanding = false;
+            _crazyDaveHeldItem = null;
             _crazyDaveIdleMouth = null;
             _crazyDaveVoice.Stop();
             SetCrazyDaveAnimation("anim_leave", 24f, false);
+        }
+
+        /// <summary>Starts the original adventure Vasebreaker conversation after a stage clears.</summary>
+        /// <param name="start">The first original message index.</param>
+        private void StartVaseInterlude(int start)
+        {
+            var key = "CRAZY_DAVE_" + start;
+            var message = _presenter.OriginalProgressionText(key);
+            if (string.IsNullOrEmpty(message) || message == key)
+            {
+                Debug.LogWarning($"{nameof(PvZGame)}: Original Crazy Dave text {key} is missing.");
+                _game.PopulateAdventureVaseInterlude(start == 2700 ? 2702 : 2801);
+                _game.FinishAdventureVaseInterlude();
+                return;
+            }
+
+            _vaseDialogueActive = true;
+            _vaseDialogueRemainder = 0;
+            CancelBoardSelection();
+            PlayPresentationSound("hugewave");
+            SetCrazyDaveAnimation("anim_enter", 24f, false);
+            ShowCrazyDaveMessage(start);
+        }
+
+        /// <summary>Updates Dave until he has left the vase stage transition.</summary>
+        /// <param name="delta">The elapsed frame time.</param>
+        private void UpdateVaseInterlude(float delta)
+        {
+            if (!_vaseDialogueActive || _currentView != ScreenView.Board || _optionsView.IsOpen || _confirmingQuit
+                || _unavailableFeature != null || _game.State == MatchState.Paused || delta <= 0f || float.IsNaN(delta) || float.IsInfinity(delta))
+            {
+                return;
+            }
+
+            _vaseDialogueRemainder += delta;
+            while (_vaseDialogueRemainder + .000000001 >= (double).01f && _vaseDialogueActive)
+            {
+                _vaseDialogueRemainder -= (double).01f;
+                UpdateCrazyDaveAnimation(.01f);
+                if (_crazyDaveAnimation == null)
+                {
+                    _game.FinishAdventureVaseInterlude();
+                    _vaseDialogueActive = false;
+                }
+            }
         }
 
         /// <summary>Performs handle adventure intro event.</summary>
@@ -2315,6 +2615,19 @@ namespace PlantsVsZombies.Game
             PlayAdventureRewardSound("buttonclick.ogg");
             try
             {
+                var intro = CrazyDaveStoreDialog.AdventureRewardIntroduction(_game.Adventure.Level.Number, _game.Adventure.Level.IsReplay);
+                if (!_adventureTestBoard && intro >= 0)
+                {
+                    OpenStoreForAdventureIntro(intro);
+                    return;
+                }
+
+                if (!_adventureTestBoard && !_game.Adventure.Level.IsReplay && _game.Adventure.Level.Number == 44)
+                {
+                    OpenZenGardenForAdventureIntro();
+                    return;
+                }
+
                 if (_adventureTestBoard || _adventureCampaign.Progress.Completed)
                 {
                     _currentView = ScreenView.Selector;
@@ -2580,6 +2893,12 @@ namespace PlantsVsZombies.Game
             try
             {
                 _adventureCampaign = new AdventureCampaign(_adventureStore, _profiles.SelectedId.Value, _accountStore);
+                if (GetSelectedAccount().ZenGardenTutorialStage > 0)
+                {
+                    OpenZenGardenForAdventureIntro();
+                    return true;
+                }
+
                 if (_adventureCampaign.Progress.Completed)
                 {
                     _adventureStore.StartNextCycle(_profiles.SelectedId.Value);
@@ -2588,6 +2907,13 @@ namespace PlantsVsZombies.Game
                 _adventureTestBoard = false;
                 AttachAdventureGame(_adventureCampaign.BeginOrResume());
                 _currentView = ScreenView.Board;
+                var account = GetSelectedAccount();
+                if (_adventureCampaign.Progress.NextLevel == 35 && account.HasPendingTacoReward && !account.TacoDiamondPresented)
+                {
+                    OpenStoreForAdventureIntro(601);
+                    _storeAdventureGamePrepared = true;
+                }
+
                 return true;
             }
             catch (Exception error)
@@ -2599,13 +2925,16 @@ namespace PlantsVsZombies.Game
 
         /// <summary>Performs attach adventure game.</summary>
         /// <param name = "simulation">The simulation.</param>
-        private void AttachAdventureGame(GameSimulation simulation)
+        /// <param name="isRestart">Whether this board follows a loss or an explicit restart.</param>
+        private void AttachAdventureGame(GameSimulation simulation, bool isRestart = false)
         {
             _game = simulation;
             _hammerAnimationAge = 1f;
+            _adventureOpeningIsRestart = isRestart;
             _animations.ResetNativePlayback();
             _game.EventRaised = PlaySound;
             _game.Adventure.NoticeRaised = AdventureNotice;
+            _game.Adventure.VaseInterludeDialogueEnabled = true;
             InitializeAdventureWaveNotices();
             _deck.Clear();
             foreach (PlantKind seed in _game.Adventure.SelectedSeeds)
@@ -2639,7 +2968,7 @@ namespace PlantsVsZombies.Game
 
             try
             {
-                AttachAdventureGame(_adventureCampaign.BeginOrResume());
+                AttachAdventureGame(_adventureCampaign.BeginOrResume(), isRestart: true);
             }
             catch (Exception error)
             {
@@ -2667,6 +2996,11 @@ namespace PlantsVsZombies.Game
         /// <param name = "notice">The notice.</param>
         private void AdventureNotice(AdventureNotice notice)
         {
+            if (notice.Kind == AdventureNoticeKind.VaseInterludeStarted)
+            {
+                StartVaseInterlude(notice.Value);
+            }
+
             if (notice.Kind == AdventureNoticeKind.CoinCollectionStarted)
             {
                 PlayAdventureCoinPickupSound((AdventureCoinKind)notice.Value);
@@ -2871,6 +3205,38 @@ namespace PlantsVsZombies.Game
             return key == null ? null : _presenter.OriginalProgressionText(key);
         }
 
+        /// <summary>Handles only the original shovel interaction while the opening is paused.</summary>
+        /// <param name="point">The logical board pointer position.</param>
+        private void HandleBowlingShovelLesson(Vector2 point)
+        {
+            if (_crazyDaveAnimation != null)
+            {
+                return;
+            }
+
+            if (s_adventureShovelButton.Contains(point))
+            {
+                _shovel = !_shovel;
+                PlayPresentationSound("shovel");
+                return;
+            }
+
+            if (!_shovel || !_game.TryShovelAdventurePlant(AdventureShovelTarget(point)))
+            {
+                return;
+            }
+
+            _shovel = false;
+            PlayPresentationSound("plant");
+            if (_game.Adventure.Tutorial == AdventureTutorial.Complete)
+            {
+                _bowlingShovelLessonActive = false;
+                _crazyDaveStartIndex = 2410;
+                _adventureIntro.RestartAfterShovelTutorial();
+                _adventureIntroFrame = _adventureIntro.Frame;
+            }
+        }
+
         /// <summary>Performs handle adventure click.</summary>
         /// <param name = "point">The point.</param>
         private void HandleAdventureClick(Vector2 point)
@@ -2878,6 +3244,11 @@ namespace PlantsVsZombies.Game
             var board = _game.Adventure;
             if (AdventureIntroActive && !AdventureIntroAwaitingSeeds)
             {
+                if (_bowlingShovelLessonActive)
+                {
+                    HandleBowlingShovelLesson(point);
+                }
+
                 return;
             }
 
@@ -3282,10 +3653,12 @@ namespace PlantsVsZombies.Game
                 "plant",
                 "coin",
                 "diamond",
+                "points",
+                "hatchback_open",
                 "crazydaveshort1", "crazydaveshort2", "crazydaveshort3",
                 "crazydavelong1", "crazydavelong2", "crazydavelong3",
                 "crazydaveextralong1", "crazydaveextralong2", "crazydaveextralong3",
-                "crazydavecrazy", "crazydavescream", "crazydavescream2"
+                "crazydavecrazy", "crazydavescream", "crazydavescream2", "bungee_scream"
             };
             _dynamicAudioTasks = (manifest == null || manifest.clips == null ? 0 : manifest.clips.Length) + cues.Length;
             if (manifest != null && manifest.clips != null)
@@ -3334,7 +3707,7 @@ namespace PlantsVsZombies.Game
                 var diamond = cue == "diamond";
                 var path = Path.Combine(_root, "sounds", cue + (diamond ? ".wav" : ".ogg"));
 #if UNITY_EDITOR
-                if (!File.Exists(path) && cue.StartsWith("crazydave", StringComparison.Ordinal))
+                if (!File.Exists(path) && (cue.StartsWith("crazydave", StringComparison.Ordinal) || cue == "bungee_scream" || cue == "hatchback_open"))
                 {
                     path = Path.Combine(Application.dataPath, "OriginalPvZ", "Raw", "sounds", cue + ".ogg");
                 }
@@ -3490,7 +3863,8 @@ namespace PlantsVsZombies.Game
                 }
             }
 
-            _dynamicMusicStems[0].Gain = desired == MusicCue.Night ? _dynamicBurst.NightBase : 1f;
+            var bossGrabFade = _bossDaveGrabbed && _crazyDaveAnimation == "anim_grab" && AdventureIntroActive;
+            _dynamicMusicStems[0].Gain = bossGrabFade ? Mathf.Clamp01(1f - _crazyDaveAnimationAge / .5f) : desired == MusicCue.Night ? _dynamicBurst.NightBase : 1f;
             _dynamicMusicStems[1].Gain = _dynamicBurst.Drums;
             _dynamicMusicStems[2].Gain = _dynamicBurst.HiHats;
             foreach (var stem in _dynamicMusicStems)
@@ -3508,8 +3882,25 @@ namespace PlantsVsZombies.Game
                 return MusicCue.Title;
             }
 
+            // PC CutScene::StartLevelIntro and AnimateBoard select Dave's theme, silence,
+            // and finally boss music during the final-boss opening.
+            if (AdventureIntroActive && _currentView == ScreenView.Board && _game.Adventure.Level.Mode == AdventureMode.Boss)
+            {
+                if (_adventureIntro.NativeTime >= _adventureIntro.Plan.BankOnStart)
+                {
+                    return MusicCue.Boss;
+                }
+
+                if (_adventureIntro.Plan.Context.HasCrazyDaveDialog && (!_bossDaveGrabbed || _crazyDaveAnimation == "anim_grab" && _crazyDaveAnimationAge < .5f))
+                {
+                    return MusicCue.Title;
+                }
+
+                return MusicCue.None;
+            }
+
             // PC CutScene::StartLevelIntro 0x446F64 selects tune 6 (ChooseYourSeeds).
-            if (AdventureIntroActive && _currentView == ScreenView.Board && _game.Adventure.Level.Mode != AdventureMode.Boss)
+            if (AdventureIntroActive && _currentView == ScreenView.Board)
             {
                 return MusicCue.ChooseSeeds;
             }
@@ -4696,6 +5087,11 @@ namespace PlantsVsZombies.Game
                 return false;
             }
 
+            if (AdventureIntroActive)
+            {
+                return true;
+            }
+
             var s = _modeSession;
             if (s_modeBackButton.Contains(point))
             {
@@ -5183,6 +5579,26 @@ namespace PlantsVsZombies.Game
         internal int _selectedShopItem = -1;
         /// <summary>Stores store return view.</summary>
         private ScreenView _storeReturnView = ScreenView.Selector;
+        /// <summary>The original store introduction awaiting Dave's entrance, or -1.</summary>
+        private int _storeIntroPending = -1;
+        /// <summary>Whether the current store visit returns to the next adventure level.</summary>
+        internal bool _storeAdventureIntro;
+        /// <summary>Whether the store back button uses the original introduction caption.</summary>
+        internal bool _storeIntroNextLabel;
+        /// <summary>Whether the next adventure board was already prepared before opening the store.</summary>
+        private bool _storeAdventureGamePrepared;
+        /// <summary>Whether the store introduction requires a click to advance.</summary>
+        private bool _storeIntroTalking;
+        /// <summary>Whether the magic taco diamond is visible in the store.</summary>
+        internal bool _storeTacoDiamondVisible;
+        /// <summary>Elapsed time since the magic taco diamond appeared.</summary>
+        internal float _storeTacoDiamondAge;
+        /// <summary>Gets the original from-present diamond's vertical position.</summary>
+        internal float StoreTacoDiamondY => 520f - 100f * (1f - Mathf.Pow(.95f, _storeTacoDiamondAge * 100f));
+        /// <summary>Whether the store hatch is open after its animation.</summary>
+        internal bool _storeHatchOpen;
+        /// <summary>Remaining native ticks of the store hatch animation.</summary>
+        internal int _storeHatchTicks;
         /// <summary>Stores progression message.</summary>
         internal string _progressionMessage;
         /// <summary>Stores garden kind.</summary>
@@ -5195,6 +5611,22 @@ namespace PlantsVsZombies.Game
         private long _gardenUpdateUtc;
         /// <summary>Stores tree grow started.</summary>
         internal float _treeGrowStarted = -100f;
+        /// <summary>Whether the first-visit tree conversation has not yet been acknowledged.</summary>
+        internal bool _treeDaveIntroPending;
+        /// <summary>Whether Dave is presenting the first Zen Garden introduction.</summary>
+        internal bool _gardenDaveIntroActive;
+        /// <summary>Whether the Zen tutorial returns to the next adventure level.</summary>
+        internal bool _gardenReturnToAdventure;
+        /// <summary>Tracks the original Zen tutorial's tool and store steps.</summary>
+        internal int _gardenTutorialStage;
+        /// <summary>Whether Dave is entering, talking, or departing from the tree.</summary>
+        internal bool _treeDaveIntroActive;
+        /// <summary>Elapsed time since the first tree introduction started.</summary>
+        private float _treeDaveIntroTime;
+        /// <summary>Runs the tree's original timed wisdom and idle speech.</summary>
+        internal WisdomTreeSpeechClock? _treeSpeechClock;
+        /// <summary>Accumulates elapsed time between native speech updates.</summary>
+        private double _treeSpeechRemainder;
         /// <summary>Stores original shop pages.</summary>
         internal static readonly int[][] s_originalShopPages =
         {
@@ -5324,6 +5756,15 @@ namespace PlantsVsZombies.Game
 
             _storeReturnView = _currentView == ScreenView.Garden || _currentView == ScreenView.Tree ? _currentView : ScreenView.Selector;
             _currentView = ScreenView.Store;
+            _storeIntroPending = -1;
+            _storeAdventureIntro = false;
+            _storeIntroNextLabel = false;
+            _storeAdventureGamePrepared = false;
+            _storeIntroTalking = false;
+            _storeHatchOpen = true;
+            _storeHatchTicks = 0;
+            _storeTacoDiamondVisible = GetSelectedAccount().TacoDiamondPresented;
+            _storeTacoDiamondAge = 0f;
             _shopPage = 0;
             _selectedShopItem = -1;
             _progressionMessage = null;
@@ -5334,11 +5775,154 @@ namespace PlantsVsZombies.Game
             _crazyDaveMessageIndex = -1;
             _crazyDaveText = "";
             _crazyDaveHanding = false;
+            _crazyDaveHeldItem = null;
             _crazyDaveIdleMouth = null;
             _crazyDaveBlinkAge = -1f;
             _crazyDaveBlinkTicks = UnityEngine.Random.Range(400, 801);
             _crazyDaveVoice.Stop();
             SetCrazyDaveAnimation("anim_enter", 24f, false);
+        }
+
+        /// <summary>Opens the original store interlude before the next adventure level.</summary>
+        /// <param name="message">The first original dialogue entry.</param>
+        private void OpenStoreForAdventureIntro(int message)
+        {
+            OpenStore();
+            if (_currentView == ScreenView.Store)
+            {
+                _storeAdventureIntro = true;
+                _storeIntroNextLabel = true;
+                _storeIntroPending = message;
+                _storeHatchOpen = false;
+                if (message == 601)
+                {
+                    _storeTacoDiamondVisible = false;
+                }
+            }
+        }
+
+        /// <summary>Opens a click-controlled store introduction from the Zen Garden.</summary>
+        /// <param name="message">The first original dialogue entry.</param>
+        private void OpenStoreForGardenIntro(int message)
+        {
+            OpenStore();
+            if (_currentView == ScreenView.Store)
+            {
+                _storeIntroPending = message;
+                _storeHatchOpen = false;
+                _storeIntroNextLabel = true;
+            }
+        }
+
+        /// <summary>Advances a click-controlled original store introduction.</summary>
+        private void AdvanceStoreIntro()
+        {
+            if (_crazyDaveMessageIndex == 3100)
+            {
+                BeginStoreHatchOpen();
+            }
+
+            var next = CrazyDaveDialogue.NextMessageIndex(_crazyDaveMessageIndex, index =>
+            {
+                var key = "CRAZY_DAVE_" + index;
+                var value = _presenter.OriginalProgressionText(key);
+                return !string.IsNullOrEmpty(value) && value != key;
+            });
+            if (next >= 0)
+            {
+                if (next == 303 || next == 606 || next == 2601)
+                {
+                    BeginStoreHatchOpen();
+                }
+
+                if (next == 603 && GetSelectedAccount().HasPendingTacoReward)
+                {
+                    ProgressionAction(() => _accountStore.PresentTacoReward(_profiles.SelectedId.Value));
+                    if (_progressionMessage != null)
+                    {
+                        return;
+                    }
+
+                    _storeTacoDiamondVisible = true;
+                    _storeTacoDiamondAge = 0f;
+                    PlayPresentationSound("diamond");
+                }
+
+                _storeSpeechClock.SetMessage(next, 0);
+                ShowCrazyDaveMessage(next);
+                return;
+            }
+
+            _storeIntroTalking = false;
+            StopCrazyDaveStoreSpeech();
+        }
+
+        /// <summary>Starts the original store hatch opening at its dialogue cue.</summary>
+        private void BeginStoreHatchOpen()
+        {
+            _storeHatchOpen = true;
+            _storeHatchTicks = 150;
+            PlayPresentationSound("hatchback_open");
+        }
+
+        /// <summary>Returns from the store to the appropriate original destination.</summary>
+        private void LeaveStore()
+        {
+            if (_storeIntroPending >= 0 || _storeIntroTalking || _storeHatchTicks > 0)
+            {
+                return;
+            }
+
+            if (_storeAdventureIntro)
+            {
+                try
+                {
+                    if (_storeAdventureGamePrepared || _adventureCampaign.StartNextLevel())
+                    {
+                        AttachAdventureGame(_adventureCampaign.Game);
+                        _storeAdventureIntro = false;
+                        _storeAdventureGamePrepared = false;
+                        _currentView = ScreenView.Board;
+                    }
+                }
+                catch (Exception error)
+                {
+                    _progressionMessage = error.Message;
+                }
+
+                return;
+            }
+
+            _currentView = _storeReturnView;
+            if (_currentView == ScreenView.Garden && _gardenTutorialStage == 5)
+            {
+                ProgressionAction(() => _accountStore.SetZenGardenTutorialStage(_profiles.SelectedId.Value, 6));
+                if (_progressionMessage == null)
+                {
+                    _progressionMessage = _presenter.OriginalProgressionText("ADVICE_ZEN_GARDEN_FERTILIZE");
+                }
+            }
+        }
+
+        /// <summary>Persists the magic taco diamond before hiding its store presentation.</summary>
+        private void CollectStoreTacoDiamond()
+        {
+            ProgressionAction(() =>
+            {
+                if (_accountStore.CollectTacoReward(_profiles.SelectedId.Value))
+                {
+                    _storeTacoDiamondVisible = false;
+                    _displayAccountSnapshot = null;
+                    PlayPresentationSound("points");
+                }
+            });
+        }
+
+        /// <summary>Enters the original Zen Garden tutorial from the watering-can award.</summary>
+        private void OpenZenGardenForAdventureIntro()
+        {
+            _gardenReturnToAdventure = true;
+            OpenZenGarden();
         }
 
         /// <summary>Performs open zen garden.</summary>
@@ -5357,11 +5941,75 @@ namespace PlantsVsZombies.Game
             }
 
             _currentView = ScreenView.Garden;
+            _gardenSalePlant = null;
+            _gardenSaleDaveActive = false;
             _gardenKind = GardenKind.Greenhouse;
             _gardenTool = GardenTool.Water;
             _movingGardenPlant = null;
             _progressionMessage = null;
             ProgressionAction(() => _accountStore.UpdateGarden(_profiles.SelectedId.Value, UtcSeconds, true));
+            var account = GetSelectedAccount();
+            if (!account.GardenGiftClaimed && account.ZenGardenTutorialStage == 0)
+            {
+                ProgressionAction(() => _accountStore.BeginZenGardenTutorial(_profiles.SelectedId.Value));
+                account = GetSelectedAccount();
+            }
+
+            var savedStage = account.ZenGardenTutorialStage;
+            _gardenReturnToAdventure = savedStage > 0;
+            _gardenTutorialStage = savedStage == 8 ? 5 : Math.Max(0, savedStage - 1);
+            _gardenDaveIntroActive = savedStage == 1;
+            if (_gardenDaveIntroActive)
+            {
+                _crazyDaveMessageIndex = -1;
+                _crazyDaveAnimation = null;
+                _crazyDaveVoice.Stop();
+                ShowCrazyDaveMessage(2100);
+            }
+            else if (savedStage == 8)
+            {
+                OpenStoreForGardenIntro(2600);
+            }
+            else if (savedStage > 1)
+            {
+                var key = savedStage == 2 ? "ADVICE_ZEN_GARDEN_PICK_UP_WATER" : savedStage == 3 ? "ADVICE_ZEN_GARDEN_WATER_PLANT" : savedStage == 4 ? "ADVICE_ZEN_GARDEN_KEEP_WATERING" : savedStage == 5 ? "ADVICE_ZEN_GARDEN_VISIT_STORE" : savedStage == 6 ? "ADVICE_ZEN_GARDEN_FERTILIZE" : "ADVICE_ZEN_GARDEN_CONTINUE_ADVENTURE";
+                _progressionMessage = _presenter.OriginalProgressionText(key);
+            }
+        }
+
+        /// <summary>Advances Dave's original first garden conversation and its seedlings.</summary>
+        private void AdvanceZenGardenIntroduction()
+        {
+            var next = CrazyDaveDialogue.NextMessageIndex(_crazyDaveMessageIndex, index =>
+            {
+                var key = "CRAZY_DAVE_" + index;
+                var text = _presenter.OriginalProgressionText(key);
+                return !string.IsNullOrEmpty(text) && text != key;
+            });
+            if (next >= 0)
+            {
+                if (next == 2102)
+                {
+                    ProgressionAction(() => _accountStore.GrantZenGardenIntroPlants(_profiles.SelectedId.Value, UtcSeconds));
+                    if (_progressionMessage != null)
+                    {
+                        return;
+                    }
+                }
+
+                ShowCrazyDaveMessage(next);
+                return;
+            }
+
+            ProgressionAction(() => _accountStore.CompleteZenGardenIntroduction(_profiles.SelectedId.Value));
+            if (_progressionMessage != null)
+            {
+                return;
+            }
+
+            _gardenTutorialStage = 1;
+            _progressionMessage = _presenter.OriginalProgressionText("ADVICE_ZEN_GARDEN_PICK_UP_WATER");
+            LeaveCrazyDaveDialogue();
         }
 
         /// <summary>Performs open wisdom tree.</summary>
@@ -5379,9 +6027,24 @@ namespace PlantsVsZombies.Game
                 return;
             }
 
+            if (_storeSpeechClock != null)
+            {
+                StopCrazyDaveStoreSpeech();
+                _storeSpeechClock = null;
+            }
+
             _currentView = ScreenView.Tree;
             _treeGrowStarted = -100f;
             _progressionMessage = null;
+            _treeSpeechClock = new WisdomTreeSpeechClock(bound => UnityEngine.Random.Range(0, bound));
+            _treeSpeechRemainder = 0;
+            _treeDaveIntroTime = 0f;
+            _treeDaveIntroPending = !p.TreeFoodGiftClaimed;
+            _treeDaveIntroActive = _treeDaveIntroPending;
+            _crazyDaveMessageIndex = -1;
+            _crazyDaveAnimation = null;
+            _crazyDaveHeldItem = null;
+            _crazyDaveVoice.Stop();
         }
 
         /// <summary>Performs update progression music context.</summary>
@@ -5394,11 +6057,124 @@ namespace PlantsVsZombies.Game
         private void UpdateProgression()
         {
             UpdateCrazyDaveStore(Time.unscaledDeltaTime);
-            if (_currentView == ScreenView.Garden && _accountStore != null && UtcSeconds != _gardenUpdateUtc)
+            UpdateWisdomTreeDialogue(Time.unscaledDeltaTime);
+            if (_currentView == ScreenView.Garden && _gardenDaveIntroActive && !_optionsView.IsOpen)
+            {
+                UpdateCrazyDaveAnimation(Time.unscaledDeltaTime);
+                if (_crazyDaveMessageIndex < 0 && (_crazyDaveAnimation == null || _crazyDaveAnimation == "anim_leave" && _crazyDaveAnimationAge >= .75f))
+                {
+                    _gardenDaveIntroActive = false;
+                    _crazyDaveAnimation = null;
+                }
+            }
+            if (_currentView == ScreenView.Garden && _gardenSaleDaveActive && !_optionsView.IsOpen)
+            {
+                UpdateCrazyDaveAnimation(Time.unscaledDeltaTime);
+                if (!_gardenSalePlant.HasValue && (_crazyDaveAnimation == null || _crazyDaveAnimation == "anim_leave" && _crazyDaveAnimationAge >= .75f))
+                {
+                    _gardenSaleDaveActive = false;
+                    _crazyDaveAnimation = null;
+                }
+            }
+            if (_currentView == ScreenView.Garden && !_gardenSalePlant.HasValue && _accountStore != null && UtcSeconds != _gardenUpdateUtc)
             {
                 _gardenUpdateUtc = UtcSeconds;
+                var previousMessage = _progressionMessage;
                 ProgressionAction(() => _accountStore.UpdateGarden(_profiles.SelectedId.Value, _gardenUpdateUtc));
+                if (_progressionMessage == null)
+                {
+                    _progressionMessage = previousMessage;
+                }
+
+                if (_gardenTutorialStage == 3)
+                {
+                    foreach (var plant in GetSelectedAccount().Plants)
+                    {
+                        if (plant.Need(_gardenUpdateUtc) == GardenNeed.Fertilizer)
+                        {
+                            ProgressionAction(() => _accountStore.SetZenGardenTutorialStage(_profiles.SelectedId.Value, 5));
+                            if (_progressionMessage == null)
+                            {
+                                _gardenTutorialStage = 4;
+                                _progressionMessage = _presenter.OriginalProgressionText("ADVICE_ZEN_GARDEN_VISIT_STORE");
+                            }
+
+                            break;
+                        }
+                    }
+                }
             }
+        }
+
+        /// <summary>Advances the first tree introduction and the tree's native speech clock.</summary>
+        /// <param name="delta">Elapsed unscaled seconds.</param>
+        private void UpdateWisdomTreeDialogue(float delta)
+        {
+            if (_currentView != ScreenView.Tree || _optionsView.IsOpen || (_profileDialog != null && _profileDialog.IsOpen) || _unavailableFeature != null || delta <= 0f)
+            {
+                return;
+            }
+
+            if (_treeDaveIntroActive)
+            {
+                _treeDaveIntroTime += delta;
+                UpdateCrazyDaveAnimation(delta);
+                if (_treeDaveIntroPending && _crazyDaveAnimation == null && _treeDaveIntroTime >= 2f && _treeDaveIntroTime < 2.75f)
+                {
+                    SetCrazyDaveAnimation("anim_enter", 24f, false);
+                }
+
+                if (_treeDaveIntroPending && _crazyDaveMessageIndex < 0 && _treeDaveIntroTime >= 2.75f)
+                {
+                    var first = _presenter.OriginalProgressionText("CRAZY_DAVE_3200");
+                    if (string.IsNullOrEmpty(first) || first == "CRAZY_DAVE_3200")
+                    {
+                        Debug.LogWarning($"{nameof(PvZGame)}: Original Crazy Dave text CRAZY_DAVE_3200 is missing.");
+                        CompleteWisdomTreeIntroduction();
+                    }
+                    else
+                    {
+                        ShowCrazyDaveMessage(3200);
+                    }
+                }
+
+                if (!_treeDaveIntroPending && (_crazyDaveAnimation == null || _crazyDaveAnimation == "anim_leave" && _crazyDaveAnimationAge >= .75f))
+                {
+                    _crazyDaveAnimation = null;
+                    _treeDaveIntroActive = false;
+                }
+            }
+
+            if (_treeDaveIntroPending || _treeSpeechClock == null)
+            {
+                return;
+            }
+
+            var account = GetSelectedAccount();
+            if (account == null)
+            {
+                return;
+            }
+
+            _treeSpeechRemainder += delta;
+            while (_treeSpeechRemainder >= .01)
+            {
+                _treeSpeechRemainder -= .01;
+                _treeSpeechClock.Tick(account.TreeHeight);
+            }
+        }
+
+        /// <summary>Grants the original five tree-food bags when Dave's introduction is acknowledged.</summary>
+        private void CompleteWisdomTreeIntroduction()
+        {
+            ProgressionAction(() => _accountStore.ClaimWisdomTreeFoodGift(_profiles.SelectedId.Value));
+            if (!GetSelectedAccount().TreeFoodGiftClaimed)
+            {
+                return;
+            }
+
+            _treeDaveIntroPending = false;
+            LeaveCrazyDaveDialogue();
         }
 
         /// <summary>Advances the original store speech and releases it when the store closes.</summary>
@@ -5454,8 +6230,39 @@ namespace PlantsVsZombies.Game
             {
                 _storeSpeechRemainder -= .01f;
                 UpdateCrazyDaveAnimation(.01f);
+                if (_storeTacoDiamondVisible)
+                {
+                    _storeTacoDiamondAge += .01f;
+                    if (_storeTacoDiamondAge >= .8f)
+                    {
+                        CollectStoreTacoDiamond();
+                    }
+                }
+                var hatchBusy = _storeHatchTicks > 0;
+                if (hatchBusy && _crazyDaveAnimation != "anim_enter")
+                {
+                    _storeHatchTicks--;
+                }
+                if (_storeIntroPending >= 0 && _crazyDaveAnimation != "anim_enter")
+                {
+                    var message = _storeIntroPending;
+                    _storeIntroPending = -1;
+                    var key = "CRAZY_DAVE_" + message;
+                    var text = _presenter.OriginalProgressionText(key);
+                    if (!string.IsNullOrEmpty(text) && text != key)
+                    {
+                        _storeIntroTalking = true;
+                        clock.SetMessage(message, 0);
+                        ShowCrazyDaveMessage(message);
+                    }
+                    else
+                    {
+                        Debug.LogWarning($"{nameof(PvZGame)}: Original Crazy Dave text {key} is missing.");
+                    }
+                }
+
                 clock.Advance(true, _crazyDaveAnimation == "anim_enter", _selectedShopItem >= 0,
-                    false, false, false, false, _crazyDaveWaitForBubbleVoice && _crazyDaveVoice.isPlaying,
+                    hatchBusy, _storeHatchTicks > 0, _storeIntroPending >= 0, _storeIntroTalking, _crazyDaveWaitForBubbleVoice && _crazyDaveVoice.isPlaying,
                     hoveredMessage, completed, s_storeRandomBelow, _storeSpeak!, _storeStopSpeech!);
             }
         }
@@ -5467,6 +6274,7 @@ namespace PlantsVsZombies.Game
             _crazyDaveMessageIndex = -1;
             _crazyDaveText = "";
             _crazyDaveHanding = false;
+            _crazyDaveHeldItem = null;
             _crazyDaveIdleMouth = null;
             _crazyDaveVoice.Stop();
             SetCrazyDaveAnimation("anim_idle", 12f, true);
@@ -5497,6 +6305,28 @@ namespace PlantsVsZombies.Game
         {
             if (_currentView == ScreenView.Store)
             {
+                if (_storeIntroPending >= 0)
+                {
+                    return true;
+                }
+
+                if (_storeIntroTalking)
+                {
+                    AdvanceStoreIntro();
+                    return true;
+                }
+
+                if (_storeTacoDiamondVisible && new Rect(77, StoreTacoDiamondY, 40, 65).Contains(point))
+                {
+                    CollectStoreTacoDiamond();
+                    return true;
+                }
+
+                if (_storeHatchTicks > 0)
+                {
+                    return true;
+                }
+
                 if (_selectedShopItem >= 0)
                 {
                     if (new Rect(245, 346, 135, 46).Contains(point))
@@ -5526,7 +6356,7 @@ namespace PlantsVsZombies.Game
 
                 if (new Rect(366, 512, 138, 80).Contains(point))
                 {
-                    _currentView = _storeReturnView;
+                    LeaveStore();
                     return true;
                 }
 
@@ -5572,10 +6402,14 @@ namespace PlantsVsZombies.Game
             {
                 if (new Rect(655, 8, 138, 40).Contains(point))
                 {
+                    _treeDaveIntroActive = false;
+                    _crazyDaveAnimation = null;
                     _currentView = ScreenView.Garden;
                 }
                 else if (new Rect(655, 548, 138, 42).Contains(point))
                 {
+                    _treeDaveIntroActive = false;
+                    _crazyDaveAnimation = null;
                     OpenStore();
                 }
                 else if (new Rect(24, 505, 253, 80).Contains(point))
@@ -5586,7 +6420,11 @@ namespace PlantsVsZombies.Game
                     }
 
                     ProgressionAction(() => _accountStore.FeedWisdomTree(_profiles.SelectedId.Value));
-                    _treeGrowStarted = Time.unscaledTime;
+                    if (_progressionMessage == null)
+                    {
+                        _treeGrowStarted = Time.unscaledTime;
+                        _treeSpeechClock?.StartGrowth();
+                    }
                 }
 
                 return true;
@@ -5602,15 +6440,84 @@ namespace PlantsVsZombies.Game
                 return false;
             }
 
+            if (_gardenReturnToAdventure && _gardenTutorialStage >= 1 && _gardenTutorialStage <= 5)
+            {
+                var onWater = new Rect(8, 4, 73, 57).Contains(point);
+                var onFertilizer = new Rect(86, 4, 73, 57).Contains(point);
+                var onStore = new Rect(654, 540, 136, 42).Contains(point);
+                var onPlant = false;
+                foreach (var plant in GetSelectedAccount().Plants)
+                {
+                    if (plant.Garden == _gardenKind && GardenPlantRect(plant).Contains(point))
+                    {
+                        onPlant = true;
+                        break;
+                    }
+                }
+
+                if (_gardenTutorialStage == 1 && !onWater
+                    || (_gardenTutorialStage == 2 || _gardenTutorialStage == 3) && !onWater && !onPlant
+                    || _gardenTutorialStage == 4 && !onStore
+                    || _gardenTutorialStage == 5 && !onFertilizer && !onWater && !onPlant)
+                {
+                    return true;
+                }
+            }
+
             if (new Rect(674, 6, 120, 36).Contains(point))
             {
-                _currentView = ScreenView.Selector;
+                if (_gardenReturnToAdventure && _gardenTutorialStage == 6)
+                {
+                    try
+                    {
+                        if (_adventureCampaign == null || _adventureCampaign.ProfileId != _profiles.SelectedId.Value)
+                        {
+                            _adventureCampaign = new AdventureCampaign(_adventureStore, _profiles.SelectedId.Value, _accountStore);
+                        }
+
+                        var next = _adventureCampaign.Game == null
+                            ? _adventureCampaign.BeginOrResume()
+                            : _adventureCampaign.Game.Adventure.Phase != AdventurePhase.Finished
+                                ? _adventureCampaign.Game
+                                : _adventureCampaign.StartNextLevel() ? _adventureCampaign.Game : null;
+                        if (next != null)
+                        {
+                            _accountStore.FinishZenGardenTutorial(_profiles.SelectedId.Value);
+                            _gardenReturnToAdventure = false;
+                            _gardenTutorialStage = 0;
+                            AttachAdventureGame(next);
+                            _currentView = ScreenView.Board;
+                        }
+                    }
+                    catch (Exception error)
+                    {
+                        _progressionMessage = error.Message;
+                    }
+                }
+                else if (!_gardenReturnToAdventure)
+                {
+                    _currentView = ScreenView.Selector;
+                }
+
                 return true;
             }
 
             if (new Rect(654, 540, 136, 42).Contains(point))
             {
-                OpenStore();
+                if (_gardenTutorialStage == 4)
+                {
+                    ProgressionAction(() => _accountStore.GrantZenGardenTutorialFertilizer(_profiles.SelectedId.Value));
+                    if (_progressionMessage == null)
+                    {
+                        _gardenTutorialStage = 5;
+                        OpenStoreForGardenIntro(2600);
+                    }
+                }
+                else if (_gardenTutorialStage == 0 || _gardenTutorialStage == 6)
+                {
+                    OpenStore();
+                }
+
                 return true;
             }
 
@@ -5655,6 +6562,18 @@ namespace PlantsVsZombies.Game
             {
                 if (new Rect(8 + i * 78, 4, 73, 57).Contains(point))
                 {
+                    if (_gardenTutorialStage == 1 && i == 0)
+                    {
+                        ProgressionAction(() => _accountStore.SetZenGardenTutorialStage(_profiles.SelectedId.Value, 3));
+                        if (_progressionMessage != null)
+                        {
+                            return true;
+                        }
+
+                        _gardenTutorialStage = 2;
+                        _progressionMessage = _presenter.OriginalProgressionText("ADVICE_ZEN_GARDEN_WATER_PLANT");
+                    }
+
                     _gardenTool = (GardenTool)i;
                     return true;
                 }
@@ -5664,7 +6583,11 @@ namespace PlantsVsZombies.Game
             {
                 if (g.Garden == _gardenKind && GardenPlantRect(g).Contains(point))
                 {
-                    if (_gardenTool == GardenTool.Move)
+                    if (_gardenTool == GardenTool.Sell)
+                    {
+                        BeginGardenSale(g);
+                    }
+                    else if (_gardenTool == GardenTool.Move)
                     {
                         _movingGardenPlant = g.Id;
                         _progressionMessage = "选择下一个花园，将植物放过去。";
@@ -5672,6 +6595,70 @@ namespace PlantsVsZombies.Game
                     else
                     {
                         ProgressionAction(() => _accountStore.TendGarden(_profiles.SelectedId.Value, g.Id, _gardenTool, UtcSeconds));
+                        if (_progressionMessage == null && _gardenTool == GardenTool.Water && (_gardenTutorialStage == 2 || _gardenTutorialStage == 3))
+                        {
+                            ProgressionAction(() => _accountStore.SetZenGardenTutorialStage(_profiles.SelectedId.Value, 4));
+                            if (_progressionMessage != null)
+                            {
+                                return true;
+                            }
+
+                            _gardenTutorialStage = 3;
+                            _progressionMessage = _presenter.OriginalProgressionText("ADVICE_ZEN_GARDEN_KEEP_WATERING");
+                            foreach (var plant in GetSelectedAccount().Plants)
+                            {
+                                if (plant.Need(UtcSeconds) == GardenNeed.Fertilizer)
+                                {
+                                    ProgressionAction(() => _accountStore.SetZenGardenTutorialStage(_profiles.SelectedId.Value, 5));
+                                    if (_progressionMessage != null)
+                                    {
+                                        return true;
+                                    }
+
+                                    _gardenTutorialStage = 4;
+                                    _progressionMessage = _presenter.OriginalProgressionText("ADVICE_ZEN_GARDEN_VISIT_STORE");
+                                    break;
+                                }
+                            }
+                        }
+                        else if (_progressionMessage == null && _gardenTool == GardenTool.Water && _gardenTutorialStage == 5)
+                        {
+                            _progressionMessage = _presenter.OriginalProgressionText("ADVICE_ZEN_GARDEN_FERTILIZE");
+                        }
+                        else if (_progressionMessage == null && _gardenTool == GardenTool.Fertilizer && _gardenTutorialStage == 5)
+                        {
+                            var account = GetSelectedAccount();
+                            var allFertilized = true;
+                            foreach (var plant in account.Plants)
+                            {
+                                if (plant.Growth == 0)
+                                {
+                                    allFertilized = false;
+                                    break;
+                                }
+                            }
+
+                            if (allFertilized)
+                            {
+                                ProgressionAction(() => _accountStore.SetZenGardenTutorialStage(_profiles.SelectedId.Value, 7));
+                                if (_progressionMessage != null)
+                                {
+                                    return true;
+                                }
+
+                                _gardenTutorialStage = 6;
+                                _progressionMessage = _presenter.OriginalProgressionText("ADVICE_ZEN_GARDEN_CONTINUE_ADVENTURE");
+                            }
+                            else if (account.PurchaseCount(14) == 0)
+                            {
+                                ProgressionAction(() => _accountStore.GrantZenGardenTutorialFertilizer(_profiles.SelectedId.Value, false));
+                                _progressionMessage = _presenter.OriginalProgressionText("ADVICE_ZEN_GARDEN_NEED_MORE_FERTILIZER");
+                            }
+                            else
+                            {
+                                _progressionMessage = _presenter.OriginalProgressionText("ADVICE_ZEN_GARDEN_FERTILIZE");
+                            }
+                        }
                     }
 
                     return true;
@@ -5679,6 +6666,57 @@ namespace PlantsVsZombies.Game
             }
 
             return true;
+        }
+
+        /// <summary>Identifies the garden plant awaiting a sale decision.</summary>
+        internal Guid? _gardenSalePlant;
+        /// <summary>Whether Dave is present for a garden sale or departure.</summary>
+        internal bool _gardenSaleDaveActive;
+        /// <summary>Bounds of the original garden sale confirmation's yes button.</summary>
+        internal static readonly Rect s_gardenSaleYes = new Rect(365, 406, 135, 46);
+        /// <summary>Bounds of the original garden sale confirmation's no button.</summary>
+        internal static readonly Rect s_gardenSaleNo = new Rect(540, 406, 135, 46);
+
+        /// <summary>Asks Dave's original sale question without changing the plant or account.</summary>
+        /// <param name="plant">The plant selected by the money-sign cursor.</param>
+        private void BeginGardenSale(GardenPlant plant)
+        {
+            var key = plant.Kind == PlantKind.Marigold && plant.Growth == 0
+                ? "MARIGOLD_SPROUT" : VerifiedDataCatalog.Plants[(int)plant.Kind].InternalName;
+            var name = _presenter.OriginalProgressionText(key);
+            var message = _presenter.OriginalProgressionText("CRAZY_DAVE_1700")
+                .Replace("{SELL_PRICE}", PlayerAccountStore.SellPrice(plant).ToString(System.Globalization.CultureInfo.InvariantCulture))
+                .Replace("{PLANT_TYPE}", name);
+            _gardenSalePlant = plant.Id;
+            _gardenSaleDaveActive = true;
+            _progressionMessage = null;
+            ShowCrazyDaveResolvedMessage(1700, message);
+            SetCrazyDaveAnimation("anim_blahblah", 12f, false);
+        }
+
+        /// <summary>Resolves the original garden sale confirmation.</summary>
+        /// <param name="accepted">Whether the player agreed to sell the plant.</param>
+        private void ResolveGardenSale(bool accepted)
+        {
+            if (!_gardenSalePlant.HasValue)
+            {
+                return;
+            }
+
+            if (accepted)
+            {
+                var id = _gardenSalePlant.Value;
+                ProgressionAction(() => _accountStore.TendGarden(_profiles.SelectedId.Value, id, GardenTool.Sell, UtcSeconds));
+                if (_progressionMessage != null)
+                {
+                    return;
+                }
+
+                _displayAccountSnapshot = null;
+            }
+
+            _gardenSalePlant = null;
+            LeaveCrazyDaveDialogue();
         }
 
         /// <summary>Stores original tooltip.</summary>
@@ -5945,7 +6983,7 @@ namespace PlantsVsZombies.Game
             var importedId = Guid.NewGuid();
             var copy = Path.Combine(Application.persistentDataPath, "original-" + importedId.ToString("N") + ".dat");
             OriginalSaveFormat.KeepImportedSource(source, copy);
-            _accountStore.Import(importedId, source.Coins, source.Purchases, source.ChallengeRecords, source.ChallengeRecords[49], source.Plants, source.MinigamesUnlocked, source.PuzzleUnlocked, source.SurvivalUnlocked);
+            _accountStore.Import(importedId, source.Coins, source.Purchases, source.ChallengeRecords, source.ChallengeRecords[49], source.Plants, source.MinigamesUnlocked, source.PuzzleUnlocked, source.SurvivalUnlocked, source.PacketUpgradeDeclines, source.TreeFoodGiftClaimed, source.GardenGiftClaimed, source.GardenFertilizerInitialized);
             _adventureStore.Import(importedId, source.Level, source.FinishedAdventure);
             _profiles.CreateImported(importedId, name);
             _progressionMessage = "已导入用户：" + name;

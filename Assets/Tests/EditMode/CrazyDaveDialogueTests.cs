@@ -52,24 +52,24 @@ namespace PlantsVsZombies.Tests.EditMode
             Assert.That(CrazyDaveDialogue.SelectAdventureStart(25, true, AdventureMode.LittleTrouble, true, true, false), Is.EqualTo(701));
         }
 
-        /// <summary>Checks that only dialogue sequences without special advance actions are enabled.</summary>
+        /// <summary>Checks which original opening sequences are supported.</summary>
         /// <param name="index">The original starting dialogue index.</param>
-        /// <param name="expected">Whether ordinary progression is supported.</param>
+        /// <param name="expected">Whether the opening is supported.</param>
         [TestCase(701, true)]
         [TestCase(1101, true)]
         [TestCase(1301, true)]
         [TestCase(1304, true)]
         [TestCase(1601, true)]
         [TestCase(2500, true)]
-        [TestCase(401, false)]
-        [TestCase(1501, false)]
-        [TestCase(1551, false)]
-        [TestCase(2300, false)]
-        [TestCase(2400, false)]
-        [TestCase(2411, false)]
-        public void EnablesOnlyPlainOpenings(int index, bool expected)
+        [TestCase(401, true)]
+        [TestCase(1501, true)]
+        [TestCase(1551, true)]
+        [TestCase(2300, true)]
+        [TestCase(2400, true)]
+        [TestCase(2411, true)]
+        public void EnablesSupportedOpenings(int index, bool expected)
         {
-            Assert.That(CrazyDaveDialogue.IsPlainAdventureOpening(index), Is.EqualTo(expected));
+            Assert.That(CrazyDaveDialogue.IsSupportedAdventureOpening(index), Is.EqualTo(expected));
         }
 
         /// <summary>Checks the native post-Dave jump for a non-scrolling vase opening.</summary>

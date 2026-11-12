@@ -151,20 +151,56 @@ namespace PlantsVsZombies.Progression
                     AddCoins(p, 300);
                 }
 
-                if (level == 34)
+                if (level == 34 && cycle == 1)
                 {
-                    AddCoins(p, 100);
+                    p._receipts["taco:pending"] = 1;
                 }
 
-                if (level >= 44 && !p.GardenGiftClaimed)
+                if (level == 44 && cycle == 1 && !p.GardenGiftClaimed)
                 {
-                    AddGardenPlant(p, PlantKind.Marigold, 0);
-                    AddGardenPlant(p, PlantKind.Marigold, 0);
-                    p.GardenGiftClaimed = true;
-                    p._purchases[14] = Math.Max(5, p._purchases[14]);
+                    p._receipts["zen:tutorial"] = 1;
                 }
 
                 Commit(p);
+            }
+        }
+
+        /// <summary>Persists presentation of Dave's original magic taco diamond.</summary>
+        /// <param name="id">The player receiving the diamond.</param>
+        /// <exception cref="ArgumentException">The player identifier is empty.</exception>
+        /// <exception cref="IOException">The updated account could not be saved.</exception>
+        /// <exception cref="InvalidOperationException">The account changed externally or cannot be saved.</exception>
+        public void PresentTacoReward(Guid id)
+        {
+            Change(id, account =>
+            {
+                if (account.HasPendingTacoReward)
+                {
+                    account._receipts["taco:pending"] = 2;
+                }
+            });
+        }
+
+        /// <summary>Collects the one-time original magic taco diamond atomically.</summary>
+        /// <param name="id">The player receiving the diamond.</param>
+        /// <returns>Whether a pending diamond was collected.</returns>
+        /// <exception cref="ArgumentException">The player identifier is empty.</exception>
+        /// <exception cref="IOException">The updated account could not be saved.</exception>
+        /// <exception cref="InvalidOperationException">The account changed externally or cannot be saved.</exception>
+        public bool CollectTacoReward(Guid id)
+        {
+            lock (_gate)
+            {
+                var account = Get(id);
+                if (!account.TacoDiamondPresented)
+                {
+                    return false;
+                }
+
+                account._receipts.Remove("taco:pending");
+                AddCoins(account, 100);
+                Commit(account);
+                return true;
             }
         }
 
@@ -209,10 +245,14 @@ namespace PlantsVsZombies.Progression
         /// <param name = "minigamesUnlocked">The minigames unlocked.</param>
         /// <param name = "puzzleUnlocked">The puzzle unlocked.</param>
         /// <param name = "survivalUnlocked">The survival unlocked.</param>
+        /// <param name="packetUpgradeDeclines">The number of original packet upgrade offers declined.</param>
+        /// <param name="treeFoodGiftClaimed">Whether the initial tree food gift has already been claimed.</param>
+        /// <param name="gardenGiftClaimed">Whether the original garden introduction was completed, or null to infer it from the plants.</param>
+        /// <param name="gardenFertilizerInitialized">Whether the original fertilizer counter was initialized, or null for legacy inference.</param>
         /// <exception cref = "InvalidDataException">The operation cannot satisfy its preconditions.</exception>
-        public void Import(Guid id, int coins, int[] purchases, int[] challenges, int treeHeight, IEnumerable<GardenPlant> plants, bool minigamesUnlocked = false, bool puzzleUnlocked = false, bool survivalUnlocked = false)
+        public void Import(Guid id, int coins, int[] purchases, int[] challenges, int treeHeight, IEnumerable<GardenPlant> plants, bool minigamesUnlocked = false, bool puzzleUnlocked = false, bool survivalUnlocked = false, int packetUpgradeDeclines = 0, bool treeFoodGiftClaimed = true, bool? gardenGiftClaimed = null, bool? gardenFertilizerInitialized = null)
         {
-            if (coins < 0 || coins > 99999 || treeHeight < 0 || treeHeight > 10000000 || purchases == null || purchases.Length != 80 || challenges == null || challenges.Length != 100)
+            if (packetUpgradeDeclines < 0 || coins < 0 || coins > 99999 || treeHeight < 0 || treeHeight > 10000000 || purchases == null || purchases.Length != 80 || challenges == null || challenges.Length != 100)
             {
                 throw new InvalidDataException("Invalid original account.");
             }
@@ -229,10 +269,20 @@ namespace PlantsVsZombies.Progression
                     p._garden.Add(plant.Copy());
                 }
 
-                p.GardenGiftClaimed = p._garden.Count > 0;
+                p.GardenGiftClaimed = gardenGiftClaimed ?? p._garden.Count > 0;
+                if (gardenFertilizerInitialized.HasValue)
+                {
+                    p._receipts["zen:fertilizer"] = gardenFertilizerInitialized.Value ? 1 : 0;
+                }
+                else
+                {
+                    p._receipts.Remove("zen:fertilizer");
+                }
                 p.MinigamesUnlocked = minigamesUnlocked;
                 p.PuzzleUnlocked = puzzleUnlocked;
                 p.SurvivalUnlocked = survivalUnlocked;
+                p.PacketUpgradeDeclines = packetUpgradeDeclines;
+                p.TreeFoodGiftClaimed = treeFoodGiftClaimed;
             });
         }
 
@@ -253,6 +303,11 @@ namespace PlantsVsZombies.Progression
                 string oldest = null;
                 foreach (var key in p._receipts.Keys)
                 {
+                    if (key == "taco:pending" || key == "zen:tutorial" || key == "zen:fertilizer")
+                    {
+                        continue;
+                    }
+
                     oldest = key;
                     break;
                 }
@@ -370,7 +425,7 @@ namespace PlantsVsZombies.Progression
                 using (var w = new BinaryWriter(stream, Encoding.UTF8))
                 {
                     w.Write(s_magic);
-                    w.Write(1);
+                    w.Write(2);
                     w.Write(values.Count);
                     var ids = new List<Guid>(values.Keys);
                     ids.Sort();
@@ -387,6 +442,8 @@ namespace PlantsVsZombies.Progression
                         w.Write(p.SurvivalUnlocked);
                         w.Write(p._rewardCycle);
                         w.Write(p._rewardMask);
+                        w.Write(p.PacketUpgradeDeclines);
+                        w.Write(p.TreeFoodGiftClaimed);
                         foreach (int n in p._purchases)
                         {
                             w.Write(n);
@@ -474,7 +531,13 @@ namespace PlantsVsZombies.Progression
                 {
                     using (var r = new BinaryReader(stream, Encoding.UTF8))
                     {
-                        if (!Same(s_magic, r.ReadBytes(8)) || r.ReadInt32() != 1)
+                        if (!Same(s_magic, r.ReadBytes(8)))
+                        {
+                            throw new InvalidDataException("Unsupported account format.");
+                        }
+
+                        var version = r.ReadInt32();
+                        if (version != 1 && version != 2)
                         {
                             throw new InvalidDataException("Unsupported account format.");
                         }
@@ -496,6 +559,12 @@ namespace PlantsVsZombies.Progression
                                 _rewardCycle = Bound(r.ReadInt32(), 0, 1000000),
                                 _rewardMask = r.ReadUInt64()
                             };
+                            if (version >= 2)
+                            {
+                                p.PacketUpgradeDeclines = Bound(r.ReadInt32(), 0, int.MaxValue);
+                                p.TreeFoodGiftClaimed = r.ReadBoolean();
+                            }
+
                             if (p.ProfileId == Guid.Empty || result.ContainsKey(p.ProfileId) || p._rewardMask >= 1UL << 50)
                             {
                                 throw new InvalidDataException("Invalid account identity or rewards.");
@@ -591,6 +660,34 @@ namespace PlantsVsZombies.Progression
             return n;
         }
 
+        /// <summary>Records the player's answer to an eligible adventure packet upgrade offer atomically.</summary>
+        /// <param name="id">The profile receiving the offer.</param>
+        /// <param name="accepted">Whether the player accepts the offer.</param>
+        /// <exception cref="InvalidOperationException">The offer is no longer eligible.</exception>
+        /// <exception cref="IOException">The account could not be persisted.</exception>
+        public void ResolveAdventurePacketOffer(Guid id, bool accepted)
+        {
+            Change(id, account =>
+            {
+                var purchases = account.PurchaseCount(21);
+                var price = ShopCatalog.Price(ShopCatalog.Get(21), account);
+                if (purchases > 1 || account.PacketUpgradeDeclines >= 2 || account.Coins < price)
+                {
+                    throw new InvalidOperationException("The packet upgrade offer is no longer available.");
+                }
+
+                if (accepted)
+                {
+                    account.Coins -= price;
+                    account._purchases[21]++;
+                }
+                else
+                {
+                    account.PacketUpgradeDeclines++;
+                }
+            });
+        }
+
         /// <summary>Performs purchase.</summary>
         /// <param name = "id">The id.</param>
         /// <param name = "itemId">The item id.</param>
@@ -638,6 +735,10 @@ namespace PlantsVsZombies.Progression
                 else if (itemId == 14 || itemId == 15)
                 {
                     p._purchases[itemId] += 5;
+                    if (itemId == 14)
+                    {
+                        p._receipts["zen:fertilizer"] = 1;
+                    }
                 }
                 else if (itemId == 24)
                 {
@@ -651,7 +752,106 @@ namespace PlantsVsZombies.Progression
                 if (itemId == 27)
                 {
                     p.TreeHeight = 1;
-                    p._purchases[28] += 5;
+                    p.TreeFoodGiftClaimed = false;
+                }
+            });
+        }
+
+        /// <summary>Records that the first Zen Garden tutorial has started.</summary>
+        /// <param name="id">The player starting the tutorial.</param>
+        public void BeginZenGardenTutorial(Guid id)
+        {
+            Change(id, p =>
+            {
+                if (!p.GardenGiftClaimed && p.ZenGardenTutorialStage == 0)
+                {
+                    p._receipts["zen:tutorial"] = 1;
+                }
+            });
+        }
+
+        /// <summary>Persists the current original garden tutorial step.</summary>
+        /// <param name="id">The player performing the step.</param>
+        /// <param name="stage">The one-based tutorial step, from two through eight.</param>
+        /// <exception cref="ArgumentOutOfRangeException">The stage lies outside the supported tutorial steps.</exception>
+        public void SetZenGardenTutorialStage(Guid id, int stage)
+        {
+            if (stage < 2 || stage > 8)
+            {
+                throw new ArgumentOutOfRangeException(nameof(stage));
+            }
+
+            Change(id, p => p._receipts["zen:tutorial"] = stage);
+        }
+
+        /// <summary>Clears the persisted garden tutorial after returning to adventure.</summary>
+        /// <param name="id">The player who completed the tutorial.</param>
+        public void FinishZenGardenTutorial(Guid id)
+        {
+            Change(id, p => p._receipts.Remove("zen:tutorial"));
+        }
+
+        /// <summary>Introduces the two original garden seedlings if no potted plants exist.</summary>
+        /// <param name="id">The player receiving the seedlings.</param>
+        /// <param name="utc">The current UTC time in seconds.</param>
+        public void GrantZenGardenIntroPlants(Guid id, long utc)
+        {
+            Change(id, p =>
+            {
+                if (p._garden.Count == 0)
+                {
+                    for (var i = 0; i < 2; i++)
+                    {
+                        AddGardenPlant(p, PlantKind.Marigold, utc);
+                        p._garden[p._garden.Count - 1].FeedingsPerGrow = 3;
+                    }
+                }
+            });
+        }
+
+        /// <summary>Provides the five fertilizer bags from the original garden tutorial store visit.</summary>
+        /// <param name="id">The player receiving the fertilizer.</param>
+        /// <param name="startsVisit">Whether the initial tutorial store conversation is starting.</param>
+        public void GrantZenGardenTutorialFertilizer(Guid id, bool startsVisit = true)
+        {
+            Change(id, p =>
+            {
+                p._purchases[14] = 5;
+                p._receipts["zen:fertilizer"] = 1;
+                if (startsVisit)
+                {
+                    p._receipts["zen:tutorial"] = 8;
+                }
+            });
+        }
+
+        /// <summary>Records that Dave's first garden introduction has been completed.</summary>
+        /// <param name="id">The player who completed the introduction.</param>
+        public void CompleteZenGardenIntroduction(Guid id)
+        {
+            Change(id, p =>
+            {
+                p.GardenGiftClaimed = true;
+                p._receipts["zen:tutorial"] = 2;
+            });
+        }
+
+        /// <summary>Provides Dave's original first-visit tree food once.</summary>
+        /// <param name="id">The player receiving the five bags.</param>
+        /// <exception cref="InvalidOperationException">The player has not purchased the tree.</exception>
+        public void ClaimWisdomTreeFoodGift(Guid id)
+        {
+            Change(id, p =>
+            {
+                if (p.PurchaseCount(27) == 0)
+                {
+                    throw new InvalidOperationException("尚未种下智慧树。");
+                }
+
+                if (!p.TreeFoodGiftClaimed)
+                {
+                    p._purchases[28] = 5;
+                    p.TreeFoodGiftClaimed = true;
                 }
             });
         }

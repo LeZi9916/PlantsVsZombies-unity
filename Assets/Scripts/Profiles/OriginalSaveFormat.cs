@@ -253,7 +253,11 @@ namespace PlantsVsZombies.Profiles
                 FinishedAdventure = finished,
                 MinigamesUnlocked = Int(bytes, 768) != 0,
                 PuzzleUnlocked = Int(bytes, 772) != 0,
-                SurvivalUnlocked = Int(bytes, 792) != 0
+                SurvivalUnlocked = Int(bytes, 792) != 0,
+                GardenGiftClaimed = count > 0 || Int(bytes, 416 + 14 * 4) >= 1000,
+                GardenFertilizerInitialized = Int(bytes, 416 + 14 * 4) >= 1000,
+                TreeFoodGiftClaimed = Int(bytes, 416 + 28 * 4) >= 1000,
+                PacketUpgradeDeclines = Math.Max(0, Int(bytes, 752))
             };
         }
 
@@ -315,6 +319,7 @@ namespace PlantsVsZombies.Profiles
             Put(result, 8, account.Coins);
             Put(result, 12, adventure.CompletedRuns);
             Put(result, 816, count);
+            Put(result, 752, account.PacketUpgradeDeclines);
             Put(result, 768, account.MinigamesUnlocked ? 1 : 0);
             Put(result, 772, account.PuzzleUnlocked ? 1 : 0);
             Put(result, 792, account.SurvivalUnlocked || adventure.CompletedRuns > 0 ? 1 : 0);
@@ -326,7 +331,7 @@ namespace PlantsVsZombies.Profiles
             for (var i = 0; i < 80; i++)
             {
                 var n = account.PurchaseCount(i);
-                if ((i == 14 || i == 15 || i == 26 || i == 28) && n > 0)
+                if (i == 14 && account.GardenFertilizerInitialized || (i == 15 || i == 26) && n > 0 || i == 28 && account.TreeFoodGiftClaimed)
                 {
                     n += 1000;
                 }
