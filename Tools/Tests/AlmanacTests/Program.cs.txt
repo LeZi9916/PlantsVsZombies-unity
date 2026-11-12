@@ -4,9 +4,10 @@ using System.Diagnostics;
 using System.Text.Json;
 using System.IO;
 using System.Reflection;
-using PvZReplica.Reanimation;
-using PvZReplica.UI;
-using PvZReplica.VerifiedData;
+using PlantsVsZombies.Inputs;
+using PlantsVsZombies.Reanimation;
+using PlantsVsZombies.UI;
+using PlantsVsZombies.VerifiedData;
 using UnityEngine;
 
 internal static class Program
@@ -81,15 +82,15 @@ internal static class Program
 
     private static void Field(AlmanacView view, string name, object value)
     {
-        typeof(AlmanacView).GetField(name, BindingFlags.Instance | BindingFlags.NonPublic).SetValue(view, value);
+        typeof(AlmanacView).GetField("_" + name, BindingFlags.Instance | BindingFlags.NonPublic).SetValue(view, value);
     }
 
     private static float FloatField(AlmanacView view, string name)
     {
-        return (float)typeof(AlmanacView).GetField(name, BindingFlags.Instance | BindingFlags.NonPublic).GetValue(view);
+        return (float)typeof(AlmanacView).GetField("_" + name, BindingFlags.Instance | BindingFlags.NonPublic).GetValue(view);
     }
 
-    private static void Pointer(AlmanacView view, float x, float y, EventType type)
+    private static void Pointer(AlmanacView view, float x, float y, PointerPhase type)
     {
         Check(view.HandlePointer(new Vector2(x, y), type), "open modal consumes " + type);
     }
@@ -99,20 +100,20 @@ internal static class Program
         view.SetUnlockedPlants(null);
         view.SetUnlockedZombies(null);
         view.Open();
-        Pointer(view, 131, 346, EventType.MouseDown);
+        Pointer(view, 131, 346, PointerPhase.Down);
         Check(view.Screen == AlmanacScreen.Home, "navigation does not activate on press");
-        Pointer(view, 300, 420, EventType.MouseDrag);
-        Pointer(view, 300, 420, EventType.MouseUp);
+        Pointer(view, 300, 420, PointerPhase.Drag);
+        Pointer(view, 300, 420, PointerPhase.Up);
         Check(view.Screen == AlmanacScreen.Home, "dragging off a home button cancels activation");
-        Pointer(view, 300, 420, EventType.MouseDown);
-        Pointer(view, 131, 346, EventType.MouseUp);
+        Pointer(view, 300, 420, PointerPhase.Down);
+        Pointer(view, 131, 346, PointerPhase.Up);
         Check(view.Screen == AlmanacScreen.Home, "release without a matching press cannot navigate");
-        Pointer(view, 131, 346, EventType.MouseDown);
-        Pointer(view, 131, 346, EventType.MouseUp);
+        Pointer(view, 131, 346, PointerPhase.Down);
+        Pointer(view, 131, 346, PointerPhase.Up);
         Check(view.SelectedId == 0, "new almanac session defaults to peashooter");
-        Pointer(view, 80, 95, EventType.MouseDown);
+        Pointer(view, 80, 95, PointerPhase.Down);
         Check(view.SelectedId == 1, "entry selects on mouse down");
-        Pointer(view, 80, 95, EventType.MouseUp);
+        Pointer(view, 80, 95, PointerPhase.Up);
         Field(view, "formattedDescription", "long description");
         Field(view, "descriptionRect", new Rect(485, 300, 258, 100));
         Field(view, "descriptionHeight", 400f);
@@ -128,43 +129,43 @@ internal static class Program
         Check(!view.HandleScroll(new Vector2(200, 320), 1f), "wheel outside description is ignored");
         Check(!view.HandleScroll(new Vector2(600, 320), float.NaN), "invalid wheel is ignored");
         Field(view, "scrollOffset", 0f);
-        Pointer(view, 739, 312, EventType.MouseDown);
+        Pointer(view, 739, 312, PointerPhase.Down);
         Check(FloatField(view, "scrollOffset") == 0f, "grabbing the thumb does not jump");
-        Pointer(view, 739, 387, EventType.MouseDrag);
+        Pointer(view, 739, 387, PointerPhase.Drag);
         Check(FloatField(view, "scrollOffset") == 300f, "thumb drags through its full travel");
-        Pointer(view, 900, 900, EventType.MouseDrag);
+        Pointer(view, 900, 900, PointerPhase.Drag);
         Check(FloatField(view, "scrollOffset") == 300f, "captured thumb clamps outside the canvas");
-        Pointer(view, 900, 900, EventType.MouseUp);
-        Pointer(view, 739, 300, EventType.MouseDrag);
+        Pointer(view, 900, 900, PointerPhase.Up);
+        Pointer(view, 739, 300, PointerPhase.Drag);
         Check(FloatField(view, "scrollOffset") == 300f, "release ends scrollbar capture");
         Click(view, 133, 95);
         Check(view.SelectedId == 2 && FloatField(view, "scrollOffset") == 0f &&
             float.IsNaN(FloatField(view, "animationEpoch")), "new entry resets description and portrait animation");
-        Pointer(view, 33, 568, EventType.MouseDown);
+        Pointer(view, 33, 568, PointerPhase.Down);
         Check(view.SelectedId == 2, "index remains on category until release");
-        Pointer(view, 33, 568, EventType.MouseUp);
+        Pointer(view, 33, 568, PointerPhase.Up);
         Check(view.Screen == AlmanacScreen.Home, "index returns on release");
         Click(view, 131, 346);
         Check(view.SelectedId == 2, "index navigation retains the chosen entry");
-        Pointer(view, 677, 568, EventType.MouseDown);
+        Pointer(view, 677, 568, PointerPhase.Down);
         Check(!view.IsClosed, "close waits for release");
-        Pointer(view, 400, 550, EventType.MouseUp);
+        Pointer(view, 400, 550, PointerPhase.Up);
         Check(!view.IsClosed, "dragging off close cancels it");
-        Pointer(view, 677, 568, EventType.MouseDown);
-        Pointer(view, 677, 568, EventType.MouseUp);
+        Pointer(view, 677, 568, PointerPhase.Down);
+        Pointer(view, 677, 568, PointerPhase.Up);
         Check(view.IsClosed, "matching close release closes the modal");
-        Check(!view.HandlePointer(new Vector2(131, 346), EventType.MouseDown), "closed modal ignores pointer events");
+        Check(!view.HandlePointer(new Vector2(131, 346), PointerPhase.Down), "closed modal ignores pointer events");
         view.Open();
         Click(view, 131, 346);
         Check(view.SelectedId == 0, "a newly opened dialog resets old session selections");
         view.HandleBack();
-        Pointer(view, 131, 346, EventType.MouseDown);
+        Pointer(view, 131, 346, PointerPhase.Down);
         view.HandleBack();
         view.Open();
-        Pointer(view, 131, 346, EventType.MouseUp);
+        Pointer(view, 131, 346, PointerPhase.Up);
         Check(view.Screen == AlmanacScreen.Home, "reopening clears stale pointer capture");
         Check(!view.HandleClick(new Vector2(float.NaN, 346)), "NaN click cannot activate a control");
-        Check(!view.HandlePointer(new Vector2(131, 346), EventType.Layout), "non-pointer event is ignored");
+        Check(!view.HandlePointer(new Vector2(131, 346), (PointerPhase)(-1)), "non-pointer event is ignored");
     }
 
     private static void CheckPortraitLayout()
@@ -220,7 +221,7 @@ internal static class Program
             UseShellExecute = false, CreateNoWindow = true
         };
         foreach (string arg in new[] { "-d", "Ubuntu-24.04", "--", "sh", "-c",
-            "PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=analysis/ida/plant_timing/vendor python3 PvZUnity/tests/AlmanacTests/native_oracle.py" })
+            "PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=analysis/ida/plant_timing/vendor python3 PvZUnity/Tools/Tests/AlmanacTests/native_oracle.py" })
             start.ArgumentList.Add(arg);
         string json;
         using (Process process = Process.Start(start))

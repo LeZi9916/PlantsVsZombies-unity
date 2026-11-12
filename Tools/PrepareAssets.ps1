@@ -45,7 +45,7 @@ foreach ($group in $resources.SelectNodes('//Resources')) {
     }
 }
 
-$animations = @('PeaShooterSingle', 'PeaShooter', 'SunFlower', 'Wallnut', 'Tallnut', 'CherryBomb', 'Jalapeno', 'fire', 'SnowPea', 'PotatoMine', 'Zombie', 'Zombie_flagpole', 'Sun', 'LawnMower')
+$animations = @('PeaShooterSingle', 'PeaShooter', 'SunFlower', 'Wallnut', 'Tallnut', 'CherryBomb', 'Jalapeno', 'fire', 'SnowPea', 'PotatoMine', 'Zombie', 'Zombie_flagpole', 'Zombie_surprise', 'Sun', 'LawnMower', 'Hammer')
 foreach ($name in $animations) {
     $relative = "reanim\$name.reanim"
     if (-not (Copy-Asset $relative)) { throw "Missing animation: $relative" }
@@ -79,15 +79,28 @@ foreach ($name in @('background1.jpg', 'background1unsodded.jpg', 'SeedBank.png'
     'plantshadow.png', 'ProjectilePea.png', 'ProjectileSnowPea.png')) {
     if (-not (Copy-Asset "images\$name")) { throw "Missing image: $name" }
 }
-foreach ($name in @('Wallnut_cracked1.png', 'Wallnut_cracked2.png', 'Tallnut_cracked1.png', 'Tallnut_cracked2.png')) {
+foreach ($name in @('Wallnut_cracked1.png', 'Wallnut_cracked2.png', 'Tallnut_cracked1.png', 'Tallnut_cracked2.png', 'Zombie_paper_madhead.png')) {
     if (-not (Copy-Asset "reanim\$name")) { throw "Missing damaged plant image: $name" }
 }
+foreach ($name in @('coin_silver_dollar.png', 'coin_gold_dollar.png')) {
+    if (-not (Copy-Asset "reanim\$name")) { throw "Missing original collection face: $name" }
+}
 foreach ($name in @('plant.ogg', 'throw.ogg', 'points.ogg', 'splat.ogg',
-    'lawnmower.ogg', 'cherrybomb.ogg', 'potato_mine.ogg', 'jalapeno.ogg', 'winmusic.ogg', 'losemusic.ogg')) {
+    'lawnmower.ogg', 'cherrybomb.ogg', 'potato_mine.ogg', 'jalapeno.ogg', 'winmusic.ogg', 'losemusic.ogg', 'newspaper_rarrgh.ogg', 'newspaper_rarrgh2.ogg', 'coin.ogg')) {
     if (-not (Copy-Asset "sounds\$name")) { throw "Missing sound: $name" }
 }
 [void](Copy-Asset 'properties\resources.xml')
 [void](Copy-Asset 'properties\LawnStrings.txt')
+$diamondSource = Join-Path $Source '..\converted\audio\diamond.wav'
+$diamondDestination = Join-Path $Destination 'sounds\diamond.wav'
+if (-not (Test-Path -LiteralPath $diamondSource -PathType Leaf)) { throw "Missing converted original diamond sound: $diamondSource" }
+if (Test-Path -LiteralPath $diamondDestination -PathType Leaf) {
+    if ((Get-FileHash -LiteralPath $diamondSource -Algorithm SHA256).Hash -ne
+        (Get-FileHash -LiteralPath $diamondDestination -Algorithm SHA256).Hash) {
+        throw "Destination differs from original diamond sound; refusing to overwrite: $diamondDestination"
+    }
+}
+else { Copy-Item -LiteralPath $diamondSource -Destination $diamondDestination }
 $sodSource = Join-Path $Source '..\converted\rgba\images\sod1row.png'
 $sodDestination = Join-Path $Destination 'images\sod1row.png'
 if (-not (Test-Path -LiteralPath $sodSource -PathType Leaf)) { throw "Missing converted lawn image: $sodSource" }

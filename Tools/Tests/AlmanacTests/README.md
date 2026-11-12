@@ -9,7 +9,7 @@
 - 重复选择同一条目不重置说明滚动或预览动画；切换条目会重置。
 - 描述支持滚轮、轨道点击及滚动条拖拽；拖动期间光标离开说明框仍保持捕获，释放后结束。
 - 从战斗设置打开图鉴，关闭后恢复设置草稿，战斗继续暂停；从主菜单进入则返回主菜单。
-- 真实宿主转发 `HandlePointer(point, type)`，坐标先转换为逻辑 800×600。`HandleClick(point)` 是测试或其他宿主的一次完整点击便捷接口。
+- 真实宿主转发 `HandlePointer(point, phase)`，类型为独立的 `PointerPhase`，坐标通过 `GameViewport` 转换为逻辑 800×600。`HandleClick(point)` 是测试或其他宿主的一次完整点击便捷接口。
 
 ## 大小、位置和动画
 
@@ -20,7 +20,7 @@
 - 机枪射手在身体上附着头部、枪管和头盔；三重射手和裂荚射手合成各自的头部轨道。
 - 僵尸缩略图按半尺寸缓存图的原点和独立偏移绘制，裁剪到窗口内部；预览按原版固定坐标和 `197×187` 裁剪范围绘制。
 - 僵王博士使用 `anim_head_idle`、独立 reanim 93 驾驶员及前后遮挡顺序。缩略图缓存与动画预览有不同的驾驶员放置规则。
-- 离屏 GL 绘制使用独立矩阵，并将部件变换只应用一次；不再把部件矩阵同时交给 IMGUI 和 GL，避免全部僵尸预览出现头身分离、偏移或被裁掉。带矩阵变换的僵尸图层先渲染到受限的离屏画布，再作为单张图片显示，以避免 IMGUI 嵌套组的变换裁剪失效。带独立 PNG 蒙版的 JPG 部件先合成为 RGBA32，避免 RGB24 丢失透明度。所需着色器位于 `Assets/Resources/Shaders/PvZNativePortrait.shader`，由 Resources 明确打包。
+- 图像与文字通过原生 Canvas 显示，动画部件由 `ReanimationRenderer` 提交到场景 MeshRenderer，并由共享 URP Camera 直接显示。需要裁剪或灰度的局部动画保留独立离屏表面，再作为局部四边形参与同一绘制顺序；不再将整屏输出回贴到 IMGUI。带独立 PNG 蒙版的 JPG 部件先合成为 RGBA32，避免 RGB24 丢失透明度。部件着色器为 `Assets/Resources/Shaders/PvZCombatSprite.shader`，通过 Resources 打包。
 
 - 旗帜僵尸的静态缩略图先在身体原点绘制旗杆，再绘身体；动画预览使用持旗手相对第 0 帧的变换，避免旗杆重复旋转/平移。小鬼明确选择 `anim_walk`，不再误用文件中排在首位的 `anim_land`。
 
@@ -32,15 +32,23 @@
 
 ## 验证
 
+当前 .NET 测试引用 Unity 6000.3.17f1 已编译的 `PlantsVsZombies.Runtime.dll`，不通过普通 dotnet 重编译 URP 主工程。默认读取主项目 `Library/ScriptAssemblies`；也可使用新隔离测试运行生成的程序集：
+
+```powershell
+dotnet run --project Tools/Tests/AlmanacTests/AlmanacTests.csproj -c Release -p:RuntimeAssembly="D:/path/to/PvZUnity/.unity-runs/<run>/p/Library/ScriptAssemblies/PlantsVsZombies.Runtime.dll" -- Tools/Tests/AlmanacTests/PreparedAssets
+```
+
+这验证逻辑与数据，不证明渲染效果。当前渲染回归请运行 `Tools/Tests/Run-UnityTests.ps1`；本目录旧 `UnityProject` 和 `RunUnitySmoke.ps1` 保存历史验证快照，未迁移为当前 URP 主项目测试入口。
+
 在 `PvZUnity/` 执行：
 
 ```powershell
 & .\Tools\PrepareAlmanacAssets.ps1
-& .\Tools\PrepareAlmanacAssets.ps1 -Destination .\tests\AlmanacTests\PreparedAssets
-dotnet run --project .\tests\AlmanacTests\AlmanacTests.csproj -c Release -- .\tests\AlmanacTests\PreparedAssets
-dotnet run --project .\tests\AlmanacTests\AlmanacTests.csproj -c Release -- .\tests\AlmanacTests\PreparedAssets --native-oracle
-& .\tests\PlayerSmokeTests\Run.ps1 -Mode UI
-& .\tests\AlmanacTests\RunUnitySmoke.ps1
+& .\Tools\PrepareAlmanacAssets.ps1 -Destination .\Tools\Tests\AlmanacTests\PreparedAssets
+dotnet run --project .\Tools\Tests\AlmanacTests\AlmanacTests.csproj -c Release -- .\Tools\Tests\AlmanacTests\PreparedAssets
+dotnet run --project .\Tools\Tests\AlmanacTests\AlmanacTests.csproj -c Release -- .\Tools\Tests\AlmanacTests\PreparedAssets --native-oracle
+& .\Tools\Tests\PlayerSmokeTests\Run.ps1 -Mode UI
+& .\Tools\Tests\AlmanacTests\RunUnitySmoke.ps1
 ```
 
 `--native-oracle` 使用已有 `Ubuntu-24.04` WSL / Unicorn 依赖，仅执行原 EXE `0x40CAA0/0x40CCF0` 的局部命中指令，对照边界、锁定集合和首页状态。可用性函数明确被桩替换，**不验证解锁规则、原版完整 UI 或渲染**。

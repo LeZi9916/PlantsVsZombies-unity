@@ -59,13 +59,13 @@ var game = new GameSimulation(rules);
 
 - `LevelOneTests.csproj` 同时运行原 IDA 数据检查和新增实验模式测试，覆盖模式默认值、行/卡限制、选中取消、阳光与冷却、教学门、波次、可替换回调、固定步长以及通过实际豌豆攻击结束关卡。
 - `FullSimulationRegression`、`FullAdvancedRegression` 将原测试源码与完整 `Levels/` 一起编译，以验证 Unity 脚本集合存在时普通演示仍通过；原两个测试工程本身也需单独运行。
-- `UnityCoreCompile` 用 C# 7.3/.NET Standard 2.1 编译核心脚本；它不是 Unity 编辑器构建。额外运行了现有 `PlantTimingTests`，其原始 x86 机器码对照与本实验无关，只用于验证保留的植物计时模型。
+- `UnityCoreCompile` 用 C# 9.0/.NET Standard 2.1 编译核心脚本；它不是 Unity 编辑器构建。额外运行了现有 `PlantTimingTests`，其原始 x86 机器码对照与本实验无关，只用于验证保留的植物计时模型。
 - `wave_native_oracle.py` 在合成的首轮 1-1 内存状态中执行 EXE 的 `0x416860`、`0x4150C0`，得到唯一可用 ID 0 与 `[[0],[0],[0],[0,0]]`。它只拦截 `0x5267C0`，并确认候选恰为一个 ID 0 后返回该候选，不模拟 RNG。原始写入轨迹还显示末批的首个普通僵尸由 `0x41502D` 直接插入，另一个经过选择。该结果不是原版游戏实机运行，也不验证教程、时序或胜利。
 - 在已配置 `Ubuntu-24.04` WSL 且已有 Unicorn 依赖的本机，从工作区根目录可重复上述额外检查：
 
 ```powershell
-& "$env:WINDIR\System32\wsl.exe" -d Ubuntu-24.04 -- sh -c 'PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=analysis/ida/plant_timing/vendor python3 PvZUnity/tests/LevelOneTests/wave_native_oracle.py'
+& "$env:WINDIR\System32\wsl.exe" -d Ubuntu-24.04 -- sh -c 'PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=analysis/ida/plant_timing/vendor python3 PvZUnity/Tools/Tests/LevelOneTests/wave_native_oracle.py'
 ```
 
   这里只使用既有的第三方 Unicorn 依赖，不复制其他项目的行为实现。若该环境或依赖不存在，可运行 .NET 测试，但不能声称运行了此机器码检查。
-- 本次 .NET 测试将两个原测试工程的中间及输出路径重定向到 `tests/LevelOneTests/`。未运行 Unity 编辑器构建，也未做原版游戏动态对照。
+- 本次 .NET 测试将两个原测试工程的中间及输出路径重定向到 `Tools/Tests/LevelOneTests/`。未运行 Unity 编辑器构建，也未做原版游戏动态对照。

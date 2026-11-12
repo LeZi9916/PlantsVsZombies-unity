@@ -1,154 +1,117 @@
+#nullable enable
+
 using System;
 
-namespace PvZUnity.Timing
+namespace PlantsVsZombies.Timing
 {
-    public enum PlantKind
-    {
-        Peashooter = 0,
-        Sunflower = 1,
-        SnowPea = 5,
-        Repeater = 7
-    }
-
-    public enum ShootingTrack
-    {
-        None,
-        Head,
-        Body
-    }
-
-    public enum AttackAttempt
-    {
-        None,
-        CountdownExpired,
-        RepeaterAt25
-    }
-
-    public readonly struct PlantTimingState
-    {
-        public PlantKind Kind { get; }
-        public int Countdown { get; }
-        public int ShootingCountdown { get; }
-
-        internal PlantTimingState(PlantKind kind, int countdown, int shootingCountdown)
-        {
-            Kind = kind;
-            Countdown = countdown;
-            ShootingCountdown = shootingCountdown;
-        }
-    }
-
-    // These are snapshots of external game conditions, not modeled game systems.
-    public readonly struct PlantTimingInput
-    {
-        public bool PlantUpdateEnabled { get; }
-        public bool ShootingCountdownEnabled { get; }
-        public bool MainActionEnabled { get; }
-        public bool SunProductionEnabled { get; }
-        public bool HasTarget { get; }
-        public ShootingTrack Track { get; }
-        public bool AnimationResetReady { get; }
-        public int RandomDraw { get; }
-
-        public PlantTimingInput(
-            bool plantUpdateEnabled,
-            bool shootingCountdownEnabled,
-            bool mainActionEnabled,
-            bool sunProductionEnabled,
-            bool hasTarget,
-            ShootingTrack track,
-            bool animationResetReady,
-            int randomDraw)
-        {
-            PlantUpdateEnabled = plantUpdateEnabled;
-            ShootingCountdownEnabled = shootingCountdownEnabled;
-            MainActionEnabled = mainActionEnabled;
-            SunProductionEnabled = sunProductionEnabled;
-            HasTarget = hasTarget;
-            Track = track;
-            AnimationResetReady = animationResetReady;
-            RandomDraw = randomDraw;
-        }
-    }
-
-    public readonly struct PlantTimingResult
-    {
-        public PlantTimingState State { get; }
-        public AttackAttempt Attempt { get; }
-        public bool AnimationStarted { get; }
-        public int ProjectilesCreated { get; }
-        public bool SunCreated { get; }
-
-        internal PlantTimingResult(
-            PlantTimingState state, AttackAttempt attempt, bool animationStarted,
-            int projectilesCreated, bool sunCreated)
-        {
-            State = state;
-            Attempt = attempt;
-            AnimationStarted = animationStarted;
-            ProjectilesCreated = projectilesCreated;
-            SunCreated = sunCreated;
-        }
-    }
-
+    /// <summary>Defines plant timing.</summary>
     public static class PlantTiming
     {
+        /// <summary>Performs initial random bound.</summary>
+        /// <param name = "kind">The kind.</param>
+        /// <returns>The resulting initial random bound.</returns>
         public static int InitialRandomBound(PlantKind kind)
         {
             ValidateKind(kind);
-            return kind == PlantKind.Sunflower ? 951 : 151;
+            return kind == PlantKind.Sunflower ? 951 : AttackPeriod(kind) + 1;
         }
 
+        /// <summary>Gets the original base attack period from the plant definition table.</summary>
+        /// <param name="kind">The plant whose attack period is required.</param>
+        /// <returns>The base attack period in native updates.</returns>
+        public static int AttackPeriod(PlantKind kind)
+        {
+            ValidateKind(kind);
+            return kind == PlantKind.Sunflower ? 2500
+                : kind == PlantKind.CabbagePult || kind == PlantKind.KernelPult || kind == PlantKind.MelonPult || kind == PlantKind.WinterMelon ? 300 : 150;
+        }
+
+        /// <summary>Performs initialize.</summary>
+        /// <param name = "kind">The kind.</param>
+        /// <param name = "randomDraw">The random draw.</param>
+        /// <returns>The resulting initialize.</returns>
         public static PlantTimingState Initialize(PlantKind kind, int randomDraw)
         {
-            int bound = InitialRandomBound(kind);
+            var bound = InitialRandomBound(kind);
             CheckDraw(randomDraw, bound);
-            return new PlantTimingState(kind,
-                kind == PlantKind.Sunflower ? 300 + randomDraw : randomDraw, 0);
+            return new PlantTimingState(kind, kind == PlantKind.Sunflower ? 300 + randomDraw : randomDraw, 0);
         }
 
+        /// <summary>Performs from raw.</summary>
+        /// <param name = "kind">The kind.</param>
+        /// <param name = "countdown">The countdown.</param>
+        /// <param name = "shootingCountdown">The shooting countdown.</param>
+        /// <returns>The resulting from raw.</returns>
+        /// <exception cref = "ArgumentOutOfRangeException">The operation cannot satisfy its preconditions.</exception>
+        /// <exception cref = "ArgumentException">The operation cannot satisfy its preconditions.</exception>
         public static PlantTimingState FromRaw(PlantKind kind, int countdown, int shootingCountdown)
         {
             ValidateKind(kind);
             if (countdown < 0 || shootingCountdown < 0)
+            {
                 throw new ArgumentOutOfRangeException("Countdowns must be nonnegative at tick boundaries.");
+            }
+
             if (kind == PlantKind.Sunflower && shootingCountdown != 0)
+            {
                 throw new ArgumentException("This model does not track non-shooting sunflower animation counters.");
+            }
+
             return new PlantTimingState(kind, countdown, shootingCountdown);
         }
 
         // Returns zero when this tick does not consume a timing random draw.
+        /// <summary>Performs required random bound.</summary>
+        /// <param name = "state">The state.</param>
+        /// <param name = "input">The input.</param>
+        /// <returns>The resulting required random bound.</returns>
         public static int RequiredRandomBound(PlantTimingState state, PlantTimingInput input)
         {
             ValidateKind(state.Kind);
             if (!input.PlantUpdateEnabled || !input.MainActionEnabled || state.Countdown > 1)
+            {
                 return 0;
+            }
+
             if (state.Kind == PlantKind.Sunflower)
+            {
                 return input.SunProductionEnabled ? 151 : 0;
+            }
+
             return 15;
         }
 
+        /// <summary>Performs tick.</summary>
+        /// <param name = "state">The state.</param>
+        /// <param name = "input">The input.</param>
+        /// <returns>The resulting tick.</returns>
+        /// <exception cref = "ArgumentOutOfRangeException">The operation cannot satisfy its preconditions.</exception>
         public static PlantTimingResult Tick(PlantTimingState state, PlantTimingInput input)
         {
             ValidateKind(state.Kind);
-            int countdown = state.Countdown;
-            int shooting = state.ShootingCountdown;
-            int projectiles = 0;
-            bool sun = false;
-            bool animation = false;
-            AttackAttempt attempt = AttackAttempt.None;
-
+            var countdown = state.Countdown;
+            var shooting = state.ShootingCountdown;
+            var projectiles = 0;
+            var sun = false;
+            var animation = false;
+            var attempt = AttackAttempt.None;
             if (!input.PlantUpdateEnabled)
+            {
                 return new PlantTimingResult(state, attempt, false, 0, false);
+            }
 
             // In the EXE this runs before the plant's attack/production branch.
             if (state.Kind != PlantKind.Sunflower && input.ShootingCountdownEnabled && shooting != 0)
             {
                 shooting--;
                 if (shooting == 1)
+                {
                     projectiles++;
+                }
                 else if (shooting == 0 && !input.AnimationResetReady)
+                {
                     shooting = 1;
+                }
             }
 
             if (input.MainActionEnabled)
@@ -168,7 +131,7 @@ namespace PvZUnity.Timing
                     if (countdown <= 0)
                     {
                         CheckDraw(input.RandomDraw, 15);
-                        countdown = 150 - input.RandomDraw;
+                        countdown = AttackPeriod(state.Kind) - input.RandomDraw;
                         attempt = AttackAttempt.CountdownExpired;
                     }
                     else if (state.Kind == PlantKind.Repeater && countdown == 25)
@@ -185,7 +148,7 @@ namespace PvZUnity.Timing
                                 animation = true;
                                 break;
                             case ShootingTrack.Body:
-                                shooting = 29;
+                                shooting = BodyShootingCountdown(state.Kind, input);
                                 animation = true;
                                 break;
                             case ShootingTrack.None:
@@ -198,21 +161,59 @@ namespace PvZUnity.Timing
                 }
             }
 
-            return new PlantTimingResult(new PlantTimingState(state.Kind, countdown, shooting),
-                attempt, animation, projectiles, sun);
+            return new PlantTimingResult(new PlantTimingState(state.Kind, countdown, shooting), attempt, animation, projectiles, sun);
         }
 
+        /// <summary>Gets the original body-animation delay set when an attack starts.</summary>
+        /// <param name="kind">The attacking plant.</param>
+        /// <param name="input">The selected attack variant.</param>
+        /// <returns>The shooting countdown before the first decrement.</returns>
+        private static int BodyShootingCountdown(PlantKind kind, PlantTimingInput input)
+        {
+            switch (kind)
+            {
+                case PlantKind.FumeShroom:
+                    return 50;
+                case PlantKind.ScaredyShroom:
+                    return 25;
+                case PlantKind.Cactus:
+                    return input.CactusHigh ? 23 : 35;
+                case PlantKind.CabbagePult:
+                    return 32;
+                case PlantKind.KernelPult:
+                    return 30;
+                case PlantKind.MelonPult:
+                case PlantKind.WinterMelon:
+                    return 36;
+                default:
+                    return 29;
+            }
+        }
+
+        /// <summary>Performs validate kind.</summary>
+        /// <param name = "kind">The kind.</param>
+        /// <exception cref = "ArgumentOutOfRangeException">The operation cannot satisfy its preconditions.</exception>
         private static void ValidateKind(PlantKind kind)
         {
-            if (kind != PlantKind.Peashooter && kind != PlantKind.Sunflower &&
-                kind != PlantKind.SnowPea && kind != PlantKind.Repeater)
+            if (kind != PlantKind.Peashooter && kind != PlantKind.Sunflower && kind != PlantKind.SnowPea && kind != PlantKind.Repeater
+                && kind != PlantKind.PuffShroom && kind != PlantKind.SeaShroom && kind != PlantKind.FumeShroom
+                && kind != PlantKind.ScaredyShroom && kind != PlantKind.Cactus && kind != PlantKind.CabbagePult
+                && kind != PlantKind.KernelPult && kind != PlantKind.MelonPult && kind != PlantKind.WinterMelon)
+            {
                 throw new ArgumentOutOfRangeException(nameof(kind));
+            }
         }
 
+        /// <summary>Performs check draw.</summary>
+        /// <param name = "draw">The draw.</param>
+        /// <param name = "bound">The bound.</param>
+        /// <exception cref = "ArgumentOutOfRangeException">The operation cannot satisfy its preconditions.</exception>
         private static void CheckDraw(int draw, int bound)
         {
             if (draw < 0 || draw >= bound)
+            {
                 throw new ArgumentOutOfRangeException(nameof(draw), "Injected draw is outside [0, bound).");
+            }
         }
     }
 }

@@ -6,7 +6,7 @@ using System.Reflection.PortableExecutable;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
-using PvZReplica.BoardUI;
+using PlantsVsZombies.BoardUI;
 
 internal static class Program
 {

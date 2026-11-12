@@ -1,8 +1,8 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
-$generator = Join-Path $PSScriptRoot '../../Tools/GenerateVerifiedData.ps1'
-$source = Join-Path $PSScriptRoot '../../../analysis/ida/balance'
-$fixture = Join-Path $PSScriptRoot ('generator-fixture-' + [Guid]::NewGuid().ToString('N'))
+$generator = Join-Path $PSScriptRoot '../../GenerateVerifiedData.ps1'
+$source = Join-Path $PSScriptRoot '../../../../analysis/ida/balance'
+$fixture = Join-Path $PSScriptRoot ('artifacts/generator-fixture-' + [Guid]::NewGuid().ToString('N'))
 $names = @('plants_full', 'zombies_full', 'adventure_levels_full', 'challenge_modes_full', 'reanimations_full')
 $utf8 = [System.Text.UTF8Encoding]::new($false)
 

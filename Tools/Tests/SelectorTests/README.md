@@ -1,42 +1,18 @@
 # Selector view
 
-`PvZReplica.UI.SelectorView` is an independent IMGUI view, not an implementation
+`PlantsVsZombies.UI.SelectorView` is an independent Canvas view, not an implementation
 of the games or menus it points to. Its constructor takes a directory containing
 `images/` and `reanim/`; for this workspace use `extracted_assets/raw`. The current
 `Tools/PrepareAssets.ps1` does not copy these assets, so the existing
 `StreamingAssets/PvZ` directory is not a complete selector resource root.
 
-The host calls `Draw(seconds)` during `OnGUI`, with a matrix mapping logical
-800x600 coordinates to its viewport, and calls `HitTest` with the pointer in
-those logical coordinates. Set `HoveredAction` from `HitTest` for highlights.
-Neither method consumes input or dispatches an action. The host must handle
-clicks and communicate honestly when an entry has no implementation. Every
-entry returns an intent regardless of progress or implementation status;
-`SetModeLocked` only changes the original-style dark tint for MiniGames, Puzzle,
-and Survival. `Dispose` releases cached textures. Do not use a disposed view.
-
-For example, with `offsetX`, `offsetY` and `scale` calculated by the host:
-
-```csharp
-Event e = Event.current;
-Vector2 logical = new Vector2((e.mousePosition.x - offsetX) / scale,
-                              (e.mousePosition.y - offsetY) / scale);
-view.HoveredAction = view.HitTest(logical);
-if (e.type == EventType.MouseUp && e.button == 0)
-{
-    SelectorAction intent = view.HitTest(logical);
-    // The host decides whether that intent is implemented and how to respond.
-}
-Matrix4x4 old = GUI.matrix;
-try
-{
-    GUI.matrix = Matrix4x4.TRS(new Vector3(offsetX, offsetY, 0),
-        Quaternion.identity, new Vector3(scale, scale, 1));
-    view.Draw(Time.time);
-}
-finally { GUI.matrix = old; }
-```
-
+The presenter calls `Draw(seconds)` once per frame in its 800x600 logical
+Canvas space. The input router converts screen pixels through the shared
+viewport and calls `HitTest` with logical coordinates; set `HoveredAction`
+from that result for highlights. Neither method dispatches navigation.
+`SetModeLocked` changes the dark tint for MiniGames, Puzzle, and Survival;
+`Dispose` releases cached textures. Drawing and hit testing reject use after
+disposal. A GUI event or `OnGUI` callback is not required.
 The returned actions are `None`, `Adventure`, `MiniGames`, `Puzzle`, `Survival`,
 `ZenGarden`, `Almanac`, `Store`, `Options`, `Help`, `Quit`, `ChangeUser`, and
 `Zombatar`. The view does not load profiles, automatically gate progress, invoke
@@ -98,7 +74,7 @@ named `Survival`, Puzzle on `Challenges`, and Survival on `Vasebreaker`.
 ## Verification
 
 ```powershell
-dotnet run --project PvZUnity/tests/SelectorTests/SelectorTests.csproj -c Release
+dotnet run --project PvZUnity/Tools/Tests/SelectorTests/SelectorTests.csproj -c Release
 ```
 
 The standalone tests exercise hit intents, boundaries, cache behavior, mask

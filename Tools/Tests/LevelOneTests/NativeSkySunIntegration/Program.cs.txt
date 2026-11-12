@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
-using PvZReplica;
-using PvZReplica.Levels;
-using OriginalSun = PvZUnity.Sun;
-using OriginalTiming = PvZUnity.Timing;
+using PlantsVsZombies.Simulation;
+using PlantsVsZombies.Levels;
+using OriginalSun = PlantsVsZombies.Sun;
+using OriginalTiming = PlantsVsZombies.Timing;
 
 internal static class Program
 {

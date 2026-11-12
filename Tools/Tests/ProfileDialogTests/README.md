@@ -1,8 +1,20 @@
 # ProfileDialog integration
 
-`PvZReplica.UI.ProfileDialog` is an independent modal. It does not modify
+`PlantsVsZombies.UI.ProfileDialog` is an independent modal. It does not modify
 `PvZGame`, create the catalog, import original saves, or change the game scene.
 The current production catalog uses `Guid` profile IDs and `Guid? SelectedId`.
+
+Run the current logic fixtures with the prepared resource root:
+
+```powershell
+dotnet run --project Tools/Tests/ProfileDialogTests/ProfileDialogTests.csproj -c Release -- Assets/StreamingAssets
+dotnet run --project Tools/Tests/ProfileDialogTests/RealCatalogTests/RealCatalogTests.csproj -c Release -- Assets/StreamingAssets
+```
+
+`UnityStubs.cs` and `OriginalUiWidgetsFixture.cs` provide inert image drawing
+and deterministic input for state, fallback-label, persistence, and ownership
+checks. These fixtures do not verify widget appearance, native Canvas input, or
+rendered pixels. Use the Unity and Player regression paths for rendering.
 
 ## Lifecycle and input
 
@@ -11,14 +23,13 @@ The current production catalog uses `Guid` profile IDs and `Guid? SelectedId`.
   loading the required images. The owner chooses the catalog file path.
 - `Open()` starts a session. An empty catalog opens the new-user editor. A
   catalog read failure is displayed inside the still-open dialog.
-- `Draw()` runs from `OnGUI` after the owner establishes its 800x600,
-  top-left-origin GUI matrix. Draw the underlying screen first.
-- While the dialog is open, suppress all input to the underlying screen.
-  Forward a primary `MouseDown` in logical coordinates to `HandleClick`.
-  If it returns `true`, call `Event.Use()`. If it returns `false`, do not
-  route the event to the underlying screen: leave it available to the IMGUI
-  text field. Forward normal keyboard, composition, mouse drag and mouse-up
-  events to IMGUI without consuming them first.
+- `Draw()` submits Canvas elements once per presentation frame in the owner's
+  800x600 logical space. Draw the underlying screen first.
+- While the dialog is open, suppress input to the underlying screen.
+  Forward the primary press in logical coordinates to `HandleClick`.
+  A false return leaves the press available to the native Canvas text field;
+  it must still never reach the screen underneath. The Canvas input field owns
+  keyboard editing, composition, selection, and focus.
 - Route Escape once to `HandleBack()` and suppress the underlying Escape
   handler. Back cancels a nested editor or confirmation first. On the list,
   an outstanding error is dismissed without closing; closing is allowed only
@@ -29,26 +40,9 @@ The current production catalog uses `Guid` profile IDs and `Guid? SelectedId`.
 - `Dispose()` releases owned textures and the font; call it on Unity's main
   thread. It is idempotent. Other methods reject use after disposal.
 
-In the existing host, the `OnGUI` input branch must give the modal priority:
-
-```csharp
-bool wasOpen = profileDialog.IsOpen;
-if (wasOpen)
-{
-    if (Event.current.type == EventType.MouseDown && Event.current.button == 0)
-    {
-        // point is already converted from screen pixels to 800x600 coordinates.
-        if (profileDialog.HandleClick(point)) Event.current.Use();
-    }
-    // Do not run the underlying screen's input handler, even when false was returned.
-}
-else
-{
-    // Existing input routing.
-}
-// Set the host GUI matrix, draw the underlying screen, then profileDialog.Draw().
-```
-
+The host's frame input router gives this modal priority. A click that closes
+it is consumed for the entire frame. Presentation runs separately after flow
+and input updates; it does not create or consume Unity GUI events.
 The error text may contain a catalog exception message. A catalog that reports
 it is unusable must be reconstructed by the owner after inspecting the file;
 this view intentionally does not reopen files or guess the result of a failed
@@ -95,9 +89,9 @@ not a runtime dependency of this component.
 From the workspace root:
 
 ```powershell
-dotnet run --project PvZUnity/tests/ProfileDialogTests/ProfileDialogTests.csproj -c Release
-dotnet run --project PvZUnity/tests/ProfileDialogTests/RealCatalogTests/RealCatalogTests.csproj -c Release
-& ./PvZUnity/tests/ProfileDialogTests/run-unity.ps1
+dotnet run --project PvZUnity/Tools/Tests/ProfileDialogTests/ProfileDialogTests.csproj -c Release
+dotnet run --project PvZUnity/Tools/Tests/ProfileDialogTests/RealCatalogTests/RealCatalogTests.csproj -c Release
+& ./PvZUnity/Tools/Tests/ProfileDialogTests/run-unity.ps1
 ```
 
 The first suite uses controllable Unity and catalog test doubles. The second

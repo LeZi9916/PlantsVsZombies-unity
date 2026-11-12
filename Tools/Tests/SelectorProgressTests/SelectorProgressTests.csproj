@@ -2,13 +2,18 @@
   <PropertyGroup>
     <TargetFrameworks>netstandard2.1;net9.0</TargetFrameworks>
     <OutputType Condition="'$(TargetFramework)' == 'net9.0'">Exe</OutputType>
-    <LangVersion>7.3</LangVersion>
+    <LangVersion>9.0</LangVersion>
     <ImplicitUsings>disable</ImplicitUsings>
     <Nullable>disable</Nullable>
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="../../Assets/Scripts/Progression/SelectorProgressRules.cs" Link="SelectorProgressRules.cs" />
+    <Compile Include="../../../Assets/Scripts/Progression/SelectorMode.cs" Link="Runtime/%(Filename)%(Extension)" />
+    <Compile Include="../../../Assets/Scripts/Progression/SelectorModeClick.cs" Link="Runtime/%(Filename)%(Extension)" />
+    <Compile Include="../../../Assets/Scripts/Progression/SelectorProfileFields.cs" Link="Runtime/%(Filename)%(Extension)" />
+    <Compile Include="../../../Assets/Scripts/Progression/SelectorProgressRules.cs" Link="Runtime/%(Filename)%(Extension)" />
+    <Compile Include="../../../Assets/Scripts/Progression/SelectorProgressState.cs" Link="Runtime/%(Filename)%(Extension)" />
+    <Compile Include="../../../Assets/Scripts/Progression/SelectorRuntimeFields.cs" Link="Runtime/%(Filename)%(Extension)" />
   </ItemGroup>
   <ItemGroup Condition="'$(TargetFramework)' == 'net9.0'">
     <Compile Include="Program.cs" />

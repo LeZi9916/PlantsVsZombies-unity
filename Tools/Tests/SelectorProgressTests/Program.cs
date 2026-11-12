@@ -1,6 +1,6 @@
 using System;
 using System.Globalization;
-using PvZReplica.Progression;
+using PlantsVsZombies.Progression;
 
 internal static class Program
 {

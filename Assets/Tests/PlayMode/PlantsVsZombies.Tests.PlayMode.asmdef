@@ -1,0 +1,11 @@
+{
+  "name": "PlantsVsZombies.Tests.PlayMode",
+  "rootNamespace": "PlantsVsZombies.Tests.PlayMode",
+  "references": [
+    "PlantsVsZombies.Runtime",
+    "UnityEngine.UI"
+  ],
+  "autoReferenced": false,
+  "defineConstraints": ["UNITY_INCLUDE_TESTS"],
+  "optionalUnityReferences": ["TestAssemblies"]
+}

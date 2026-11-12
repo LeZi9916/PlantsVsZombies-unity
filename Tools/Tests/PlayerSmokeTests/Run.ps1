@@ -1,10 +1,10 @@
 #Requires -Version 7.0
 [CmdletBinding()]
 param(
-    [string]$Player = (Join-Path $PSScriptRoot '../../Build/PvZUnity.exe'),
+    [string]$Player = (Join-Path $PSScriptRoot '../../../Build/PvZUnity.exe'),
     [ValidateSet('FirstUser', 'UI', 'LevelOne', 'Battle', 'Adventure')]
     [string[]]$Mode = @('FirstUser', 'UI', 'LevelOne', 'Battle', 'Adventure'),
-    [string]$OutputRoot = (Join-Path $PSScriptRoot '../../Build/SmokeTests'),
+    [string]$OutputRoot = (Join-Path $PSScriptRoot '../../../Build/SmokeTests'),
     [switch]$LogicOnly,
     [ValidateRange(10, 600)][int]$TimeoutSeconds = 120,
     [ValidateRange(800, 3840)][int]$Width = 800,
@@ -18,7 +18,7 @@ if ($LogicOnly -and ('Battle' -in $Mode -or 'Adventure' -in $Mode)) {
 }
 $playerPath = (Resolve-Path -LiteralPath $Player).ProviderPath
 $playerDirectory = [IO.Path]::GetDirectoryName($playerPath)
-$assemblyPath = Join-Path $playerDirectory 'PvZUnity_Data/Managed/Assembly-CSharp.dll'
+$assemblyPath = Join-Path $playerDirectory 'PvZUnity_Data/Managed/PlantsVsZombies.Runtime.dll'
 if (-not (Test-Path -LiteralPath $assemblyPath -PathType Leaf)) {
     throw "Player assembly missing: $assemblyPath"
 }

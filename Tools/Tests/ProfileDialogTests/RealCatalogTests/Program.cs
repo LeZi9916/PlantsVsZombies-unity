@@ -1,7 +1,7 @@
 using System;
 using System.IO;
-using PvZReplica.Profiles;
-using PvZReplica.UI;
+using PlantsVsZombies.Profiles;
+using PlantsVsZombies.UI;
 using UnityEngine;
 
 internal static class Program
@@ -16,12 +16,11 @@ internal static class Program
     { Check(dialog.HandleClick(new Vector2(x, y)), "Expected modal click."); }
     private static void Draw(ProfileDialog dialog, string text = null)
     {
-        GUI.Labels.Clear();
-        GUI.NextText = text;
-        Event.current = new Event { type = EventType.Repaint };
+        CanvasUI.Labels.Clear();
+        CanvasUI.NextText = text;
         dialog.Draw();
     }
-    private static bool Has(string text) { return GUI.Labels.Exists(label => label.Contains(text)); }
+    private static bool Has(string text) { return CanvasUI.Labels.Exists(label => label.Contains(text)); }
     private static void Ok(ProfileDialog dialog) { Click(dialog, 300, 478); }
     private static void Cancel(ProfileDialog dialog) { Click(dialog, 470, 478); }
 

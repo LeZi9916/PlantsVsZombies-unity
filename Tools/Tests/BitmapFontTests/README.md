@@ -1,13 +1,16 @@
 # Bitmap Font Tests
 
-从工作区运行：
+从仓库根目录运行纯解析与排版验证：
 
 ```powershell
-dotnet run --project .\PvZUnity\tests\BitmapFontTests\BitmapFontTests.csproj --configuration Release
-& .\PvZUnity\Tools\PrepareBitmapFonts.ps1
-& .\PvZUnity\tests\BitmapFontTests\RunUnitySmoke.ps1
+dotnet run --project Tools/Tests/BitmapFontTests/BitmapFontTests.csproj -c Release
+./Tools/Tests/Run-UnityTests.ps1 -Platform PlayMode -TestFilter CanvasPresentationTests
 ```
 
-独立测试读取全部 25 层、逐项比较三套原始中文字体，验证 kerning、多页和异常输入。Unity 脚本需要 Windows、Unity 6000.3.17f1 的 Windows 构建支持和可用图形设备；可用 `-Unity` 指定编辑器路径。它在 `.unity-runs/<随机 ID>` 中复制并编译运行时源码，在 `artifacts/<随机 ID>` 写日志、截图和结果，不打开或修改主项目。
+独立测试读取全部 25 层、逐项比较三套原始中文字体，验证 kerning、多页和异常输入。
+当前运行时是 `CanvasBitmapFont`，字形由原生 CanvasRenderer 显示，不依赖 GUI 事件。
+主工程的 `CanvasPresentationTests` 通过 Unity 6000.3.17f1 和实际图形设备检查 Canvas 图层、
+裁剪、复用、原生文本控件及位图字形；隔离运行目录由主工程测试脚本管理。
 
-Player 从隐藏窗口启动，然后只将自己的窗口移出桌面并以非激活状态显示，以便 Unity 触发真正的 IMGUI Repaint。测试从 Player 截图回读像素，按原 PNG 的透明度和指定颜色计算预期值。可删除此测试目录下生成的 `.unity-runs`、`artifacts`、`bin`、`obj`；它们不是运行时输入。
+本目录的 `UnitySmokeProject` 和 `RunUnitySmoke.ps1` 是历史 IMGUI 验证快照，
+不是当前 Canvas 运行时的测试入口。保留历史结果不表示这些快照已迁移或重新通过。

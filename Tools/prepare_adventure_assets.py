@@ -12,7 +12,8 @@ def main():
     regular=['background2.jpg','background3.jpg','background4.jpg','background5.jpg','background6boss.jpg',
              'ConveyorBelt.png','ConveyorBelt_backdrop.png','Scary_Pot.png','crater.png','crater_water_day.png',
              'crater_water_night.png','crater_roof_center.png','ice.png','pool.jpg','pool_night.jpg',
-             'ProjectileCactus.png','Projectile_star.png','CobCannon_target.png','CobCannon_target_shadow.png']
+             'ProjectileCactus.png','Projectile_star.png','CobCannon_target.png','CobCannon_target_shadow.png',
+             'Tombstone_mounds.png','dirtbig.png']
     for name in regular:planned['images/'+name]=(source/'images'/name).read_bytes()
     for name in ['PuffShroom_puff1.png','PuffShroom_puff2.png']:
         planned['particles/'+name]=(source/'particles'/name).read_bytes()
@@ -23,6 +24,13 @@ def main():
         if image.size!=mask.size:raise ValueError('Alpha mask dimensions differ: '+name)
         image.putalpha(mask);out=BytesIO();image.save(out,format='PNG');planned['images/'+name+'.png']=out.getvalue()
     sod=source.parent/'converted'/'rgba'/'images'/'sod3row.png';planned['images/sod3row.png']=sod.read_bytes()
+    planned['sounds/coin.ogg']=(source/'sounds'/'coin.ogg').read_bytes()
+    planned['sounds/diamond.wav']=(source.parent/'converted'/'audio'/'diamond.wav').read_bytes()
+    for name in ['coin_silver_dollar.png','coin_gold_dollar.png']:
+        planned['reanim/'+name]=(source/'reanim'/name).read_bytes()
+    planned['particles/GraveStoneRise.xml']=(source/'particles'/'GraveStoneRise.xml').read_bytes()
+    planned['particles/ZombieRise.xml']=(source/'particles'/'ZombieRise.xml').read_bytes()
+    planned['sounds/gravestone_rumble.ogg']=(source/'sounds'/'gravestone_rumble.ogg').read_bytes()
     for name in ['PoolCleaner','RoofCleaner','Zombie_boss_fireball','Zombie_boss_iceball','Coin_silver','Coin_gold','Diamond','FirePea']:
         relative='reanim/'+name+'.reanim'; data=(source/relative).read_bytes();planned[relative]=data
         doc=ET.fromstring('<root>'+data.decode('utf-8-sig')+'</root>')

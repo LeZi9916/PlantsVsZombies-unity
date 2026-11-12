@@ -1,32 +1,59 @@
+#nullable enable
 using System;
 using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Collections.Generic;
 using System.Security.Cryptography;
-using PvZReplica;
-using PvZReplica.Adventure;
-using PvZReplica.Profiles;
+using PlantsVsZombies.Simulation;
+using PlantsVsZombies.Adventure;
+using PlantsVsZombies.Profiles;
 
 internal static class AdventureUnitTests
 {
     private static int assertions;
     private static void Check(bool condition,string name) {assertions++;if(!condition)throw new Exception("Adventure assertion: "+name);}
     private static void Throws<T>(Action action,string name) where T:Exception {bool threw=false;try{action();}catch(T){threw=true;}Check(threw,name);}
-    private static object Invoke(GameSimulation game,string name,params object[] args)
-    {return typeof(GameSimulation).GetMethod(name,BindingFlags.Instance|BindingFlags.NonPublic).Invoke(game,args);}
+    /// <summary>Invokes a private fixture hook, including defaults added to its optional parameters.</summary>
+    /// <param name="game">The isolated unit simulation.</param>
+    /// <param name="name">The private simulation hook name.</param>
+    /// <param name="args">The explicit fixture arguments.</param>
+    /// <returns>The hook's result.</returns>
+    private static object? Invoke(GameSimulation game, string name, params object[] args)
+    {
+        var method = typeof(GameSimulation).GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic)!;
+        var parameters = method.GetParameters();
+        if (args.Length == parameters.Length)
+        {
+            return method.Invoke(game, args);
+        }
+
+        var complete = new object[parameters.Length];
+        Array.Copy(args, complete, args.Length);
+        for (var index = args.Length; index < complete.Length; index++)
+        {
+            complete[index] = parameters[index].DefaultValue;
+        }
+
+        return method.Invoke(game, complete);
+    }
     private static GameSimulation Fixture(int level,params PlantKind[] wanted)
     {
         var g=new GameSimulation(new GameRules{AdventureLevel=level},7529);
         if(g.Adventure.Phase==AdventurePhase.ChoosingSeeds)
         {var deck=wanted.ToList();foreach(var k in g.Adventure.Level.UnlockedSeeds)if(deck.Count<6&&!deck.Contains(k))deck.Add(k);Check(g.ChooseAdventureSeeds(deck),"fixture chooses legal earned deck");}
         if(level==5) for(int c=3;c<=5;c++)g.RemovePlant(2,c);
-        g.Adventure.CurrentWave=g.Adventure.Waves.Count;g.Adventure.FinalAmbush=false;
-        g.Adventure.NextSkySun=float.MaxValue;
+        g.Adventure.CurrentWave=g.Adventure.Waves.Count;g.Adventure._finalAmbush=false;
+        g.Adventure._nextSkySun=float.MaxValue;
         return g;
     }
+    /// <summary>Funds an explicitly isolated unit fixture without inventing a nonnative sun denomination.</summary>
+    /// <param name="g">The isolated unit simulation; public-action playthroughs do not call this helper.</param>
     private static void CreditFixture(GameSimulation g)
-    {var s=new Sun{Value=9990};g.Suns.Add(s);Check(g.CollectSun(s),"explicit unit fixture sun credit");}
+    {
+        typeof(GameSimulation).GetProperty(nameof(GameSimulation.SunAmount))!.SetValue(g, 9990);
+        Check(g.SunAmount == 9990, "explicit unit fixture sun credit");
+    }
     private static Zombie SpawnFixture(GameSimulation g,ZombieKind kind,int row,float x)
     {return (Zombie)Invoke(g,"SpawnAdventureZombie",kind,row,x,0);}
     public static int Run(string workspace)
@@ -50,7 +77,7 @@ internal static class AdventureUnitTests
             var spec=AdventureLevels.Get(n);Check(spec.BaseWaveCount==BitConverter.ToInt32(pe,Offset(pe,0x74EDD8)+(n-1)*4),"native base wave count "+n);
             Check(spec.WaveCount==(n==15?8:spec.BaseWaveCount),"runtime wave override "+n);
             var plan=AdventureWavePlan.Build(spec,new Random(n));Check(plan.Count==spec.WaveCount,"complete playable wave plan "+n);
-            for(int z=0;z<34;z++)Check(PvZReplica.VerifiedData.VerifiedDataCatalog.AdventureLevels[n-1].ZombieFlagsRaw[z]==BitConverter.ToInt32(pe,Offset(pe,0x74EEA0)+z*204+n*4),"native row eligibility "+n+":"+z);
+            for(int z=0;z<34;z++)Check(PlantsVsZombies.VerifiedData.VerifiedDataCatalog.AdventureLevels[n-1].ZombieFlagsRaw[z]==BitConverter.ToInt32(pe,Offset(pe,0x74EEA0)+z*204+n*4),"native row eligibility "+n+":"+z);
             Check(spec.DefaultSeeds.All(k=>spec.UnlockedSeeds.Contains(k)),"no default unearned seed "+n);
             Check(spec.UnlockedSeeds.Distinct().Count()==spec.UnlockedSeeds.Count,"unlocked cards have no duplicate awards "+n);
             Check(plan.All(w=>w.Zombies.Count>0 && w.Zombies.All(z=>(int)z<=24)),"executable zombie behavior for every planned spawn "+n);
@@ -69,9 +96,13 @@ internal static class AdventureUnitTests
         Check(one.SelectAdventureSeed(PlantKind.Peashooter),"select tutorial seed");
         Check(!one.TryPlant(PlantKind.Peashooter,1,0),"unsodded row rejects planting");
         Check(one.TryPlant(PlantKind.Peashooter,2,0),"single grass lane accepts pea");
-        one.Update(17.9f);Check(one.SpawnedZombies==0,"first wave cannot use previous-wave early trigger");one.Update(0.2f);Check(one.SpawnedZombies>0,"actual first wave starts");
+        one.Update(17.9f);Check(one.SpawnedZombies==0,"first wave waits for the original two-peashooter tutorial release");
+        CreditFixture(one);
+        Check(one.TryPlant(PlantKind.Peashooter,2,1),"second tutorial pea releases the native first-wave countdown");
+        one.Update(0.99f);Check(one.SpawnedZombies==0,"tutorial first wave preserves the native one hundred tick delay");
+        one.Update(0.02f);Check(one.SpawnedZombies>0,"actual first wave starts after the tutorial countdown");
         var two=new GameSimulation(new GameRules{AdventureLevel=2});Check(!two.TryPlant(PlantKind.Peashooter,2,0),"sunflower tutorial requires sunflower first");
-        CreditFixture(two);Check(two.TryPlant(PlantKind.Sunflower,1,0),"first tutorial sunflower");two.Update(8f);Check(two.TryPlant(PlantKind.Sunflower,3,0),"second tutorial sunflower after recharge");Check(two.Adventure.Tutorial==AdventureTutorial.Complete,"tutorial completed by actions");
+        CreditFixture(two);Check(two.TryPlant(PlantKind.Sunflower,1,0),"first tutorial sunflower");two.Update(GameSimulation.RechargeTime(PlantKind.Sunflower) + .01f);Check(two.TryPlant(PlantKind.Sunflower,3,0),"second tutorial sunflower after recharge: " + two.LastAdventurePlantingFailure);Check(two.Adventure.Tutorial==AdventureTutorial.Complete,"tutorial completed by actions");
         var five=new GameSimulation(new GameRules{AdventureLevel=5});Check(five.Plants.Count(p=>p.Kind==PlantKind.Peashooter)==3,"bowling opens with shovel tutorial peas");five.Update(30f);Check(five.SpawnedZombies==0 && five.Elapsed==0,"shovel tutorial blocks opening wave and belt");for(int c=3;c<=5;c++)Check(five.RemovePlant(2,c),"shovel accepts tutorial pea");Check(five.Adventure.Tutorial==AdventureTutorial.Complete,"shovel completes after all three removals");
         var selector=new GameSimulation(new GameRules{AdventureLevel=8});selector.Update(60);Check(selector.Elapsed==0&&selector.SpawnedZombies==0,"seed chooser suspends world");
         Check(!selector.ChooseAdventureSeeds(new[]{PlantKind.Peashooter,PlantKind.Peashooter}),"duplicate deck rejected");
@@ -96,7 +127,7 @@ internal static class AdventureUnitTests
         Check(roof.TryPlant(PlantKind.HypnoShroom,2,1)&&roof.AdventurePlantAt(2,1,PlantLayer.Main).Asleep,"day mushroom sleeps");
         Check(roof.TryPlant(PlantKind.CoffeeBean,2,1),"coffee targets sleeping mushroom");roof.Update(2.1f);Check(!roof.AdventurePlantAt(2,1,PlantLayer.Main).Asleep,"coffee wakes after delay");
         var combat=Fixture(19,PlantKind.FumeShroom,PlantKind.GraveBuster,PlantKind.PuffShroom,PlantKind.IceShroom,PlantKind.HypnoShroom,PlantKind.SunShroom);CreditFixture(combat);
-        Check(combat.TryPlant(PlantKind.FumeShroom,2,2),"night fume active");var door=SpawnFixture(combat,ZombieKind.ScreenDoor,2,5f);combat.Update(1f);Check(door.ShieldHealth==1100&&door.Health<270,"fume passes screen shield");
+        Check(combat.TryPlant(PlantKind.FumeShroom,2,2),"night fume active");var door=SpawnFixture(combat,ZombieKind.ScreenDoor,2,5f);combat.Update(2.1f);Check(door.ShieldHealth<1100&&door.Health<270,"fume damages screen shield and body");
         var basic=Fixture(9,PlantKind.Peashooter,PlantKind.Sunflower,PlantKind.PotatoMine,PlantKind.SnowPea,PlantKind.CherryBomb,PlantKind.Wallnut);CreditFixture(basic);
         var normal=SpawnFixture(basic,ZombieKind.Normal,2,4f);Invoke(basic,"HitAdventureZombie",normal,200f,false);Check(normal.Headless,"body threshold causes real decapitation");float health=normal.Health;basic.Update(1f);Check(normal.Health<health||!basic.Zombies.Contains(normal),"headless zombie bleeds");
         var diver=SpawnFixture(pool,ZombieKind.Snorkel,3,5);Check(diver.Submerged,"snorkel has submerged state");
@@ -108,20 +139,28 @@ internal static class AdventureUnitTests
     }
     private static void Specials()
     {
+        var vaultFixture=Fixture(9);
+        var vault=SpawnFixture(vaultFixture,ZombieKind.PoleVaulter,2,5f);
+        vault.UsedAbility=true;vault.AbilityTimer=.75f;
+        Check(vaultFixture.AdventurePresentationZombieAnimation(vault)=="anim_jump","pole vaulter uses the native jump animation during the vault");
+        Check(Math.Abs(vaultFixture.AdventurePresentationZombieRate(vault)-24f)<0.00001f,"pole vaulter jump uses the native 24 fps rate");
+        Check(AdventureZombieGroundData.TryGet("Zombie_polevaulter","anim_jump",out var jump)&&jump.Count==43&&Math.Abs(jump.SourceRate-24f)<0.00001f&&Math.Abs(jump.GroundDistance)<0.00001f,"pole vaulter jump ground clip matches the native marker interval");
+        vault.AbilityTimer=0;Check(vaultFixture.AdventurePresentationZombieAnimation(vault)=="anim_walk","pole vaulter returns to walking after the vault");
         var bowling=Fixture(5);var packet=bowling.Adventure.Packets[0];Check(!bowling.TryUseAdventurePacket(packet.Id,2,3),"bowling placement line enforced");Check(bowling.TryUseAdventurePacket(packet.Id,2,2),"bowling emits moving nut");Check(!bowling.TryUseAdventurePacket(packet.Id,2,2),"packet cannot be spent twice");var victim=SpawnFixture(bowling,ZombieKind.Normal,2,4);bowling.Update(1);Check(!bowling.Zombies.Contains(victim),"bowling collision kills actual zombie");
         var hammer=Fixture(15);var cone=SpawnFixture(hammer,ZombieKind.Conehead,2,5);hammer.Update(0.5f);Check(hammer.HammerAdventureZombie(cone.Id),"hammer accepts live emerged zombie");
+        var whackOpening=new GameSimulation(new GameRules{AdventureLevel=15},1570935);Check(whackOpening.Adventure.Graves.Count==9,"2-5 starts with nine native graves");Check(whackOpening.Adventure.Waves.Count==8,"2-5 uses eight Whack waves");whackOpening.Update(2.03f);Check(whackOpening.Adventure.CurrentWave==1&&whackOpening.Zombies.Count>0,"2-5 starts its first grave spawn on the native timer");Check(whackOpening.Zombies[0].GraveRiseTicks>=48,"2-5 grave zombies use the native fifty-tick Whack rise duration");
         var vase=Fixture(35);Check(vase.Adventure.Vases.Count==15,"first vase stage has actual fifteen objects");var shown=vase.Adventure.Vases.First(v=>v.ShowsPlant);Check(vase.SmashAdventureVase(shown.Row,shown.Column)&&vase.Adventure.Packets.Count==1,"green vase creates usable seed packet");Check(!vase.SmashAdventureVase(shown.Row,shown.Column),"vase cannot be smashed twice");
         var boss=Fixture(50);Check(boss.Adventure.BossHealth==40000&&boss.Adventure.Packets.Count==4,"boss health and scripted opening packets");boss.Adventure.BossHeadVulnerable=true;Invoke(boss,"DamageAdventureBoss",1800f);Check(boss.Adventure.BossHealth==38200,"exposed boss takes real damage");boss.Adventure.BossHeadVulnerable=false;Invoke(boss,"DamageAdventureBoss",1800f);Check(boss.Adventure.BossHealth==38200,"hidden boss rejects damage");
         var a=new GameSimulation(new GameRules{AdventureLevel=5},96);var b=new GameSimulation(new GameRules{AdventureLevel=5},96);
         for(int c=3;c<=5;c++){a.RemovePlant(2,c);b.RemovePlant(2,c);}
-        for(int i=0;i<100;i++)a.Update(0.1f);for(int i=0;i<1000;i++)b.Update(0.01f);
-        Check(a.Elapsed>9.9f && a.Zombies.Count>0,"determinism fixture actually advances live enemies");
+        for(int i=0;i<200;i++)a.Update(0.1f);for(int i=0;i<2000;i++)b.Update(0.01f);
+        Check(a.Elapsed>19.9f && a.Zombies.Count>0,"determinism fixture advances beyond the original eighteen-second opening countdown");
         Check(a.Adventure.CurrentWave==b.Adventure.CurrentWave&&a.Zombies.Count==b.Zombies.Count&&a.Adventure.Packets.Select(p=>p.Kind).SequenceEqual(b.Adventure.Packets.Select(p=>p.Kind)),"fixed-step grouping preserves RNG and wave schedule");
         Check(a.Zombies.Zip(b.Zombies,(x,y)=>Math.Abs(x.X-y.X)<0.00001f&&x.Kind==y.Kind&&x.Row==y.Row).All(v=>v),"fixed-step grouping preserves moving entities");
     }
     private static void Progression(string workspace)
     {
-        string dir=Path.Combine(workspace,"tests","AdventureTests","artifacts",Guid.NewGuid().ToString("N"));Directory.CreateDirectory(dir);
+        string dir=Path.Combine(workspace,"Tools","Tests","AdventureTests","artifacts",Guid.NewGuid().ToString("N"));Directory.CreateDirectory(dir);
         string old=Path.Combine(dir,"profiles.dat"),path=Path.Combine(dir,"campaign.adventure");
         var catalog=new ProfileCatalog(old);var profile=catalog.Create("冒险测试");byte[] oldBytes=File.ReadAllBytes(old);
         var store=new AdventureProgressStore(path);var campaign=new AdventureCampaign(store,profile.Id);var game=campaign.BeginOrResume();var bot=new PlaythroughBot(game);

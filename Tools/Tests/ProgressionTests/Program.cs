@@ -1,10 +1,12 @@
+#nullable enable
+
 using System;
 using System.IO;
 using System.Collections.Generic;
-using PvZReplica;
-using PvZReplica.Adventure;
-using PvZReplica.Profiles;
-using PvZReplica.Progression;
+using PlantsVsZombies.Simulation;
+using PlantsVsZombies.Adventure;
+using PlantsVsZombies.Profiles;
+using PlantsVsZombies.Progression;
 
 internal static class Program
 {
@@ -22,6 +24,16 @@ internal static class Program
         using(var users=new BinaryWriter(File.Create(Path.Combine(folder,"users.dat")))){users.Write(14);users.Write((ushort)1);users.Write((ushort)3);users.Write(new byte[]{90,111,235});users.Write(7u);users.Write(7u);}
         var directory=OriginalSaveFormat.ReadDirectory(folder);Check(directory.Count==1&&directory[0].Name=="Zoë"&&directory[0].OriginalId==7,"Native v14 byte-wise username and user mapping");
         var source=OriginalSaveFormat.ReadUser(original);Check(source.Level==36&&source.Coins==10000&&source.Plants.Count==1,"Native v12 import");Check(source.Purchases[14]==5,"Native supply marker normalization");
+        Check(source.Name == "user7" && source.Purchases.Length == 80 && source.ChallengeRecords.Length == 100,
+            "Imported saves supply a fallback name and complete non-null record arrays");
+        var emptySaveBytes = new byte[887];
+        Put(emptySaveBytes, 0, 12);
+        Put(emptySaveBytes, 4, 1);
+        var emptySavePath = Path.Combine(folder, "user8.dat");
+        File.WriteAllBytes(emptySavePath, emptySaveBytes);
+        var emptySave = OriginalSaveFormat.ReadUser(emptySavePath);
+        Check(emptySave.Plants.Count == 0 && emptySave.Name == "user8" && emptySave.Purchases.Length == 80,
+            "A valid empty garden retains non-null parsed collections");
         var profiles=new ProfileCatalog(Path.Combine(folder,"profiles.dat"));Guid id=Guid.NewGuid();profiles.CreateImported(id,"原版导入");
         var store=new PlayerAccountStore(Path.Combine(folder,"wallet.account"));store.Import(id,source.Coins,source.Purchases,source.ChallengeRecords,source.ChallengeRecords[49],source.Plants);
         var progress=new AdventureProgressStore(Path.Combine(folder,"campaign.adventure"));progress.Import(id,source.Level,source.FinishedAdventure);
@@ -34,8 +46,25 @@ internal static class Program
         var campaign=new AdventureCampaign(progress,id,store);var game=campaign.BeginOrResume();Check(game.Adventure.Level.IsReplay&&game.Adventure.Level.PacketSlots==10&&game.Adventure.AvailableSeeds.Count==42,"Replay includes purchased seeds");Check(game.Adventure.RequiredSeeds.Count==3,"Dave fixes three seeds");
         var chosen=new List<PlantKind>(game.Adventure.RequiredSeeds);foreach(var k in new[]{PlantKind.GatlingPea,PlantKind.TwinSunflower,PlantKind.Imitater,PlantKind.Sunflower,PlantKind.Repeater,PlantKind.LilyPad,PlantKind.Wallnut,PlantKind.FumeShroom})if(k!=PlantKind.Imitater&&!chosen.Contains(k)&&chosen.Count<10)chosen.Add(k);foreach(var k in game.Adventure.AvailableSeeds)if(!chosen.Contains(k)&&chosen.Count<10)chosen.Add(k);
         Check(campaign.ChooseSeeds(chosen),"Owned upgraded loadout can be saved and played");var resumed=new AdventureCampaign(new AdventureProgressStore(Path.Combine(folder,"campaign.adventure")),id,store).BeginOrResume();Check(resumed.Adventure.SelectedSeeds.Count==10&&resumed.Adventure.Phase==AdventurePhase.Playing,"Saved upgraded loadout resumes");
-        var coin=game.SpawnAdventureCoin(AdventureCoinKind.Gold,4,1);int money=store.Get(id).Coins;Check(game.CollectAdventureCoin(coin),"Battle collection");Check(store.Get(id).Coins==money+5&&!game.CollectAdventureCoin(coin),"Battle coin immediately durable once");
-        var failure=new GameSimulation(new GameRules{AdventureLevel=8,AdventureCoinCommit=total=>false},17);failure.ChooseDefaultAdventureSeeds();var pending=failure.SpawnAdventureCoin(AdventureCoinKind.Silver,4,2);Check(!failure.CollectAdventureCoin(pending)&&pending.PersistencePending,"Persistence failure preserves coin");pending.Age=35;failure.Update(.01f);Check(failure.Adventure.Coins.Count==1,"Failed-save coin does not expire");failure.Rules.AdventureCoinCommit=total=>true;Check(failure.CollectAdventureCoin(pending)&&failure.Adventure.Coins.Count==0,"Pending pickup can be retried");
+        var coin = game.SpawnAdventureCoin(AdventureCoinKind.Gold, 4, 1);
+        var money = store.Get(id).Coins;
+        Check(game.CollectAdventureCoin(coin), "Battle collection starts its original flight");
+        Check(store.Get(id).Coins == money && !game.CollectAdventureCoin(coin), "A flying pickup remains uncredited and cannot be collected twice");
+        game.Update(1.5f);
+        Check(store.Get(id).Coins == money + 5 && !game.CollectAdventureCoin(coin), "The arriving battle coin is durable exactly once");
+        var failure = new GameSimulation(new GameRules { AdventureLevel = 8, AdventureCoinCommit = total => false }, 17);
+        failure.ChooseDefaultAdventureSeeds();
+        var pending = failure.SpawnAdventureCoin(AdventureCoinKind.Silver, 4, 2) ?? throw new InvalidOperationException("The silver coin was not spawned.");
+        Check(failure.CollectAdventureCoin(pending), "Pickup starts before its arrival-time persistence attempt");
+        failure.Update(1.5f);
+        Check(pending.PersistencePending && !pending.IsBeingCollected, "Persistence failure preserves a retryable coin");
+        pending.Age = 35;
+        failure.Update(.01f);
+        Check(failure.Adventure.Coins.Count == 1, "Failed-save coin does not expire");
+        failure.Rules.AdventureCoinCommit = total => true;
+        Check(failure.CollectAdventureCoin(pending), "Pending pickup can be retried");
+        failure.Update(.01f);
+        Check(failure.Adventure.Coins.Count == 0, "The retry credits and retires the arriving pickup");
         Guid plant=store.Get(id).Plants[0].Id;long utc=1900000000;
         for(int stage=0;stage<3;stage++){for(int water=0;water<3;water++){var g=store.Get(id).Plants[0];utc=Math.Max(utc,g.NextCareUtc);store.TendGarden(id,plant,GardenTool.Water,utc);utc+=16;}utc=Math.Max(utc,store.Get(id).Plants[0].NextCareUtc);store.TendGarden(id,plant,GardenTool.Fertilizer,utc);utc=store.Get(id).Plants[0].NextCareUtc;}
         Check(store.Get(id).Plants[0].Growth==3&&store.Get(id).PurchaseCount(14)==2,"Garden growth consumes three fertilizer charges");

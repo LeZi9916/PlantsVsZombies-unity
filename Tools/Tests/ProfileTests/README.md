@@ -94,6 +94,6 @@ dotnet run --project ProfileTests.csproj -c Release -f net9.0 --no-build
 ```
 
 The build also compiles the production sources against .NET Standard 2.1 with
-C# 7.3. The executable uses no test framework or third-party dependencies. It
+C# 9.0. The executable uses no test framework or third-party dependencies. It
 tests real files, replacement/lock failures, injected commit-boundary failures,
 recovery, corrupt and unknown formats, stale writers, and cross-process locking.

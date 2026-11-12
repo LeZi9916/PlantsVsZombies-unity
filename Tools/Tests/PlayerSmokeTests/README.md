@@ -3,7 +3,7 @@
 Run from `PvZUnity/` in an interactive Windows desktop, after building the Player:
 
 ```powershell
-& .\tests\PlayerSmokeTests\Run.ps1
+& .\Tools\Tests\PlayerSmokeTests\Run.ps1
 ```
 
 The default run launches five separate visible Direct3D 11 windows in sequence:
@@ -24,8 +24,8 @@ automated smoke scripts are still invoked directly by the test.
 For a wider viewport or a subset, invoke the script directly from PowerShell:
 
 ```powershell
-& .\tests\PlayerSmokeTests\Run.ps1 -Width 1280 -Height 720 -Mode UI,LevelOne
-& .\tests\PlayerSmokeTests\Run.ps1 -Mode FirstUser,UI,LevelOne -LogicOnly
+& .\Tools\Tests\PlayerSmokeTests\Run.ps1 -Width 1280 -Height 720 -Mode UI,LevelOne
+& .\Tools\Tests\PlayerSmokeTests\Run.ps1 -Mode FirstUser,UI,LevelOne -LogicOnly
 ```
 
 `-LogicOnly` uses a hidden `-batchmode -nographics` Player, expects no screenshots,
@@ -42,7 +42,7 @@ For manual checks with real OS mouse/keyboard input, run:
 
 `-pvz-ui-review` creates a separate temporary profile without starting automated
 navigation. Settings changes in this mode stay in memory. Add `-pvz-level-one`
-to inspect the experimental first level. Explicit tests/review keep updating
+to inspect the experimental first level. Explicit Tools/Tests/review keep updating
 when their window loses focus; normal gameplay keeps its existing setting.
 
 The runtime flag `-pvz-smoke-output <directory>` redirects only explicit smoke

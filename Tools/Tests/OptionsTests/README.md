@@ -1,6 +1,6 @@
 # OptionsView integration contract
 
-`PvZReplica.UI.OptionsView` is an independent in-game options view. It is not
+`PlantsVsZombies.UI.OptionsView` is an independent in-game options view. It is not
 wired into `PvZGame`; the owner is responsible for opening it, routing input,
 applying settings and resuming the game. It does not access `Screen`, audio,
 preferences, saves, scene loading or application restart.
@@ -15,15 +15,13 @@ preferences, saves, scene loading or application restart.
   rejected. Opening an already open view throws. Opening clears `CloseResult`.
 - `MusicVolume`, `SoundVolume`, `FullScreen`, `IsOpen` and `CloseResult` are
   read-only properties. Values are drafts, including during slider drag.
-- `Draw()`: call inside `OnGUI`, with the owner's GUI matrix already set to map
-  the top-left-origin 800 x 600 logical coordinates to the display. It does
-  not transform input or dispatch events and does nothing while closed.
-- `HandlePointer(Vector2 position, EventType type)`: send logical coordinates.
-  Forward left-button `MouseDown`, `MouseDrag`, `MouseUp`, plus `MouseMove` for
-  hover. It returns `true` for those events whenever open, even outside the
-  panel, including the mouse-up which closes it; otherwise it returns `false`.
-  The owner must consume those events and suppress all other game input while
-  modal. Forward drag and release even when the pointer leaves the panel.
+- `Draw()`: submit Canvas elements once per presentation frame in top-left
+  800x600 logical coordinates. Drawing does nothing while the view is closed.
+- `HandlePointer(Vector2 position, PointerPhase phase)`: send logical
+  coordinates with `Down`, `Drag`, `Up`, or `Move` from the independent input
+  router. These phases return `true` whenever the modal is open, even outside
+  the panel, including a release that closes it. Suppress underlying game
+  input for the entire frame, and forward drag/release outside the panel.
 - `Close()`: owner-initiated close with `ReturnToGame`; this is suitable for
   Escape. `OptionsCloseResult` has `None` and `ReturnToGame`. After the return
   button or `Close()`, read the drafts once and apply/persist them in the owner.
@@ -31,49 +29,10 @@ preferences, saves, scene loading or application restart.
 - `Dispose()`: release the owned Unity textures and dynamic font on the main
   thread. Idempotent. Other methods throw after disposal.
 
-Example routing pattern, after `view.Open(...)` and after the owner has paused
-its game. `ApplyOptions` is an owner-defined one-shot method:
-
-```csharp
-void OnGUI()
-{
-    Event e = Event.current;
-    bool wasOpen = view.IsOpen;
-    float scale = Mathf.Min(Screen.width / 800f, Screen.height / 600f);
-    float ox = (Screen.width - 800f * scale) * 0.5f;
-    float oy = (Screen.height - 600f * scale) * 0.5f;
-    if (wasOpen)
-    {
-        if (e.type == EventType.KeyDown && e.keyCode == KeyCode.Escape)
-        {
-            view.Close();
-            e.Use();
-        }
-        else if (e.type == EventType.MouseMove ||
-                 ((e.type == EventType.MouseDown || e.type == EventType.MouseDrag ||
-                   e.type == EventType.MouseUp) && e.button == 0))
-        {
-            var p = new Vector2((e.mousePosition.x - ox) / scale,
-                                (e.mousePosition.y - oy) / scale);
-            if (view.HandlePointer(p, e.type)) e.Use();
-        }
-        // Suppress remaining game keyboard, other mouse buttons and scroll here.
-        if (!view.IsOpen && view.CloseResult == OptionsCloseResult.ReturnToGame)
-            ApplyOptions(view.MusicVolume, view.SoundVolume, view.FullScreen);
-    }
-    // Draw the game first, then the modal view.
-    Matrix4x4 previous = GUI.matrix;
-    try
-    {
-        GUI.matrix = Matrix4x4.TRS(new Vector3(ox, oy, 0), Quaternion.identity,
-            new Vector3(scale, scale, 1));
-        view.Draw();
-    }
-    finally { GUI.matrix = previous; }
-}
-```
-
-Do not also handle mouse events automatically in `Draw`, or forward them twice.
+The host pauses gameplay before opening the modal, gives it priority in the
+frame input router, applies the draft once on close, and then resumes gameplay.
+Input coordinates use the same viewport conversion as Canvas and the scene
+camera. Presentation never synthesizes GUI events or processes a click twice.
 The user-facing slider values are normalized; the owner decides the audio
 mapping. The original binary additionally multiplied the SFX value by 0.65;
 that is not applied by the view.

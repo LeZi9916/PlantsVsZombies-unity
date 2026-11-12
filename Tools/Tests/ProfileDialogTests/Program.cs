@@ -1,7 +1,7 @@
 using System;
 using System.IO;
-using PvZReplica.Profiles;
-using PvZReplica.UI;
+using PlantsVsZombies.Profiles;
+using PlantsVsZombies.UI;
 using UnityEngine;
 
 internal static class Program
@@ -16,13 +16,12 @@ internal static class Program
     { Check(dialog.HandleClick(new Vector2(x, y)), "Expected modal click to be consumed."); }
     private static void Draw(ProfileDialog dialog, string text = null)
     {
-        GUI.Labels.Clear();
-        GUI.NextText = text;
-        Event.current = new Event { type = EventType.Repaint };
+        CanvasUI.Labels.Clear();
+        CanvasUI.NextText = text;
         dialog.Draw();
     }
     private static bool HasLabel(string fragment)
-    { return GUI.Labels.Exists(text => text.Contains(fragment)); }
+    { return CanvasUI.Labels.Exists(text => text.Contains(fragment)); }
     private static void Ok(ProfileDialog dialog) { Click(dialog, 300, 478); }
     private static void Cancel(ProfileDialog dialog) { Click(dialog, 470, 478); }
     private static void Create(ProfileDialog dialog, string name, int row)
@@ -43,8 +42,8 @@ internal static class Program
         dialog.Open();
         Draw(dialog);
         Check(dialog.IsOpen && HasLabel("新用户"), "Empty catalog starts in create editor.");
-        Check(GUI.Focused == "PvZ.ProfileDialog.Name", "Name field receives focus.");
-        Check(!dialog.HandleClick(new Vector2(300, 270)), "Text field MouseDown must reach IMGUI.");
+        Check(CanvasUI.Focused == "PvZ.ProfileDialog.Name", "Name field receives focus.");
+        Check(!dialog.HandleClick(new Vector2(300, 270)), "Text field MouseDown must reach IMCanvasUI.");
         Check(dialog.HandleClick(new Vector2(1, 1)), "Clicks outside the panel remain modal.");
         Ok(dialog);
         Draw(dialog);
@@ -150,10 +149,10 @@ internal static class Program
         dialog.HandleBack();
         Check(dialog.IsOpen, "Unreadable catalog never closes via Back.");
         catalog.FailRead = false;
-        GUI.color = new Color(0.1f, 0.2f, 0.3f, 0.4f);
-        GUI.enabled = false;
+        CanvasUI.Color = new Color(0.1f, 0.2f, 0.3f, 0.4f);
+        CanvasUI.Enabled = false;
         Draw(dialog);
-        Check(GUI.color.r == 0.1f && !GUI.enabled, "Draw restores host GUI state.");
+        Check(CanvasUI.Color.r == 0.1f && !CanvasUI.Enabled, "Draw restores host Canvas state.");
         dialog.Dispose();
         dialog.Dispose();
         foreach (Texture2D image in Texture2D.Created)

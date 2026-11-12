@@ -28,8 +28,8 @@ the auxiliary entries, and its `SetModeLocked` changes tint only.
 Build both targets and run the standalone checks from the workspace root:
 
 ```powershell
-dotnet build PvZUnity/tests/SelectorProgressTests/SelectorProgressTests.csproj -c Release
-dotnet run --project PvZUnity/tests/SelectorProgressTests/SelectorProgressTests.csproj -c Release -f net9.0 --no-build
+dotnet build PvZUnity/Tools/Tests/SelectorProgressTests/SelectorProgressTests.csproj -c Release
+dotnet run --project PvZUnity/Tools/Tests/SelectorProgressTests/SelectorProgressTests.csproj -c Release -f net9.0 --no-build
 ```
 
 Optional independent differential verification requires Python 3, Unicorn
@@ -40,7 +40,7 @@ native instruction branches against C#. It neither starts the game nor reads or
 writes its saves:
 
 ```text
-python3 PvZUnity/tests/SelectorProgressTests/native_oracle.py
+python3 PvZUnity/Tools/Tests/SelectorProgressTests/native_oracle.py
 ```
 
 On this machine the Windows Unicorn runtime exited while executing even a

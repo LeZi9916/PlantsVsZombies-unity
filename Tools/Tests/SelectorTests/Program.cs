@@ -1,6 +1,6 @@
 using System;
 using System.IO;
-using PvZReplica.UI;
+using PlantsVsZombies.UI;
 using UnityEngine;
 
 internal static class Program
@@ -71,24 +71,21 @@ internal static class Program
         Hit(view, 430, 100, SelectorAction.Adventure);
         Hit(view, 430, 170, SelectorAction.None);
 
-        Event.current = new Event { type = EventType.Layout };
-        view.Draw(0);
-        Check(ImageConversion.LoadCount == 0, "Layout must not load textures.");
-        Event.current.type = EventType.Repaint;
+        Check(ImageConversion.LoadCount == 0, "Construction must not load textures.");
         view.Draw(0);
         Check(Debug.Warnings.Count == 0, "Asset warning: " + string.Join("; ", Debug.Warnings));
-        Check(GUI.GroupDepth == 0, "GUI group must be balanced.");
-        Check(GUI.Drawn.Count == 32, "Unexpected number of drawn layers: " + GUI.Drawn.Count);
+        Check(CanvasUI.GroupDepth == 0, "Canvas clipping groups must be balanced.");
+        Check(CanvasUI.Drawn.Count == 32, "Unexpected number of drawn layers: " + CanvasUI.Drawn.Count);
         Check(ImageConversion.LoadCount == 34, "Unexpected image/mask load count: " + ImageConversion.LoadCount);
         // Native anchor evidence fixes both origin and unscaled original image size.
-        Rect almanac = GUI.Drawn[28], store = GUI.Drawn[27];
+        Rect almanac = CanvasUI.Drawn[28], store = CanvasUI.Drawn[27];
         Check(almanac.x == 327 && almanac.y == 428 && almanac.width == 99 && almanac.height == 99,
             "Almanac must use its native settled anchor and original image size.");
         Check(store.x == 405 && store.y == 482 && store.width == 130 && store.height == 89,
             "Store must use its native settled anchor and original image size.");
         int loaded = ImageConversion.LoadCount;
         view.Draw(float.NaN);
-        Check(ImageConversion.LoadCount == loaded, "Second repaint must reuse cached textures.");
+        Check(ImageConversion.LoadCount == loaded, "Second frame must reuse cached textures.");
         view.HoveredAction = SelectorAction.MiniGames;
         view.SetModeLocked(SelectorAction.MiniGames, true);
         view.Draw(1);
