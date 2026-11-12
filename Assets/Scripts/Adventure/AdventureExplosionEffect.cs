@@ -12,6 +12,8 @@ namespace PlantsVsZombies.Adventure
         /// <summary>Identifies potato mine.</summary>
         PotatoMine,
         /// <summary>Identifies potato mine rise.</summary>
-        PotatoMineRise
+        PotatoMineRise,
+        /// <summary>Identifies the original Whack-a-Zombie hammer impact.</summary>
+        Pow
     }
 }

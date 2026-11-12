@@ -5185,6 +5185,7 @@ namespace PlantsVsZombies.Simulation
                 BossHealth = level.Mode == AdventureMode.Boss ? 40000f : 0f,
                 _bossTimer = 12f
             };
+            Adventure._whackSeedBankY = level.Mode == AdventureMode.WhackAZombie ? -87f : 0f;
             InitializeAdventureSeedAccess();
             InitializeReplaySeedChoices();
             Adventure._waveInitialCountdown = Adventure.WaveCountdown;
@@ -5418,6 +5419,7 @@ namespace PlantsVsZombies.Simulation
             TickCellTimers(Adventure._craters, dt);
             TickCellTimers(Adventure._ice, dt);
             AdvanceAdventureEconomy(dt);
+            AdvanceAdventureWhackSeedBank(dt);
             if (Adventure.Level.Mode == AdventureMode.Boss)
             {
                 AdvanceAdventureBoss(dt);
@@ -5599,6 +5601,34 @@ namespace PlantsVsZombies.Simulation
             }
 
             a.StormFlash = a.Level.Mode == AdventureMode.Storm && a._ticks % 600 < 150;
+        }
+
+        /// <summary>Advances the original Whack-a-Zombie seed-bank reveal after a sun is available.</summary>
+        /// <param name="dt">The elapsed simulation seconds.</param>
+        private void AdvanceAdventureWhackSeedBank(float dt)
+        {
+            var board = Adventure;
+            if (board.Level.Mode != AdventureMode.WhackAZombie || board._whackSeedBankY >= 0f)
+            {
+                return;
+            }
+
+            var collecting = false;
+            foreach (var sun in Suns)
+            {
+                if (sun.PresentationPickup.Collecting)
+                {
+                    collecting = true;
+                    break;
+                }
+            }
+
+            if (SunAmount <= 0 && !collecting && board._whackSeedBankY <= -87f)
+            {
+                return;
+            }
+
+            board._whackSeedBankY = Math.Min(0f, board._whackSeedBankY + dt * 200f);
         }
 
         /// <summary>Performs adventure conveyor weight.</summary>
@@ -5880,30 +5910,71 @@ namespace PlantsVsZombies.Simulation
             return p;
         }
 
-        /// <summary>Performs hammer adventure zombie.</summary>
-        /// <param name = "zombieId">The zombie id.</param>
-        /// <returns>The resulting hammer adventure zombie.</returns>
+        /// <summary>Strikes the center of a zombie's hammer hit rectangle for simulation-only callers.</summary>
+        /// <param name="zombieId">The live zombie to strike.</param>
+        /// <returns>Whether the hammer strike was accepted.</returns>
         public bool HammerAdventureZombie(int zombieId)
         {
-            if (!IsAdventure || State != MatchState.Playing || Adventure.Phase != AdventurePhase.Playing || Adventure.Level.Mode != AdventureMode.WhackAZombie)
+            var zombie = Zombies.Find(candidate => candidate.Id == zombieId);
+            if (zombie == null)
+            {
+                return false;
+            }
+
+            var body = AdventureZombieTargetingRules.BodyRectangle(zombie, 50 + zombie.Row * 100);
+            return HammerAdventureZombie(zombieId, body.X + body.Width * .5f, body.Y + (body.Height - 50) * .5f + 20f);
+        }
+
+        /// <summary>Applies the original helmet damage or immediate lethal hammer strike at a board click.</summary>
+        /// <param name="zombieId">The live zombie selected by the hammer hit test.</param>
+        /// <param name="hitX">The original board-pixel click x coordinate.</param>
+        /// <param name="hitY">The original board-pixel click y coordinate.</param>
+        /// <returns>Whether the hammer strike was accepted.</returns>
+        public bool HammerAdventureZombie(int zombieId, float hitX, float hitY)
+        {
+            var whack = IsAdventure && (Adventure.Level.Mode == AdventureMode.WhackAZombie || ModeSession != null && ModeSession.Definition.Mechanic == ModeMechanic.Whack);
+            if (!whack || State != MatchState.Playing || Adventure.Phase != AdventurePhase.Playing)
             {
                 return false;
             }
 
             var z = Zombies.Find(x => x.Id == zombieId);
-            if (z == null || z.Age < 0.4f)
+            if (z == null || z.Health <= 0f)
             {
                 return false;
             }
 
             if (z.ArmorHealth > 0)
             {
+                EnsureAdventureZombieEquipment(z);
+                AdventurePresentationZombieHit(z, 900f, true);
+                if (z.Kind == ZombieKind.Buckethead)
+                {
+                    RequestAdventureZombieFoley(46);
+                }
+                else if (z.Kind == ZombieKind.Conehead)
+                {
+                    RequestAdventureZombieFoley(58);
+                }
+
                 z.ArmorHealth = Math.Max(0, z.ArmorHealth - 900f);
+                AdventurePresentationZombieEquipmentDamaged(z, 0);
                 Raise(GameEvent.ZombieHit);
             }
             else
             {
-                KillAdventureZombie(z);
+                // PC 0x42D616..0x42D65F: Pow at the click, followed by immediate death with loot.
+                Presentation.Explosions.Add(new AdventureExplosion
+                {
+                    Id = ++Presentation._effectId,
+                    Seed = _random.Next(),
+                    Row = z.Row,
+                    X = z.X,
+                    NativeX = hitX - 3f,
+                    NativeY = hitY + 9f,
+                    Effect = AdventureExplosionEffect.Pow
+                });
+                KillAdventureZombie(z, 16U);
             }
 
             return true;
@@ -7542,6 +7613,11 @@ namespace PlantsVsZombies.Simulation
         /// <param name = "z">The z.</param>
         private void RefreshAdventureZombieNativeSpeed(Zombie z)
         {
+            if (z.PresentationWhackSpeed)
+            {
+                return;
+            }
+
             var phase = AdventureZombieFeedbackPhase(z);
             var kind = z.ModeHead >= 26 ? z.ModeHead : (int)z.Kind;
             if (z._presentationSpeedPhase != phase || z._presentationSpeedKind != kind)
@@ -9673,9 +9749,10 @@ namespace PlantsVsZombies.Simulation
         private void TickAdventureWhack(float dt)
         {
             var a = Adventure;
+            var ticks = Math.Max(1, (int)Math.Round(dt * 100f));
             if (WaveSchedule != null)
             {
-                WaveSchedule.ElapsedTicks += Math.Max(1, (int)Math.Round(dt * 100f));
+                WaveSchedule.ElapsedTicks += ticks;
                 WaveSchedule.InitialCountdownTicks = a.CurrentWave > 0 ? 2000 : 200;
                 WaveSchedule.CountdownTicks = Math.Max(0, (int)Math.Round(a.WaveCountdown * 100f));
                 WaveSchedule.HealthAtWaveStart = 0;
@@ -9687,31 +9764,33 @@ namespace PlantsVsZombies.Simulation
                 return;
             }
 
-            a.WaveCountdown -= dt;
-            if (a.CurrentWave > 0 && a.WaveCountdown <= 1f && !a._whackGravesRaised)
+            var countdown = Math.Max(0, (int)Math.Round(a.WaveCountdown * 100f) - ticks);
+            a.WaveCountdown = countdown * .01f;
+            if (a.CurrentWave > 0 && countdown == 100 && !a._whackGravesRaised)
             {
                 WhackPlaceGraves(Math.Max(1, 5 - a._graves.Count));
                 a._whackGravesRaised = true;
             }
 
-            if (a.WaveCountdown <= 0)
+            if (countdown == 0)
             {
                 a.CurrentWave++;
                 a.WaveCountdown = 20f;
                 a._whackGravesRaised = false;
-                a._whackSpawnTimer = a.CurrentWave == a.Waves.Count ? 1f : 0.01f;
+                // PC 0x43139E: the reset counter is decremented on this same native tick.
+                a._whackSpawnTimer = a.CurrentWave == a.Waves.Count ? 3f : .03f;
                 a.TotalWavesSpawned++;
                 a.Notice(AdventureNoticeKind.WaveSpawned, a.CurrentWave - 1);
                 RaiseScheduledWaveEvent(global::PlantsVsZombies.Waves.WaveScheduleEventKind.WaveSpawned, a.CurrentWave - 1);
             }
-
-            if (a.CurrentWave <= 0 || a.WaveCountdown < 3f)
+            else if (countdown < 300)
             {
                 return;
             }
 
-            a._whackSpawnTimer -= dt;
-            if (a._whackSpawnTimer > 0)
+            var spawnTicks = Math.Max(0, (int)Math.Round(a._whackSpawnTimer * 100f) - ticks);
+            a._whackSpawnTimer = spawnTicks * .01f;
+            if (spawnTicks > 0)
             {
                 return;
             }
@@ -9765,7 +9844,8 @@ namespace PlantsVsZombies.Simulation
             }
 
             var progress = Math.Max(0f, Math.Min(1f, (a.CurrentWave - 1) / 11f));
-            var speedMax = final ? 2f : 1f + 2f * progress * progress;
+            // PC 0x4315D8 calls the integer curve helper, then stores pixels per native tick.
+            var speedMax = final ? 2f : (float)Math.Round(1f + 2f * progress * progress, MidpointRounding.AwayFromZero);
             for (var i = 0; i < count && graves.Count > 0; i++)
             {
                 var index = _random.Next(graves.Count);
@@ -9773,13 +9853,15 @@ namespace PlantsVsZombies.Simulation
                 graves.RemoveAt(index);
                 var zombieKind = final ? (_random.Next(2) == 0 ? ZombieKind.Conehead : ZombieKind.Buckethead) : kind;
                 var zombie = SpawnAdventureZombie(zombieKind, grave.Row, grave.Column + 0.5f, a.CurrentWave - 1);
-                zombie.Speed = 0.5f + (float)_random.NextDouble() * (speedMax - 0.5f);
+                zombie.PresentationNativeVelocity = 0.5f + (float)_random.NextDouble() * (speedMax - 0.5f);
+                zombie.Speed = AdventureZombieNativeRules.GridSpeed(zombie.PresentationNativeVelocity);
+                zombie.PresentationWhackSpeed = true;
                 zombie.DropRemaining = 0.5f;
                 InitializeAdventureGraveZombie(zombie, grave.Column);
             }
 
-            var minTicks = (int)Math.Round(100f - 70f * progress);
-            var maxTicks = (int)Math.Round(200f - 140f * progress);
+            var minTicks = (int)Math.Round(100f - 70f * progress, MidpointRounding.AwayFromZero);
+            var maxTicks = (int)Math.Round(200f - 140f * progress, MidpointRounding.AwayFromZero);
             a._whackSpawnTimer = _random.Next(minTicks, maxTicks + 1) * 0.01f;
             if (final)
             {
@@ -9890,6 +9972,8 @@ namespace PlantsVsZombies.Simulation
                 graves.RemoveAt(index);
                 var z = SpawnAdventureZombie(final ? (_random.Next(2) == 0 ? ZombieKind.Conehead : ZombieKind.Buckethead) : kind, g.Row, g.Column + 0.5f, a.CurrentWave - 1);
                 z.Speed = 0.5f + (float)_random.NextDouble() * (speedMax - 0.5f);
+                z.PresentationNativeVelocity = z.Speed * .8f;
+                z.PresentationWhackSpeed = true;
                 z.DropRemaining = 0.5f;
                 InitializeAdventureGraveZombie(z, g.Column);
             }
@@ -13235,9 +13319,11 @@ namespace PlantsVsZombies.Simulation
         private void InitializeAdventureGraveZombie(Zombie zombie, int column)
         {
             var nativeX = 40f + column * 80f - 25f;
+            var whack = Adventure.Level.Mode == AdventureMode.WhackAZombie || ModeSession != null && ModeSession.Definition.Mechanic == ModeMechanic.Whack;
             zombie.X = AdventureZombieNativeRules.GridX(nativeX, zombie.IsSmall ? .5f : 1f);
             zombie.PresentationPreviousX = zombie.X;
-            zombie.GraveRiseTicks = AdventureZombieRiseRules.DurationTicks;
+            zombie.GraveRiseTicks = whack ? 50 : AdventureZombieRiseRules.DurationTicks;
+            zombie.PresentationWhackSpeed = whack;
             zombie.PresentationNativePhase = 14;
             zombie.DropRemaining = 0f;
             zombie.Eating = false;
@@ -13247,9 +13333,17 @@ namespace PlantsVsZombies.Simulation
                 Id = ++Presentation._effectId,
                 Row = zombie.Row,
                 X = nativeX + 60f,
-                Y = AdventureBiteNativeY(zombie, (int)nativeX) + 110f
+                Y = AdventureBiteNativeY(zombie, (int)nativeX) + 110f,
+                Whack = whack
             });
-            RequestAdventureZombieFoley(79);
+            if (whack)
+            {
+                Presentation.ZombieRiseSoundSerial++;
+            }
+            else
+            {
+                RequestAdventureZombieFoley(79);
+            }
         }
 
         /// <summary>Performs pick scheduled ambush zombie.</summary>

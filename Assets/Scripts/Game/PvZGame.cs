@@ -120,6 +120,8 @@ namespace PlantsVsZombies.Game
         internal string _profileLoadError;
         /// <summary>Stores current view.</summary>
         internal ScreenView _currentView = ScreenView.Selector;
+        /// <summary>Stores whether the system cursor visibility has been synchronized.</summary>
+        private bool _cursorVisibilityInitialized;
         /// <summary>Stores almanac return view.</summary>
         private ScreenView _almanacReturnView = ScreenView.Selector;
         /// <summary>Stores almanac returns to options.</summary>
@@ -288,6 +290,7 @@ namespace PlantsVsZombies.Game
             PreserveAdventureFeedbackDuringPause(Time.unscaledDeltaTime);
             if (UpdateOriginalLoading(Time.unscaledDeltaTime))
             {
+                UpdateCursorVisibility();
                 UpdateDynamicAudio();
                 return;
             }
@@ -388,7 +391,25 @@ namespace PlantsVsZombies.Game
                 _currentView = ScreenView.Selector;
             }
 
+            UpdateCursorVisibility();
             UpdateDynamicAudio();
+        }
+
+        /// <summary>Synchronizes the system cursor with the original adventure board presentation.</summary>
+        private void UpdateCursorVisibility()
+        {
+            var whackBoard = _game != null && _game.IsAdventure
+                && (_game.Adventure.Level.Mode == AdventureMode.WhackAZombie
+                    || IsModeBoard && _modeSession != null && _modeSession.Definition.Mechanic == ModeMechanic.Whack);
+            var hidden = _currentView == ScreenView.Board && _game != null && _game.IsAdventure
+                && whackBoard
+                && !_optionsView.IsOpen && !_confirmingQuit && _unavailableFeature == null && !_originalLoadingActive;
+            var visible = !hidden;
+            if (!_cursorVisibilityInitialized || UnityEngine.Cursor.visible != visible)
+            {
+                UnityEngine.Cursor.visible = visible;
+                _cursorVisibilityInitialized = true;
+            }
         }
 
         /// <summary>Retires a selected conveyor packet after the simulation removes it.</summary>
@@ -471,6 +492,7 @@ namespace PlantsVsZombies.Game
         /// <summary>Performs on destroy.</summary>
         private void OnDestroy()
         {
+            UnityEngine.Cursor.visible = true;
             _presenter?.Dispose();
             DisposeDynamicAudio();
             DisposeOriginalLoading();
@@ -3115,6 +3137,12 @@ namespace PlantsVsZombies.Game
         {
             get
             {
+                if (!IsModeBoard && _game.IsAdventure && _game.Adventure.Level.Mode == AdventureMode.WhackAZombie)
+                {
+                    var x = _adventureIntroFrame == null ? 0f : _adventureIntroFrame.SeedBankX;
+                    return new Vector2(x, _game.Adventure._whackSeedBankY);
+                }
+
                 return !IsModeBoard && _game.IsAdventure && _adventureIntroFrame != null
                     ? new Vector2(_adventureIntroFrame.SeedBankX, _adventureIntroFrame.SeedBankY)
                     : Vector2.zero;
@@ -3509,16 +3537,58 @@ namespace PlantsVsZombies.Game
 
             if (board.Level.Mode == AdventureMode.WhackAZombie)
             {
-                _hammerAnimationAge = 0.2f;
-                for (var i = _game.Zombies.Count - 1; i >= 0; i--)
+                TryHammerAdventureZombie(point);
+            }
+        }
+
+        /// <summary>Performs the original Whack-a-Zombie circular hammer hit test.</summary>
+        /// <param name="point">The board-space click point.</param>
+        private void TryHammerAdventureZombie(Vector2 point)
+        {
+            _hammerAnimationAge = 0.2f;
+            PlayPresentationSound("swing");
+            var hitPoint = new Vector2(point.x, point.y - 20f);
+            Zombie target = null;
+            var targetRow = -1;
+            for (var i = 0; i < _game.Zombies.Count; i++)
+            {
+                var zombie = _game.Zombies[i];
+                var bodyY = 50 + zombie.Row * 100;
+                if (zombie.GraveRiseTicks > 0)
                 {
-                    var zombie = _game.Zombies[i];
-                    var x = AdventureGridX + zombie.X * CellWidth;
-                    if (new Rect(x - 48, AdventureCellY(zombie.Row, zombie.X) - 35, 96, 140).Contains(point))
-                    {
-                        _game.HammerAdventureZombie(zombie.Id);
-                        return;
-                    }
+                    bodyY += (int)-AdventureZombieRiseRules.Altitude(zombie.GraveRiseTicks);
+                }
+
+                var body = AdventureZombieTargetingRules.BodyRectangle(zombie, bodyY);
+                var height = body.Height - 50;
+                if (zombie.GraveRiseTicks > 0)
+                {
+                    height -= (int)(-AdventureZombieRiseRules.Altitude(zombie.GraveRiseTicks) + Math.Min(40, zombie.GraveRiseTicks));
+                }
+
+                // PC 0x428460 retains negative rise heights and checks the near edge first.
+                var dx = hitPoint.x < body.X ? body.X - hitPoint.x
+                    : hitPoint.x > body.X + body.Width ? hitPoint.x - body.X - body.Width : 0f;
+                var dy = hitPoint.y < body.Y ? body.Y - hitPoint.y
+                    : hitPoint.y > body.Y + height ? hitPoint.y - body.Y - height : 0f;
+                if (dx * dx + dy * dy > 45f * 45f)
+                {
+                    continue;
+                }
+
+                if (target == null || zombie.Row >= targetRow)
+                {
+                    target = zombie;
+                    targetRow = zombie.Row;
+                }
+            }
+
+            if (target != null)
+            {
+                var hadArmor = target.ArmorHealth > 0f;
+                if (_game.HammerAdventureZombie(target.Id, point.x, point.y) && !hadArmor)
+                {
+                    PlayPresentationSound("bonk");
                 }
             }
         }
@@ -3647,6 +3717,8 @@ namespace PlantsVsZombies.Game
                 "cherrybomb",
                 "juicy",
                 "dirt_rise",
+                "swing",
+                "bonk",
                 "buzzer",
                 "seedlift",
                 "shovel",
@@ -3707,7 +3779,7 @@ namespace PlantsVsZombies.Game
                 var diamond = cue == "diamond";
                 var path = Path.Combine(_root, "sounds", cue + (diamond ? ".wav" : ".ogg"));
 #if UNITY_EDITOR
-                if (!File.Exists(path) && (cue.StartsWith("crazydave", StringComparison.Ordinal) || cue == "bungee_scream" || cue == "hatchback_open"))
+                if (!File.Exists(path) && (cue.StartsWith("crazydave", StringComparison.Ordinal) || cue == "bungee_scream" || cue == "hatchback_open" || cue == "swing" || cue == "bonk"))
                 {
                     path = Path.Combine(Application.dataPath, "OriginalPvZ", "Raw", "sounds", cue + ".ogg");
                 }
@@ -5404,16 +5476,7 @@ namespace PlantsVsZombies.Game
 
             if (m == ModeMechanic.Whack)
             {
-                _hammerAnimationAge = 0.2f;
-                for (var i = _game.Zombies.Count - 1; i >= 0; i--)
-                {
-                    var z = _game.Zombies[i];
-                    if (new Rect(AdventureGridX + z.X * CellWidth - 48, AdventureCellY(z.Row, z.X) - 35, 96, 140).Contains(point))
-                    {
-                        _game.HammerAdventureZombie(z.Id);
-                        break;
-                    }
-                }
+                TryHammerAdventureZombie(point);
             }
 
             return true;
@@ -6745,8 +6808,8 @@ namespace PlantsVsZombies.Game
 
         /// <summary>Stores zombie part audio game.</summary>
         private GameSimulation _zombiePartAudioGame;
-        /// <summary>Stores zombie part audio serial,  zombie sound read index.</summary>
-        private int _zombiePartAudioSerial, _zombieSoundReadIndex;
+        /// <summary>Stores zombie part audio serial, rise sound serial, and zombie sound read index.</summary>
+        private int _zombiePartAudioSerial, _zombieRiseSoundSerial, _zombieSoundReadIndex;
         /// <summary>Stores zombie part audio loading,  zombie foley ready.</summary>
         private bool _zombiePartAudioLoading, _zombieFoleyReady;
         /// <summary>Stores zombie foley random.</summary>
@@ -6761,6 +6824,7 @@ namespace PlantsVsZombies.Game
             {
                 _zombiePartAudioGame = _game;
                 _zombiePartAudioSerial = 0;
+                _zombieRiseSoundSerial = 0;
                 _zombieSoundReadIndex = 0;
                 _zombieFoleyLastTick.Clear();
             }
@@ -6771,7 +6835,22 @@ namespace PlantsVsZombies.Game
                 StartCoroutine(LoadAdventureZombiePartAudio());
             }
 
-            if (!_zombieFoleyReady || _game == null || _audioSource == null)
+            if (_game == null || _audioSource == null)
+            {
+                return;
+            }
+
+            if (_game.IsAdventure)
+            {
+                var riseSerial = _game.Presentation.ZombieRiseSoundSerial;
+                while (_zombieRiseSoundSerial < riseSerial)
+                {
+                    _zombieRiseSoundSerial++;
+                    PlayPresentationSound("dirt_rise");
+                }
+            }
+
+            if (!_zombieFoleyReady)
             {
                 return;
             }

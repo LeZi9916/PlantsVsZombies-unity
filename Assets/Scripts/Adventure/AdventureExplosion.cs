@@ -9,6 +9,8 @@ namespace PlantsVsZombies.Adventure
         public int Id, Seed, Row, Ticks;
         /// <summary>Stores x.</summary>
         public float X;
+        /// <summary>Stores the original board-pixel position of a hammer impact.</summary>
+        public float NativeX, NativeY;
         /// <summary>Stores effect.</summary>
         public AdventureExplosionEffect Effect;
         /// <summary>Gets or sets overlay.</summary>
@@ -35,7 +37,7 @@ namespace PlantsVsZombies.Adventure
         {
             get
             {
-                return Effect == AdventureExplosionEffect.Doom ? 400 : Effect == AdventureExplosionEffect.PotatoMineRise ? 120 : 200;
+                return Effect == AdventureExplosionEffect.Pow ? 50 : Effect == AdventureExplosionEffect.Doom ? 400 : Effect == AdventureExplosionEffect.PotatoMineRise ? 120 : 200;
             }
         }
     }

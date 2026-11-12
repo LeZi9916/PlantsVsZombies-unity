@@ -59,6 +59,7 @@ namespace PlantsVsZombies.Game
         /// <summary>Releases retained interface objects when the game lifetime ends.</summary>
         internal void Dispose()
         {
+            _hammerParticles?.Clear();
             _levelNameFont?.Dispose();
             CanvasUI.Dispose();
         }
@@ -198,6 +199,7 @@ namespace PlantsVsZombies.Game
                     case PvZGame.ScreenView.Board:
                         DrawBoard();
                         DrawInterface();
+                        DrawAdventureHammerHits();
                         DrawAdventureCrazyDave();
                         if (_owner._packetUpgradeOfferActive)
                         {
@@ -1208,7 +1210,7 @@ namespace PlantsVsZombies.Game
             {
                 if (!explosion.Overlay && explosion.Row == row)
                 {
-                    DrawAdventureExplosion(explosion);
+                    DrawAdventureExplosion(explosion, _adventureParticles);
                 }
             }
 
@@ -1235,7 +1237,7 @@ namespace PlantsVsZombies.Game
         }
 
         // Rendering.cs owner calls after all rows, before the Sun pass (PC layer 400000).
-        /// <summary>Performs draw adventure explosion overlay.</summary>
+        /// <summary>Draws native explosion overlays before the pickup layer.</summary>
         private void DrawAdventureExplosionOverlay()
         {
             if (_adventureParticles == null)
@@ -1245,19 +1247,59 @@ namespace PlantsVsZombies.Game
 
             foreach (var explosion in _owner._game.Presentation.Explosions)
             {
-                if (explosion.Overlay)
+                if (explosion.Overlay && explosion.Effect != AdventureExplosionEffect.Pow)
                 {
-                    DrawAdventureExplosion(explosion);
+                    DrawAdventureExplosion(explosion, _adventureParticles);
                 }
             }
         }
 
         /// <summary>Performs draw adventure explosion.</summary>
         /// <param name = "explosion">The explosion.</param>
-        private void DrawAdventureExplosion(AdventureExplosion explosion)
+        /// <param name="particles">The particle renderer owning this effect's native draw layer.</param>
+        private void DrawAdventureExplosion(AdventureExplosion explosion, OriginalParticleRenderer particles)
         {
-            var point = new Vector2(PvZGame.AdventureGridX + explosion.X * PvZGame.CellWidth, _owner.AdventureCellY(explosion.Row, explosion.X - .5f) + 40f);
-            _adventureParticles.Draw("native-explosion-" + explosion.Id, explosion.Particle, explosion.Ticks * .01f + AdventureRenderRemainder, point, explosion.Seed);
+            var point = explosion.Effect == AdventureExplosionEffect.Pow
+                ? new Vector2(explosion.NativeX, explosion.NativeY)
+                : new Vector2(PvZGame.AdventureGridX + explosion.X * PvZGame.CellWidth, _owner.AdventureCellY(explosion.Row, explosion.X - .5f) + 40f);
+            particles.Draw("native-explosion-" + explosion.Id, explosion.Particle, explosion.Ticks * .01f + AdventureRenderRemainder, point, explosion.Seed);
+        }
+
+        /// <summary>Retains the hammer particle systems independently of the earlier board particle pass.</summary>
+        private OriginalParticleRenderer? _hammerParticles;
+        /// <summary>Identifies the simulation owning the retained hammer particle systems.</summary>
+        private GameSimulation? _hammerPresentedGame;
+
+        /// <summary>Draws the PC 800000 hammer layer after the interface and collecting suns.</summary>
+        private void DrawAdventureHammerHits()
+        {
+            var game = _owner._game;
+            if (game == null || !game.IsAdventure
+                || game.Adventure.Level.Mode != AdventureMode.WhackAZombie
+                    && (game.ModeSession == null || game.ModeSession.Definition.Mechanic != ModeMechanic.Whack))
+            {
+                return;
+            }
+
+            var particles = _hammerParticles;
+            if (!ReferenceEquals(_hammerPresentedGame, game) || particles == null)
+            {
+                particles?.Clear();
+                particles = new OriginalParticleRenderer(_owner._root, _owner._animations);
+                _hammerParticles = particles;
+                _hammerPresentedGame = game;
+            }
+
+            particles.BeginFrame();
+            foreach (var explosion in game.Presentation.Explosions)
+            {
+                if (explosion.Effect == AdventureExplosionEffect.Pow)
+                {
+                    DrawAdventureExplosion(explosion, particles);
+                }
+            }
+
+            particles.EndFrame();
         }
 
         /// <summary>Performs draw adventure snow trails.</summary>
@@ -1785,7 +1827,7 @@ namespace PlantsVsZombies.Game
                     {
                         if (effect.Row == row)
                         {
-                            _adventureParticles.Draw(_presentationKeys.Get("grave-zombie-rise-", effect.Id), "ZombieRise",
+                            _adventureParticles.Draw(_presentationKeys.Get("grave-zombie-rise-", effect.Id), effect.Whack ? "WhackAZombieRise" : "ZombieRise",
                                 effect.Age + AdventureRenderRemainder, new Vector2(effect.X, effect.Y), effect.Id);
                         }
                     }

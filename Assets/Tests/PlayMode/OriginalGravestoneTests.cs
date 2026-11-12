@@ -9,6 +9,7 @@ using PlantsVsZombies.Simulation;
 using PlantsVsZombies.UI;
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
 using UnityEngine;
@@ -214,6 +215,83 @@ namespace PlantsVsZombies.Tests.PlayMode
             Assert.That(DifferentPixels(empty, _pixels.GetPixels32()), Is.GreaterThan(20),
                 "Original grave-rise dirt and arm emitters must submit visible native artwork.");
             Save("grave-zombie-rise-particles.png");
+        }
+
+        /// <summary>Checks the real 2-5 board selects dirt-only Whack particles instead of the grave ambush's detached arm.</summary>
+        /// <returns>Frame boundaries for original particle submission through the production board presenter.</returns>
+        [UnityTest]
+        public IEnumerator WhackRiseUsesOriginalDirtWithoutZombieArm()
+        {
+            _owner._game = new GameSimulation(new GameRules { AdventureLevel = 15 }, 1570935);
+            _owner._game.Update(2.03f);
+            Assert.That(_owner._game.Presentation.ZombieRiseEffects.Count, Is.GreaterThan(0));
+            _owner._game.Zombies.Clear();
+            _owner._game.Mowers.Clear();
+            _owner._game.Suns.Clear();
+            _owner._game.Adventure._graves.Clear();
+            _owner._choosingSeeds = true;
+            foreach (var effect in _owner._game.Presentation.ZombieRiseEffects)
+            {
+                Assert.That(effect.Whack, Is.True);
+                effect.Age = .4f;
+            }
+
+            var flags = BindingFlags.Instance | BindingFlags.NonPublic;
+            var drawBoard = typeof(GamePresenter).GetMethod("DrawAdventureBoard", flags)!;
+            yield return Capture(() => drawBoard.Invoke(_presenter, null));
+            var textures = (Dictionary<string, Texture2D>)typeof(ReanimationRenderer).GetField("_texturesById", flags)!.GetValue(_animations)!;
+            var pool = (ObjectSpriteRenderer)typeof(ReanimationRenderer).GetField("_objectRenderer", flags)!.GetValue(_animations)!;
+            var sprites = (List<ObjectSprite>)typeof(ObjectSpriteRenderer).GetField("_sprites", flags)!.GetValue(pool)!;
+            Assert.That(textures.ContainsKey("IMAGE_DIRTSMALL"), Is.True);
+            Assert.That(textures.ContainsKey("IMAGE_DIRTBIG"), Is.True);
+            Assert.That(textures.ContainsKey("IMAGE_ZOMBIEARM"), Is.False,
+                "The original ZombieRise arm emitter belongs to ordinary grave ambushes, not Whack-a-Zombie.");
+            Assert.That(pool.SubmittedObjectCount, Is.GreaterThan(0));
+            var textureId = Shader.PropertyToID("_MainTex");
+            for (var index = 0; index < pool.SubmittedObjectCount; index++)
+            {
+                var texture = sprites[index].Properties.GetTexture(textureId);
+                Assert.That(texture == textures["IMAGE_DIRTSMALL"] || texture == textures["IMAGE_DIRTBIG"], Is.True,
+                    "The isolated original Whack rise effect must submit only its two native dirt images.");
+            }
+        }
+
+        /// <summary>Checks a real hammer kill renders its native Pow image through the production overlay layer.</summary>
+        /// <returns>Frame boundaries for actual original impact artwork and camera readback.</returns>
+        [UnityTest]
+        public IEnumerator OriginalWhackPowParticlesResolveTheirNativeArtwork()
+        {
+            _owner._game = new GameSimulation(new GameRules { AdventureLevel = 15 }, 1570935);
+            var zombie = new Zombie
+            {
+                Id = 711,
+                Kind = ZombieKind.Normal,
+                Row = 2,
+                X = 4f,
+                Health = 270f,
+                StartingHealth = 270f
+            };
+            _owner._game.Zombies.Add(zombie);
+            Assert.That(_owner._game.HammerAdventureZombie(zombie.Id, 420f, 280f), Is.True);
+            Assert.That(_owner._game.Presentation.Explosions.Count, Is.EqualTo(1));
+            _owner._game.Presentation.Explosions[0].Ticks = 12;
+            var flags = BindingFlags.Instance | BindingFlags.NonPublic;
+            var drawOverlay = typeof(GamePresenter).GetMethod("DrawAdventureHammerHits", flags)!;
+            yield return Capture(() => { });
+            var empty = _pixels.GetPixels32();
+            yield return Capture(() =>
+            {
+                drawOverlay.Invoke(_presenter, null);
+            });
+            var particles = (OriginalParticleRenderer)typeof(GamePresenter).GetField("_hammerParticles", flags)!.GetValue(_presenter)!;
+            Assert.That(particles.LastError, Is.Null.Or.Empty);
+            var textures = (Dictionary<string, Texture2D>)typeof(ReanimationRenderer).GetField("_texturesById", flags)!.GetValue(_animations)!;
+            var pool = (ObjectSpriteRenderer)typeof(ReanimationRenderer).GetField("_objectRenderer", flags)!.GetValue(_animations)!;
+            var sprites = (List<ObjectSprite>)typeof(ObjectSpriteRenderer).GetField("_sprites", flags)!.GetValue(pool)!;
+            Assert.That(pool.SubmittedObjectCount, Is.EqualTo(1));
+            Assert.That(sprites[0].Properties.GetTexture(Shader.PropertyToID("_MainTex")), Is.EqualTo(textures["IMAGE_POW"]));
+            Assert.That(DifferentPixels(empty, _pixels.GetPixels32()), Is.GreaterThan(20),
+                "The original Pow must contribute visible hammer impact pixels.");
         }
 
         /// <summary>Creates an isolated fully emerged grave with fixed original appearance and no live particle tail.</summary>
