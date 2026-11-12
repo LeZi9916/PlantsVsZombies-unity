@@ -1438,6 +1438,33 @@ namespace PlantsVsZombies.Simulation
             });
         }
 
+        /// <summary>Creates one of the original Grave Buster particle systems above the plant's cell.</summary>
+        /// <param name="plant">The Grave Buster that owns the particles.</param>
+        /// <param name="effect">Either the eating (GraveBuster) or the finishing (GraveBusterDie) effect.</param>
+        private void AdventurePresentationGraveBuster(Plant plant, global::PlantsVsZombies.Adventure.AdventureExplosionEffect effect)
+        {
+            Presentation.Explosions.Add(new global::PlantsVsZombies.Adventure.AdventureExplosion {
+                Id = ++Presentation._effectId,
+                Seed = _random.Next(),
+                Row = plant.Row,
+                X = plant.Column + .5f,
+                Effect = effect
+            });
+        }
+
+        /// <summary>Starts the attached rock particles when the Grave Buster finishes landing (Plant::UpdateGraveBuster).</summary>
+        /// <param name="plant">The Grave Buster whose timer was just advanced.</param>
+        private void StartAdventureGraveBusterEating(Plant plant)
+        {
+            if (plant.GraveBusterEatingStarted || !global::PlantsVsZombies.Adventure.AdventureGraveBusterRules.IsEating(plant.ActionTimer))
+            {
+                return;
+            }
+
+            plant.GraveBusterEatingStarted = true;
+            AdventurePresentationGraveBuster(plant, global::PlantsVsZombies.Adventure.AdventureExplosionEffect.GraveBuster);
+        }
+
         /// <summary>Performs adventure explosion random float.</summary>
         /// <param name = "range">The range.</param>
         /// <returns>The resulting adventure explosion random float.</returns>
@@ -1858,6 +1885,21 @@ namespace PlantsVsZombies.Simulation
                 return;
             }
 
+            DropAdventureLootPiece(x, z.Row, factor);
+        }
+
+        /// <summary>Rolls the original Board::DropLootPiece tickets and spawns the resulting sun, coin or gift.</summary>
+        /// <param name="x">The board column position of the drop, already clamped to the lawn.</param>
+        /// <param name="row">The lawn row of the drop.</param>
+        /// <param name="factor">The drop factor that scales every ticket cutoff.</param>
+        private void DropAdventureLootPiece(float x, int row, int factor)
+        {
+            var a = Adventure;
+            if (Rules.AdventureDisableLoot)
+            {
+                return;
+            }
+
             var roll = _random.Next(30000);
             if (ModeSession == null && !a.Level.IsReplay && a.Level.Number == 11 && !a._droppedFirstCoin && a.CurrentWave > 5)
             {
@@ -1876,7 +1918,7 @@ namespace PlantsVsZombies.Simulation
                 {
                     for (var i = 0; i < 3; i++)
                     {
-                        Suns.Add(CreateSun(x - i * .25f, z.Row, z.Row + .3f));
+                        Suns.Add(CreateSun(x - i * .25f, row, row + .3f));
                     }
 
                     return;
@@ -1923,7 +1965,7 @@ namespace PlantsVsZombies.Simulation
                 return;
             }
 
-            var coin = SpawnAdventureCoin(kind, x, z.Row);
+            var coin = SpawnAdventureCoin(kind, x, row);
             if (coin == null)
             {
                 return;
@@ -2726,11 +2768,17 @@ namespace PlantsVsZombies.Simulation
                 Layer = LayerFor(kind),
                 Health = kind == PlantKind.Wallnut || kind == PlantKind.Pumpkin ? 4000f : kind == PlantKind.TallNut ? 8000f : kind == PlantKind.Garlic ? 400f : 300f,
                 Asleep = Nocturnal(kind) && !Adventure.Level.IsNight,
-                ActionTimer = kind == PlantKind.PotatoMine ? 15f : kind == PlantKind.CherryBomb || kind == PlantKind.Jalapeno || kind == PlantKind.DoomShroom || kind == PlantKind.IceShroom ? 1f : kind == PlantKind.GraveBuster ? 4.5f : kind == PlantKind.Sunflower || kind == PlantKind.SunShroom ? 5f + (float)_random.NextDouble() * 2.5f : 0.5f,
+                ActionTimer = kind == PlantKind.PotatoMine ? 15f : kind == PlantKind.CherryBomb || kind == PlantKind.Jalapeno || kind == PlantKind.DoomShroom || kind == PlantKind.IceShroom ? 1f : kind == PlantKind.GraveBuster ? global::PlantsVsZombies.Adventure.AdventureGraveBusterRules.TotalSeconds : kind == PlantKind.Sunflower || kind == PlantKind.SunShroom ? 5f + (float)_random.NextDouble() * 2.5f : 0.5f,
                 IsSmall = false
             };
             InitializeAdventureNativePlantTiming(plant);
             Plants.Add(plant);
+            if (kind == PlantKind.GraveBuster)
+            {
+                // Plant::PlantInit plays FOLEY_GRAVEBUSTERCHOMP when the buster lands in play.
+                Presentation.GraveBusterChompSoundSerial++;
+            }
+
             if (kind == PlantKind.Sunflower)
             {
                 Adventure._plantedSunflowers++;
@@ -2910,6 +2958,11 @@ namespace PlantsVsZombies.Simulation
                     }
 
                     p.ActionTimer -= dt;
+                    if (p.Kind == PlantKind.GraveBuster)
+                    {
+                        StartAdventureGraveBusterEating(p);
+                    }
+
                     producerAdvanced = AdventureProducerGlow.HasNativeProductionHint(p.Kind);
                     if (AdvanceAdventureUpgradePlant(p, dt))
                     {
@@ -2994,7 +3047,11 @@ namespace PlantsVsZombies.Simulation
                                     Adventure._graves.RemoveAt(i);
                                 }
                             }
+
+                            // Plant::UpdateGraveBuster: GraveBusterDie particles, Die(), then DropLootPiece(mX + 40, mY, 12).
+                            AdventurePresentationGraveBuster(p, global::PlantsVsZombies.Adventure.AdventureExplosionEffect.GraveBusterDie);
                             RemoveAdventurePlantAndStack(p);
+                            DropAdventureLootPiece(x, p.Row, global::PlantsVsZombies.Adventure.AdventureGraveBusterRules.LootDropFactor);
                             break;
                         case PlantKind.Blover:
                             for (var i = Zombies.Count - 1; i >= 0; i--)
@@ -8259,8 +8316,8 @@ namespace PlantsVsZombies.Simulation
         private Zombie SpawnAdventureZombie(ZombieKind kind, int row, float x, int wave)
         {
             var health = kind == ZombieKind.Yeti ? 1350f : kind == ZombieKind.Bungee ? 450f : kind == ZombieKind.Ladder ? 500f : kind == ZombieKind.Gargantuar ? 3000f : kind == ZombieKind.Zomboni ? 1350f : kind == ZombieKind.Catapult ? 850f : kind == ZombieKind.PoleVaulter || kind == ZombieKind.DolphinRider || kind == ZombieKind.JackInTheBox || kind == ZombieKind.Pogo || kind == ZombieKind.Dancing ? 500f : 270f;
-            var armor = kind == ZombieKind.Conehead ? 370f : kind == ZombieKind.Buckethead ? 1100f : kind == ZombieKind.Football ? 1400f : kind == ZombieKind.Digger ? 100f : kind == ZombieKind.Bobsled ? 300f : 0f;
-            var shield = kind == ZombieKind.ScreenDoor ? 1100f : kind == ZombieKind.Newspaper ? 150f : kind == ZombieKind.Ladder ? 500f : 0f;
+            var armor = global::PlantsVsZombies.Adventure.AdventureZombieEquipmentRules.StartingArmor(kind);
+            var shield = global::PlantsVsZombies.Adventure.AdventureZombieEquipmentRules.StartingShield(kind);
             var z = new Zombie
             {
                 Id = ++Adventure._zombieId,
@@ -13274,7 +13331,12 @@ namespace PlantsVsZombies.Simulation
                 {
                     for (var i = 0; i < 4; i++)
                     {
-                        SpawnAdventureZombie(kind, row, x + i * 0.2f, wave.Index);
+                        var sled = SpawnAdventureZombie(kind, row, x + i * 0.2f, wave.Index);
+                        if (i > 0 && sled.Kind == ZombieKind.Bobsled)
+                        {
+                            // Original ZombieInitialize gives the 300 helm health only to the leader (no parent zombie).
+                            sled.ArmorHealth = 0f;
+                        }
                     }
                 }
                 else if (a.Level.Mode == AdventureMode.Bungee && kind != ZombieKind.Bungee && kind != ZombieKind.Zomboni)

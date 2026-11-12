@@ -18,7 +18,8 @@ namespace PlantsVsZombies.Adventure
         {
             get
             {
-                return Effect != AdventureExplosionEffect.PotatoMine && Effect != AdventureExplosionEffect.PotatoMineRise;
+                return Effect != AdventureExplosionEffect.PotatoMine && Effect != AdventureExplosionEffect.PotatoMineRise
+                    && Effect != AdventureExplosionEffect.GraveBuster && Effect != AdventureExplosionEffect.GraveBusterDie;
             }
         }
 
@@ -37,7 +38,11 @@ namespace PlantsVsZombies.Adventure
         {
             get
             {
-                return Effect == AdventureExplosionEffect.Pow ? 50 : Effect == AdventureExplosionEffect.Doom ? 400 : Effect == AdventureExplosionEffect.PotatoMineRise ? 120 : 200;
+                return Effect == AdventureExplosionEffect.Pow ? 50
+                    : Effect == AdventureExplosionEffect.Doom ? 400
+                    : Effect == AdventureExplosionEffect.PotatoMineRise ? 120
+                    : Effect == AdventureExplosionEffect.GraveBuster ? 400
+                    : Effect == AdventureExplosionEffect.GraveBusterDie ? 500 : 200;
             }
         }
     }

@@ -1368,8 +1368,11 @@ namespace PlantsVsZombies.Game
                 zombie.Kind = (ZombieKind)preview.NativeKind;
                 zombie.Health = 270;
                 zombie.StartingHealth = 270;
-                zombie.ArmorHealth = preview.NativeKind == 2 || preview.NativeKind == 4 ? 100 : 0;
-                zombie.ShieldHealth = preview.NativeKind == 5 || preview.NativeKind == 6 || preview.NativeKind == 21 ? 100 : 0;
+                // The original preview zombies are real board zombies, so each starts with its full ZombieInitialize equipment.
+                zombie.ArmorHealth = AdventureZombieEquipmentRules.StartingArmor(zombie.Kind);
+                zombie.ShieldHealth = AdventureZombieEquipmentRules.StartingShield(zombie.Kind);
+                zombie.PresentationMaxArmor = zombie.ArmorHealth;
+                zombie.PresentationMaxShield = zombie.ShieldHealth;
                 zombie.IsSmall = preview.Scale < 1f;
                 string asset = AdventureAnimationCatalog.AdventureZombieAnimation(zombie.Kind), clip = preview.Animation;
                 if (!_owner.AnimationCatalog.AdventureClipExists(asset, clip))
@@ -2050,9 +2053,9 @@ namespace PlantsVsZombies.Game
                 var eaten = 0;
                 foreach (var plant in _owner.RequiredGame.Plants)
                 {
-                    if (plant.Kind == PlantKind.GraveBuster && plant.Row == grave.Row && plant.Column == grave.Column && plant.ActionTimer <= 4f)
+                    if (plant.Kind == PlantKind.GraveBuster && plant.Row == grave.Row && plant.Column == grave.Column && AdventureGraveBusterRules.IsEating(plant.ActionTimer))
                     {
-                        eaten = AdventureIntroPresentation.Curve(0, 400, 400 - (int)Math.Round(plant.ActionTimer * 100f), 10, 40, 1);
+                        eaten = AdventureIntroPresentation.Curve(0, 400, 400 - AdventureGraveBusterRules.EatingTicksRemaining(plant.ActionTimer), 10, 40, 1);
                         break;
                     }
                 }
@@ -2440,11 +2443,13 @@ namespace PlantsVsZombies.Game
             var age = plant.Age + AdventureRenderRemainder;
             if (plant.Kind == PlantKind.GraveBuster)
             {
-                var landing = plant.ActionTimer > 4f;
+                var landing = !AdventureGraveBusterRules.IsEating(plant.ActionTimer);
                 clip = landing ? "anim_land" : "anim_idle";
-                age = landing ? plant.Age + AdventureRenderRemainder : Math.Max(0f, plant.Age - .5f) + AdventureRenderRemainder;
+                age = landing ? plant.Age + AdventureRenderRemainder : Math.Max(0f, plant.Age - AdventureGraveBusterRules.LandingSeconds) + AdventureRenderRemainder;
                 rate = 12f;
                 loop = !landing;
+                // Plant::Animate sinks the eating buster up to 30px as its countdown runs from 400 to 0.
+                origin.y += AdventureGraveBusterRules.SinkOffset(plant.ActionTimer);
             }
 
             if (plant.Kind == PlantKind.PotatoMine)

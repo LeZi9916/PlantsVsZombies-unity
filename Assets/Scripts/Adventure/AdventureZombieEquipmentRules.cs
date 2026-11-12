@@ -17,6 +17,46 @@ namespace PlantsVsZombies.Adventure
             return maximum <= 0 ? 0 : current < maximum / 3 ? 2 : current < (2 * maximum) / 3 ? 1 : 0;
         }
 
+        /// <summary>Returns the helm health assigned by the original Zombie::ZombieInitialize.</summary>
+        /// <param name="kind">The zombie kind being initialized.</param>
+        /// <returns>The starting helm health, or 0 when the kind has no helm.</returns>
+        public static float StartingArmor(ZombieKind kind)
+        {
+            switch (kind)
+            {
+                case ZombieKind.Conehead:
+                    return 370f;
+                case ZombieKind.Buckethead:
+                    return 1100f;
+                case ZombieKind.Football:
+                    return 1400f;
+                case ZombieKind.Digger:
+                    return 100f;
+                case ZombieKind.Bobsled:
+                    return 300f;
+                default:
+                    return 0f;
+            }
+        }
+
+        /// <summary>Returns the shield health assigned by the original Zombie::ZombieInitialize.</summary>
+        /// <param name="kind">The zombie kind being initialized.</param>
+        /// <returns>The starting shield health, or 0 when the kind has no shield.</returns>
+        public static float StartingShield(ZombieKind kind)
+        {
+            switch (kind)
+            {
+                case ZombieKind.ScreenDoor:
+                    return 1100f;
+                case ZombieKind.Newspaper:
+                    return 150f;
+                case ZombieKind.Ladder:
+                    return 500f;
+                default:
+                    return 0f;
+            }
+        }
+
         /// <summary>Performs helm type.</summary>
         /// <param name = "z">The z.</param>
         /// <returns>The resulting helm type.</returns>

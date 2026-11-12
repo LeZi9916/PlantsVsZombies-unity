@@ -179,6 +179,7 @@ namespace PlantsVsZombies.Audio
                 "cherrybomb",
                 "juicy",
                 "dirt_rise",
+                "gravebusterchomp",
                 "swing",
                 "bonk",
                 "buzzer",

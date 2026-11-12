@@ -2592,14 +2592,25 @@ namespace PlantsVsZombies.Reanimation
             try
             {
                 var placement = previous * CombatPlacement(origin, scale, false, 80f) * PartMatrix(pose) * inverse;
-                return DrawClipPose(asset, blink, NativeSeconds(blink, blinkSeconds, 15f, asset.Fps, false), asset.Fps, false,
-                    placement, color, trackVisible: name => TrackIs(name, "Dave_blink"));
+                // The original blink is a PlayOnceFullLastFrameAndHold copy of the whole CrazyDave definition limited
+                // to the anim_blink frames: it samples start + count * time (one source frame per 1/15 s) and shows
+                // both the eyelid (Dave_blink) and the squashing Dave_eye, because the parent hides its own eye.
+                return DrawClipPose(asset, blink, Math.Max(0f, blinkSeconds) * 15f / asset.Fps, asset.Fps, false,
+                    placement, color, trackVisible: CrazyDaveBlinkLayerVisible);
             }
             finally
             {
                 SpriteMatrix = previous;
                 SpriteDrawState.Color = color;
             }
+        }
+
+        /// <summary>Tests whether a CrazyDave track is visible inside the attached blink reanimation.</summary>
+        /// <param name="track">The CrazyDave track name.</param>
+        /// <returns>Whether the track is one of the two tracks that are visible in the anim_blink frames.</returns>
+        private static bool CrazyDaveBlinkLayerVisible(string track)
+        {
+            return TrackIs(track, "Dave_blink") || TrackIs(track, "Dave_eye");
         }
 
         /// <summary>Performs draw zombie playback.</summary>

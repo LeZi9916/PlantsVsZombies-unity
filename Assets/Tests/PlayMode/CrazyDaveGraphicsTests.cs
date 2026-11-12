@@ -285,7 +285,18 @@ namespace PlantsVsZombies.Tests.PlayMode
 
             Assert.That(actual, Does.Contain(textures["IMAGE_REANIM_CRAZYDAVE_MOUTH5"]));
             Assert.That(actual, Does.Contain(textures["IMAGE_REANIM_CRAZYDAVE_BLINK1"]));
-            Assert.That(actual.Contains(textures["IMAGE_REANIM_CRAZYDAVE_EYE"]), Is.False);
+            // The parent hides its open eye; only the blink layer's squashing Dave_eye may draw it.
+            Assert.That(actual, Does.Contain(textures["IMAGE_REANIM_CRAZYDAVE_EYE"]));
+            var eyeSprites = 0;
+            for (var index = 0; index < pool.SubmittedObjectCount; index++)
+            {
+                if (sprites[index].Properties.GetTexture(Shader.PropertyToID("_MainTex")) == textures["IMAGE_REANIM_CRAZYDAVE_EYE"])
+                {
+                    eyeSprites++;
+                }
+            }
+
+            Assert.That(eyeSprites, Is.EqualTo(1));
         }
     }
 }

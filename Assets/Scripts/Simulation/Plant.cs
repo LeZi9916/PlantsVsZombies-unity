@@ -124,6 +124,8 @@ namespace PlantsVsZombies.Simulation
         public MinePhase MinePhase;
         /// <summary>Stores phase age.</summary>
         public float PhaseAge;
+        /// <summary>Stores whether a Grave Buster has already created its attached eating particles.</summary>
+        public bool GraveBusterEatingStarted;
         /// <summary>Stores timing.</summary>
         public global::PlantsVsZombies.Timing.PlantTimingState? Timing;
 

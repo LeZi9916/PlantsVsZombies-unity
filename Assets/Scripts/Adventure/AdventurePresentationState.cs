@@ -24,6 +24,8 @@ namespace PlantsVsZombies.Adventure
         public readonly List<AdventurePlantBiteEffect> PlantBiteEffects = new List<AdventurePlantBiteEffect>();
         /// <summary>Stores potato mine rise sound serial.</summary>
         public int PotatoMineRiseSoundSerial;
+        /// <summary>Stores the number of Grave Buster landings that requested the original chomp sound.</summary>
+        public int GraveBusterChompSoundSerial;
         /// <summary>Stores corpses.</summary>
         public readonly List<AdventureZombieCorpse> Corpses = new List<AdventureZombieCorpse>();
         /// <summary>Stores impacts.</summary>

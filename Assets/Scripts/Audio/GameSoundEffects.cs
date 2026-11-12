@@ -238,6 +238,8 @@ namespace PlantsVsZombies.Audio
         private GameSimulation? _potatoMineAudioGame;
         /// <summary>Stores potato mine rise audio serial.</summary>
         private int _potatoMineRiseAudioSerial;
+        /// <summary>Stores the number of Grave Buster chomp sounds already played.</summary>
+        private int _graveBusterChompAudioSerial;
 
         /// <summary>Performs update adventure potato mine audio.</summary>
         internal void UpdateAdventurePotatoMineAudio()
@@ -246,6 +248,7 @@ namespace PlantsVsZombies.Audio
             {
                 _potatoMineAudioGame = _owner._game;
                 _potatoMineRiseAudioSerial = 0;
+                _graveBusterChompAudioSerial = 0;
             }
 
             if (_owner._game == null || !_owner._game.IsAdventure)
@@ -258,6 +261,13 @@ namespace PlantsVsZombies.Audio
             {
                 _potatoMineRiseAudioSerial++;
                 PlayPresentationSound("dirt_rise");
+            }
+
+            var chompSerial = _owner._game.Presentation.GraveBusterChompSoundSerial;
+            while (_graveBusterChompAudioSerial < chompSerial)
+            {
+                _graveBusterChompAudioSerial++;
+                PlayPresentationSound("gravebusterchomp");
             }
         }
         /// <summary>Stores award sounds.</summary>
