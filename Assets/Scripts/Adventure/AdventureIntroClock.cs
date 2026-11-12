@@ -61,7 +61,7 @@ namespace PlantsVsZombies.Adventure
         /// <param name = "dialogActive">The dialog active.</param>
         /// <param name = "shovelTutorialActive">The shovel tutorial active.</param>
         /// <param name = "emit">The emit.</param>
-        public void Tick(bool paused = false, bool dialogActive = false, bool shovelTutorialActive = false, Action<AdventureIntroEvent> emit = null)
+        public void Tick(bool paused = false, bool dialogActive = false, bool shovelTutorialActive = false, Action<AdventureIntroEvent>? emit = null)
         {
             if (Complete || paused || dialogActive || shovelTutorialActive || WaitingForSeeds)
             {

@@ -90,7 +90,7 @@ namespace PlantsVsZombies.Diagnostics
                 yield break;
             }
 
-            string screenshot = null;
+            string? screenshot = null;
             if (!logicOnly)
             {
                 screenshot = Path.Combine(SmokeTestArtifacts.DirectoryPath, "level-one-" + DateTime.UtcNow.ToString("yyyyMMddHHmmssfff") + ".png");

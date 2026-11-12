@@ -20,13 +20,17 @@ namespace PlantsVsZombies.Progression
         }
 
         /// <summary>Stores account store.</summary>
-        internal PlayerAccountStore _accountStore;
+        internal PlayerAccountStore? _accountStore;
+
+        /// <summary>Gets the account store, which must already exist wherever it is used.</summary>
+        /// <exception cref="System.InvalidOperationException">The member is not available.</exception>
+        internal PlayerAccountStore RequiredAccountStore => _accountStore ?? throw new System.InvalidOperationException("The member '_accountStore' is not available.");
         /// <summary>Stores display account snapshot.</summary>
-        internal PlayerAccount _displayAccountSnapshot;
+        internal PlayerAccount? _displayAccountSnapshot;
         /// <summary>Stores account error.</summary>
-        private string _accountError;
+        private string? _accountError;
         /// <summary>Stores progression message.</summary>
-        internal string _progressionMessage;
+        internal string? _progressionMessage;
 
         /// <summary>Performs ensure player account.</summary>
         /// <returns>The resulting ensure player account.</returns>
@@ -67,10 +71,15 @@ namespace PlantsVsZombies.Progression
 
         /// <summary>Performs get selected account.</summary>
         /// <returns>The resulting get selected account.</returns>
-        internal PlayerAccount GetSelectedAccount()
+        internal PlayerAccount? GetSelectedAccount()
         {
-            return EnsurePlayerAccount() ? _accountStore.Get(_owner._profiles.SelectedId.Value) : null;
+            return EnsurePlayerAccount() ? RequiredAccountStore.Get(_owner.RequiredProfiles.RequiredSelectedId) : null;
         }
+
+        /// <summary>Calls <see cref="GetSelectedAccount"/> where a result must exist, failing with a descriptive exception instead of returning null.</summary>
+        /// <returns>The non-null get selected account result.</returns>
+        /// <exception cref="System.InvalidOperationException">The method returned no result.</exception>
+        internal PlayerAccount RequiredGetSelectedAccount() => GetSelectedAccount() ?? throw new System.InvalidOperationException("'GetSelectedAccount' returned no result.");
 
         /// <summary>Performs progression action.</summary>
         /// <param name = "action">The action.</param>

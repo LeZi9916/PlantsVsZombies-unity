@@ -181,7 +181,7 @@ namespace PlantsVsZombies.UI
         /// <param name="texture">The original artwork.</param>
         /// <param name="scaleMode">Whether to stretch, contain, or crop the artwork.</param>
         /// <param name="alphaBlend">Whether the original call requested alpha blending.</param>
-        public static void DrawTexture(Rect destination, Texture texture, ScaleMode scaleMode = ScaleMode.StretchToFill, bool alphaBlend = true)
+        public static void DrawTexture(Rect destination, Texture? texture, ScaleMode scaleMode = ScaleMode.StretchToFill, bool alphaBlend = true)
         {
             if (texture == null || destination.width <= 0f || destination.height <= 0f)
             {
@@ -251,7 +251,7 @@ namespace PlantsVsZombies.UI
         /// <param name="destination">The original text bounds.</param>
         /// <param name="text">The visible text.</param>
         /// <param name="style">The view's layout and font settings.</param>
-        public static void Label(Rect destination, string text, GUIStyle style)
+        public static void Label(Rect destination, string text, GUIStyle? style)
         {
             if (!IsFrameActive || string.IsNullOrEmpty(text) || destination.width <= 0f || destination.height <= 0f)
             {
@@ -267,6 +267,11 @@ namespace PlantsVsZombies.UI
 
             var graphic = s_labels[s_labelCount++];
             PrepareGraphic(graphic.rectTransform, layer.transform, false);
+            if (style == null)
+            {
+                throw new System.ArgumentNullException(nameof(style));
+            }
+
             graphic.Configure(destination, text, style, Matrix, Color * ContentColor * style.normal.textColor, SpriteDrawState.Clip);
         }
 
@@ -337,8 +342,13 @@ namespace PlantsVsZombies.UI
         /// <param name="value">The current external text value.</param>
         /// <param name="style">The native field's font, color, and padding settings.</param>
         /// <returns>The current edited text.</returns>
-        public static string TextField(Rect bounds, string value, GUIStyle style)
+        public static string TextField(Rect bounds, string value, GUIStyle? style)
         {
+            if (style == null)
+            {
+                throw new System.ArgumentNullException(nameof(style));
+            }
+
             return TextField(bounds, value, 0, style);
         }
 

@@ -118,7 +118,7 @@ namespace PlantsVsZombies.Tests.PlayMode
                     animations.DrawNativeImage(white, new Rect(0, 0, Screen.width, Screen.height), new Rect(0, 0, 1, 1));
                     drawZombie.Invoke(presenter, new object[] { zombie });
                     animations.EndObjectFrame();
-                    var image = owner.Textures.Load(item.Level == 12 ? "plantshadow2.png" : "plantshadow.png");
+                    var image = owner.Textures.RequiredLoad(item.Level == 12 ? "plantshadow2.png" : "plantshadow.png");
                     Assert.That(image.width, Is.EqualTo(86));
                     Assert.That(image.height, Is.EqualTo(36));
                     var pool = (ObjectSpriteRenderer)typeof(ReanimationRenderer).GetField("_objectRenderer", flags)!.GetValue(animations)!;

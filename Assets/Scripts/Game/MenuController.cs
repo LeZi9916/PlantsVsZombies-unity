@@ -57,7 +57,7 @@ namespace PlantsVsZombies.Game
         /// <summary>Performs load bitmap font.</summary>
         /// <param name = "name">The name.</param>
         /// <returns>The resulting load bitmap font.</returns>
-        internal static CanvasBitmapFont LoadBitmapFont(string name)
+        internal static CanvasBitmapFont? LoadBitmapFont(string name)
         {
             try
             {
@@ -73,7 +73,7 @@ namespace PlantsVsZombies.Game
         /// <summary>Performs set unavailable.</summary>
         /// <param name = "feature">The feature.</param>
         /// <param name = "detail">The detail.</param>
-        internal void SetUnavailable(string feature, string detail)
+        internal void SetUnavailable(string feature, string? detail)
         {
             _owner._unavailableFeature = feature;
             _owner._unavailableDetail = detail;
@@ -83,7 +83,7 @@ namespace PlantsVsZombies.Game
         /// <param name = "category">The category.</param>
         internal void OpenModes(int category)
         {
-            _owner._modeView.Open(category);
+            _owner.RequiredModeView.Open(category);
             _owner._currentView = PvZGame.ScreenView.Modes;
         }
 
@@ -94,7 +94,7 @@ namespace PlantsVsZombies.Game
         {
             _almanacReturnView = returnView;
             _almanacReturnsToOptions = returnToOptions;
-            _owner._almanacView.Open();
+            _owner.RequiredAlmanacView.Open();
             _owner._currentView = PvZGame.ScreenView.Almanac;
         }
 
@@ -104,7 +104,7 @@ namespace PlantsVsZombies.Game
         /// <returns>The resulting handle almanac pointer.</returns>
         internal bool HandleAlmanacPointer(Vector2 point, PointerPhase eventType)
         {
-            var consumed = _owner._almanacView.HandlePointer(point, eventType);
+            var consumed = _owner.RequiredAlmanacView.HandlePointer(point, eventType);
             ReturnFromAlmanacIfClosed();
             return consumed;
         }
@@ -112,7 +112,7 @@ namespace PlantsVsZombies.Game
         /// <summary>Performs return from almanac if closed.</summary>
         internal void ReturnFromAlmanacIfClosed()
         {
-            if (!_owner._almanacView.IsClosed)
+            if (!_owner.RequiredAlmanacView.IsClosed)
             {
                 return;
             }
@@ -120,7 +120,7 @@ namespace PlantsVsZombies.Game
             _owner._currentView = _almanacReturnView;
             if (_almanacReturnsToOptions)
             {
-                _owner._optionsView.ResumeFromAlmanac();
+                _owner.RequiredOptionsView.ResumeFromAlmanac();
             }
 
             _almanacReturnsToOptions = false;
@@ -129,15 +129,15 @@ namespace PlantsVsZombies.Game
         /// <summary>Performs open options.</summary>
         internal void OpenOptions()
         {
-            _owner._optionsView.GameplayButtonsEnabled = _owner._currentView == PvZGame.ScreenView.Board;
-            _owner._optionsView.Open(_owner.Music._musicVolume, _owner.Sounds._soundVolume, Screen.fullScreen);
+            _owner.RequiredOptionsView.GameplayButtonsEnabled = _owner._currentView == PvZGame.ScreenView.Board;
+            _owner.RequiredOptionsView.Open(_owner.Music._musicVolume, _owner.Sounds._soundVolume, Screen.fullScreen);
         }
 
         /// <summary>Performs close options.</summary>
         internal void CloseOptions()
         {
-            _owner._optionsView.Close();
-            if (!_owner._optionsView.IsOpen)
+            _owner.RequiredOptionsView.Close();
+            if (!_owner.RequiredOptionsView.IsOpen)
             {
                 ApplyOptions();
             }
@@ -148,27 +148,27 @@ namespace PlantsVsZombies.Game
         {
             // The original almanac is modal over the options dialog. Retain its
             // unapplied draft and keep gameplay suspended until Return to Game.
-            if (_owner._optionsView.CloseResult == OptionsCloseResult.OpenAlmanac)
+            if (_owner.RequiredOptionsView.CloseResult == OptionsCloseResult.OpenAlmanac)
             {
                 OpenAlmanac(_owner._currentView, true);
                 return;
             }
 
-            _owner.Music.SetVolume(_owner._optionsView.MusicVolume);
-            _owner.Sounds.SetVolume(_owner._optionsView.SoundVolume);
+            _owner.Music.SetVolume(_owner.RequiredOptionsView.MusicVolume);
+            _owner.Sounds.SetVolume(_owner.RequiredOptionsView.SoundVolume);
             _owner.Dave.SetVoiceVolume(_owner.Sounds._soundVolume);
             if (!_owner._smokeMode)
             {
                 PlayerPrefs.SetFloat("PvZReplica.Music", _owner.Music._musicVolume);
                 PlayerPrefs.SetFloat("PvZReplica.Sound", _owner.Sounds._soundVolume);
                 PlayerPrefs.Save();
-                if (Screen.fullScreen != _owner._optionsView.FullScreen)
+                if (Screen.fullScreen != _owner.RequiredOptionsView.FullScreen)
                 {
-                    Screen.fullScreen = _owner._optionsView.FullScreen;
+                    Screen.fullScreen = _owner.RequiredOptionsView.FullScreen;
                 }
             }
 
-            switch (_owner._optionsView.CloseResult)
+            switch (_owner.RequiredOptionsView.CloseResult)
             {
                 case OptionsCloseResult.RestartLevel:
                     _owner.ResetGame();

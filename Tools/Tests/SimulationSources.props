@@ -15,4 +15,22 @@
     <Compile Include="$(MSBuildThisFileDirectory)../../Assets/Scripts/VerifiedData/**/*.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)../../Assets/Scripts/Waves/**/*.cs" />
   </ItemGroup>
+
+  <!-- PvZGame collaborators depend on UnityEngine and stay outside the Unity-independent boundary. -->
+  <ItemGroup>
+    <Compile Remove="$(MSBuildThisFileDirectory)../../Assets/Scripts/Adventure/AdventureAnimationCatalog.cs" />
+    <Compile Remove="$(MSBuildThisFileDirectory)../../Assets/Scripts/Adventure/AdventureBoardController.cs" />
+    <Compile Remove="$(MSBuildThisFileDirectory)../../Assets/Scripts/Adventure/AdventureCampaignController.cs" />
+    <Compile Remove="$(MSBuildThisFileDirectory)../../Assets/Scripts/Adventure/AdventureOpeningController.cs" />
+    <Compile Remove="$(MSBuildThisFileDirectory)../../Assets/Scripts/Adventure/AdventureRewardController.cs" />
+    <Compile Remove="$(MSBuildThisFileDirectory)../../Assets/Scripts/Adventure/AdventureWaveNoticeController.cs" />
+    <Compile Remove="$(MSBuildThisFileDirectory)../../Assets/Scripts/BoardUI/BoardLayout.cs" />
+    <Compile Remove="$(MSBuildThisFileDirectory)../../Assets/Scripts/Modes/IndependentModeController.cs" />
+    <Compile Remove="$(MSBuildThisFileDirectory)../../Assets/Scripts/Profiles/OriginalSaveUtilityController.cs" />
+    <Compile Remove="$(MSBuildThisFileDirectory)../../Assets/Scripts/Progression/CrazyDaveActor.cs" />
+    <Compile Remove="$(MSBuildThisFileDirectory)../../Assets/Scripts/Progression/CrazyDaveStoreController.cs" />
+    <Compile Remove="$(MSBuildThisFileDirectory)../../Assets/Scripts/Progression/PlayerAccountSession.cs" />
+    <Compile Remove="$(MSBuildThisFileDirectory)../../Assets/Scripts/Progression/WisdomTreeController.cs" />
+    <Compile Remove="$(MSBuildThisFileDirectory)../../Assets/Scripts/Progression/ZenGardenController.cs" />
+  </ItemGroup>
 </Project>

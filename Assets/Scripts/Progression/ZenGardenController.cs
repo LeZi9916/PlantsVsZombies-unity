@@ -51,7 +51,7 @@ namespace PlantsVsZombies.Progression
                 return;
             }
 
-            var progress = _owner.Campaign._adventureStore.Get(_owner._profiles.SelectedId.Value);
+            var progress = _owner.Campaign.RequiredAdventureStore.Get(_owner.RequiredProfiles.RequiredSelectedId);
             if (progress.CompletedRuns == 0 && progress.NextLevel < 45)
             {
                 _owner.Menus.SetUnavailable("禅境花园", "通过冒险模式 5-4，取得浇水壶后即可进入。");
@@ -65,12 +65,17 @@ namespace PlantsVsZombies.Progression
             _gardenTool = GardenTool.Water;
             _movingGardenPlant = null;
             _owner.Accounts._progressionMessage = null;
-            _owner.Accounts.ProgressionAction(() => _owner.Accounts._accountStore.UpdateGarden(_owner._profiles.SelectedId.Value, PvZGame.UtcSeconds, true));
-            var account = _owner.Accounts.GetSelectedAccount();
+            _owner.Accounts.ProgressionAction(() => _owner.Accounts.RequiredAccountStore.UpdateGarden(_owner.RequiredProfiles.RequiredSelectedId, PvZGame.UtcSeconds, true));
+            var account = _owner.Accounts.RequiredGetSelectedAccount();
             if (!account.GardenGiftClaimed && account.ZenGardenTutorialStage == 0)
             {
-                _owner.Accounts.ProgressionAction(() => _owner.Accounts._accountStore.BeginZenGardenTutorial(_owner._profiles.SelectedId.Value));
+                _owner.Accounts.ProgressionAction(() => _owner.Accounts.RequiredAccountStore.BeginZenGardenTutorial(_owner.RequiredProfiles.RequiredSelectedId));
                 account = _owner.Accounts.GetSelectedAccount();
+            }
+
+            if (account == null)
+            {
+                throw new System.InvalidOperationException("The value 'account' is not available.");
             }
 
             var savedStage = account.ZenGardenTutorialStage;
@@ -108,7 +113,7 @@ namespace PlantsVsZombies.Progression
             {
                 if (next == 2102)
                 {
-                    _owner.Accounts.ProgressionAction(() => _owner.Accounts._accountStore.GrantZenGardenIntroPlants(_owner._profiles.SelectedId.Value, PvZGame.UtcSeconds));
+                    _owner.Accounts.ProgressionAction(() => _owner.Accounts.RequiredAccountStore.GrantZenGardenIntroPlants(_owner.RequiredProfiles.RequiredSelectedId, PvZGame.UtcSeconds));
                     if (_owner.Accounts._progressionMessage != null)
                     {
                         return;
@@ -119,7 +124,7 @@ namespace PlantsVsZombies.Progression
                 return;
             }
 
-            _owner.Accounts.ProgressionAction(() => _owner.Accounts._accountStore.CompleteZenGardenIntroduction(_owner._profiles.SelectedId.Value));
+            _owner.Accounts.ProgressionAction(() => _owner.Accounts.RequiredAccountStore.CompleteZenGardenIntroduction(_owner.RequiredProfiles.RequiredSelectedId));
             if (_owner.Accounts._progressionMessage != null)
             {
                 return;
@@ -133,7 +138,7 @@ namespace PlantsVsZombies.Progression
         /// <summary>Advances the garden's Dave animations, plant growth and the first-visit tutorial.</summary>
         internal void UpdateZenGarden()
         {
-            if (_owner._currentView == PvZGame.ScreenView.Garden && _gardenDaveIntroActive && !_owner._optionsView.IsOpen)
+            if (_owner._currentView == PvZGame.ScreenView.Garden && _gardenDaveIntroActive && !_owner.RequiredOptionsView.IsOpen)
             {
                 _owner.Dave.UpdateCrazyDaveAnimation(Time.unscaledDeltaTime);
                 if (_owner.Dave._crazyDaveMessageIndex < 0 && (_owner.Dave._crazyDaveAnimation == null || _owner.Dave._crazyDaveAnimation == "anim_leave" && _owner.Dave._crazyDaveAnimationAge >= .75f))
@@ -142,7 +147,7 @@ namespace PlantsVsZombies.Progression
                     _owner.Dave._crazyDaveAnimation = null;
                 }
             }
-            if (_owner._currentView == PvZGame.ScreenView.Garden && _gardenSaleDaveActive && !_owner._optionsView.IsOpen)
+            if (_owner._currentView == PvZGame.ScreenView.Garden && _gardenSaleDaveActive && !_owner.RequiredOptionsView.IsOpen)
             {
                 _owner.Dave.UpdateCrazyDaveAnimation(Time.unscaledDeltaTime);
                 if (!_gardenSalePlant.HasValue && (_owner.Dave._crazyDaveAnimation == null || _owner.Dave._crazyDaveAnimation == "anim_leave" && _owner.Dave._crazyDaveAnimationAge >= .75f))
@@ -155,7 +160,7 @@ namespace PlantsVsZombies.Progression
             {
                 _gardenUpdateUtc = PvZGame.UtcSeconds;
                 var previousMessage = _owner.Accounts._progressionMessage;
-                _owner.Accounts.ProgressionAction(() => _owner.Accounts._accountStore.UpdateGarden(_owner._profiles.SelectedId.Value, _gardenUpdateUtc));
+                _owner.Accounts.ProgressionAction(() => _owner.Accounts._accountStore.UpdateGarden(_owner.RequiredProfiles.RequiredSelectedId, _gardenUpdateUtc));
                 if (_owner.Accounts._progressionMessage == null)
                 {
                     _owner.Accounts._progressionMessage = previousMessage;
@@ -163,11 +168,11 @@ namespace PlantsVsZombies.Progression
 
                 if (_gardenTutorialStage == 3)
                 {
-                    foreach (var plant in _owner.Accounts.GetSelectedAccount().Plants)
+                    foreach (var plant in _owner.Accounts.RequiredGetSelectedAccount().Plants)
                     {
                         if (plant.Need(_gardenUpdateUtc) == GardenNeed.Fertilizer)
                         {
-                            _owner.Accounts.ProgressionAction(() => _owner.Accounts._accountStore.SetZenGardenTutorialStage(_owner._profiles.SelectedId.Value, 5));
+                            _owner.Accounts.ProgressionAction(() => _owner.Accounts._accountStore.SetZenGardenTutorialStage(_owner.RequiredProfiles.RequiredSelectedId, 5));
                             if (_owner.Accounts._progressionMessage == null)
                             {
                                 _gardenTutorialStage = 4;
@@ -202,7 +207,7 @@ namespace PlantsVsZombies.Progression
                 var onFertilizer = new Rect(86, 4, 73, 57).Contains(point);
                 var onStore = new Rect(654, 540, 136, 42).Contains(point);
                 var onPlant = false;
-                foreach (var plant in _owner.Accounts.GetSelectedAccount().Plants)
+                foreach (var plant in _owner.Accounts.RequiredGetSelectedAccount().Plants)
                 {
                     if (plant.Garden == _gardenKind && GardenPlantRect(plant).Contains(point))
                     {
@@ -226,9 +231,9 @@ namespace PlantsVsZombies.Progression
                 {
                     try
                     {
-                        if (_owner.Campaign._adventureCampaign == null || _owner.Campaign._adventureCampaign.ProfileId != _owner._profiles.SelectedId.Value)
+                        if (_owner.Campaign._adventureCampaign == null || _owner.Campaign._adventureCampaign.ProfileId != _owner.RequiredProfiles.RequiredSelectedId)
                         {
-                            _owner.Campaign._adventureCampaign = new AdventureCampaign(_owner.Campaign._adventureStore, _owner._profiles.SelectedId.Value, _owner.Accounts._accountStore);
+                            _owner.Campaign._adventureCampaign = new AdventureCampaign(_owner.Campaign._adventureStore, _owner.RequiredProfiles.RequiredSelectedId, _owner.Accounts._accountStore);
                         }
 
                         var next = _owner.Campaign._adventureCampaign.Game == null
@@ -238,7 +243,7 @@ namespace PlantsVsZombies.Progression
                                 : _owner.Campaign._adventureCampaign.StartNextLevel() ? _owner.Campaign._adventureCampaign.Game : null;
                         if (next != null)
                         {
-                            _owner.Accounts._accountStore.FinishZenGardenTutorial(_owner._profiles.SelectedId.Value);
+                            _owner.Accounts.RequiredAccountStore.FinishZenGardenTutorial(_owner.RequiredProfiles.RequiredSelectedId);
                             _gardenReturnToAdventure = false;
                             _gardenTutorialStage = 0;
                             _owner.Campaign.AttachAdventureGame(next);
@@ -262,7 +267,7 @@ namespace PlantsVsZombies.Progression
             {
                 if (_gardenTutorialStage == 4)
                 {
-                    _owner.Accounts.ProgressionAction(() => _owner.Accounts._accountStore.GrantZenGardenTutorialFertilizer(_owner._profiles.SelectedId.Value));
+                    _owner.Accounts.ProgressionAction(() => _owner.Accounts.RequiredAccountStore.GrantZenGardenTutorialFertilizer(_owner.RequiredProfiles.RequiredSelectedId));
                     if (_owner.Accounts._progressionMessage == null)
                     {
                         _gardenTutorialStage = 5;
@@ -285,7 +290,7 @@ namespace PlantsVsZombies.Progression
 
             if (new Rect(8, 540, 155, 42).Contains(point))
             {
-                var p = _owner.Accounts.GetSelectedAccount();
+                var p = _owner.Accounts.RequiredGetSelectedAccount();
                 var next = (GardenKind)(((int)_gardenKind + 1) % 3);
                 if (next == GardenKind.Mushroom && p.PurchaseCount(18) == 0)
                 {
@@ -300,7 +305,7 @@ namespace PlantsVsZombies.Progression
                 if (_movingGardenPlant.HasValue)
                 {
                     var id = _movingGardenPlant.Value;
-                    _owner.Accounts.ProgressionAction(() => _owner.Accounts._accountStore.TendGarden(_owner._profiles.SelectedId.Value, id, GardenTool.Move, PvZGame.UtcSeconds, next));
+                    _owner.Accounts.ProgressionAction(() => _owner.Accounts.RequiredAccountStore.TendGarden(_owner.RequiredProfiles.RequiredSelectedId, id, GardenTool.Move, PvZGame.UtcSeconds, next));
                     _movingGardenPlant = null;
                 }
 
@@ -308,9 +313,9 @@ namespace PlantsVsZombies.Progression
                 return true;
             }
 
-            if (new Rect(490, 490, 105, 82).Contains(point) && _owner.Accounts.GetSelectedAccount().PurchaseCount(20) > 0)
+            if (new Rect(490, 490, 105, 82).Contains(point) && _owner.Accounts.RequiredGetSelectedAccount().PurchaseCount(20) > 0)
             {
-                _owner.Accounts.ProgressionAction(() => _owner.Accounts._accountStore.WakeSnail(_owner._profiles.SelectedId.Value, PvZGame.UtcSeconds));
+                _owner.Accounts.ProgressionAction(() => _owner.Accounts.RequiredAccountStore.WakeSnail(_owner.RequiredProfiles.RequiredSelectedId, PvZGame.UtcSeconds));
                 return true;
             }
 
@@ -320,7 +325,7 @@ namespace PlantsVsZombies.Progression
                 {
                     if (_gardenTutorialStage == 1 && i == 0)
                     {
-                        _owner.Accounts.ProgressionAction(() => _owner.Accounts._accountStore.SetZenGardenTutorialStage(_owner._profiles.SelectedId.Value, 3));
+                        _owner.Accounts.ProgressionAction(() => _owner.Accounts.RequiredAccountStore.SetZenGardenTutorialStage(_owner.RequiredProfiles.RequiredSelectedId, 3));
                         if (_owner.Accounts._progressionMessage != null)
                         {
                             return true;
@@ -335,7 +340,7 @@ namespace PlantsVsZombies.Progression
                 }
             }
 
-            foreach (var g in _owner.Accounts.GetSelectedAccount().Plants)
+            foreach (var g in _owner.Accounts.RequiredGetSelectedAccount().Plants)
             {
                 if (g.Garden == _gardenKind && GardenPlantRect(g).Contains(point))
                 {
@@ -350,10 +355,10 @@ namespace PlantsVsZombies.Progression
                     }
                     else
                     {
-                        _owner.Accounts.ProgressionAction(() => _owner.Accounts._accountStore.TendGarden(_owner._profiles.SelectedId.Value, g.Id, _gardenTool, PvZGame.UtcSeconds));
+                        _owner.Accounts.ProgressionAction(() => _owner.Accounts.RequiredAccountStore.TendGarden(_owner.RequiredProfiles.RequiredSelectedId, g.Id, _gardenTool, PvZGame.UtcSeconds));
                         if (_owner.Accounts._progressionMessage == null && _gardenTool == GardenTool.Water && (_gardenTutorialStage == 2 || _gardenTutorialStage == 3))
                         {
-                            _owner.Accounts.ProgressionAction(() => _owner.Accounts._accountStore.SetZenGardenTutorialStage(_owner._profiles.SelectedId.Value, 4));
+                            _owner.Accounts.ProgressionAction(() => _owner.Accounts.RequiredAccountStore.SetZenGardenTutorialStage(_owner.RequiredProfiles.RequiredSelectedId, 4));
                             if (_owner.Accounts._progressionMessage != null)
                             {
                                 return true;
@@ -361,11 +366,11 @@ namespace PlantsVsZombies.Progression
 
                             _gardenTutorialStage = 3;
                             _owner.Accounts._progressionMessage = _owner._presenter.OriginalProgressionText("ADVICE_ZEN_GARDEN_KEEP_WATERING");
-                            foreach (var plant in _owner.Accounts.GetSelectedAccount().Plants)
+                            foreach (var plant in _owner.Accounts.RequiredGetSelectedAccount().Plants)
                             {
                                 if (plant.Need(PvZGame.UtcSeconds) == GardenNeed.Fertilizer)
                                 {
-                                    _owner.Accounts.ProgressionAction(() => _owner.Accounts._accountStore.SetZenGardenTutorialStage(_owner._profiles.SelectedId.Value, 5));
+                                    _owner.Accounts.ProgressionAction(() => _owner.Accounts.RequiredAccountStore.SetZenGardenTutorialStage(_owner.RequiredProfiles.RequiredSelectedId, 5));
                                     if (_owner.Accounts._progressionMessage != null)
                                     {
                                         return true;
@@ -383,7 +388,7 @@ namespace PlantsVsZombies.Progression
                         }
                         else if (_owner.Accounts._progressionMessage == null && _gardenTool == GardenTool.Fertilizer && _gardenTutorialStage == 5)
                         {
-                            var account = _owner.Accounts.GetSelectedAccount();
+                            var account = _owner.Accounts.RequiredGetSelectedAccount();
                             var allFertilized = true;
                             foreach (var plant in account.Plants)
                             {
@@ -396,7 +401,7 @@ namespace PlantsVsZombies.Progression
 
                             if (allFertilized)
                             {
-                                _owner.Accounts.ProgressionAction(() => _owner.Accounts._accountStore.SetZenGardenTutorialStage(_owner._profiles.SelectedId.Value, 7));
+                                _owner.Accounts.ProgressionAction(() => _owner.Accounts.RequiredAccountStore.SetZenGardenTutorialStage(_owner.RequiredProfiles.RequiredSelectedId, 7));
                                 if (_owner.Accounts._progressionMessage != null)
                                 {
                                     return true;
@@ -407,7 +412,7 @@ namespace PlantsVsZombies.Progression
                             }
                             else if (account.PurchaseCount(14) == 0)
                             {
-                                _owner.Accounts.ProgressionAction(() => _owner.Accounts._accountStore.GrantZenGardenTutorialFertilizer(_owner._profiles.SelectedId.Value, false));
+                                _owner.Accounts.ProgressionAction(() => _owner.Accounts.RequiredAccountStore.GrantZenGardenTutorialFertilizer(_owner.RequiredProfiles.RequiredSelectedId, false));
                                 _owner.Accounts._progressionMessage = _owner._presenter.OriginalProgressionText("ADVICE_ZEN_GARDEN_NEED_MORE_FERTILIZER");
                             }
                             else
@@ -462,7 +467,7 @@ namespace PlantsVsZombies.Progression
             if (accepted)
             {
                 var id = _gardenSalePlant.Value;
-                _owner.Accounts.ProgressionAction(() => _owner.Accounts._accountStore.TendGarden(_owner._profiles.SelectedId.Value, id, GardenTool.Sell, PvZGame.UtcSeconds));
+                _owner.Accounts.ProgressionAction(() => _owner.Accounts.RequiredAccountStore.TendGarden(_owner.RequiredProfiles.RequiredSelectedId, id, GardenTool.Sell, PvZGame.UtcSeconds));
                 if (_owner.Accounts._progressionMessage != null)
                 {
                     return;

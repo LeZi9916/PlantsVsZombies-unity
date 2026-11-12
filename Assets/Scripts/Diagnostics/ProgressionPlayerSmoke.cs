@@ -10,6 +10,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
 using UnityEngine;
+using System.Diagnostics.CodeAnalysis;
 
 namespace PlantsVsZombies.Diagnostics
 {
@@ -18,9 +19,13 @@ namespace PlantsVsZombies.Diagnostics
     internal sealed class ProgressionPlayerSmoke : MonoBehaviour
     {
         /// <summary>Stores controller.</summary>
-        private PvZGame _controller;
+        private PvZGame? _controller;
+
+        /// <summary>Gets the controller, which must already exist wherever it is used.</summary>
+        /// <exception cref="System.InvalidOperationException">The member is not available.</exception>
+        private PvZGame RequiredController => _controller ?? throw new System.InvalidOperationException("The member '_controller' is not available.");
         /// <summary>Stores logged error.</summary>
-        private string _loggedError;
+        private string? _loggedError;
         /// <summary>Stores checks.</summary>
         private int _checks;
         /// <summary>Stores private.</summary>
@@ -30,7 +35,7 @@ namespace PlantsVsZombies.Diagnostics
         /// <returns>The resulting field.</returns>
         private object Field(string name)
         {
-            return GameMemberReflection.GetField(_controller, name);
+            return GameMemberReflection.GetField(RequiredController, name);
         }
 
         /// <summary>Performs set.</summary>
@@ -38,7 +43,7 @@ namespace PlantsVsZombies.Diagnostics
         /// <param name = "value">The value.</param>
         private void Set(string name, object value)
         {
-            GameMemberReflection.SetField(_controller, name, value);
+            GameMemberReflection.SetField(RequiredController, name, value);
         }
 
         /// <summary>Performs call.</summary>
@@ -47,14 +52,14 @@ namespace PlantsVsZombies.Diagnostics
         /// <returns>The resulting call.</returns>
         private object Call(string name, params object[] args)
         {
-            return GameMemberReflection.Invoke(_controller, name, args);
+            return GameMemberReflection.Invoke(RequiredController, name, args);
         }
 
         /// <summary>Performs view.</summary>
         /// <param name = "view">The view.</param>
         private void View(string view)
         {
-            var field = GameMemberReflection.FindField(_controller, "_currentView", out var owner)!;
+            var field = GameMemberReflection.FindField(RequiredController, "_currentView", out var owner) ?? throw new MissingMemberException(nameof(PvZGame), "_currentView");
             field.SetValue(owner, Enum.Parse(field.FieldType, view));
         }
 
@@ -71,7 +76,7 @@ namespace PlantsVsZombies.Diagnostics
         /// <param name = "passed">The passed.</param>
         /// <param name = "message">The message.</param>
         /// <exception cref = "InvalidOperationException">The operation cannot satisfy its preconditions.</exception>
-        private void Check(bool passed, string message)
+        private void Check([DoesNotReturnIf(false)] bool passed, string message)
         {
             _checks++;
             if (!passed)
@@ -167,19 +172,19 @@ namespace PlantsVsZombies.Diagnostics
             yield return new WaitForSecondsRealtime(.8f);
             yield return Capture("00-original-loading");
             var deadline = Time.unscaledTime + 60f;
-            while ((!_controller.Loading.OriginalLoadingReady || (float)Field("_originalLoadWidth") < 313.99f || (int)Field("_originalTitleTicks") < 500) && Time.unscaledTime < deadline)
+            while ((!RequiredController.Loading.OriginalLoadingReady || (float)Field("_originalLoadWidth") < 313.99f || (int)Field("_originalTitleTicks") < 500) && Time.unscaledTime < deadline)
             {
                 yield return null;
             }
 
-            Check(_controller.Loading.OriginalLoadingReady && (float)Field("_originalLoadWidth") >= 313.99f, "Original loading finishes real progress and title animation");
+            Check(RequiredController.Loading.OriginalLoadingReady && (float)Field("_originalLoadWidth") >= 313.99f, "Original loading finishes real progress and title animation");
             yield return Capture("00b-original-title-ready");
             Set("_smokeMode", true);
             Call("CompleteOriginalLoading", false);
-            Check(!_controller.Loading.OriginalLoadingActive && _controller.Music.DynamicAudioReady, "Original loading completes after real resources");
+            Check(!RequiredController.Loading.OriginalLoadingActive && RequiredController.Music.DynamicAudioReady, "Original loading completes after real resources");
             Check((bool)Call("EnsureAdventureStore") && (bool)Call("EnsurePlayerAccount"), "Isolated stores initialized");
             var catalog = (ProfileCatalog)Field("_profiles");
-            var id = catalog.SelectedId.Value;
+            var id = catalog.RequiredSelectedId;
             var accounts = (PlayerAccountStore)Field("_accountStore");
             var campaign = (AdventureProgressStore)Field("_adventureStore");
             var purchases = new int[80];
@@ -261,7 +266,7 @@ namespace PlantsVsZombies.Diagnostics
             Call("OpenModes", 1);
             yield return Capture("07-minigames-directory");
             Check((bool)Call("StartIndependentMode", 16), "Independent mode launches");
-            var mode = Sim.ModeSession;
+            var mode = Sim.RequiredModeSession;
             Check(mode.ChooseSeeds(Sim.Adventure.SelectedSeeds), "Mode accepts real loadout");
             Set("_choosingSeeds", false);
             mode.Update(28f);
@@ -270,7 +275,7 @@ namespace PlantsVsZombies.Diagnostics
             Check((bool)Call("StartAdventureCampaign"), "Replay launches from normal menu");
             Check(Sim.Adventure.Level.IsReplay && Sim.Adventure.RequiredSeeds.Count == 3 && Sim.Adventure.AvailableSeeds.Count == 41, "Replay and owned seeds wired");
             yield return Capture("09-replay-chooser");
-            _controller.Campaign.StartAdventureTestLevel(8, accounts.Get(id).SeedAccess());
+            RequiredController.Campaign.StartAdventureTestLevel(8, accounts.Get(id).SeedAccess());
             Check(Sim.ChooseDefaultAdventureSeeds(), "Test board seed chooser");
             Set("_choosingSeeds", false);
             var plantMethod = typeof(GameSimulation).GetMethod("PlaceAdventurePlant", Private);

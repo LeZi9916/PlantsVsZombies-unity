@@ -117,7 +117,7 @@ namespace PlantsVsZombies.Adventure
         /// <param name = "clip">The clip.</param>
         /// <param name = "count">The count.</param>
         /// <returns>The resulting try get.</returns>
-        public static bool TryGet(string asset, string clip, out int count)
+        public static bool TryGet(string asset, string? clip, out int count)
         {
             return s_clips.TryGetValue(asset + "/" + clip, out count);
         }

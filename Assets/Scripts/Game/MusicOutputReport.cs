@@ -11,7 +11,7 @@ namespace PlantsVsZombies.Game
     public sealed class MusicOutputReport
     {
         /// <summary>Stores status, cue, output path, explanation.</summary>
-        public string status, cue, outputPath, explanation;
+        public string status = string.Empty, cue = string.Empty, outputPath = string.Empty, explanation = string.Empty;
         /// <summary>Stores loading ready, listener paused, game paused, source pcm nonzero, listener pcm nonzero, music only pcm nonzero.</summary>
         public bool loadingReady, listenerPaused, gamePaused, sourcePcmNonzero, listenerPcmNonzero, musicOnlyPcmNonzero;
         /// <summary>Stores listeners, decoded clips, decode failures, output sample rate, windows, music only windows.</summary>
@@ -25,6 +25,6 @@ namespace PlantsVsZombies.Game
         /// <summary>Stores source peak, listener peak, music only peak.</summary>
         public float sourcePeak, listenerPeak, musicOnlyPeak;
         /// <summary>Stores stems.</summary>
-        public OriginalMusicStemState[] stems;
+        public OriginalMusicStemState[] stems = System.Array.Empty<OriginalMusicStemState>();
     }
 }

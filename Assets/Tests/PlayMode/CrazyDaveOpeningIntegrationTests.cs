@@ -78,8 +78,8 @@ namespace PlantsVsZombies.Tests.PlayMode
         public void TearDown()
         {
             _voice.Stop();
-            _game._animations.Dispose();
-            _game._selectorView.Dispose();
+            _game.RequiredAnimations.Dispose();
+            _game.RequiredSelectorView.Dispose();
             _presenter.Dispose();
             UnityEngine.Object.DestroyImmediate(_clip);
             UnityEngine.Object.DestroyImmediate(_audioHost);
@@ -96,13 +96,13 @@ namespace PlantsVsZombies.Tests.PlayMode
             sounds["crazydaveshort2"] = _clip;
             sounds["crazydaveshort3"] = _clip;
             Tick(2.75f);
-            Assert.That(_game.Opening._adventureIntro.NativeTime, Is.EqualTo(2750));
+            Assert.That(_game.Opening.RequiredAdventureIntro.NativeTime, Is.EqualTo(2750));
             Assert.That(_game.Dave._crazyDaveMessageIndex, Is.EqualTo(201));
             Assert.That(_game.Dave._crazyDaveText, Is.EqualTo("First."));
             Assert.That(_game.Dave._crazyDaveAnimation, Is.EqualTo("anim_smalltalk"));
             Assert.That(_voice.clip, Is.SameAs(_clip));
             Tick(.5f);
-            Assert.That(_game.Opening._adventureIntro.NativeTime, Is.EqualTo(2750));
+            Assert.That(_game.Opening.RequiredAdventureIntro.NativeTime, Is.EqualTo(2750));
             Click();
             Assert.That(_game.Dave._crazyDaveMessageIndex, Is.EqualTo(202));
             Assert.That(_game.Dave._crazyDaveText, Is.EqualTo("Second."));
@@ -111,7 +111,7 @@ namespace PlantsVsZombies.Tests.PlayMode
             Assert.That(_game.Dave._crazyDaveAnimation, Is.EqualTo("anim_leave"));
             Assert.That(_voice.isPlaying, Is.False);
             Tick(.1f);
-            Assert.That(_game.Opening._adventureIntro.NativeTime, Is.GreaterThan(2750));
+            Assert.That(_game.Opening.RequiredAdventureIntro.NativeTime, Is.GreaterThan(2750));
         }
 
         /// <summary>Missing original voice data is reported and does not trap the opening.</summary>
@@ -125,7 +125,7 @@ namespace PlantsVsZombies.Tests.PlayMode
             Click();
             Click();
             Tick(.1f);
-            Assert.That(_game.Opening._adventureIntro.NativeTime, Is.GreaterThan(2750));
+            Assert.That(_game.Opening.RequiredAdventureIntro.NativeTime, Is.GreaterThan(2750));
         }
 
         /// <summary>Decodes and plays each original short voice through the real dialogue coordinator.</summary>
@@ -185,7 +185,7 @@ namespace PlantsVsZombies.Tests.PlayMode
 
             File.WriteAllText(Path.Combine(_root, "properties", "LawnStrings.txt"),
                 "[CRAZY_DAVE_801]\nFirst.\n[CRAZY_DAVE_802]\nSecond.{MOUTH_BIG_SMILE}\n[CRAZY_DAVE_803]\nThird.{MOUTH_SMALL_SMILE}\n");
-            _game._animations.Dispose();
+            _game.RequiredAnimations.Dispose();
             _game._animations = new ReanimationRenderer(nativeRoot);
             SetField("_crazyDaveStartIndex", 801);
             SetField("_crazyDaveBlinkTicks", 1000);
@@ -250,7 +250,7 @@ namespace PlantsVsZombies.Tests.PlayMode
             }
 
             GameMemberReflection.Invoke(_game, "InitializeAdventureOpening", null);
-            Assert.That(_game.Opening._adventureIntro.Plan.NonScrolling, Is.True);
+            Assert.That(_game.Opening.RequiredAdventureIntro.Plan.NonScrolling, Is.True);
             Assert.That(_game._game.Adventure.GravesEnabled, Is.False);
             _game.Opening._adventureIntroDrawn = true;
             Tick(2.75f);
@@ -270,7 +270,7 @@ namespace PlantsVsZombies.Tests.PlayMode
             Click();
             Assert.That(_game.Dave._crazyDaveMessageIndex, Is.EqualTo(-1));
             Tick(1.26f);
-            Assert.That(_game.Opening._adventureIntro.NativeTime, Is.GreaterThanOrEqualTo(_game.Opening._adventureIntro.Plan.PanLeftEnd));
+            Assert.That(_game.Opening.RequiredAdventureIntro.NativeTime, Is.GreaterThanOrEqualTo(_game.Opening.RequiredAdventureIntro.Plan.PanLeftEnd));
         }
 
         /// <summary>Checks both Vasebreaker conversations through the production host and input routing.</summary>
@@ -359,7 +359,7 @@ namespace PlantsVsZombies.Tests.PlayMode
             var initialize = GameMemberReflection.BindMethod(_game, "InitializeAdventureOpening")!;
             var music = GameMemberReflection.BindMethod(_game, "ResolveOriginalMusicCue")!;
             initialize.Invoke(_game, null);
-            Assert.That(_game.Opening._adventureIntro.Plan.DaveTime, Is.EqualTo(6500));
+            Assert.That(_game.Opening.RequiredAdventureIntro.Plan.DaveTime, Is.EqualTo(6500));
             Assert.That(music.Invoke(_game, null), Is.EqualTo(MusicCue.Title));
             _game.Opening._adventureIntroDrawn = true;
             Tick(2.75f);
@@ -375,7 +375,7 @@ namespace PlantsVsZombies.Tests.PlayMode
             Assert.That(music.Invoke(_game, null), Is.EqualTo(MusicCue.None));
             SetField("_adventureOpeningIsRestart", true);
             initialize.Invoke(_game, null);
-            Assert.That(_game.Opening._adventureIntro.Plan.DaveTime, Is.Zero);
+            Assert.That(_game.Opening.RequiredAdventureIntro.Plan.DaveTime, Is.Zero);
             Assert.That(music.Invoke(_game, null), Is.EqualTo(MusicCue.None));
         }
 

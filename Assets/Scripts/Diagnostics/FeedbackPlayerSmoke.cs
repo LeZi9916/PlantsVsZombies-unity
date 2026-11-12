@@ -9,6 +9,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
 using UnityEngine;
+using System.Diagnostics.CodeAnalysis;
 
 namespace PlantsVsZombies.Diagnostics
 {
@@ -17,9 +18,13 @@ namespace PlantsVsZombies.Diagnostics
     internal sealed class FeedbackPlayerSmoke : MonoBehaviour
     {
         /// <summary>Stores controller.</summary>
-        private PvZGame _controller;
+        private PvZGame? _controller;
+
+        /// <summary>Gets the controller, which must already exist wherever it is used.</summary>
+        /// <exception cref="System.InvalidOperationException">The member is not available.</exception>
+        private PvZGame RequiredController => _controller ?? throw new System.InvalidOperationException("The member '_controller' is not available.");
         /// <summary>Stores logged error.</summary>
-        private string _loggedError;
+        private string? _loggedError;
         /// <summary>Stores checks.</summary>
         private int _checks;
         /// <summary>Stores private.</summary>
@@ -38,7 +43,7 @@ namespace PlantsVsZombies.Diagnostics
         /// <returns>The resulting field.</returns>
         private object Field(string name)
         {
-            return GameMemberReflection.GetField(_controller, name);
+            return GameMemberReflection.GetField(RequiredController, name);
         }
 
         /// <summary>Performs call.</summary>
@@ -47,13 +52,13 @@ namespace PlantsVsZombies.Diagnostics
         /// <returns>The resulting call.</returns>
         private object Call(string name, params object[] args)
         {
-            var method = GameMemberReflection.FindMethod(_controller, name, out var owner);
+            var method = GameMemberReflection.FindMethod(RequiredController, name, out var owner);
             if (method != null)
             {
                 return method.Invoke(owner, args);
             }
 
-            var presenter = GameMemberReflection.GetField(_controller, "_presenter");
+            var presenter = GameMemberReflection.GetField(RequiredController, "_presenter");
             return presenter.GetType().GetMethod(name, Private).Invoke(presenter, args);
         }
 
@@ -82,7 +87,7 @@ namespace PlantsVsZombies.Diagnostics
         /// <param name = "passed">The passed.</param>
         /// <param name = "message">The message.</param>
         /// <exception cref = "InvalidOperationException">The operation cannot satisfy its preconditions.</exception>
-        private void Check(bool passed, string message)
+        private void Check([DoesNotReturnIf(false)] bool passed, string message)
         {
             _checks++;
             if (!passed)
@@ -175,15 +180,15 @@ namespace PlantsVsZombies.Diagnostics
         private IEnumerator Run()
         {
             var deadline = Time.unscaledTime + 60;
-            while (_controller.Loading.OriginalLoadingActive && Time.unscaledTime < deadline)
+            while (RequiredController.Loading.OriginalLoadingActive && Time.unscaledTime < deadline)
             {
                 yield return null;
             }
 
-            Check(!_controller.Loading.OriginalLoadingActive, "Startup did not finish");
-            _controller.Campaign.StartAdventureTestLevel(8);
+            Check(!RequiredController.Loading.OriginalLoadingActive, "Startup did not finish");
+            RequiredController.Campaign.StartAdventureTestLevel(8);
             Check(Sim.ChooseDefaultAdventureSeeds(), "Could not choose test seeds");
-            GameMemberReflection.SetField(_controller, "_choosingSeeds", false);
+            GameMemberReflection.SetField(RequiredController, "_choosingSeeds", false);
             var sunflower = (Plant)SimCall("PlaceAdventurePlant", PlantKind.Sunflower, 1, 1);
             sunflower.Timing = global::PlantsVsZombies.Timing.PlantTiming.FromRaw(global::PlantsVsZombies.Timing.PlantKind.Sunflower, 150, 0);
             sunflower.ActionTimer = 1.5f;
@@ -241,16 +246,16 @@ namespace PlantsVsZombies.Diagnostics
             yield return new WaitForSecondsRealtime(.12f);
             yield return Capture("06-seed-reward-falling");
             deadline = Time.unscaledTime + 5;
-            while (!Sim.Adventure.RewardPresentation.OnGround && Time.unscaledTime < deadline)
+            while (!Sim.Adventure.RequiredRewardPresentation.OnGround && Time.unscaledTime < deadline)
             {
                 yield return null;
             }
 
-            Check(Sim.Adventure.RewardPresentation.OnGround, "Seed reward did not land");
+            Check(Sim.Adventure.RequiredRewardPresentation.OnGround, "Seed reward did not land");
             yield return Capture("07-seed-reward-pickup-arrow");
             Call("HandleClick", new Vector2(50, 500));
             Check(campaign.Progress.NextLevel == 1, "Unrelated click collected the reward");
-            var reward = Sim.Adventure.RewardPresentation;
+            var reward = Sim.Adventure.RequiredRewardPresentation;
             Call("HandleClick", new Vector2(reward.X + 25, reward.Y + 35));
             Check(reward.Stage == AdventureAwardStage.Collecting && campaign.Progress.NextLevel == 2, "Visible seed pickup did not persist and start original animation");
             yield return new WaitForSecondsRealtime(.8f);
@@ -271,11 +276,16 @@ namespace PlantsVsZombies.Diagnostics
             progress.Import(campaign.ProfileId, 1, 1);
             Call("HandleSelector", SelectorAction.Adventure);
             Check(Sim.Adventure.Level.IsReplay && Sim.ChooseDefaultAdventureSeeds(), "Replay setup failed");
-            GameMemberReflection.SetField(_controller, "_choosingSeeds", false);
+            GameMemberReflection.SetField(RequiredController, "_choosingSeeds", false);
             typeof(GameSimulation).GetProperty("State").SetValue(Sim, MatchState.Won);
             Sim.Adventure.Phase = AdventurePhase.Reward;
             SimCall("SpawnAdventureRewardPresentation");
             reward = Sim.Adventure.RewardPresentation;
+            if (reward == null)
+            {
+                throw new System.InvalidOperationException("The value 'reward' is not available.");
+            }
+
             Call("HandleClick", new Vector2(reward.X + reward.Width / 2, reward.Y + reward.Height / 2));
             Check(reward.NativeType == 18 && reward.Stage == AdventureAwardStage.Collecting, "Replay did not award a moneybag");
             Sim.Update(6.1f);

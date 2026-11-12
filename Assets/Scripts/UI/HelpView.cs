@@ -24,21 +24,33 @@ namespace PlantsVsZombies.UI
         /// <summary>Stores return bounds.</summary>
         private static readonly Rect s_returnBounds = new Rect(324f, 500f, 156f, 42f);
         /// <summary>Stores lawn.</summary>
-        private Texture2D _lawn;
+        private Texture2D? _lawn;
         /// <summary>Stores paper.</summary>
-        private Texture2D _paper;
+        private Texture2D? _paper;
+
+        /// <summary>Gets the paper, which must already exist wherever it is used.</summary>
+        /// <exception cref="System.InvalidOperationException">The member is not available.</exception>
+        private Texture2D RequiredPaper => _paper ?? throw new System.InvalidOperationException("The member '_paper' is not available.");
         /// <summary>Stores writing.</summary>
-        private Texture2D _writing;
+        private Texture2D? _writing;
+
+        /// <summary>Gets the writing, which must already exist wherever it is used.</summary>
+        /// <exception cref="System.InvalidOperationException">The member is not available.</exception>
+        private Texture2D RequiredWriting => _writing ?? throw new System.InvalidOperationException("The member '_writing' is not available.");
         /// <summary>Stores button.</summary>
-        private Texture2D _button;
+        private Texture2D? _button;
         /// <summary>Stores button glow.</summary>
-        private Texture2D _buttonGlow;
+        private Texture2D? _buttonGlow;
         /// <summary>Stores return label.</summary>
         private readonly string _returnLabel;
         /// <summary>Stores font.</summary>
-        private Font _font;
+        private Font? _font;
         /// <summary>Stores label style.</summary>
-        private GUIStyle _labelStyle;
+        private GUIStyle? _labelStyle;
+
+        /// <summary>Gets the label style, which must already exist wherever it is used.</summary>
+        /// <exception cref="System.InvalidOperationException">The member is not available.</exception>
+        private GUIStyle RequiredLabelStyle => _labelStyle ?? throw new System.InvalidOperationException("The member '_labelStyle' is not available.");
         /// <summary>Stores hovered.</summary>
         private bool _hovered;
         /// <summary>Stores captured.</summary>
@@ -134,8 +146,8 @@ namespace PlantsVsZombies.UI
             {
                 CanvasUI.Color = Color.white;
                 Image(new Rect(-700f, -300f, 2800f, 1200f), _lawn);
-                Image(new Rect(80f, 80f, _paper.width, _paper.height), _paper);
-                Image(new Rect(131f, 132f, _writing.width, _writing.height), _writing);
+                Image(new Rect(80f, 80f, RequiredPaper.width, RequiredPaper.height), _paper);
+                Image(new Rect(131f, 132f, RequiredWriting.width, RequiredWriting.height), _writing);
                 var offset = IsReturnPressed ? 1f : 0f;
                 var buttonRect = new Rect(s_returnBounds.x + offset, s_returnBounds.y + offset, s_returnBounds.width, s_returnBounds.height);
                 Image(buttonRect, _button);
@@ -144,7 +156,7 @@ namespace PlantsVsZombies.UI
                     Image(buttonRect, _buttonGlow);
                 }
 
-                _labelStyle.normal.textColor = new Color32(213, 159, 43, 255);
+                RequiredLabelStyle.normal.textColor = new Color32(213, 159, 43, 255);
                 CanvasUI.Label(new Rect(buttonRect.x, buttonRect.y - 1f, buttonRect.width, buttonRect.height), _returnLabel, _labelStyle);
             }
             finally
@@ -277,7 +289,7 @@ namespace PlantsVsZombies.UI
         /// <summary>Performs image.</summary>
         /// <param name = "bounds">The bounds.</param>
         /// <param name = "texture">The texture.</param>
-        private static void Image(Rect bounds, Texture2D texture)
+        private static void Image(Rect bounds, Texture2D? texture)
         {
             CanvasUI.DrawTexture(bounds, texture, ScaleMode.StretchToFill, true);
         }
@@ -325,9 +337,9 @@ namespace PlantsVsZombies.UI
         /// <exception cref = "InvalidDataException">The operation cannot satisfy its preconditions.</exception>
         private static Texture2D LoadMaskedTexture(string images, string colorName, string maskName)
         {
-            Texture2D color = null;
-            Texture2D mask = null;
-            Texture2D result = null;
+            Texture2D? color = null;
+            Texture2D? mask = null;
+            Texture2D? result = null;
             try
             {
                 color = LoadTexture(images, colorName);
@@ -395,7 +407,7 @@ namespace PlantsVsZombies.UI
 
         /// <summary>Performs release.</summary>
         /// <param name = "resource">The resource.</param>
-        private static void Release(UnityEngine.Object resource)
+        private static void Release(UnityEngine.Object? resource)
         {
             if (resource == null)
             {

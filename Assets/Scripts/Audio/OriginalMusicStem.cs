@@ -13,7 +13,11 @@ namespace PlantsVsZombies.Audio
         /// <summary>Stores sources.</summary>
         private readonly AudioSource[] _sources;
         /// <summary>Stores clip.</summary>
-        private AudioClip _clip;
+        private AudioClip? _clip;
+
+        /// <summary>Gets the clip, which must already exist wherever it is used.</summary>
+        /// <exception cref="System.InvalidOperationException">The member is not available.</exception>
+        private AudioClip RequiredClip => _clip ?? throw new System.InvalidOperationException("The member '_clip' is not available.");
         /// <summary>Stores loop start.</summary>
         private int _loopStart;
         /// <summary>Stores active.</summary>
@@ -47,7 +51,7 @@ namespace PlantsVsZombies.Audio
         /// <summary>Initializes original music stem.</summary>
         /// <param name = "owner">The owner.</param>
         /// <param name = "first">The first.</param>
-        public OriginalMusicStem(GameObject owner, AudioSource first = null)
+        public OriginalMusicStem(GameObject owner, AudioSource? first = null)
         {
             _sources = new[]
             {
@@ -107,7 +111,7 @@ namespace PlantsVsZombies.Audio
             _startDsp = dsp;
             _playbackOriginSample = sample;
             _playbackOriginDsp = dsp;
-            _endDsp = dsp + (_clip.samples - sample) / (double)_clip.frequency;
+            _endDsp = dsp + (RequiredClip.samples - sample) / (double)RequiredClip.frequency;
             var voice = _sources[_active];
             voice.clip = _clip;
             voice.timeSamples = sample;

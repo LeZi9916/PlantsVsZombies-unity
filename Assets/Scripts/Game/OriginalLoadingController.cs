@@ -54,7 +54,7 @@ namespace PlantsVsZombies.Game
         /// <summary>Stores original title textures.</summary>
         internal readonly Dictionary<string, Texture2D> _originalTitleTextures = new Dictionary<string, Texture2D>();
         /// <summary>Stores original loading font.</summary>
-        internal CanvasBitmapFont _originalLoadingFont;
+        internal CanvasBitmapFont? _originalLoadingFont;
         /// <summary>Stores original sprout info,  original head info.</summary>
         internal global::PlantsVsZombies.Reanimation.AnimationInfo _originalSproutInfo, _originalHeadInfo;
         /// <summary>Gets or sets original loading active.</summary>
@@ -178,7 +178,7 @@ namespace PlantsVsZombies.Game
             foreach (string track in tracks)
             {
                 global::PlantsVsZombies.Reanimation.AnimationInfo info;
-                if (_owner._animations.TryGetAnimationInfo(track, null, out info))
+                if (_owner.RequiredAnimations.TryGetAnimationInfo(track, null, out info))
                 {
                     if (track == "LoadBar_sprout")
                     {
@@ -191,7 +191,7 @@ namespace PlantsVsZombies.Game
                 }
                 else if (track == "LoadBar_sprout" || track == "LoadBar_Zombiehead")
                 {
-                    Debug.LogError("Missing original startup animation: " + track + ": " + _owner._animations.LastError);
+                    Debug.LogError("Missing original startup animation: " + track + ": " + _owner.RequiredAnimations.LastError);
                 }
 
                 _originalWarmupCompleted++;

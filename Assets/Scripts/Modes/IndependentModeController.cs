@@ -26,7 +26,11 @@ namespace PlantsVsZombies.Modes
         }
 
         /// <summary>Stores mode session.</summary>
-        internal ModeSession _modeSession;
+        internal ModeSession? _modeSession;
+
+        /// <summary>Gets the mode session, which must already exist wherever it is used.</summary>
+        /// <exception cref="System.InvalidOperationException">The member is not available.</exception>
+        internal ModeSession RequiredModeSession => _modeSession ?? throw new System.InvalidOperationException("The member '_modeSession' is not available.");
         /// <summary>Stores mode profile id.</summary>
         private Guid _modeProfileId;
         /// <summary>Stores mode first clear,  mode reward claimed,  mode choosing imitater.</summary>
@@ -34,9 +38,13 @@ namespace PlantsVsZombies.Modes
         /// <summary>Stores mode saved stage.</summary>
         private int _modeSavedStage = -1;
         /// <summary>Stores mode save error.</summary>
-        internal string _modeSaveError;
+        internal string? _modeSaveError;
         /// <summary>Stores mode account snapshot.</summary>
-        internal PlayerAccount _modeAccountSnapshot;
+        internal PlayerAccount? _modeAccountSnapshot;
+
+        /// <summary>Gets the mode account snapshot, which must already exist wherever it is used.</summary>
+        /// <exception cref="System.InvalidOperationException">The member is not available.</exception>
+        internal PlayerAccount RequiredModeAccountSnapshot => _modeAccountSnapshot ?? throw new System.InvalidOperationException("The member '_modeAccountSnapshot' is not available.");
         /// <summary>Stores mode has finished adventure.</summary>
         private bool _modeHasFinishedAdventure;
         /// <summary>Stores mode adventure next level.</summary>
@@ -44,7 +52,7 @@ namespace PlantsVsZombies.Modes
         /// <summary>Stores mode account refresh,  mode next save attempt.</summary>
         private float _modeAccountRefresh, _modeNextSaveAttempt;
         /// <summary>Stores external challenge requested.</summary>
-        public Action<int> ExternalChallengeRequested;
+        public Action<int>? ExternalChallengeRequested;
         /// <summary>Gets or sets independent mode music cue.</summary>
         internal MusicCue? IndependentModeMusicCue
         {
@@ -55,7 +63,7 @@ namespace PlantsVsZombies.Modes
                     return null;
                 }
 
-                if (_owner._game.State == MatchState.Won || _owner._game.State == MatchState.Lost)
+                if (_owner.RequiredGame.State == MatchState.Won || _owner.RequiredGame.State == MatchState.Lost)
                 {
                     return MusicCue.None;
                 }
@@ -65,8 +73,8 @@ namespace PlantsVsZombies.Modes
                     return MusicCue.ChooseSeeds;
                 }
 
-                var m = _modeSession.Definition.Mechanic;
-                if (_modeSession.Definition.Puzzle)
+                var m = RequiredModeSession.Definition.Mechanic;
+                if (RequiredModeSession.Definition.Puzzle)
                 {
                     return MusicCue.Puzzle;
                 }
@@ -86,7 +94,7 @@ namespace PlantsVsZombies.Modes
                     return MusicCue.Minigame;
                 }
 
-                var level = _owner._game.Adventure.Level;
+                var level = _owner.RequiredGame.Adventure.Level;
                 return level.Terrain == AdventureTerrain.Fog ? MusicCue.Fog : level.IsNight ? MusicCue.Night : level.HasPool ? MusicCue.Pool : level.HasRoof ? MusicCue.Roof : MusicCue.Day;
             }
         }
@@ -111,12 +119,12 @@ namespace PlantsVsZombies.Modes
         /// <summary>Performs initialize modes.</summary>
         internal void InitializeModes()
         {
-            _owner._modeView.LaunchRequested = StartIndependentMode;
-            _owner._modeView.ProgressLookup = ReadModeRecord;
-            _owner._modeView.LockReasonLookup = ReadModeLockReason;
-            _owner._modeView.CanLaunch = id =>
+            _owner.RequiredModeView.LaunchRequested = StartIndependentMode;
+            _owner.RequiredModeView.ProgressLookup = ReadModeRecord;
+            _owner.RequiredModeView.LockReasonLookup = ReadModeLockReason;
+            _owner.RequiredModeView.CanLaunch = id =>
             {
-                ModeDefinition d;
+                ModeDefinition? d;
                 return ModeCatalog.TryGet(id, out d) ? ReadModeLockReason(id) == null : ExternalChallengeRequested != null && (id == 43 || id == 50);
             };
         }
@@ -136,7 +144,7 @@ namespace PlantsVsZombies.Modes
                 _modeAccountSnapshot = _owner.Accounts.GetSelectedAccount();
                 if (_owner.Campaign.EnsureAdventureStore())
                 {
-                    var progress = _owner.Campaign._adventureStore.Get(_owner._profiles.SelectedId.Value);
+                    var progress = _owner.Campaign.RequiredAdventureStore.Get(_owner._profiles.SelectedId.Value);
                     _modeHasFinishedAdventure = progress.CompletedRuns > 0;
                     _modeAdventureNextLevel = progress.NextLevel;
                 }
@@ -150,7 +158,7 @@ namespace PlantsVsZombies.Modes
         /// <summary>Performs read mode lock reason.</summary>
         /// <param name = "originalModeId">The original mode id.</param>
         /// <returns>The resulting read mode lock reason.</returns>
-        private string ReadModeLockReason(int originalModeId)
+        private string? ReadModeLockReason(int originalModeId)
         {
             if (_owner._profiles == null || !_owner._profiles.SelectedId.HasValue)
             {
@@ -163,13 +171,13 @@ namespace PlantsVsZombies.Modes
             }
 
             ReadModeRecord(originalModeId);
-            var giftAccess = originalModeId <= 15 ? _modeAccountSnapshot.SurvivalUnlocked : originalModeId <= 35 ? _modeAccountSnapshot.MinigamesUnlocked : _modeAccountSnapshot.PuzzleUnlocked;
+            var giftAccess = originalModeId <= 15 ? RequiredModeAccountSnapshot.SurvivalUnlocked : originalModeId <= 35 ? RequiredModeAccountSnapshot.MinigamesUnlocked : RequiredModeAccountSnapshot.PuzzleUnlocked;
             if (!giftAccess && !ModeUnlockRules.CategoryUnlocked(originalModeId, _modeAdventureNextLevel, _modeHasFinishedAdventure))
             {
                 return originalModeId <= 15 ? "通关冒险模式后解锁生存模式。" : originalModeId <= 35 ? "通过冒险模式3-2，领取小游戏礼物后解锁。" : "通过冒险模式4-6，领取解谜模式礼物后解锁。";
             }
 
-            return ModeUnlockRules.LockReason(originalModeId, _modeHasFinishedAdventure, index => _modeAccountSnapshot.ModeRecord(index));
+            return ModeUnlockRules.LockReason(originalModeId, _modeHasFinishedAdventure, index => RequiredModeAccountSnapshot.ModeRecord(index));
         }
 
         /// <summary>Performs start independent mode.</summary>
@@ -177,7 +185,7 @@ namespace PlantsVsZombies.Modes
         /// <returns>The resulting start independent mode.</returns>
         private bool StartIndependentMode(int originalModeId)
         {
-            ModeDefinition definition;
+            ModeDefinition? definition;
             if (!ModeCatalog.TryGet(originalModeId, out definition))
             {
                 if (ExternalChallengeRequested != null)
@@ -213,10 +221,10 @@ namespace PlantsVsZombies.Modes
 
             try
             {
-                var account = _owner.Accounts.GetSelectedAccount();
+                var account = _owner.Accounts.RequiredGetSelectedAccount();
                 _modeProfileId = _owner._profiles.SelectedId.Value;
                 var record = account.ModeRecord(definition.RecordIndex);
-                var progress = _owner.Campaign._adventureStore.Get(_modeProfileId);
+                var progress = _owner.Campaign.RequiredAdventureStore.Get(_modeProfileId);
                 var basicSeeds = progress.CompletedRuns > 0 ? 40 : Math.Min(40, AdventureLevelSpec.AwardSeedId(progress.NextLevel));
                 _modeFirstClear = definition.Survival ? record < (definition.Hard ? 10 : 5) : record == 0;
                 _modeSession = new ModeSession(originalModeId, account.SeedAccess(), account.PacketSlots, unchecked(Environment.TickCount ^ (int)DateTime.UtcNow.Ticks), account.PurchaseCount(23) > 0, account.PurchaseCount(22) > 0, basicSeeds);
@@ -230,7 +238,7 @@ namespace PlantsVsZombies.Modes
                 {
                     try
                     {
-                        _owner.Accounts._accountStore.CollectBattleLoot(coinProfile, coinReceipt + ":" + coin.Id, coin.Kind == AdventureCoinKind.Chocolate, coin.GiftPlant ?? PlantKind.Peashooter, PvZGame.UtcSeconds);
+                        _owner.Accounts.RequiredAccountStore.CollectBattleLoot(coinProfile, coinReceipt + ":" + coin.Id, coin.Kind == AdventureCoinKind.Chocolate, coin.GiftPlant ?? PlantKind.Peashooter, PvZGame.UtcSeconds);
                         return true;
                     }
                     catch (IOException e)
@@ -248,7 +256,7 @@ namespace PlantsVsZombies.Modes
                 {
                     try
                     {
-                        _owner.Accounts._accountStore.CreditBattleCoins(coinProfile, coinReceipt, total);
+                        _owner.Accounts.RequiredAccountStore.CreditBattleCoins(coinProfile, coinReceipt, total);
                         _modeAccountSnapshot = null;
                         _modeSaveError = null;
                         return true;
@@ -273,12 +281,12 @@ namespace PlantsVsZombies.Modes
                 {
                     try
                     {
-                        if (_owner.Accounts._accountStore.Get(coinProfile).PurchaseCount(24) <= 0)
+                        if (_owner.Accounts.RequiredAccountStore.Get(coinProfile).PurchaseCount(24) <= 0)
                         {
                             return false;
                         }
 
-                        _owner.Accounts._accountStore.ConsumeRake(coinProfile);
+                        _owner.Accounts.RequiredAccountStore.ConsumeRake(coinProfile);
                         _modeAccountSnapshot = null;
                         return true;
                     }
@@ -295,10 +303,10 @@ namespace PlantsVsZombies.Modes
                 }) : null);
                 _owner.Campaign.AttachAdventureGame(_modeSession.Game);
                 _owner._deck.Clear();
-                _owner._deck.AddRange(_owner._game.Adventure.SelectedSeeds);
+                _owner._deck.AddRange(_owner.RequiredGame.Adventure.SelectedSeeds);
                 _owner.AdventureBoard.AdventureFeedback(_modeSession.Advice, 8f);
                 _owner._choosingSeeds = _modeSession.Phase == ModePhase.ChoosingSeeds;
-                _owner._pendingSeeds = new AdventureSeedChooserState(_owner._game.Adventure.SelectedSeeds);
+                _owner._pendingSeeds = new AdventureSeedChooserState(_owner.RequiredGame.Adventure.SelectedSeeds);
                 _owner._currentView = PvZGame.ScreenView.Board;
                 return true;
             }
@@ -318,12 +326,12 @@ namespace PlantsVsZombies.Modes
                 return false;
             }
 
-            if (_modeSession.Phase == ModePhase.Won && !_modeRewardClaimed && !SaveModeRecord(true))
+            if (RequiredModeSession.Phase == ModePhase.Won && !_modeRewardClaimed && !SaveModeRecord(true))
             {
                 return true;
             }
 
-            StartIndependentMode(_modeSession.Definition.Id);
+            StartIndependentMode(RequiredModeSession.Definition.Id);
             return true;
         }
 
@@ -337,8 +345,8 @@ namespace PlantsVsZombies.Modes
                 return false;
             }
 
-            _modeSession.Update(dt);
-            if ((_modeSession.Phase == ModePhase.StageCleared || _modeSession.Phase == ModePhase.Lost) && _modeSavedStage != _modeSession.ClearedStages && Time.unscaledTime >= _modeNextSaveAttempt)
+            RequiredModeSession.Update(dt);
+            if ((RequiredModeSession.Phase == ModePhase.StageCleared || RequiredModeSession.Phase == ModePhase.Lost) && _modeSavedStage != RequiredModeSession.ClearedStages && Time.unscaledTime >= _modeNextSaveAttempt)
             {
                 SaveModeRecord(false);
             }
@@ -401,7 +409,7 @@ namespace PlantsVsZombies.Modes
 
             _owner._currentView = PvZGame.ScreenView.Modes;
             var id = _modeSession == null ? 16 : _modeSession.Definition.Id;
-            _owner._modeView.Open(id <= 15 ? 0 : id >= 51 ? 3 : 1);
+            _owner.RequiredModeView.Open(id <= 15 ? 0 : id >= 51 ? 3 : 1);
             _owner._selected = -1;
             _owner.AdventureBoard._selectedAdventurePacket = -1;
             _owner._shovel = false;
@@ -430,6 +438,11 @@ namespace PlantsVsZombies.Modes
                 return true;
             }
 
+            if (s == null)
+            {
+                throw new System.InvalidOperationException("The value 's' is not available.");
+            }
+
             if (s.Phase == ModePhase.ChoosingSeeds)
             {
                 HandleModeChooser(point);
@@ -444,11 +457,11 @@ namespace PlantsVsZombies.Modes
                     {
                         if (SaveModeRecord(false) && s.Continue())
                         {
-                            _owner._animations.ResetNativePlayback();
+                            _owner.RequiredAnimations.ResetNativePlayback();
                             _owner._choosingSeeds = s.Phase == ModePhase.ChoosingSeeds;
-                            _owner._pendingSeeds = new AdventureSeedChooserState(_owner._game.Adventure.SelectedSeeds);
+                            _owner._pendingSeeds = new AdventureSeedChooserState(_owner.RequiredGame.Adventure.SelectedSeeds);
                             _owner._deck.Clear();
-                            _owner._deck.AddRange(_owner._game.Adventure.SelectedSeeds);
+                            _owner._deck.AddRange(_owner.RequiredGame.Adventure.SelectedSeeds);
                             _owner._selected = -1;
                             _owner.AdventureBoard._selectedAdventurePacket = -1;
                             _owner._shovel = false;
@@ -489,7 +502,7 @@ namespace PlantsVsZombies.Modes
                 return true;
             }
 
-            if (_owner._game.State == MatchState.Paused)
+            if (_owner.RequiredGame.State == MatchState.Paused)
             {
                 return true;
             }
@@ -500,20 +513,20 @@ namespace PlantsVsZombies.Modes
                 return true;
             }
 
-            for (var i = _owner._game.Adventure.Coins.Count - 1; i >= 0; i--)
+            for (var i = _owner.RequiredGame.Adventure.Coins.Count - 1; i >= 0; i--)
             {
-                if (_owner.Layout.AdventureCoinRect(_owner._game.Adventure.Coins[i]).Contains(point))
+                if (_owner.Layout.AdventureCoinRect(_owner.RequiredGame.Adventure.Coins[i]).Contains(point))
                 {
-                    _owner._game.CollectAdventureCoin(_owner._game.Adventure.Coins[i]);
+                    _owner.RequiredGame.CollectAdventureCoin(_owner.RequiredGame.Adventure.Coins[i]);
                     return true;
                 }
             }
 
-            for (var i = _owner._game.Suns.Count - 1; i >= 0; i--)
+            for (var i = _owner.RequiredGame.Suns.Count - 1; i >= 0; i--)
             {
-                if (ModeSunRect(_owner._game.Suns[i]).Contains(point))
+                if (ModeSunRect(_owner.RequiredGame.Suns[i]).Contains(point))
                 {
-                    _owner._game.CollectSun(_owner._game.Suns[i]);
+                    _owner.RequiredGame.CollectSun(_owner.RequiredGame.Suns[i]);
                     return true;
                 }
             }
@@ -549,7 +562,7 @@ namespace PlantsVsZombies.Modes
                 {
                     if (new Rect(80 + i * 98, 8, 92, 60).Contains(point))
                     {
-                        _owner._game.BuyModeMatchAction(i);
+                        _owner.RequiredGame.BuyModeMatchAction(i);
                         return true;
                     }
                 }
@@ -582,14 +595,14 @@ namespace PlantsVsZombies.Modes
                 }
                 else
                 {
-                    for (var i = 0; i < _owner._game.Adventure.Packets.Count && i < 10; i++)
+                    for (var i = 0; i < _owner.RequiredGame.Adventure.Packets.Count && i < 10; i++)
                     {
                         if (_owner.Layout.AdventurePacketContains(i, point))
                         {
-                            _owner.AdventureBoard._selectedAdventurePacket = _owner.AdventureBoard._selectedAdventurePacket == _owner._game.Adventure.Packets[i].Id ? -1 : _owner._game.Adventure.Packets[i].Id;
+                            _owner.AdventureBoard._selectedAdventurePacket = _owner.AdventureBoard._selectedAdventurePacket == _owner.RequiredGame.Adventure.Packets[i].Id ? -1 : _owner.RequiredGame.Adventure.Packets[i].Id;
                             _owner._selected = -1;
                             _owner._shovel = false;
-                            _owner._game.CancelAdventureCobCannonAim();
+                            _owner.RequiredGame.CancelAdventureCobCannonAim();
                             return true;
                         }
                     }
@@ -608,7 +621,7 @@ namespace PlantsVsZombies.Modes
                 {
                     if (ModeSeedRect(i).Contains(point))
                     {
-                        var context = _owner._game.AdventurePacketContext(_owner._deck[i]);
+                        var context = _owner.RequiredGame.AdventurePacketContext(_owner._deck[i]);
                         if (AdventureSeedBankPresentation.CanPickUp(context))
                         {
                             _owner._selected = _owner._selected == i ? -1 : i;
@@ -620,7 +633,7 @@ namespace PlantsVsZombies.Modes
                         }
                         _owner.AdventureBoard._selectedAdventurePacket = -1;
                         _owner._shovel = false;
-                        _owner._game.CancelAdventureCobCannonAim();
+                        _owner.RequiredGame.CancelAdventureCobCannonAim();
                         return true;
                     }
                 }
@@ -632,13 +645,13 @@ namespace PlantsVsZombies.Modes
                 _owner.Sounds.PlayPresentationSound("shovel");
                 _owner._selected = -1;
                 _owner.AdventureBoard._selectedAdventurePacket = -1;
-                _owner._game.CancelAdventureCobCannonAim();
+                _owner.RequiredGame.CancelAdventureCobCannonAim();
                 return true;
             }
 
             var col = Mathf.FloorToInt((point.x - BoardLayout.AdventureGridX) / BoardLayout.CellWidth);
             var row = Mathf.FloorToInt((point.y - BoardLayout.AdventureGridY - _owner.Layout.AdventureSlope(col)) / _owner.Layout.AdventurePitch);
-            if (col < 0 || col > 8 || row < 0 || row >= _owner._game.RowCount)
+            if (col < 0 || col > 8 || row < 0 || row >= _owner.RequiredGame.RowCount)
             {
                 return true;
             }
@@ -648,7 +661,7 @@ namespace PlantsVsZombies.Modes
                 if (_owner._selected >= 0 && !s.PlaceZombie(s.ZombieCards[_owner._selected], row, col))
                 {
                     var bungee = s.ZombieCards[_owner._selected] == ZombieKind.Bungee;
-                    if (bungee ? col >= _owner._game.ModeIZombieColumns : col < _owner._game.ModeIZombieColumns)
+                    if (bungee ? col >= _owner.RequiredGame.ModeIZombieColumns : col < _owner.RequiredGame.ModeIZombieColumns)
                     {
                         _owner.AdventureBoard.AdventureFeedback(bungee ? "[ADVICE_I_ZOMBIE_LEFT_OF_LINE]" : "[ADVICE_I_ZOMBIE_NOT_PASSED_LINE]", 3f);
                     }
@@ -663,15 +676,15 @@ namespace PlantsVsZombies.Modes
                 return true;
             }
 
-            if (_owner._game.Adventure.SelectedCobCannonId.HasValue)
+            if (_owner.RequiredGame.Adventure.SelectedCobCannonId.HasValue)
             {
-                _owner._game.TryFireAdventureCobCannonAtCell(row, col);
+                _owner.RequiredGame.TryFireAdventureCobCannonAtCell(row, col);
                 return true;
             }
 
             if (_owner._shovel)
             {
-                if (_owner._game.TryShovelAdventurePlant(_owner.Layout.AdventureShovelTarget(point)))
+                if (_owner.RequiredGame.TryShovelAdventurePlant(_owner.Layout.AdventureShovelTarget(point)))
                 {
                     _owner._shovel = false;
                     _owner.Sounds.PlayPresentationSound("plant");
@@ -696,7 +709,7 @@ namespace PlantsVsZombies.Modes
 
             if (m == ModeMechanic.Vases && _owner._selected == 0)
             {
-                if (_owner._game.PlantModeVaseCherry(row, col))
+                if (_owner.RequiredGame.PlantModeVaseCherry(row, col))
                 {
                     _owner._selected = -1;
                 }
@@ -722,7 +735,7 @@ namespace PlantsVsZombies.Modes
                 return true;
             }
 
-            if (_owner._game.TryAimAdventureCobCannon(row, col))
+            if (_owner.RequiredGame.TryAimAdventureCobCannon(row, col))
             {
                 return true;
             }
@@ -745,17 +758,17 @@ namespace PlantsVsZombies.Modes
         /// <param name = "point">The point.</param>
         private void HandleModeChooser(Vector2 point)
         {
-            var unlocked = _owner._game.Adventure.AvailableSeeds;
-            var required = Math.Min(_modeSession.PacketSlots, unlocked.Count);
-            _owner._pendingSeeds.LandFlyingSeeds();
+            var unlocked = _owner.RequiredGame.Adventure.AvailableSeeds;
+            var required = Math.Min(RequiredModeSession.PacketSlots, unlocked.Count);
+            _owner.RequiredPendingSeeds.LandFlyingSeeds();
             if (_modeChoosingImitater)
             {
                 for (var i = 0; i < 40; i++)
                 {
-                    if (BoardLayout.AdventureChooserRect(i).Contains(point) && _owner._game.SetModeImitaterTarget((PlantKind)i))
+                    if (BoardLayout.AdventureChooserRect(i).Contains(point) && _owner.RequiredGame.SetModeImitaterTarget((PlantKind)i))
                     {
                         var home = BoardLayout.AdventureChooserRect(_owner.Router.AdventureAvailableSeedIndex(PlantKind.Imitater));
-                        _owner._pendingSeeds.Choose(PlantKind.Imitater, (int)home.x, (int)home.y, _owner.Layout.SeedBankCapacity);
+                        _owner.RequiredPendingSeeds.Choose(PlantKind.Imitater, (int)home.x, (int)home.y, _owner.Layout.SeedBankCapacity);
                         _owner.Sounds.PlayAdventureRewardSound("tap2.ogg");
                         _modeChoosingImitater = false;
                         return;
@@ -779,7 +792,7 @@ namespace PlantsVsZombies.Modes
             {
                 if (BoardLayout.AdventureChooserRect(i).Contains(point))
                 {
-                    if (!_owner._pendingSeeds.Contains(unlocked[i]) && _owner._pendingSeeds.Count < required)
+                    if (!_owner.RequiredPendingSeeds.Contains(unlocked[i]) && _owner.RequiredPendingSeeds.Count < required)
                     {
                         if (unlocked[i] == PlantKind.Imitater)
                         {
@@ -788,7 +801,7 @@ namespace PlantsVsZombies.Modes
                         else
                         {
                             var home = BoardLayout.AdventureChooserRect(i);
-                            _owner._pendingSeeds.Choose(unlocked[i], (int)home.x, (int)home.y, _owner.Layout.SeedBankCapacity);
+                            _owner.RequiredPendingSeeds.Choose(unlocked[i], (int)home.x, (int)home.y, _owner.Layout.SeedBankCapacity);
                             _owner.Sounds.PlayAdventureRewardSound("tap2.ogg");
                         }
                     }
@@ -797,11 +810,11 @@ namespace PlantsVsZombies.Modes
                 }
             }
 
-            if (new Rect(300, 533, 200, 34).Contains(point) && _owner._pendingSeeds.Count == required)
+            if (new Rect(300, 533, 200, 34).Contains(point) && _owner.RequiredPendingSeeds.Count == required)
             {
                 var seeds = new List<PlantKind>(_owner._pendingSeeds);
 
-                if (_modeSession.ChooseSeeds(seeds))
+                if (RequiredModeSession.ChooseSeeds(seeds))
                 {
                     _owner._choosingSeeds = false;
                     _owner._deck.Clear();

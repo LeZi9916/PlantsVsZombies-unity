@@ -333,6 +333,11 @@ namespace PlantsVsZombies.Tests.EditMode
             {
                 foreach (var property in typeof(PvZGame).GetProperties(flags | BindingFlags.DeclaredOnly))
                 {
+                    if (property.Name.StartsWith("Required", StringComparison.Ordinal))
+                    {
+                        continue;
+                    }
+
                     var collaborator = property.GetValue(controller);
                     field = collaborator?.GetType().GetField(name, flags);
                     if (field != null)

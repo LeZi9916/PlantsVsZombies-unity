@@ -23,7 +23,7 @@ namespace PlantsVsZombies.UI.BitmapFonts
                 throw new ArgumentNullException("text");
             }
 
-            string face = null;
+            string? face = null;
             int pointSize = 0, lineHeight = 0, baseline = 0, atlasWidth = 0, atlasHeight = 0;
             int pageCount = -1, glyphCount = -1, kerningCount = -1;
             bool hasInfo = false, hasCommon = false;
@@ -185,7 +185,7 @@ namespace PlantsVsZombies.UI.BitmapFonts
                 }
             }
 
-            if (!hasInfo || !hasCommon || glyphCount < 0 || kerningCount < 0)
+            if (!hasInfo || face == null || !hasCommon || glyphCount < 0 || kerningCount < 0)
             {
                 throw new FormatException("BMFont is missing a required info, common, chars or kernings record.");
             }

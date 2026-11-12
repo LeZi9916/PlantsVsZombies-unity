@@ -10,6 +10,7 @@ using System.Collections;
 using System.IO;
 using System.Reflection;
 using UnityEngine;
+using System.Diagnostics.CodeAnalysis;
 
 namespace PlantsVsZombies.Diagnostics
 {
@@ -18,11 +19,15 @@ namespace PlantsVsZombies.Diagnostics
     internal sealed class IntroAudioPlayerSmoke : MonoBehaviour
     {
         /// <summary>Stores controller.</summary>
-        private PvZGame _controller;
+        private PvZGame? _controller;
+
+        /// <summary>Gets the controller, which must already exist wherever it is used.</summary>
+        /// <exception cref="System.InvalidOperationException">The member is not available.</exception>
+        private PvZGame RequiredController => _controller ?? throw new System.InvalidOperationException("The member '_controller' is not available.");
         /// <summary>Stores checks.</summary>
         private int _checks;
         /// <summary>Stores error log.</summary>
-        private string _errorLog;
+        private string? _errorLog;
         /// <summary>Stores private.</summary>
         private const BindingFlags Private = BindingFlags.Instance | BindingFlags.NonPublic;
         /// <summary>Performs field.</summary>
@@ -30,7 +35,7 @@ namespace PlantsVsZombies.Diagnostics
         /// <returns>The resulting field.</returns>
         private object Field(string name)
         {
-            return GameMemberReflection.GetField(_controller, name);
+            return GameMemberReflection.GetField(RequiredController, name);
         }
 
         /// <summary>Performs call.</summary>
@@ -39,13 +44,13 @@ namespace PlantsVsZombies.Diagnostics
         /// <returns>The resulting call.</returns>
         private object Call(string name, params object[] args)
         {
-            var method = GameMemberReflection.FindMethod(_controller, name, out var owner);
+            var method = GameMemberReflection.FindMethod(RequiredController, name, out var owner);
             if (method != null)
             {
                 return method.Invoke(owner, args);
             }
 
-            var presenter = GameMemberReflection.GetField(_controller, "_presenter");
+            var presenter = GameMemberReflection.GetField(RequiredController, "_presenter");
             return presenter.GetType().GetMethod(name, Private).Invoke(presenter, args);
         }
 
@@ -67,11 +72,15 @@ namespace PlantsVsZombies.Diagnostics
             }
         }
 
+        /// <summary>Gets the opening, which must already exist wherever it is used.</summary>
+        /// <exception cref="System.InvalidOperationException">The member is not available.</exception>
+        private AdventureIntroClock RequiredOpening => Opening ?? throw new System.InvalidOperationException("The member 'Opening' is not available.");
+
         /// <summary>Performs check.</summary>
         /// <param name = "yes">The yes.</param>
         /// <param name = "reason">The reason.</param>
         /// <exception cref = "InvalidOperationException">The operation cannot satisfy its preconditions.</exception>
-        private void Check(bool yes, string reason)
+        private void Check([DoesNotReturnIf(false)] bool yes, string reason)
         {
             _checks++;
             if (!yes)
@@ -165,7 +174,7 @@ namespace PlantsVsZombies.Diagnostics
         {
             var catalog = (ProfileCatalog)Field("_profiles");
             var progress = (AdventureProgressStore)Field("_adventureStore");
-            progress.Import(catalog.SelectedId.Value, level, 0);
+            progress.Import(catalog.RequiredSelectedId, level, 0);
             Call("HandleSelector", SelectorAction.Adventure);
         }
 
@@ -174,46 +183,46 @@ namespace PlantsVsZombies.Diagnostics
         private IEnumerator Run()
         {
             var timeout = Time.unscaledTime + 60;
-            while (_controller.Loading.OriginalLoadingActive && Time.unscaledTime < timeout)
+            while (RequiredController.Loading.OriginalLoadingActive && Time.unscaledTime < timeout)
             {
                 yield return null;
             }
 
-            Check(!_controller.Loading.OriginalLoadingActive, "Loading never completed");
+            Check(!RequiredController.Loading.OriginalLoadingActive, "Loading never completed");
             Call("HandleSelector", SelectorAction.Adventure);
             Check(Opening != null && !Opening.Complete, "Normal adventure skipped opening");
-            _controller.Music.BeginMusicOutputProbe(Path.Combine(SmokeTestArtifacts.DirectoryPath, "actual-music-output.json"), 3f);
-            Check(Opening.Frame.BoardX == 220 && Sim.Elapsed == 0, "Initial house/lawn camera or gameplay gate wrong");
+            RequiredController.Music.BeginMusicOutputProbe(Path.Combine(SmokeTestArtifacts.DirectoryPath, "actual-music-output.json"), 3f);
+            Check(RequiredOpening.Frame.BoardX == 220 && Sim.Elapsed == 0, "Initial house/lawn camera or gameplay gate wrong");
             yield return Capture("00-house-before-pan");
             timeout = Time.unscaledTime + 5;
-            while (Opening.NativeTime < 2450 && Time.unscaledTime < timeout)
+            while (RequiredOpening.NativeTime < 2450 && Time.unscaledTime < timeout)
             {
                 yield return null;
             }
 
-            Check(Opening.Frame.BoardX < 220 && Opening.Frame.BoardX > -380 && Sim.Elapsed == 0, "Original camera curve or frozen gameplay missing");
+            Check(RequiredOpening.Frame.BoardX < 220 && RequiredOpening.Frame.BoardX > -380 && Sim.Elapsed == 0, "Original camera curve or frozen gameplay missing");
             yield return Capture("01-pan-to-street");
-            while (Opening.NativeTime < 3650)
+            while (RequiredOpening.NativeTime < 3650)
             {
                 yield return null;
             }
 
-            Check(Opening.Frame.BoardX == -380, "Street endpoint wrong");
+            Check(RequiredOpening.Frame.BoardX == -380, "Street endpoint wrong");
             yield return Capture("02-street-zombie-preview");
-            while (Opening.NativeTime < 7000)
+            while (RequiredOpening.NativeTime < 7000)
             {
                 yield return null;
             }
 
-            Check(Opening.Frame.SodPosition >= 500 && Opening.Frame.SodPosition < 700 && Sim.Elapsed == 0, "First row sod was fully drawn before rolling");
+            Check(RequiredOpening.Frame.SodPosition >= 500 && RequiredOpening.Frame.SodPosition < 700 && Sim.Elapsed == 0, "First row sod was fully drawn before rolling");
             yield return Capture("03-first-row-sod-rolling");
-            while (!Opening.Complete)
+            while (!RequiredOpening.Complete)
             {
                 yield return null;
             }
 
             yield return Capture("04-first-row-ready");
-            Check(Opening.Frame.SodPosition == 1000 && Opening.Frame.BoardX == 0, "Opening did not restore normal lawn");
+            Check(RequiredOpening.Frame.SodPosition == 1000 && RequiredOpening.Frame.BoardX == 0, "Opening did not restore normal lawn");
             var audioFile = Path.Combine(SmokeTestArtifacts.DirectoryPath, "actual-music-output.json");
             Check(File.Exists(audioFile), "PCM report was not written");
             var report = JsonUtility.FromJson<global::PlantsVsZombies.Game.MusicOutputReport>(File.ReadAllText(audioFile));
@@ -229,17 +238,17 @@ namespace PlantsVsZombies.Diagnostics
                 StartLevel(level);
                 yield return Capture("05-level-" + level + "-before-sod");
                 Call("UpdateAdventureOpening", 7f);
-                Check(Opening.Frame.SodPosition >= 500 && Opening.Frame.SodPosition < 650, "Native new-sod level was skipped");
+                Check(RequiredOpening.Frame.SodPosition >= 500 && RequiredOpening.Frame.SodPosition < 650, "Native new-sod level was skipped");
                 yield return Capture("06-level-" + level + "-sod-rolling");
             }
 
             StartLevel(8);
             yield return Capture("07-chooser-home");
             Call("UpdateAdventureOpening", 4.3f);
-            Check(Opening.WaitingForSeeds && Opening.NativeTime == 4250 && Sim.Elapsed == 0, "Chooser did not stop the native intro clock");
+            Check(RequiredOpening.WaitingForSeeds && RequiredOpening.NativeTime == 4250 && Sim.Elapsed == 0, "Chooser did not stop the native intro clock");
             yield return Capture("08-native-chooser-with-preview");
             Call("UpdateAdventureOpening", .5f);
-            Check(Opening.NativeTime == 4250, "Clock advanced while waiting for player seeds");
+            Check(RequiredOpening.NativeTime == 4250, "Clock advanced while waiting for player seeds");
             for (var i = 0; i < 6; i++)
             {
                 Call("HandleClick", new Vector2(47 + i * 53, 163));
@@ -251,21 +260,21 @@ namespace PlantsVsZombies.Diagnostics
             }
 
             Call("HandleClick", new Vector2(AdventureSeedSlotLayout.PositionX(5, 6) + 25, 43));
-            Check(_controller._pendingSeeds.Count == 5 && !_controller._pendingSeeds.Contains(PlantKind.SnowPea),
+            Check(RequiredController.RequiredPendingSeeds.Count == 5 && !RequiredController.RequiredPendingSeeds.Contains(PlantKind.SnowPea),
                 "The visible bank packet could not be returned to the chooser");
             yield return new WaitForSecondsRealtime(.12f);
             yield return Capture("08c-native-packet-returning-to-chooser");
             Call("HandleClick", new Vector2(47 + 5 * 53, 163));
-            Check(_controller._pendingSeeds.Count == 6 && _controller._pendingSeeds[5] == PlantKind.SnowPea,
+            Check(RequiredController.RequiredPendingSeeds.Count == 6 && RequiredController.RequiredPendingSeeds[5] == PlantKind.SnowPea,
                 "Reselection did not append the packet in click order");
             Call("HandleClick", new Vector2(232, 566));
-            Check(!Opening.WaitingForSeeds && Opening.NativeTime >= 4260 && Sim.Elapsed == 0, "Chooser confirmation started the battle before returning");
+            Check(!RequiredOpening.WaitingForSeeds && RequiredOpening.NativeTime >= 4260 && Sim.Elapsed == 0, "Chooser confirmation started the battle before returning");
             Call("UpdateAdventureOpening", .9f);
             yield return Capture("09-return-from-street");
             Call("UpdateAdventureOpening", 1.4f);
-            Check(Opening.Frame.Stage == AdventureIntroStage.ReadySetPlant, "Ready set plant original reanim absent");
+            Check(RequiredOpening.Frame.Stage == AdventureIntroStage.ReadySetPlant, "Ready set plant original reanim absent");
             yield return Capture("10-original-ready-set-plant");
-            while (!Opening.Complete)
+            while (!RequiredOpening.Complete)
             {
                 yield return null;
             }
@@ -288,7 +297,7 @@ namespace PlantsVsZombies.Diagnostics
             Sim.Suns.Add(sun);
             Check(Sim.CollectSun(sun) && sun.PresentationPickup.Collecting, "Test sunlight did not start real pickup flight");
             yield return Capture("14-sun-above-seed-bank");
-            _controller._tooltipInspection = new OriginalTooltipRequest
+            RequiredController._tooltipInspection = new OriginalTooltipRequest
             {
                 Title = (string)Call("OriginalProgressionText", "SUNFLOWER"),
                 Body = (string)Call("OriginalProgressionText", "SUNFLOWER_TOOLTIP"),
@@ -300,30 +309,30 @@ namespace PlantsVsZombies.Diagnostics
             yield return Capture("14b-original-card-tooltip");
             var tip = (OriginalTooltip)Field("_originalTooltip");
             Check(tip.LastLayout != null && tip.LastError == null, "Native tooltip fonts/layout failed");
-            _controller._tooltipInspection = null;
+            RequiredController._tooltipInspection = null;
             Call("SetUnavailable", "提示", "此操作暂时无法继续，请返回后重试。");
             yield return Capture("15-original-message-dialog");
-            GameMemberReflection.SetField(_controller, "_unavailableFeature", null);
+            GameMemberReflection.SetField(RequiredController, "_unavailableFeature", null);
             var catalog = (ProfileCatalog)Field("_profiles");
             var progress = (AdventureProgressStore)Field("_adventureStore");
-            progress.Import(catalog.SelectedId.Value, 25, 0);
+            progress.Import(catalog.RequiredSelectedId, 25, 0);
             var accounts = (global::PlantsVsZombies.Progression.PlayerAccountStore)Field("_accountStore");
-            accounts.CreditBattleCoins(catalog.SelectedId.Value, "ui-material-probe", 20000);
+            accounts.CreditBattleCoins(catalog.RequiredSelectedId, "ui-material-probe", 20000);
             Call("OpenStore");
             yield return Capture("16-original-store-buttons");
             Call("HandleClick", new Vector2(407, 350));
             Check((int)Field("_selectedShopItem") >= 0, "Original shop control stopped opening the confirmation");
             yield return Capture("17-original-purchase-dialog");
-            var view = GameMemberReflection.FindField(_controller, "_currentView", out var viewOwner)!;
+            var view = GameMemberReflection.FindField(RequiredController, "_currentView", out var viewOwner) ?? throw new MissingMemberException(nameof(PvZGame), "_currentView");
             view.SetValue(viewOwner, Enum.Parse(view.FieldType, "Import"));
             yield return Capture("18-original-import-controls");
-            progress.Import(catalog.SelectedId.Value, 1, 1);
+            progress.Import(catalog.RequiredSelectedId, 1, 1);
             Check((bool)Call("StartIndependentMode", 61), "Zombie-card mode did not open");
             yield return Capture("19-original-zombie-seed-cards");
 
             // Explicit presentation fixture: this verifies the original note artwork without claiming an earned 1-9 victory.
-            _controller.Campaign.StartAdventureTestLevel(9);
-            _controller._choosingSeeds = false;
+            RequiredController.Campaign.StartAdventureTestLevel(9);
+            RequiredController._choosingSeeds = false;
             typeof(GameSimulation).GetProperty("State").SetValue(Sim, MatchState.Won);
             Sim.Adventure.Phase = AdventurePhase.Finished;
             var note = new AdventureRewardPresentation(15, 400, 250, 50, 70, .5f, 0f, 0);
@@ -333,10 +342,15 @@ namespace PlantsVsZombies.Diagnostics
             Check(note.Stage == AdventureAwardStage.Introduction && note.IntroductionAlpha == 0f,
                 "The note fixture did not reach its fully visible introduction");
             yield return Capture("20-original-1-9-note-alpha-grid");
-            var paper = _controller.Textures.Load("ZombieNote.jpg");
-            var ink = _controller.Textures.LoadAlphaGrid("ZombieNoteBlack1.png", "ZombieNote1.png");
+            var paper = RequiredController.Textures.Load("ZombieNote.jpg");
+            var ink = RequiredController.Textures.RequiredLoadAlphaGrid("ZombieNoteBlack1.png", "ZombieNote1.png");
             Check(paper != null && paper.GetPixels32()[0].a < 10, "The original JPEG paper border is opaque");
             Check(ink != null, "The original resources.xml note alpha grid did not load");
+            if (ink == null)
+            {
+                throw new System.InvalidOperationException("The value 'ink' is not available.");
+            }
+
             var inkPixels = ink.GetPixels32();
             var transparentPixels = 0;
             var blackInkPixels = 0;

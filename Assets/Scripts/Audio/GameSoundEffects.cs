@@ -40,7 +40,7 @@ namespace PlantsVsZombies.Audio
         internal void SetVolume(float volume)
         {
             _soundVolume = volume;
-            _audioSource.volume = volume;
+            RequiredAudioSource.volume = volume;
         }
 
         /// <summary>Destroys the loaded legacy effect clips.</summary>
@@ -58,7 +58,11 @@ namespace PlantsVsZombies.Audio
         /// <summary>Stores sounds.</summary>
         internal readonly Dictionary<GameEvent, AudioClip> _sounds = new Dictionary<GameEvent, AudioClip>();
         /// <summary>Stores audio source.</summary>
-        internal AudioSource _audioSource;
+        internal AudioSource? _audioSource;
+
+        /// <summary>Gets the audio source, which must already exist wherever it is used.</summary>
+        /// <exception cref="System.InvalidOperationException">The member is not available.</exception>
+        internal AudioSource RequiredAudioSource => _audioSource ?? throw new System.InvalidOperationException("The member '_audioSource' is not available.");
         /// <summary>Stores sound volume.</summary>
         internal float _soundVolume;
         /// <summary>Stores audio loading finished.</summary>
@@ -167,7 +171,7 @@ namespace PlantsVsZombies.Audio
             AudioClip clip;
             if (_sounds.TryGetValue(gameEvent, out clip) && clip != null)
             {
-                _audioSource.PlayOneShot(clip, gameEvent == GameEvent.ZombieHit ? 0.35f : 0.7f);
+                RequiredAudioSource.PlayOneShot(clip, gameEvent == GameEvent.ZombieHit ? 0.35f : 0.7f);
             }
         }
 
@@ -231,7 +235,7 @@ namespace PlantsVsZombies.Audio
         }
 
         /// <summary>Stores potato mine audio game.</summary>
-        private GameSimulation _potatoMineAudioGame;
+        private GameSimulation? _potatoMineAudioGame;
         /// <summary>Stores potato mine rise audio serial.</summary>
         private int _potatoMineRiseAudioSerial;
 
@@ -300,7 +304,7 @@ namespace PlantsVsZombies.Audio
             AudioClip sound;
             if (_awardSounds.TryGetValue(file, out sound) && sound != null)
             {
-                _audioSource.PlayOneShot(sound);
+                RequiredAudioSource.PlayOneShot(sound);
             }
         }
 
@@ -314,17 +318,17 @@ namespace PlantsVsZombies.Audio
                 return;
             }
 
-            if (notice.Kind != AdventureNoticeKind.RewardCollected || _owner._game.Adventure.RewardPresentation == null)
+            if (notice.Kind != AdventureNoticeKind.RewardCollected || _owner.RequiredGame.Adventure.RewardPresentation == null)
             {
                 return;
             }
 
-            var level = _owner._game.Adventure.Level.Number;
-            if (!_owner._game.Adventure.Level.IsReplay && level == 4)
+            var level = _owner.RequiredGame.Adventure.Level.Number;
+            if (!_owner.RequiredGame.Adventure.Level.IsReplay && level == 4)
             {
                 PlayAdventureRewardSound("shovel.ogg");
             }
-            else if (!_owner._game.Adventure.Level.IsReplay && (level == 24 || level == 34 || level == 44))
+            else if (!_owner.RequiredGame.Adventure.Level.IsReplay && (level == 24 || level == 34 || level == 44))
             {
                 PlayAdventureRewardSound("tap2.ogg");
             }
@@ -398,7 +402,7 @@ namespace PlantsVsZombies.Audio
         }
 
         /// <summary>Stores zombie part audio game.</summary>
-        private GameSimulation _zombiePartAudioGame;
+        private GameSimulation? _zombiePartAudioGame;
         /// <summary>Stores zombie part audio serial, rise sound serial, and zombie sound read index.</summary>
         private int _zombiePartAudioSerial, _zombieRiseSoundSerial, _zombieSoundReadIndex;
         /// <summary>Stores zombie part audio loading,  zombie foley ready.</summary>
@@ -467,7 +471,7 @@ namespace PlantsVsZombies.Audio
                 AudioClip gulp;
                 if (_presentationSounds.TryGetValue("gulp", out gulp) && gulp != null)
                 {
-                    _audioSource.PlayOneShot(gulp);
+                    RequiredAudioSource.PlayOneShot(gulp);
                 }
 
                 return;

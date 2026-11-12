@@ -11,7 +11,11 @@ namespace PlantsVsZombies.Game
     internal sealed class AdventureActorRenderer
     {
         /// <summary>The session animation renderer.</summary>
-        private readonly ReanimationRenderer _renderer;
+        private readonly ReanimationRenderer? _renderer;
+
+        /// <summary>Gets the renderer, which must already exist wherever it is used.</summary>
+        /// <exception cref="System.InvalidOperationException">The member is not available.</exception>
+        private ReanimationRenderer RequiredRenderer => _renderer ?? throw new System.InvalidOperationException("The member '_renderer' is not available.");
         /// <summary>The retained callback for plant bodies and attached heads.</summary>
         private readonly Func<bool> _drawPlant;
         /// <summary>The retained callback for cursor imitation composition.</summary>
@@ -31,7 +35,7 @@ namespace PlantsVsZombies.Game
         /// <summary>The zombie whose pose is being drawn synchronously.</summary>
         private Zombie _zombie = null!;
         /// <summary>The current asset, clip, and playback identity.</summary>
-        private string _name = "", _clip = "", _key = "";
+        private string? _name = "", _clip = "", _key = "";
         /// <summary>The stable optional composition surface identity.</summary>
         private string _surfaceKey = "";
         /// <summary>The current native origin.</summary>
@@ -53,7 +57,7 @@ namespace PlantsVsZombies.Game
 
         /// <summary>Creates reusable callbacks for one synchronous presenter.</summary>
         /// <param name="renderer">The animation renderer owned by the game session.</param>
-        internal AdventureActorRenderer(ReanimationRenderer renderer)
+        internal AdventureActorRenderer(ReanimationRenderer? renderer)
         {
             _renderer = renderer;
             _drawPlant = DrawPlantPose;
@@ -98,7 +102,7 @@ namespace PlantsVsZombies.Game
             _highlighted = highlighted;
             if (highlighted || AdventureProducerGlow.Visual(plant).Enabled || plant.IsImitated || plant.PresentationEatenFlashTicks > 0)
             {
-                _renderer.DrawNativePlantHitFeedback(key, viewport, _drawPlant, plant, _surfaceKey, _highlighted);
+                RequiredRenderer.DrawNativePlantHitFeedback(key, viewport, _drawPlant, plant, _surfaceKey, _highlighted);
             }
             else
             {
@@ -124,7 +128,7 @@ namespace PlantsVsZombies.Game
             _cursorKernel = kernel;
             if (imitated)
             {
-                _renderer.DrawNativeClipped(key, viewport, _drawCursor, false, true);
+                RequiredRenderer.DrawNativeClipped(key, viewport, _drawCursor, false, true);
             }
             else
             {
@@ -136,7 +140,7 @@ namespace PlantsVsZombies.Game
         /// <returns>Whether native cursor artwork was submitted.</returns>
         private bool DrawCursorPose()
         {
-            return _renderer.DrawNative(_name, _origin, _scale, 0f, _clip, _cursorKernel ? s_cursorKernelVisible : null);
+            return RequiredRenderer.DrawNative(_name, _origin, _scale, 0f, _clip, _cursorKernel ? s_cursorKernelVisible : null);
         }
 
         /// <summary>Draws a zombie using cached body and visibility callbacks.</summary>
@@ -150,7 +154,7 @@ namespace PlantsVsZombies.Game
         /// <param name="loop">Whether playback loops.</param>
         /// <param name="key">The stable native playback identity.</param>
         /// <param name="surfaceKey">The stable combat surface identity.</param>
-        internal void DrawZombie(Zombie zombie, string name, string clip, Vector2 origin, float scale, float seconds,
+        internal void DrawZombie(Zombie zombie, string name, string? clip, Vector2 origin, float scale, float seconds,
             float rate, bool loop, string key, string surfaceKey)
         {
             _zombie = zombie;
@@ -176,7 +180,7 @@ namespace PlantsVsZombies.Game
                 viewport.yMax = Math.Min(viewport.yMax, AdventureZombieRiseRules.ClipBottom(nativeY, zombie.GraveRiseTicks));
             }
 
-            _renderer.DrawNativeZombieCombat(zombie, viewport, _drawZombie, surfaceKey);
+            RequiredRenderer.DrawNativeZombieCombat(zombie, viewport, _drawZombie, surfaceKey);
         }
 
         /// <summary>Submits the configured plant without allocating callback captures.</summary>
@@ -185,15 +189,15 @@ namespace PlantsVsZombies.Game
         {
             var visible = _plant.Kind == PlantKind.KernelPult || _plant.Kind == PlantKind.PotatoMine ? _plantVisible : null;
             var drawn = _heads != null
-                ? _renderer.DrawNativeAttachedHeads(_name, _origin, _scale, _seconds, _rate, _heads, visible, _plant.ModeFacesLeft, _key, _blendTicks)
-                : _renderer.DrawNativePlayback(_name, _origin, _scale, _seconds, _clip, _loop, _rate, visible,
+                ? RequiredRenderer.DrawNativeAttachedHeads(_name, _origin, _scale, _seconds, _rate, _heads, visible, _plant.ModeFacesLeft, _key, _blendTicks)
+                : RequiredRenderer.DrawNativePlayback(_name, _origin, _scale, _seconds, _clip, _loop, _rate, visible,
                     AdventureDefensivePlantRules.DamageTrack(_plant.Kind), AdventureDefensivePlantRules.DamageImage(_plant.Kind, _plant.Health),
                     _plant.ModeFacesLeft, _key, _blendTicks);
             var mine = _plant.PotatoMinePresentation;
             if (_plant.Kind == PlantKind.PotatoMine && mine != null && mine.LightCreated && _plant.MinePhase == MinePhase.Armed)
             {
                 var phase = mine.GlowTime + _remainder * (mine.BodyRate - 2f) / mine.GlowFrames;
-                drawn |= _renderer.DrawNativePotatoMineLight(_origin, _scale, _seconds, _rate, phase, mine.GlowFrames);
+                drawn |= RequiredRenderer.DrawNativePotatoMineLight(_origin, _scale, _seconds, _rate, phase, mine.GlowFrames);
             }
 
             return drawn;
@@ -240,17 +244,17 @@ namespace PlantsVsZombies.Game
         {
             var painted = string.Equals(_name, "Zombie", StringComparison.OrdinalIgnoreCase) && !_zombie.Headless && !_plantHead
                 && !_backwards && _zombie.Kind != ZombieKind.Flag && _zombie.Kind != ZombieKind.DuckyTube
-                ? _renderer.DrawZombiePlayback(_origin, _scale, _seconds, _variant, _clip, _loop, _rate, true, null, _key)
-                : _renderer.DrawNativePlayback(_name, _origin, _scale, _seconds, _clip, _loop, _rate, _zombieVisible, null, null,
+                ? RequiredRenderer.DrawZombiePlayback(_origin, _scale, _seconds, _variant, _clip, _loop, _rate, true, null, _key)
+                : RequiredRenderer.DrawNativePlayback(_name, _origin, _scale, _seconds, _clip, _loop, _rate, _zombieVisible, null, null,
                     _backwards, _key, _clip == "anim_gasp" ? 10 : 20, -1f, 90f);
             if (_zombie.Kind == ZombieKind.Flag && !_zombie.Headless)
             {
-                _renderer.DrawNativeZombieFlagAttachment(_origin, _scale, _clip, _seconds, _rate, _zombie.Age, _backwards);
+                RequiredRenderer.DrawNativeZombieFlagAttachment(_origin, _scale, _clip, _seconds, _rate, _zombie.Age, _backwards);
             }
 
             if (_plantHead && !_zombie.Headless)
             {
-                _renderer.DrawNativePlantHeadAttachment(_origin, _scale, _clip, _seconds, _rate, _zombie.ModeHead, _zombie.PresentationPlantHeadAge, _backwards);
+                RequiredRenderer.DrawNativePlantHeadAttachment(_origin, _scale, _clip, _seconds, _rate, _zombie.ModeHead, _zombie.PresentationPlantHeadAge, _backwards);
             }
 
             return painted;

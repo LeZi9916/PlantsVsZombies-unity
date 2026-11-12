@@ -69,7 +69,7 @@ namespace PlantsVsZombies.Progression
         /// <param name="delta">Elapsed unscaled seconds.</param>
         internal void UpdateWisdomTreeDialogue(float delta)
         {
-            if (_owner._currentView != PvZGame.ScreenView.Tree || _owner._optionsView.IsOpen || (_owner._profileDialog != null && _owner._profileDialog.IsOpen) || _owner._unavailableFeature != null || delta <= 0f)
+            if (_owner._currentView != PvZGame.ScreenView.Tree || _owner.RequiredOptionsView.IsOpen || (_owner._profileDialog != null && _owner._profileDialog.IsOpen) || _owner._unavailableFeature != null || delta <= 0f)
             {
                 return;
             }
@@ -126,8 +126,8 @@ namespace PlantsVsZombies.Progression
         /// <summary>Grants the original five tree-food bags when Dave's introduction is acknowledged.</summary>
         internal void CompleteWisdomTreeIntroduction()
         {
-            _owner.Accounts.ProgressionAction(() => _owner.Accounts._accountStore.ClaimWisdomTreeFoodGift(_owner._profiles.SelectedId.Value));
-            if (!_owner.Accounts.GetSelectedAccount().TreeFoodGiftClaimed)
+            _owner.Accounts.ProgressionAction(() => _owner.Accounts.RequiredAccountStore.ClaimWisdomTreeFoodGift(_owner.RequiredProfiles.RequiredSelectedId));
+            if (!_owner.Accounts.RequiredGetSelectedAccount().TreeFoodGiftClaimed)
             {
                 return;
             }
@@ -160,7 +160,7 @@ namespace PlantsVsZombies.Progression
                     return true;
                 }
 
-                _owner.Accounts.ProgressionAction(() => _owner.Accounts._accountStore.FeedWisdomTree(_owner._profiles.SelectedId.Value));
+                _owner.Accounts.ProgressionAction(() => _owner.Accounts.RequiredAccountStore.FeedWisdomTree(_owner.RequiredProfiles.RequiredSelectedId));
                 if (_owner.Accounts._progressionMessage == null)
                 {
                     _treeGrowStarted = Time.unscaledTime;

@@ -10,6 +10,13 @@ namespace PlantsVsZombies.Adventure
     /// <summary>Defines adventure board.</summary>
     public sealed class AdventureBoard
     {
+        /// <summary>Creates the board state for one level.</summary>
+        /// <param name="level">The level whose rules and layout this board follows.</param>
+        internal AdventureBoard(AdventureLevelSpec level)
+        {
+            Level = level;
+        }
+
         /// <summary>Gets or sets conveyor ticks.</summary>
         public int ConveyorTicks { get; internal set; }
         /// <summary>Gets or sets total waves spawned.</summary>
@@ -31,7 +38,11 @@ namespace PlantsVsZombies.Adventure
         /// <summary>Stores rake damage done.</summary>
         internal bool _rakeDamageDone;
         /// <summary>Gets or sets reward presentation.</summary>
-        public AdventureRewardPresentation RewardPresentation { get; internal set; }
+        public AdventureRewardPresentation? RewardPresentation { get; internal set; }
+
+        /// <summary>Gets the reward presentation, which must already exist wherever it is used.</summary>
+        /// <exception cref="System.InvalidOperationException">The member is not available.</exception>
+        public AdventureRewardPresentation RequiredRewardPresentation => RewardPresentation ?? throw new System.InvalidOperationException("The member 'RewardPresentation' is not available.");
 
         /// <summary>Stores last reward x,  last reward y.</summary>
         internal float _lastRewardX = 400f, _lastRewardY = 300f;
@@ -51,9 +62,9 @@ namespace PlantsVsZombies.Adventure
         /// <summary>Gets or sets tutorial.</summary>
         public AdventureTutorial Tutorial { get; internal set; }
         /// <summary>Gets or sets selected seeds.</summary>
-        public IReadOnlyList<PlantKind> SelectedSeeds { get; internal set; }
+        public IReadOnlyList<PlantKind> SelectedSeeds { get; internal set; } = System.Array.Empty<PlantKind>();
         /// <summary>Gets or sets waves.</summary>
-        public IReadOnlyList<AdventureWave> Waves { get; internal set; }
+        public IReadOnlyList<AdventureWave> Waves { get; internal set; } = System.Array.Empty<AdventureWave>();
 
         /// <summary>Stores packets.</summary>
         internal readonly List<AdventurePacket> _packets = new List<AdventurePacket>();
@@ -191,7 +202,7 @@ namespace PlantsVsZombies.Adventure
         public PlantKind? SelectedSeed { get; internal set; }
 
         /// <summary>Stores notice raised.</summary>
-        public Action<AdventureNotice> NoticeRaised;
+        public Action<AdventureNotice>? NoticeRaised;
         /// <summary>Stores packet id.</summary>
         internal int _packetId;
         /// <summary>Stores zombie id.</summary>
@@ -255,9 +266,13 @@ namespace PlantsVsZombies.Adventure
         }
 
         /// <summary>Gets or sets available seeds.</summary>
-        public IReadOnlyList<PlantKind> AvailableSeeds { get; internal set; }
+        public IReadOnlyList<PlantKind> AvailableSeeds { get; internal set; } = System.Array.Empty<PlantKind>();
         /// <summary>Gets or sets imitater target.</summary>
         public PlantKind? ImitaterTarget { get; internal set; }
+
+        /// <summary>Gets the imitater target, which must already exist wherever it is used.</summary>
+        /// <exception cref="System.InvalidOperationException">The member is not available.</exception>
+        public PlantKind RequiredImitaterTarget => ImitaterTarget ?? throw new System.InvalidOperationException("The member 'ImitaterTarget' is not available.");
         /// <summary>Gets or sets selected cob cannon id.</summary>
         public int? SelectedCobCannonId { get; internal set; }
         /// <summary>Gets or sets money collected units.</summary>

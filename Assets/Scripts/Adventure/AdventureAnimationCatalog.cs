@@ -21,20 +21,20 @@ namespace PlantsVsZombies.Adventure
         }
 
         /// <summary>Stores adventure clips.</summary>
-        private readonly Dictionary<(string Asset, string Clip), bool> _adventureClips = new Dictionary<(string, string), bool>();
+        private readonly Dictionary<(string Asset, string? Clip), bool> _adventureClips = new Dictionary<(string, string?), bool>();
 
         /// <summary>Performs adventure clip exists.</summary>
         /// <param name = "name">The name.</param>
         /// <param name = "clip">The clip.</param>
         /// <returns>The resulting adventure clip exists.</returns>
-        internal bool AdventureClipExists(string name, string clip)
+        internal bool AdventureClipExists(string name, string? clip)
         {
             var key = (name, clip);
             bool exists;
             if (!_adventureClips.TryGetValue(key, out exists))
             {
                 global::PlantsVsZombies.Reanimation.AnimationInfo info;
-                exists = _owner._animations.TryGetAnimationInfo(name, clip, out info);
+                exists = _owner.RequiredAnimations.TryGetAnimationInfo(name, clip, out info);
                 _adventureClips.Add(key, exists);
             }
 
@@ -50,7 +50,7 @@ namespace PlantsVsZombies.Adventure
         {
             if (!s_zombieAnimationNames.TryGetValue(kind, out var name))
             {
-                ReanimationDefinition definition;
+                ReanimationDefinition? definition;
                 name = VerifiedDataCatalog.TryGetReanimation(VerifiedDataCatalog.Zombies[(int)kind].ReanimationId, out definition) ? Path.GetFileNameWithoutExtension(definition.Path.Replace('\\', '/')) : "Zombie";
                 s_zombieAnimationNames.Add(kind, name);
             }

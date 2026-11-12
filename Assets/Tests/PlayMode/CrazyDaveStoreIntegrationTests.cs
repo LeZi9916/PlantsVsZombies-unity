@@ -148,10 +148,10 @@ namespace PlantsVsZombies.Tests.PlayMode
         [TestCase(3100, 3100)]
         public void RewardIntroductionAdvancesOnlyOnClick(int first, int last)
         {
-            var id = _game._profiles.SelectedId!.Value;
+            var id = _game.RequiredProfiles.SelectedId!.Value;
             if (first == 601)
             {
-                _game.Accounts._accountStore.ClaimAdventureReward(id, 1, 34);
+                _game.Accounts.RequiredAccountStore.ClaimAdventureReward(id, 1, 34);
             }
 
             Invoke("OpenStoreForAdventureIntro", first);
@@ -183,12 +183,12 @@ namespace PlantsVsZombies.Tests.PlayMode
             if (first == 601)
             {
                 Assert.That(_game.Store._storeTacoDiamondVisible, Is.True);
-                Assert.That(_game.Accounts._accountStore.Get(id).Coins, Is.EqualTo(0));
+                Assert.That(_game.Accounts.RequiredAccountStore.Get(id).Coins, Is.EqualTo(0));
                 Invoke("HandleProgressionClick", new Vector2(90, 530));
-                Assert.That(_game.Accounts._accountStore.Get(id).Coins, Is.EqualTo(100));
-                Assert.That(_game.Accounts._accountStore.Get(id).HasPendingTacoReward, Is.False);
+                Assert.That(_game.Accounts.RequiredAccountStore.Get(id).Coins, Is.EqualTo(100));
+                Assert.That(_game.Accounts.RequiredAccountStore.Get(id).HasPendingTacoReward, Is.False);
                 Invoke("HandleProgressionClick", new Vector2(90, 480));
-                Assert.That(_game.Accounts._accountStore.Get(id).Coins, Is.EqualTo(100));
+                Assert.That(_game.Accounts.RequiredAccountStore.Get(id).Coins, Is.EqualTo(100));
             }
         }
 
@@ -196,8 +196,8 @@ namespace PlantsVsZombies.Tests.PlayMode
         [Test]
         public void TacoDiamondAutomaticallyCollectsOnce()
         {
-            var id = _game._profiles.SelectedId!.Value;
-            _game.Accounts._accountStore.ClaimAdventureReward(id, 1, 34);
+            var id = _game.RequiredProfiles.SelectedId!.Value;
+            _game.Accounts.RequiredAccountStore.ClaimAdventureReward(id, 1, 34);
             var reopened = new PlayerAccountStore(Path.Combine(_root, "fixture.account"));
             Assert.That(reopened.Get(id).HasPendingTacoReward, Is.True);
             Invoke("OpenStoreForAdventureIntro", 601);
@@ -206,7 +206,7 @@ namespace PlantsVsZombies.Tests.PlayMode
             Invoke("HandleProgressionClick", new Vector2(400, 300));
             Invoke("HandleProgressionClick", new Vector2(400, 300));
             Tick(.81f);
-            Assert.That(_game.Accounts._accountStore.Get(id).Coins, Is.EqualTo(100));
+            Assert.That(_game.Accounts.RequiredAccountStore.Get(id).Coins, Is.EqualTo(100));
             Assert.That(_game.Store._storeTacoDiamondVisible, Is.False);
             Assert.That(_game.Dave._crazyDaveMessageIndex, Is.EqualTo(603));
             reopened = new PlayerAccountStore(Path.Combine(_root, "fixture.account"));
@@ -218,16 +218,16 @@ namespace PlantsVsZombies.Tests.PlayMode
         [Test]
         public void OrdinaryStoreDoesNotRedeemTacoBeforeDavePresentsIt()
         {
-            var id = _game._profiles.SelectedId!.Value;
-            _game.Campaign._adventureStore.Import(id, 35, 0);
-            _game.Accounts._accountStore.ClaimAdventureReward(id, 1, 34);
+            var id = _game.RequiredProfiles.SelectedId!.Value;
+            _game.Campaign.RequiredAdventureStore.Import(id, 35, 0);
+            _game.Accounts.RequiredAccountStore.ClaimAdventureReward(id, 1, 34);
             Invoke("OpenStore");
             _game.Dave._crazyDaveAnimation = "anim_idle";
             Tick(1f);
             Assert.That(_game.Store._storeTacoDiamondVisible, Is.False);
-            Assert.That(_game.Accounts._accountStore.Get(id).Coins, Is.Zero);
-            Assert.That(_game.Accounts._accountStore.Get(id).HasPendingTacoReward, Is.True);
-            Assert.That(_game.Accounts._accountStore.CollectTacoReward(id), Is.False);
+            Assert.That(_game.Accounts.RequiredAccountStore.Get(id).Coins, Is.Zero);
+            Assert.That(_game.Accounts.RequiredAccountStore.Get(id).HasPendingTacoReward, Is.True);
+            Assert.That(_game.Accounts.RequiredAccountStore.CollectTacoReward(id), Is.False);
             Invoke("StartAdventureCampaign");
             _game.Dave._crazyDaveAnimation = "anim_idle";
             Tick(.02f);
@@ -238,28 +238,28 @@ namespace PlantsVsZombies.Tests.PlayMode
         [Test]
         public void PresentedTacoDiamondSurvivesStoreReentry()
         {
-            var id = _game._profiles.SelectedId!.Value;
-            _game.Accounts._accountStore.ClaimAdventureReward(id, 1, 34);
-            _game.Accounts._accountStore.PresentTacoReward(id);
+            var id = _game.RequiredProfiles.SelectedId!.Value;
+            _game.Accounts.RequiredAccountStore.ClaimAdventureReward(id, 1, 34);
+            _game.Accounts.RequiredAccountStore.PresentTacoReward(id);
             _game.Accounts._accountStore = new PlayerAccountStore(Path.Combine(_root, "fixture.account"));
             Invoke("OpenStore");
             _game.Dave._crazyDaveAnimation = "anim_idle";
             Assert.That(_game.Store._storeTacoDiamondVisible, Is.True);
             Tick(.81f);
-            Assert.That(_game.Accounts._accountStore.Get(id).Coins, Is.EqualTo(100));
+            Assert.That(_game.Accounts.RequiredAccountStore.Get(id).Coins, Is.EqualTo(100));
             Assert.That(_game.Accounts._accountStore.Get(id).HasPendingTacoReward, Is.False);
             Invoke("OpenStore");
             _game.Dave._crazyDaveAnimation = "anim_idle";
             Tick(1f);
-            Assert.That(_game.Accounts._accountStore.Get(id).Coins, Is.EqualTo(100));
+            Assert.That(_game.Accounts.RequiredAccountStore.Get(id).Coins, Is.EqualTo(100));
         }
 
         /// <summary>Checks that failed taco persistence remains retryable without advancing or double crediting.</summary>
         [Test]
         public void TacoPersistenceFailuresCanBeRetried()
         {
-            var id = _game._profiles.SelectedId!.Value;
-            _game.Accounts._accountStore.ClaimAdventureReward(id, 1, 34);
+            var id = _game.RequiredProfiles.SelectedId!.Value;
+            _game.Accounts.RequiredAccountStore.ClaimAdventureReward(id, 1, 34);
             Invoke("OpenStoreForAdventureIntro", 601);
             _game.Dave._crazyDaveAnimation = "anim_idle";
             Tick(.02f);
@@ -270,7 +270,7 @@ namespace PlantsVsZombies.Tests.PlayMode
                 Invoke("HandleProgressionClick", new Vector2(400, 300));
                 Assert.That(_game.Dave._crazyDaveMessageIndex, Is.EqualTo(602));
                 Assert.That(_game.Store._storeTacoDiamondVisible, Is.False);
-                Assert.That(_game.Accounts._accountStore.Get(id).TacoDiamondPresented, Is.False);
+                Assert.That(_game.Accounts.RequiredAccountStore.Get(id).TacoDiamondPresented, Is.False);
             }
 
             Invoke("HandleProgressionClick", new Vector2(400, 300));
@@ -279,27 +279,27 @@ namespace PlantsVsZombies.Tests.PlayMode
             {
                 Tick(.81f);
                 Assert.That(_game.Store._storeTacoDiamondVisible, Is.True);
-                Assert.That(_game.Accounts._accountStore.Get(id).Coins, Is.Zero);
+                Assert.That(_game.Accounts.RequiredAccountStore.Get(id).Coins, Is.Zero);
             }
 
             Tick(.02f);
             Assert.That(_game.Store._storeTacoDiamondVisible, Is.False);
-            Assert.That(_game.Accounts._accountStore.Get(id).Coins, Is.EqualTo(100));
+            Assert.That(_game.Accounts.RequiredAccountStore.Get(id).Coins, Is.EqualTo(100));
             Tick(1f);
-            Assert.That(_game.Accounts._accountStore.Get(id).Coins, Is.EqualTo(100));
+            Assert.That(_game.Accounts.RequiredAccountStore.Get(id).Coins, Is.EqualTo(100));
         }
 
         /// <summary>Checks that an interrupted taco reward resumes before the next adventure board.</summary>
         [Test]
         public void PendingTacoResumesStoreBeforeAdventure()
         {
-            var id = _game._profiles.SelectedId!.Value;
-            _game.Campaign._adventureStore.Import(id, 35, 0);
-            _game.Accounts._accountStore.ClaimAdventureReward(id, 1, 34);
+            var id = _game.RequiredProfiles.SelectedId!.Value;
+            _game.Campaign.RequiredAdventureStore.Import(id, 35, 0);
+            _game.Accounts.RequiredAccountStore.ClaimAdventureReward(id, 1, 34);
             Invoke("StartAdventureCampaign");
             Assert.That(_game._currentView, Is.EqualTo(PvZGame.ScreenView.Store));
             Assert.That(_game.Store._storeAdventureIntro, Is.True);
-            Assert.That(_game._game.Adventure.Level.Number, Is.EqualTo(35));
+            Assert.That(_game.RequiredGame.Adventure.Level.Number, Is.EqualTo(35));
             _game.Dave._crazyDaveAnimation = "anim_idle";
             Tick(.02f);
             Assert.That(_game.Dave._crazyDaveMessageIndex, Is.EqualTo(601));
@@ -311,7 +311,7 @@ namespace PlantsVsZombies.Tests.PlayMode
             Tick(1.51f);
             Invoke("LeaveStore");
             Assert.That(_game._currentView, Is.EqualTo(PvZGame.ScreenView.Board));
-            Assert.That(_game._game.Adventure.Level.Number, Is.EqualTo(35));
+            Assert.That(_game.RequiredGame.Adventure.Level.Number, Is.EqualTo(35));
         }
 
         /// <summary>Supplies a pointer snapshot to the real store hover calculation.</summary>

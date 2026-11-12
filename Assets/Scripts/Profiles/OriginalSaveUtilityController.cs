@@ -23,7 +23,7 @@ namespace PlantsVsZombies.Profiles
         /// <summary>Opens the save utility when the developer shortcut is pressed outside the board and dialogs.</summary>
         internal void OpenWhenRequested()
         {
-            if (Input.GetKeyDown(KeyCode.F9) && _owner._currentView != PvZGame.ScreenView.Board && !_owner._optionsView.IsOpen
+            if (Input.GetKeyDown(KeyCode.F9) && _owner._currentView != PvZGame.ScreenView.Board && !_owner.RequiredOptionsView.IsOpen
                 && (_owner._profileDialog == null || !_owner._profileDialog.IsOpen))
             {
                 _owner._currentView = PvZGame.ScreenView.Import;
@@ -60,8 +60,8 @@ namespace PlantsVsZombies.Profiles
                     return;
                 }
 
-                var copy = Path.Combine(Application.persistentDataPath, "original-" + _owner._profiles.SelectedId.Value.ToString("N") + ".dat");
-                OriginalSaveFormat.ExportUser(copy, _originalExportPath, _owner.Accounts.GetSelectedAccount(), _owner.Campaign._adventureStore.Get(_owner._profiles.SelectedId.Value));
+                var copy = Path.Combine(Application.persistentDataPath, "original-" + _owner.RequiredProfiles.RequiredSelectedId.ToString("N") + ".dat");
+                OriginalSaveFormat.ExportUser(copy, _originalExportPath, _owner.Accounts.GetSelectedAccount(), _owner.Campaign.RequiredAdventureStore.Get(_owner.RequiredProfiles.RequiredSelectedId));
                 _owner.Accounts._progressionMessage = "导出完成：" + _originalExportPath;
             });
         }
@@ -98,7 +98,7 @@ namespace PlantsVsZombies.Profiles
             do
             {
                 used = false;
-                foreach (var existing in _owner._profiles.Profiles)
+                foreach (var existing in _owner.RequiredProfiles.Profiles)
                 {
                     if (string.Equals(existing.Name, name, StringComparison.OrdinalIgnoreCase))
                     {
@@ -116,9 +116,9 @@ namespace PlantsVsZombies.Profiles
             var importedId = Guid.NewGuid();
             var copy = Path.Combine(Application.persistentDataPath, "original-" + importedId.ToString("N") + ".dat");
             OriginalSaveFormat.KeepImportedSource(source, copy);
-            _owner.Accounts._accountStore.Import(importedId, source.Coins, source.Purchases, source.ChallengeRecords, source.ChallengeRecords[49], source.Plants, source.MinigamesUnlocked, source.PuzzleUnlocked, source.SurvivalUnlocked, source.PacketUpgradeDeclines, source.TreeFoodGiftClaimed, source.GardenGiftClaimed, source.GardenFertilizerInitialized);
-            _owner.Campaign._adventureStore.Import(importedId, source.Level, source.FinishedAdventure);
-            _owner._profiles.CreateImported(importedId, name);
+            _owner.Accounts.RequiredAccountStore.Import(importedId, source.Coins, source.Purchases, source.ChallengeRecords, source.ChallengeRecords[49], source.Plants, source.MinigamesUnlocked, source.PuzzleUnlocked, source.SurvivalUnlocked, source.PacketUpgradeDeclines, source.TreeFoodGiftClaimed, source.GardenGiftClaimed, source.GardenFertilizerInitialized);
+            _owner.Campaign.RequiredAdventureStore.Import(importedId, source.Level, source.FinishedAdventure);
+            _owner.RequiredProfiles.CreateImported(importedId, name);
             _owner.Accounts._progressionMessage = "已导入用户：" + name;
             _owner._currentView = PvZGame.ScreenView.Selector;
         }

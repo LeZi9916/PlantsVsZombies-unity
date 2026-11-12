@@ -10,7 +10,7 @@ namespace PlantsVsZombies.Adventure
         /// <summary>Stores x, age, scale, animation age, rate.</summary>
         public float X, Age, Scale, AnimationAge, Rate;
         /// <summary>Stores asset, animation, anchor, image.</summary>
-        public string Asset, Animation, Anchor, Image;
+        public string? Asset = string.Empty, Animation = string.Empty, Anchor = string.Empty, Image = string.Empty;
         /// <summary>Stores backwards, chilled, hypnotized.</summary>
         public bool Backwards, Chilled, Hypnotized;
         /// <summary>Gets or sets duration.</summary>

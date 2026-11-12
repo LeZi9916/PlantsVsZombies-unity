@@ -50,13 +50,13 @@ namespace PlantsVsZombies.Tests.PlayMode
             Click(_owner.Layout.AdventureSeedRect(0).center);
             Assert.That(_owner._selected, Is.EqualTo(-1));
             Assert.That(_owner.AdventureBoard.SunMoneyWarningRed, Is.False);
-            _owner._game.Adventure._ticks++;
+            _owner.RequiredGame.Adventure._ticks++;
             Assert.That(_owner.AdventureBoard.SunMoneyWarningRed, Is.True);
-            _owner._game.TogglePause();
-            _owner._game.Update(.25f);
+            _owner.RequiredGame.TogglePause();
+            _owner.RequiredGame.Update(.25f);
             Assert.That(_owner.AdventureBoard.SunMoneyWarningRed, Is.True, "Paused boards retain the native warning phase.");
-            _owner._game.TogglePause();
-            _owner._game.Adventure._ticks += 69;
+            _owner.RequiredGame.TogglePause();
+            _owner.RequiredGame.Adventure._ticks += 69;
             Assert.That(_owner.AdventureBoard.SunMoneyWarningRed, Is.False);
         }
 
@@ -69,7 +69,7 @@ namespace PlantsVsZombies.Tests.PlayMode
             var cooldowns = (int[])typeof(GameSimulation).GetField("_seedCooldownTicks", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(_owner._game)!;
             cooldowns[(int)PlantKind.Repeater] = 25;
             Click(_owner.Layout.AdventureSeedRect(0).center);
-            _owner._game.Adventure._ticks += 11;
+            _owner.RequiredGame.Adventure._ticks += 11;
             Assert.That(_owner.AdventureBoard.SunMoneyWarningRed, Is.False);
             Assert.That(_owner._selected, Is.EqualTo(-1));
         }
@@ -80,16 +80,16 @@ namespace PlantsVsZombies.Tests.PlayMode
         {
             var main = new Plant { Kind = PlantKind.Wallnut, Layer = PlantLayer.Main, Row = 2, Column = 3, Health = 4000 };
             var shell = new Plant { Kind = PlantKind.Pumpkin, Layer = PlantLayer.Armor, Row = 2, Column = 3, Health = 4000 };
-            _owner._game.Plants.Add(main);
-            _owner._game.Plants.Add(shell);
+            _owner.RequiredGame.Plants.Add(main);
+            _owner.RequiredGame.Plants.Add(shell);
             var center = new Vector2(BoardLayout.AdventureGridX + 3 * BoardLayout.CellWidth + 40, _owner.Layout.AdventureCellY(2, 3) + 40);
             Assert.That(_owner.Layout.AdventureShovelTarget(center), Is.SameAs(main));
             var rim = center + new Vector2(35, 0);
             Assert.That(_owner.Layout.AdventureShovelTarget(rim), Is.SameAs(shell));
             _owner._shovel = true;
             Click(rim);
-            Assert.That(_owner._game.Plants.Contains(shell), Is.False);
-            Assert.That(_owner._game.Plants.Contains(main), Is.True);
+            Assert.That(_owner.RequiredGame.Plants.Contains(shell), Is.False);
+            Assert.That(_owner.RequiredGame.Plants.Contains(main), Is.True);
             Assert.That(_owner._shovel, Is.False);
         }
 
@@ -98,10 +98,10 @@ namespace PlantsVsZombies.Tests.PlayMode
         public void GraveBusterIsExcludedFromTheShovelTarget()
         {
             var plant = new Plant { Kind = PlantKind.GraveBuster, Layer = PlantLayer.Main, Row = 2, Column = 3, Health = 300 };
-            _owner._game.Plants.Add(plant);
+            _owner.RequiredGame.Plants.Add(plant);
             Assert.That(_owner.Layout.AdventureShovelTarget(new Vector2(320, 320)), Is.Null);
-            Assert.That(_owner._game.TryShovelAdventurePlant(plant), Is.False);
-            Assert.That(_owner._game.Plants.Contains(plant), Is.True);
+            Assert.That(_owner.RequiredGame.TryShovelAdventurePlant(plant), Is.False);
+            Assert.That(_owner.RequiredGame.Plants.Contains(plant), Is.True);
         }
 
         /// <summary>Moves the original centered shadow with the same interpolated native coordinate as the body.</summary>

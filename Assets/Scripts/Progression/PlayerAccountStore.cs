@@ -20,7 +20,7 @@ namespace PlantsVsZombies.Progression
         /// <summary>Stores gate.</summary>
         private readonly object _gate = new object ();
         /// <summary>Stores saved bytes.</summary>
-        private byte[] _savedBytes;
+        private byte[]? _savedBytes;
         /// <summary>Stores records.</summary>
         private Dictionary<Guid, PlayerAccount> _records;
         /// <summary>Initializes player account store.</summary>
@@ -34,7 +34,7 @@ namespace PlantsVsZombies.Progression
                 throw new ArgumentException("Use a dedicated .account file.");
             }
 
-            Directory.CreateDirectory(Path.GetDirectoryName(_path));
+            Directory.CreateDirectory(Path.GetDirectoryName(_path) ?? throw new ArgumentException("The account file path has no directory.", nameof(filePath)));
             _savedBytes = ReadFile(_path);
             _records = _savedBytes == null ? new Dictionary<Guid, PlayerAccount>() : Decode(_savedBytes);
         }
@@ -52,8 +52,7 @@ namespace PlantsVsZombies.Progression
 
             lock (_gate)
             {
-                PlayerAccount p;
-                return _records.TryGetValue(id, out p) ? p.Copy() : new PlayerAccount
+                return _records.TryGetValue(id, out var p) ? p.Copy() : new PlayerAccount
                 {
                     ProfileId = id
                 };
@@ -300,7 +299,7 @@ namespace PlantsVsZombies.Progression
         {
             while (p._receipts.Count > 256)
             {
-                string oldest = null;
+                string? oldest = null;
                 foreach (var key in p._receipts.Keys)
                 {
                     if (key == "taco:pending" || key == "zen:tutorial" || key == "zen:fertilizer")
@@ -310,6 +309,11 @@ namespace PlantsVsZombies.Progression
 
                     oldest = key;
                     break;
+                }
+
+                if (oldest == null)
+                {
+                    return;
                 }
 
                 p._receipts.Remove(oldest);
@@ -372,7 +376,7 @@ namespace PlantsVsZombies.Progression
         /// <param name = "filename">The filename.</param>
         /// <returns>The resulting read file.</returns>
         /// <exception cref = "InvalidDataException">The operation cannot satisfy its preconditions.</exception>
-        private static byte[] ReadFile(string filename)
+        private static byte[]? ReadFile(string filename)
         {
             try
             {
@@ -393,7 +397,7 @@ namespace PlantsVsZombies.Progression
         /// <param name = "a">The a.</param>
         /// <param name = "b">The b.</param>
         /// <returns>The resulting same.</returns>
-        private static bool Same(byte[] a, byte[] b)
+        private static bool Same(byte[]? a, byte[]? b)
         {
             if (a == null || b == null)
             {

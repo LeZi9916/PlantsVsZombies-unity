@@ -24,9 +24,17 @@ namespace PlantsVsZombies.Adventure
         }
 
         /// <summary>Stores adventure intro.</summary>
-        internal AdventureIntroClock _adventureIntro;
+        internal AdventureIntroClock? _adventureIntro;
+
+        /// <summary>Gets the adventure intro, which must already exist wherever it is used.</summary>
+        /// <exception cref="System.InvalidOperationException">The member is not available.</exception>
+        internal AdventureIntroClock RequiredAdventureIntro => _adventureIntro ?? throw new System.InvalidOperationException("The member '_adventureIntro' is not available.");
         /// <summary>Stores adventure intro frame.</summary>
-        internal AdventureIntroFrame _adventureIntroFrame;
+        internal AdventureIntroFrame? _adventureIntroFrame;
+
+        /// <summary>Gets the adventure intro frame, which must already exist wherever it is used.</summary>
+        /// <exception cref="System.InvalidOperationException">The member is not available.</exception>
+        internal AdventureIntroFrame RequiredAdventureIntroFrame => _adventureIntroFrame ?? throw new System.InvalidOperationException("The member '_adventureIntroFrame' is not available.");
         /// <summary>Stores adventure preview.</summary>
         internal readonly List<AdventureIntroPreviewZombie> _adventurePreview = new List<AdventureIntroPreviewZombie>();
         /// <summary>Stores adventure intro remainder.</summary>
@@ -69,7 +77,7 @@ namespace PlantsVsZombies.Adventure
         {
             get
             {
-                return AdventureIntroActive && _adventureIntro.WaitingForSeeds;
+                return AdventureIntroActive && RequiredAdventureIntro.WaitingForSeeds;
             }
         }
 
@@ -184,7 +192,7 @@ namespace PlantsVsZombies.Adventure
         /// <summary>Starts original dialogue for the first independent puzzle levels.</summary>
         private void InitializeIndependentPuzzleOpening()
         {
-            var mode = _owner._game.ModeSession.Definition.Id;
+            var mode = _owner.RequiredGame.RequiredModeSession.Definition.Id;
             // PC CutScene::StartLevelIntro 0x43A900: I, Zombie always speaks;
             // Vasebreaker speaks only while its first level has not been beaten.
             var start = mode == 61 ? 2200 : mode == 51 && _owner.IndependentModes._modeFirstClear ? 3000 : -1;
@@ -206,7 +214,7 @@ namespace PlantsVsZombies.Adventure
             {
                 Level = 0,
                 NativeMode = mode,
-                NativeBackground = (int)_owner._game.Adventure.Level.Terrain,
+                NativeBackground = (int)_owner.RequiredGame.Adventure.Level.Terrain,
                 FirstAdventure = false,
                 ChooseSeedsOverride = false,
                 HasCrazyDaveDialog = true
@@ -227,7 +235,7 @@ namespace PlantsVsZombies.Adventure
                 return false;
             }
 
-            if (!_adventureIntroDrawn || _owner._optionsView.IsOpen || _owner._confirmingQuit || _owner._unavailableFeature != null || _owner._game.State == MatchState.Paused)
+            if (!_adventureIntroDrawn || _owner.RequiredOptionsView.IsOpen || _owner._confirmingQuit || _owner._unavailableFeature != null || _owner.RequiredGame.State == MatchState.Paused)
             {
                 return true;
             }
@@ -238,26 +246,26 @@ namespace PlantsVsZombies.Adventure
             }
 
             _adventureIntroRemainder += dt;
-            while (_adventureIntroRemainder + .000000001 >= (double).01f && !_adventureIntro.Complete)
+            while (_adventureIntroRemainder + .000000001 >= (double).01f && !RequiredAdventureIntro.Complete)
             {
                 _adventureIntroRemainder -= (double).01f;
                 _adventureIntroVisualAge += .01f;
                 _owner.Dave.UpdateCrazyDaveAnimation(.01f);
-                _owner._game.AdvanceAdventureGraves();
-                _adventureIntro.Tick(dialogActive: _owner.Dave._crazyDaveMessageIndex >= 0, shovelTutorialActive: _bowlingShovelLessonActive, emit: _adventureIntroEventHandler);
-                if (_crazyDaveStartIndex >= 0 && _adventureIntro.NativeTime == 2000 && _owner.Dave._crazyDaveAnimation == null)
+                _owner.RequiredGame.AdvanceAdventureGraves();
+                RequiredAdventureIntro.Tick(dialogActive: _owner.Dave._crazyDaveMessageIndex >= 0, shovelTutorialActive: _bowlingShovelLessonActive, emit: _adventureIntroEventHandler);
+                if (_crazyDaveStartIndex >= 0 && RequiredAdventureIntro.NativeTime == 2000 && _owner.Dave._crazyDaveAnimation == null)
                 {
                     _owner.Dave.SetCrazyDaveAnimation("anim_enter", 24f, false);
                 }
 
-                if (_crazyDaveStartIndex >= 0 && _adventureIntro.NativeTime == 2750 && _owner.Dave._crazyDaveMessageIndex < 0)
+                if (_crazyDaveStartIndex >= 0 && RequiredAdventureIntro.NativeTime == 2750 && _owner.Dave._crazyDaveMessageIndex < 0)
                 {
                     var index = _crazyDaveStartIndex;
                     _crazyDaveStartIndex = -1;
                     _owner.Dave.ShowCrazyDaveMessage(index);
                 }
 
-                _adventureIntroFrame = _adventureIntro.Frame;
+                _adventureIntroFrame = RequiredAdventureIntro.Frame;
             }
 
             return true;
@@ -266,7 +274,7 @@ namespace PlantsVsZombies.Adventure
         /// <summary>Advances the displayed opening dialogue or starts Dave's departure.</summary>
         internal void AdvanceCrazyDaveDialogue()
         {
-            if (AdventureIntroActive && _owner._game.ModeSession == null && _owner.Dave._crazyDaveMessageIndex == 2406)
+            if (AdventureIntroActive && _owner.RequiredGame.ModeSession == null && _owner.Dave._crazyDaveMessageIndex == 2406)
             {
                 // PC CutScene::AdvanceCrazyDaveDialog starts the shovel lesson here.
                 _bowlingShovelLessonActive = true;
@@ -282,17 +290,17 @@ namespace PlantsVsZombies.Adventure
             });
             if (next >= 0)
             {
-                if (next == 2411 && AdventureIntroActive && _owner._game.ModeSession == null)
+                if (next == 2411 && AdventureIntroActive && _owner.RequiredGame.ModeSession == null)
                 {
                     _bowlingLineVisible = true;
                 }
 
-                if (next == 406 && _owner._game.Adventure.Level.Mode == AdventureMode.WhackAZombie)
+                if (next == 406 && _owner.RequiredGame.Adventure.Level.Mode == AdventureMode.WhackAZombie)
                 {
-                    _owner._game.Adventure.GravesEnabled = true;
+                    _owner.RequiredGame.Adventure.GravesEnabled = true;
                 }
 
-                if (_vaseDialogueActive && _owner._game.PopulateAdventureVaseInterlude(next))
+                if (_vaseDialogueActive && _owner.RequiredGame.PopulateAdventureVaseInterlude(next))
                 {
                     _owner.Sounds.PlayPresentationSound("plant");
                 }
@@ -309,16 +317,16 @@ namespace PlantsVsZombies.Adventure
             if (_vaseDialogueActive)
             {
                 // If an incomplete string table omitted the population entry, do not strand the level.
-                _owner._game.PopulateAdventureVaseInterlude(_owner._game.Adventure.VaseStage == 1 ? 2702 : 2801);
+                _owner.RequiredGame.PopulateAdventureVaseInterlude(_owner.RequiredGame.Adventure.VaseStage == 1 ? 2702 : 2801);
             }
 
-            if (_owner._game.Adventure.Level.Mode == AdventureMode.WhackAZombie && !_owner._game.Adventure.GravesEnabled)
+            if (_owner.RequiredGame.Adventure.Level.Mode == AdventureMode.WhackAZombie && !_owner.RequiredGame.Adventure.GravesEnabled)
             {
                 // A truncated original string table must not leave the graves permanently hidden.
-                _owner._game.Adventure.GravesEnabled = true;
+                _owner.RequiredGame.Adventure.GravesEnabled = true;
             }
 
-            var bossOpening = AdventureIntroActive && _owner._game.ModeSession == null && _owner._game.Adventure.Level.Mode == AdventureMode.Boss;
+            var bossOpening = AdventureIntroActive && _owner.RequiredGame.ModeSession == null && _owner.RequiredGame.Adventure.Level.Mode == AdventureMode.Boss;
             _owner.Dave.LeaveCrazyDaveDialogue();
             if (bossOpening)
             {
@@ -346,9 +354,9 @@ namespace PlantsVsZombies.Adventure
                 {
                     var account = _owner.Accounts._accountStore.Get(_owner._profiles.SelectedId.Value);
                     _owner.Campaign._adventureCampaign?.UpdatePacketSlots(account.PacketSlots);
-                    _owner._game.Rules.AdventurePacketSlots = account.PacketSlots;
-                    _owner._game.Adventure.Level.SetPacketSlots(account.PacketSlots);
-                    _owner._pendingSeeds = new AdventureSeedChooserState(_owner._game.Adventure.RequiredSeeds);
+                    _owner.RequiredGame.Rules.AdventurePacketSlots = account.PacketSlots;
+                    _owner.RequiredGame.Adventure.Level.SetPacketSlots(account.PacketSlots);
+                    _owner._pendingSeeds = new AdventureSeedChooserState(_owner.RequiredGame.Adventure.RequiredSeeds);
                 }
 
                 _packetUpgradeOfferActive = false;
@@ -372,8 +380,8 @@ namespace PlantsVsZombies.Adventure
             if (string.IsNullOrEmpty(message) || message == key)
             {
                 Debug.LogWarning($"{nameof(PvZGame)}: Original Crazy Dave text {key} is missing.");
-                _owner._game.PopulateAdventureVaseInterlude(start == 2700 ? 2702 : 2801);
-                _owner._game.FinishAdventureVaseInterlude();
+                _owner.RequiredGame.PopulateAdventureVaseInterlude(start == 2700 ? 2702 : 2801);
+                _owner.RequiredGame.FinishAdventureVaseInterlude();
                 return;
             }
 
@@ -389,8 +397,8 @@ namespace PlantsVsZombies.Adventure
         /// <param name="delta">The elapsed frame time.</param>
         internal void UpdateVaseInterlude(float delta)
         {
-            if (!_vaseDialogueActive || _owner._currentView != PvZGame.ScreenView.Board || _owner._optionsView.IsOpen || _owner._confirmingQuit
-                || _owner._unavailableFeature != null || _owner._game.State == MatchState.Paused || delta <= 0f || float.IsNaN(delta) || float.IsInfinity(delta))
+            if (!_vaseDialogueActive || _owner._currentView != PvZGame.ScreenView.Board || _owner.RequiredOptionsView.IsOpen || _owner._confirmingQuit
+                || _owner._unavailableFeature != null || _owner.RequiredGame.State == MatchState.Paused || delta <= 0f || float.IsNaN(delta) || float.IsInfinity(delta))
             {
                 return;
             }
@@ -402,7 +410,7 @@ namespace PlantsVsZombies.Adventure
                 _owner.Dave.UpdateCrazyDaveAnimation(.01f);
                 if (_owner.Dave._crazyDaveAnimation == null)
                 {
-                    _owner._game.FinishAdventureVaseInterlude();
+                    _owner.RequiredGame.FinishAdventureVaseInterlude();
                     _vaseDialogueActive = false;
                 }
             }
@@ -414,8 +422,8 @@ namespace PlantsVsZombies.Adventure
         {
             if (item == AdventureIntroEvent.GraveStonesEnabled)
             {
-                _owner._game.Adventure.GravesEnabled = true;
-                foreach (var grave in _owner._game.Adventure.Graves)
+                _owner.RequiredGame.Adventure.GravesEnabled = true;
+                foreach (var grave in _owner.RequiredGame.Adventure.Graves)
                 {
                     _owner.Sounds.PlayPresentationSound("dirt_rise");
                 }
@@ -463,7 +471,7 @@ namespace PlantsVsZombies.Adventure
             if (_adventureIntro == null)
             {
                 var index = 0;
-                var availableSeeds = _owner._game.Adventure.AvailableSeeds;
+                var availableSeeds = _owner.RequiredGame.Adventure.AvailableSeeds;
                 for (var seedIndex = 0; seedIndex < availableSeeds.Count; seedIndex++)
                 {
                     var kind = availableSeeds[seedIndex];
@@ -484,8 +492,8 @@ namespace PlantsVsZombies.Adventure
                 return new Rect(468, 515, 50, 70);
             }
 
-            var upgrades = _owner._game.Adventure.Level.IsReplay;
-            var chooserSeeds = _owner._game.Adventure.AvailableSeeds;
+            var upgrades = _owner.RequiredGame.Adventure.Level.IsReplay;
+            var chooserSeeds = _owner.RequiredGame.Adventure.AvailableSeeds;
             for (var seedIndex = 0; seedIndex < chooserSeeds.Count; seedIndex++)
             {
                 var kind = chooserSeeds[seedIndex];
@@ -523,19 +531,19 @@ namespace PlantsVsZombies.Adventure
                 return;
             }
 
-            if (!_owner._shovel || !_owner._game.TryShovelAdventurePlant(_owner.Layout.AdventureShovelTarget(point)))
+            if (!_owner._shovel || !_owner.RequiredGame.TryShovelAdventurePlant(_owner.Layout.AdventureShovelTarget(point)))
             {
                 return;
             }
 
             _owner._shovel = false;
             _owner.Sounds.PlayPresentationSound("plant");
-            if (_owner._game.Adventure.Tutorial == AdventureTutorial.Complete)
+            if (_owner.RequiredGame.Adventure.Tutorial == AdventureTutorial.Complete)
             {
                 _bowlingShovelLessonActive = false;
                 _crazyDaveStartIndex = 2410;
-                _adventureIntro.RestartAfterShovelTutorial();
-                _adventureIntroFrame = _adventureIntro.Frame;
+                RequiredAdventureIntro.RestartAfterShovelTutorial();
+                _adventureIntroFrame = RequiredAdventureIntro.Frame;
             }
         }
     }

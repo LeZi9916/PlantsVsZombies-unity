@@ -9,6 +9,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
 using UnityEngine;
+using System.Diagnostics.CodeAnalysis;
 
 namespace PlantsVsZombies.Diagnostics
 {
@@ -17,11 +18,15 @@ namespace PlantsVsZombies.Diagnostics
     internal sealed class AdventurePlayerSmoke : MonoBehaviour
     {
         /// <summary>Stores controller.</summary>
-        private PvZGame _controller;
+        private PvZGame? _controller;
+
+        /// <summary>Gets the controller, which must already exist wherever it is used.</summary>
+        /// <exception cref="System.InvalidOperationException">The member is not available.</exception>
+        private PvZGame RequiredController => _controller ?? throw new System.InvalidOperationException("The member '_controller' is not available.");
         /// <summary>Stores checks.</summary>
         private int _checks;
         /// <summary>Stores log error.</summary>
-        private string _logError;
+        private string? _logError;
         /// <summary>Stores private.</summary>
         private const BindingFlags Private = BindingFlags.Instance | BindingFlags.NonPublic;
         /// <summary>Gets or sets sim.</summary>
@@ -42,12 +47,16 @@ namespace PlantsVsZombies.Diagnostics
             }
         }
 
+        /// <summary>Gets the campaign, which must already exist wherever it is used.</summary>
+        /// <exception cref="System.InvalidOperationException">The member is not available.</exception>
+        private AdventureCampaign RequiredCampaign => Campaign ?? throw new System.InvalidOperationException("The member 'Campaign' is not available.");
+
         /// <summary>Performs field.</summary>
         /// <param name = "name">The name.</param>
         /// <returns>The resulting field.</returns>
         private object Field(string name)
         {
-            return GameMemberReflection.GetField(_controller, name);
+            return GameMemberReflection.GetField(RequiredController, name);
         }
 
         /// <summary>Performs call.</summary>
@@ -56,7 +65,7 @@ namespace PlantsVsZombies.Diagnostics
         /// <returns>The resulting call.</returns>
         private object Call(string name, params object[] args)
         {
-            return GameMemberReflection.Invoke(_controller, name, args);
+            return GameMemberReflection.Invoke(RequiredController, name, args);
         }
 
         /// <summary>Performs click.</summary>
@@ -71,7 +80,7 @@ namespace PlantsVsZombies.Diagnostics
         /// <param name = "passed">The passed.</param>
         /// <param name = "message">The message.</param>
         /// <exception cref = "InvalidOperationException">The operation cannot satisfy its preconditions.</exception>
-        private void Check(bool passed, string message)
+        private void Check([DoesNotReturnIf(false)] bool passed, string message)
         {
             _checks++;
             if (!passed)
@@ -194,7 +203,7 @@ namespace PlantsVsZombies.Diagnostics
                 return false;
             }
 
-            var card = _controller.Layout.AdventureSeedRect(index);
+            var card = RequiredController.Layout.AdventureSeedRect(index);
             Click(card.center.x, card.center.y);
             if (Sim.CanPlantAdventure(kind, row, column) != AdventurePlantingFailure.None)
             {
@@ -228,7 +237,7 @@ namespace PlantsVsZombies.Diagnostics
                 return;
             }
 
-            var start = _controller.Opening.AdventureChooserStartRect;
+            var start = RequiredController.Opening.AdventureChooserStartRect;
             Click(start.center.x, start.center.y);
             Check(Sim.Adventure.Phase == AdventurePhase.Playing && !(bool)Field("_choosingSeeds"), "Visible choose/start did not activate the board.");
         }
@@ -248,7 +257,7 @@ namespace PlantsVsZombies.Diagnostics
                 {
                     if (Sim.CanPlantAdventure(packet.Kind, row, col) == AdventurePlantingFailure.None)
                     {
-                        var card = _controller.Layout.AdventureSeedRect(0, true);
+                        var card = RequiredController.Layout.AdventureSeedRect(0, true);
                         Click(card.center.x, card.center.y);
                         BoardClick(row, col);
                         return;
@@ -271,7 +280,7 @@ namespace PlantsVsZombies.Diagnostics
             }
 
             Check(index >= 0, "Requested test entitlement is not available: " + kind);
-            var card = _controller.Opening.AdventureCampaignChooserRect(kind);
+            var card = RequiredController.Opening.AdventureCampaignChooserRect(kind);
             Click(card.center.x, card.center.y);
         }
 
@@ -281,12 +290,12 @@ namespace PlantsVsZombies.Diagnostics
             var selected = new List<PlantKind>((IEnumerable<PlantKind>)Field("_pendingSeeds"));
             foreach (var seed in selected)
             {
-                if (_controller.AdventureBoard.ContainsRequiredSeed(seed))
+                if (RequiredController.AdventureBoard.ContainsRequiredSeed(seed))
                 {
                     continue;
                 }
 
-                var pending = _controller._pendingSeeds;
+                var pending = RequiredController.RequiredPendingSeeds;
                 for (var i = 0; i < pending.Count; i++)
                 {
                     if (pending[i] == seed)
@@ -307,6 +316,11 @@ namespace PlantsVsZombies.Diagnostics
             var surfaces = (System.Collections.IDictionary)typeof(global::PlantsVsZombies.Reanimation.ReanimationRenderer).GetField("_nativeSurfaces", Private).GetValue(renderer);
             var surface = surfaces["producer-plant-" + plantId];
             Check(surface != null, "The transformed Imitater has no grayscale render surface.");
+            if (surface == null)
+            {
+                throw new System.InvalidOperationException("The value 'surface' is not available.");
+            }
+
             var target = (RenderTexture)surface.GetType().GetField("Texture").GetValue(surface);
             var previous = RenderTexture.active;
             var pixels = new Texture2D(target.width, target.height, TextureFormat.RGBA32, false);
@@ -343,12 +357,12 @@ namespace PlantsVsZombies.Diagnostics
         {
             Check(_controller != null, "Main game controller was not created.");
             var startupDeadline = Time.realtimeSinceStartup + 60f;
-            while (_controller.Loading.OriginalLoadingActive && Time.realtimeSinceStartup < startupDeadline)
+            while (RequiredController.Loading.OriginalLoadingActive && Time.realtimeSinceStartup < startupDeadline)
             {
                 yield return null;
             }
 
-            Check(!_controller.Loading.OriginalLoadingActive, "Original startup loading did not complete within 60 seconds.");
+            Check(!RequiredController.Loading.OriginalLoadingActive, "Original startup loading did not complete within 60 seconds.");
             Call("HandleSelector", SelectorAction.Adventure);
             Check(Sim.IsAdventure && Sim.Adventure.Level.Number == 1 && Campaign != null, "Normal Adventure menu did not open the campaign.");
             yield return Capture("adventure-1-1");
@@ -374,13 +388,13 @@ namespace PlantsVsZombies.Diagnostics
 
             Check(Sim.State == MatchState.Won && Sim.Adventure.Phase == AdventurePhase.Reward, "First campaign battle did not reach an earned reward.");
             yield return Capture("adventure-reward");
-            Click(Sim.Adventure.RewardPresentation.X + 25, Sim.Adventure.RewardPresentation.Y + 35);
-            Check(Sim.Adventure.Phase == AdventurePhase.Finished && Campaign.Progress.NextLevel == 2, "Reward click did not commit progress.");
+            Click(Sim.Adventure.RequiredRewardPresentation.X + 25, Sim.Adventure.RequiredRewardPresentation.Y + 35);
+            Check(Sim.Adventure.Phase == AdventurePhase.Finished && RequiredCampaign.Progress.NextLevel == 2, "Reward click did not commit progress.");
             var save = (string)Field("_adventureSavePath");
             var reopened = new AdventureProgressStore(save);
-            Check(reopened.Get(Campaign.ProfileId).NextLevel == 2, "Reward was not durably saved.");
+            Check(reopened.Get(RequiredCampaign.ProfileId).NextLevel == 2, "Reward was not durably saved.");
             File.Copy(save, Path.Combine(SmokeTestArtifacts.DirectoryPath, "campaign-after-first-reward.adventure"));
-            var reward = Sim.Adventure.RewardPresentation;
+            var reward = Sim.Adventure.RequiredRewardPresentation;
             for (var update = 0; update < 200 && (reward.Stage != AdventureAwardStage.Introduction || reward.IntroductionTicks < 180); update++)
             {
                 Sim.Update(.1f);
@@ -393,8 +407,8 @@ namespace PlantsVsZombies.Diagnostics
             Check(Sim.Adventure.Level.Number == 2 && Sim.State == MatchState.Playing, "Next-level button reset the demo instead of advancing.");
             yield return Capture("adventure-1-2");
             Call("ResetGame");
-            Check(Sim.Adventure.Level.Number == 2 && Campaign.Progress.NextLevel == 2, "Restart discarded campaign progress.");
-            _controller.Campaign.StartAdventureTestLevel(5);
+            Check(Sim.Adventure.Level.Number == 2 && RequiredCampaign.Progress.NextLevel == 2, "Restart discarded campaign progress.");
+            RequiredController.Campaign.StartAdventureTestLevel(5);
             Check(Sim.Plants.Count == 3, "Bowling did not start with shovel teaching plants.");
             for (var col = 3; col <= 5; col++)
             {
@@ -423,7 +437,7 @@ namespace PlantsVsZombies.Diagnostics
             };
             foreach (int level in levels)
             {
-                _controller.Campaign.StartAdventureTestLevel(level);
+                RequiredController.Campaign.StartAdventureTestLevel(level);
                 if (level == 41)
                 {
                     yield return Capture("adventure-5-1-chooser");
@@ -493,7 +507,7 @@ namespace PlantsVsZombies.Diagnostics
             }
 
             // Explicit test entitlements exercise the input/render binding, not a fictional shop purchase.
-            _controller.Campaign.StartAdventureTestLevel(49, new AdventureSeedAccess(new[] { PlantKind.CobCannon, PlantKind.Imitater }));
+            RequiredController.Campaign.StartAdventureTestLevel(49, new AdventureSeedAccess(new[] { PlantKind.CobCannon, PlantKind.Imitater }));
             ClearChosenCards();
             ChooseCard(PlantKind.Imitater);
             Check((bool)Field("_choosingImitater"), "Imitater card did not open target selection.");
@@ -534,8 +548,13 @@ namespace PlantsVsZombies.Diagnostics
             var copied = Sim.Plants.Find(p => p.IsImitated && p.Kind == PlantKind.KernelPult);
             Check(copied != null, "Imitater did not transform into its selected plant.");
             yield return Capture("adventure-imitater-transformed");
+            if (copied == null)
+            {
+                throw new System.InvalidOperationException("The value 'copied' is not available.");
+            }
+
             CheckGrayPlant(copied.Id);
-            _controller.Campaign.StartAdventureTestLevel(49);
+            RequiredController.Campaign.StartAdventureTestLevel(49);
             ClearChosenCards();
             foreach (PlantKind seed in new[]
             {
@@ -569,7 +588,7 @@ namespace PlantsVsZombies.Diagnostics
             var value = produced.ValueUnits;
             var collectedBefore = Sim.Adventure.MoneyCollectedUnits;
             var coinsBefore = Sim.Adventure.Coins.Count;
-            var coin = _controller.Layout.AdventureCoinRect(produced);
+            var coin = RequiredController.Layout.AdventureCoinRect(produced);
             Click(coin.center.x, coin.center.y);
             Check(Sim.Adventure.Coins.Count == coinsBefore - 1 && Sim.Adventure.MoneyCollectedUnits == collectedBefore + value,
                 "Coin pointer input did not credit this board; before=" + collectedBefore + "; value=" + value + "; after=" + Sim.Adventure.MoneyCollectedUnits);

@@ -2,6 +2,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 
 namespace PlantsVsZombies.Adventure
 {
@@ -15,7 +16,7 @@ namespace PlantsVsZombies.Adventure
         /// <param name = "clip">The clip.</param>
         /// <param name = "result">The result.</param>
         /// <returns>The resulting try get.</returns>
-        public static bool TryGet(string asset, string clip, out AdventureZombieGroundClip result)
+        public static bool TryGet(string asset, string clip, [NotNullWhen(true)] out AdventureZombieGroundClip? result)
         {
             return s_clips.TryGetValue(asset + "/" + clip, out result);
         }

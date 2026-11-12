@@ -11,14 +11,14 @@ namespace PlantsVsZombies.Diagnostics
     internal static class SmokeTestArtifacts
     {
         /// <summary>Stores directory path.</summary>
-        private static string s_directoryPath;
+        private static string? s_directoryPath;
         // Invoke after WaitForEndOfFrame. The asynchronous screenshot API can publish
         // the filename before Unity closes its writer, racing a following image read.
         /// <summary>Performs capture frame.</summary>
         /// <param name = "path">The path.</param>
         public static void CaptureFrame(string path)
         {
-            Texture2D image = null;
+            Texture2D? image = null;
             try
             {
                 image = ScreenCapture.CaptureScreenshotAsTexture();

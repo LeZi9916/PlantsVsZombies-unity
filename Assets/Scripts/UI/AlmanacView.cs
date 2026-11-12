@@ -40,7 +40,7 @@ namespace PlantsVsZombies.UI
         /// <summary>Stores strings.</summary>
         private readonly Dictionary<string, string> _strings;
         /// <summary>Stores textures.</summary>
-        private readonly Dictionary<string, Texture2D> _textures = new Dictionary<string, Texture2D>(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, Texture2D?> _textures = new Dictionary<string, Texture2D?>(StringComparer.OrdinalIgnoreCase);
         /// <summary>Stores failed animations.</summary>
         private readonly HashSet<string> _failedAnimations = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         /// <summary>Stores diagnostic set.</summary>
@@ -50,19 +50,27 @@ namespace PlantsVsZombies.UI
         /// <summary>Stores read only diagnostics.</summary>
         private readonly ReadOnlyCollection<string> _readOnlyDiagnostics;
         /// <summary>Stores unlocked plants.</summary>
-        private HashSet<int> _unlockedPlants;
+        private HashSet<int>? _unlockedPlants = new();
         /// <summary>Stores unlocked zombies.</summary>
-        private HashSet<int> _unlockedZombies;
+        private HashSet<int>? _unlockedZombies = new();
         /// <summary>Stores formatted description.</summary>
-        private string _formattedDescription;
+        private string? _formattedDescription;
         /// <summary>Stores description height,  scroll offset.</summary>
         private float _descriptionHeight, _scrollOffset;
         /// <summary>Stores description rect.</summary>
         private Rect _descriptionRect;
         /// <summary>Stores font.</summary>
-        private Font _font;
+        private Font? _font;
         /// <summary>Stores heading style,  title style,  label style,  body style,  small style,  icon style.</summary>
-        private GUIStyle _headingStyle, _titleStyle, _labelStyle, _bodyStyle, _smallStyle, _iconStyle;
+        private GUIStyle? _headingStyle, _titleStyle, _labelStyle, _bodyStyle, _smallStyle, _iconStyle;
+
+        /// <summary>Gets the heading style, which must already exist wherever it is used.</summary>
+        /// <exception cref="System.InvalidOperationException">The member is not available.</exception>
+        private GUIStyle RequiredHeadingStyle => _headingStyle ?? throw new System.InvalidOperationException("The member '_headingStyle' is not available.");
+
+        /// <summary>Gets the body style, which must already exist wherever it is used.</summary>
+        /// <exception cref="System.InvalidOperationException">The member is not available.</exception>
+        private GUIStyle RequiredBodyStyle => _bodyStyle ?? throw new System.InvalidOperationException("The member '_bodyStyle' is not available.");
         /// <summary>Stores disposed.</summary>
         private bool _disposed;
         /// <summary>Stores selected plant id,  selected zombie id.</summary>
@@ -491,7 +499,7 @@ namespace PlantsVsZombies.UI
         /// <param name = "count">The count.</param>
         /// <returns>The resulting copy unlocks.</returns>
         /// <exception cref = "ArgumentOutOfRangeException">The operation cannot satisfy its preconditions.</exception>
-        private static HashSet<int> CopyUnlocks(IEnumerable<int> ids, int count)
+        private static HashSet<int>? CopyUnlocks(IEnumerable<int> ids, int count)
         {
             if (ids == null)
             {
@@ -550,7 +558,7 @@ namespace PlantsVsZombies.UI
         private void DrawHome(float seconds)
         {
             DrawBackground("Almanac_IndexBack.jpg");
-            _headingStyle.normal.textColor = new Color(220f / 255f, 220f / 255f, 220f / 255f, 1);
+            RequiredHeadingStyle.normal.textColor = new Color(220f / 255f, 220f / 255f, 220f / 255f, 1);
             CanvasUI.Label(new Rect(100, 32, 600, 40), Text("SUBURBAN_ALMANAC_INDEX"), _headingStyle);
             DrawNativePortrait(true, 1, new Vector2(167, 225), 1f, seconds, false);
             DrawNativePortrait(false, 0, new Vector2(535, 215), 1f, seconds, false);
@@ -564,7 +572,7 @@ namespace PlantsVsZombies.UI
         {
             var plants = IsPlantScreen;
             DrawBackground(plants ? "Almanac_PlantBack.jpg" : "Almanac_ZombieBack.jpg");
-            _headingStyle.normal.textColor = plants ? new Color(213f / 255f, 159f / 255f, 43f / 255f, 1) : new Color(0, 196f / 255f, 0, 1);
+            RequiredHeadingStyle.normal.textColor = plants ? new Color(213f / 255f, 159f / 255f, 43f / 255f, 1) : new Color(0, 196f / 255f, 0, 1);
             CanvasUI.Label(new Rect(70, plants ? 20 : 26, 660, 42), Text(plants ? "SUBURBAN_ALMANAC_PLANTS" : "SUBURBAN_ALMANAC_ZOMBIES"), _headingStyle);
             var count = plants ? PlantCount : ZombieCount;
             for (var id = 0; id < count; id++)
@@ -715,7 +723,7 @@ namespace PlantsVsZombies.UI
             CanvasUI.Label(plants ? new Rect(480, 270, 274, 35) : new Rect(480, 344, 268, 35), Text(key), _titleStyle);
             var header = plants ? new Rect(485, 309, 258, 100) : new Rect(485, 377, 258, 100);
             var headerText = Text(key + "_DESCRIPTION_HEADER");
-            var headerHeight = Math.Min(80f, _bodyStyle.CalcHeight(new GUIContent(headerText), header.width));
+            var headerHeight = Math.Min(80f, RequiredBodyStyle.CalcHeight(new GUIContent(headerText), header.width));
             header.height = headerHeight;
             CanvasUI.Label(header, headerText, _bodyStyle);
             var bottom = plants ? (id == 48 ? 539f : 505f) : 537f;
@@ -725,7 +733,7 @@ namespace PlantsVsZombies.UI
                 _formattedDescription = FormatDescription(Text(key + "_DESCRIPTION"));
             }
 
-            _descriptionHeight = _bodyStyle.CalcHeight(new GUIContent(_formattedDescription), _descriptionRect.width - 8f);
+            _descriptionHeight = RequiredBodyStyle.CalcHeight(new GUIContent(_formattedDescription), _descriptionRect.width - 8f);
             _scrollOffset = Math.Max(0f, Math.Min(_scrollOffset, Math.Max(0f, _descriptionHeight - _descriptionRect.height)));
             CanvasUI.BeginGroup(_descriptionRect);
             CanvasUI.Label(new Rect(0, -_scrollOffset, _descriptionRect.width - 8f, _descriptionHeight + 2f), _formattedDescription, _bodyStyle);
@@ -811,7 +819,7 @@ namespace PlantsVsZombies.UI
             var drawn = false;
             if (!_failedAnimations.Contains(failureKey))
             {
-                ReanimationDefinition animation;
+                ReanimationDefinition? animation;
                 var animationId = plants ? VerifiedDataCatalog.Plants[id].ReanimationId : VerifiedDataCatalog.Zombies[id].ReanimationId;
                 if (VerifiedDataCatalog.TryGetReanimation(animationId, out animation))
                 {
@@ -1005,7 +1013,7 @@ namespace PlantsVsZombies.UI
         private static Dictionary<string, string> ReadStrings(string path)
         {
             var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            string key = null;
+            string? key = null;
             var value = new StringBuilder();
             using (var reader = new StreamReader(path, Encoding.UTF8, true))
             {
@@ -1068,9 +1076,9 @@ namespace PlantsVsZombies.UI
         /// <summary>Performs texture.</summary>
         /// <param name = "name">The name.</param>
         /// <returns>The resulting texture.</returns>
-        private Texture2D Texture(string name)
+        private Texture2D? Texture(string name)
         {
-            Texture2D texture;
+            Texture2D? texture;
             if (_textures.TryGetValue(name, out texture))
             {
                 return texture;
@@ -1142,7 +1150,7 @@ namespace PlantsVsZombies.UI
         /// <param name = "text">The text.</param>
         /// <param name = "style">The style.</param>
         /// <param name = "textOffset">The text offset.</param>
-        private void DrawButton(Rect rect, string normal, string highlight, string text, GUIStyle style, int textOffset)
+        private void DrawButton(Rect rect, string normal, string highlight, string text, GUIStyle? style, int textOffset)
         {
             bool hovered = rect.Contains(_pointer), down = hovered && Input.GetMouseButton(0);
             if (normal == "button_middle.png")
@@ -1208,7 +1216,7 @@ namespace PlantsVsZombies.UI
 
         /// <summary>Performs destroy.</summary>
         /// <param name = "value">The value.</param>
-        private static void Destroy(UnityEngine.Object value)
+        private static void Destroy(UnityEngine.Object? value)
         {
             if (value == null)
             {
@@ -1233,7 +1241,7 @@ namespace PlantsVsZombies.UI
                 return;
             }
 
-            foreach (Texture2D texture in _textures.Values)
+            foreach (Texture2D? texture in _textures.Values)
             {
                 Destroy(texture);
             }

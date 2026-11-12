@@ -94,35 +94,39 @@ namespace PlantsVsZombies.UI
         /// <summary>Stores button right.</summary>
         private Texture2D _buttonRight;
         /// <summary>Stores button down left.</summary>
-        private Texture2D _buttonDownLeft;
+        private Texture2D? _buttonDownLeft;
         /// <summary>Stores button down middle.</summary>
-        private Texture2D _buttonDownMiddle;
+        private Texture2D? _buttonDownMiddle;
         /// <summary>Stores button down right.</summary>
-        private Texture2D _buttonDownRight;
+        private Texture2D? _buttonDownRight;
         /// <summary>Stores dialog parts.</summary>
-        private Texture2D[] _dialogParts;
+        private Texture2D[]? _dialogParts;
         /// <summary>Stores image directory.</summary>
         private readonly string _imageDirectory;
         /// <summary>Stores menu font.</summary>
-        private CanvasBitmapFont _menuFont;
+        private CanvasBitmapFont? _menuFont;
         /// <summary>Stores menu hover font.</summary>
-        private CanvasBitmapFont _menuHoverFont;
+        private CanvasBitmapFont? _menuHoverFont;
         /// <summary>Stores return font.</summary>
-        private CanvasBitmapFont _returnFont;
+        private CanvasBitmapFont? _returnFont;
         /// <summary>Stores return hover font.</summary>
-        private CanvasBitmapFont _returnHoverFont;
+        private CanvasBitmapFont? _returnHoverFont;
         /// <summary>Stores dialog title font.</summary>
-        private CanvasBitmapFont _dialogTitleFont;
+        private CanvasBitmapFont? _dialogTitleFont;
         /// <summary>Stores dialog body font.</summary>
-        private CanvasBitmapFont _dialogBodyFont;
+        private CanvasBitmapFont? _dialogBodyFont;
         /// <summary>Stores button layouts.</summary>
         private readonly Dictionary<CanvasBitmapFont, Dictionary<string, BitmapTextLayout>> _buttonLayouts = new Dictionary<CanvasBitmapFont, Dictionary<string, BitmapTextLayout>>();
         /// <summary>Stores button fonts loaded.</summary>
         private bool _buttonFontsLoaded;
         /// <summary>Stores font.</summary>
-        private Font _font;
+        private Font? _font;
         /// <summary>Stores label style.</summary>
-        private GUIStyle _labelStyle;
+        private GUIStyle? _labelStyle;
+
+        /// <summary>Gets the label style, which must already exist wherever it is used.</summary>
+        /// <exception cref="System.InvalidOperationException">The member is not available.</exception>
+        private GUIStyle RequiredLabelStyle => _labelStyle ?? throw new System.InvalidOperationException("The member '_labelStyle' is not available.");
         /// <summary>Stores capture.</summary>
         private PointerCapture _capture;
         /// <summary>Stores grab offset.</summary>
@@ -148,7 +152,7 @@ namespace PlantsVsZombies.UI
         /// <summary>Gets or sets gameplay buttons enabled.</summary>
         public bool GameplayButtonsEnabled { get; set; }
         /// <summary>Gets or sets original right label.</summary>
-        public Func<string, float, float, Color, bool> OriginalRightLabel { get; set; }
+        public Func<string, float, float, Color, bool>? OriginalRightLabel { get; set; }
 
         /// <param name = "resourceRoot">Directory containing the raw images subdirectory.</param>
         public OptionsView(string resourceRoot)
@@ -685,7 +689,7 @@ namespace PlantsVsZombies.UI
         /// <param name = "baseline">The baseline.</param>
         /// <param name = "color">The color.</param>
         /// <returns>The resulting draw centered bitmap.</returns>
-        private bool DrawCenteredBitmap(CanvasBitmapFont bitmap, string text, Rect rect, float offset, float baseline, Color color)
+        private bool DrawCenteredBitmap(CanvasBitmapFont? bitmap, string text, Rect rect, float offset, float baseline, Color color)
         {
             if (bitmap == null)
             {
@@ -759,7 +763,7 @@ namespace PlantsVsZombies.UI
         /// <summary>Performs restart dialog texture.</summary>
         /// <param name = "name">The name.</param>
         /// <returns>The resulting restart dialog texture.</returns>
-        private Texture2D RestartDialogTexture(string name)
+        private Texture2D? RestartDialogTexture(string name)
         {
             string[] names =
             {
@@ -851,9 +855,9 @@ namespace PlantsVsZombies.UI
         /// <param name = "color">The color.</param>
         private void Label(Rect rect, string text, int size, TextAnchor alignment, Color color)
         {
-            _labelStyle.fontSize = size;
-            _labelStyle.alignment = alignment;
-            _labelStyle.normal.textColor = color;
+            RequiredLabelStyle.fontSize = size;
+            RequiredLabelStyle.alignment = alignment;
+            RequiredLabelStyle.normal.textColor = color;
             CanvasUI.Label(rect, text, _labelStyle);
         }
 
@@ -878,8 +882,8 @@ namespace PlantsVsZombies.UI
         private static Texture2D LoadMaskedBackground(string images)
         {
             var color = LoadTexture(images, "options_menuback.jpg");
-            Texture2D mask = null;
-            Texture2D result = null;
+            Texture2D? mask = null;
+            Texture2D? result = null;
             try
             {
                 mask = LoadTexture(images, "options_menuback_.png");
@@ -963,7 +967,7 @@ namespace PlantsVsZombies.UI
 
         /// <summary>Performs release.</summary>
         /// <param name = "resource">The resource.</param>
-        private static void Release(UnityEngine.Object resource)
+        private static void Release(UnityEngine.Object? resource)
         {
             if (resource == null)
             {

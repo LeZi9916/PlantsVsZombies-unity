@@ -103,7 +103,7 @@ namespace PlantsVsZombies.Tests.PlayMode
             var result = new List<PropertyInfo>();
             foreach (var property in typeof(PvZGame).GetProperties(BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.DeclaredOnly))
             {
-                if (property.PropertyType.IsClass && property.PropertyType.Assembly == typeof(PvZGame).Assembly)
+                if (property.PropertyType.IsClass && property.PropertyType.Assembly == typeof(PvZGame).Assembly && !property.Name.StartsWith("Required", StringComparison.Ordinal))
                 {
                     result.Add(property);
                 }

@@ -86,8 +86,8 @@ namespace PlantsVsZombies.Tests.PlayMode
         [TearDown]
         public void TearDown()
         {
-            _game._animations.Dispose();
-            _game._selectorView.Dispose();
+            _game.RequiredAnimations.Dispose();
+            _game.RequiredSelectorView.Dispose();
             _presenter.Dispose();
             UnityEngine.Object.DestroyImmediate(_clip);
             UnityEngine.Object.DestroyImmediate(_audioHost);
@@ -108,7 +108,7 @@ namespace PlantsVsZombies.Tests.PlayMode
         {
             var values = new int[80];
             values[21] = purchases;
-            _game.Accounts._accountStore.Import(_profile, 1000, values, new int[100], 0, Array.Empty<GardenPlant>());
+            _game.Accounts.RequiredAccountStore.Import(_profile, 1000, values, new int[100], 0, Array.Empty<GardenPlant>());
             _game._game = new GameSimulation(new GameRules { AdventureLevel = 16, AdventurePacketSlots = 6 + purchases }, 1);
             Invoke("InitializeAdventureOpening");
             _game.Opening._adventureIntroDrawn = true;
@@ -118,9 +118,9 @@ namespace PlantsVsZombies.Tests.PlayMode
             Invoke("AdvanceCrazyDaveDialogue");
             Assert.That(_game.Opening._packetUpgradeOfferActive, Is.True);
             Assert.That(_game.Dave._crazyDaveMessageIndex, Is.EqualTo(start + 2));
-            var before = _game.Opening._adventureIntro.NativeTime;
+            var before = _game.Opening.RequiredAdventureIntro.NativeTime;
             Invoke("UpdateAdventureOpening", .5f);
-            Assert.That(_game.Opening._adventureIntro.NativeTime, Is.EqualTo(before));
+            Assert.That(_game.Opening.RequiredAdventureIntro.NativeTime, Is.EqualTo(before));
             var rect = accepted ? AdventureOpeningController.s_packetOfferYes : AdventureOpeningController.s_packetOfferNo;
             var input = new GameInputSnapshot(rect.center, true, true, false, true, false, 0, false, false);
             typeof(GameInput).GetProperty("Current")!.GetSetMethod(true)!.Invoke(null, new object[] { input });
@@ -145,7 +145,7 @@ namespace PlantsVsZombies.Tests.PlayMode
         {
             var values = new int[80];
             values[21] = purchases;
-            _game.Accounts._accountStore.Import(_profile, coins, values, new int[100], 0, Array.Empty<GardenPlant>(), packetUpgradeDeclines: declines);
+            _game.Accounts.RequiredAccountStore.Import(_profile, coins, values, new int[100], 0, Array.Empty<GardenPlant>(), packetUpgradeDeclines: declines);
             _game._game = new GameSimulation(new GameRules { AdventureLevel = 16, AdventurePacketSlots = 6 + purchases }, 1);
             Invoke("InitializeAdventureOpening");
             Assert.That((int)GetField("_crazyDaveStartIndex"), Is.EqualTo(-1));

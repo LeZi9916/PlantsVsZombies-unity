@@ -17,7 +17,7 @@ namespace PlantsVsZombies.Progression
         /// <param name = "consumable">The consumable.</param>
         /// <param name = "icon">The icon.</param>
         /// <returns>The resulting i.</returns>
-        private static ShopItem I(int id, string name, int price, int level = 25, bool after = false, bool garden = false, bool consumable = false, string icon = null)
+        private static ShopItem I(int id, string name, int price, int level = 25, bool after = false, bool garden = false, bool consumable = false, string? icon = null)
         {
             return new ShopItem
             {
@@ -116,34 +116,69 @@ namespace PlantsVsZombies.Progression
         /// <param name = "p">The p.</param>
         /// <param name = "utc">The utc.</param>
         /// <returns>The resulting sold out.</returns>
-        public static bool SoldOut(ShopItem item, PlayerAccount p, long utc)
+        public static bool SoldOut(ShopItem item, PlayerAccount? p, long utc)
         {
             if (item.Id == 21)
             {
+                if (p == null)
+                {
+                    throw new System.ArgumentNullException(nameof(p));
+                }
+
                 return p.PurchaseCount(21) >= 4;
             }
 
             if (item.Id >= 10 && item.Id <= 12)
             {
+                if (p == null)
+                {
+                    throw new System.ArgumentNullException(nameof(p));
+                }
+
                 return p.PurchaseCount(item.Id) == (int)(utc / 86400) || p.Plants.Count >= 32;
             }
 
             if (item.Id == 14 || item.Id == 15)
             {
+                if (p == null)
+                {
+                    throw new System.ArgumentNullException(nameof(p));
+                }
+
                 return p.PurchaseCount(item.Id) > 15;
             }
 
             if (item.Id == 24)
             {
+                if (p == null)
+                {
+                    throw new System.ArgumentNullException(nameof(p));
+                }
+
                 return p.PurchaseCount(24) > 0;
             }
 
             if (item.Id == 28)
             {
+                if (p == null)
+                {
+                    throw new System.ArgumentNullException(nameof(p));
+                }
+
                 return p.PurchaseCount(28) >= 10;
             }
 
-            return !item.Consumable && p.PurchaseCount(item.Id) > 0;
+            if (item.Consumable)
+            {
+                return false;
+            }
+
+            if (p == null)
+            {
+                throw new System.ArgumentNullException(nameof(p));
+            }
+
+            return p.PurchaseCount(item.Id) > 0;
         }
     }
 }

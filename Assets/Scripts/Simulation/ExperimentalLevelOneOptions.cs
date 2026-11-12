@@ -39,20 +39,20 @@ namespace PlantsVsZombies.Simulation
         /// simulation's shared System.Random. Each result must be in [0, bound).
         /// This does not reproduce the EXE's global RNG sequence.
         /// </summary>
-        public Func<int, int> NativeSkySunRandomDraw;
+        public Func<int, int>? NativeSkySunRandomDraw;
         /// <summary>
         /// Optional replacement for the fixed inter-wave delay. Called after a
         /// batch is dispatched with its zero-based index, except after the last
         /// batch. The result must be finite and nonnegative; zero still waits
         /// until the next simulation tick.
         /// </summary>
-        public Func<GameSimulation, int, double> BetweenWaveDelay;
+        public Func<GameSimulation, int, double>? BetweenWaveDelay;
         /// <summary>
         /// Optional completion policy, evaluated only after all four batches
         /// have been dispatched. Null uses the provisional immediate-win rule:
         /// the simulation's zombie list is empty. No reward is created.
         /// </summary>
-        public Func<GameSimulation, bool> CompletionCondition;
+        public Func<GameSimulation, bool>? CompletionCondition;
         /// <summary>
         /// Optional replacement for the approximate single-row sky-sun
         /// creation. It must return a non-null sun with finite coordinates.
@@ -60,6 +60,6 @@ namespace PlantsVsZombies.Simulation
         /// repetition and can disable sky sun.
         /// The supplied Random is the simulation's shared random source.
         /// </summary>
-        public Func<GameSimulation, Random, global::PlantsVsZombies.Simulation.Sun> SkySunFactory;
+        public Func<GameSimulation, Random, global::PlantsVsZombies.Simulation.Sun>? SkySunFactory;
     }
 }

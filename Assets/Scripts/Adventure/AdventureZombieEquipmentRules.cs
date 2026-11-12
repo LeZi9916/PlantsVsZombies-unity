@@ -52,7 +52,7 @@ namespace PlantsVsZombies.Adventure
         /// <summary>Performs helm track.</summary>
         /// <param name = "type">The type.</param>
         /// <returns>The resulting helm track.</returns>
-        public static string HelmTrack(int type)
+        public static string? HelmTrack(int type)
         {
             switch (type)
             {
@@ -77,7 +77,7 @@ namespace PlantsVsZombies.Adventure
         /// <param name = "type">The type.</param>
         /// <param name = "stage">The stage.</param>
         /// <returns>The resulting helm image.</returns>
-        public static string HelmImage(int type, int stage)
+        public static string? HelmImage(int type, int stage)
         {
             if (stage == 0)
             {
@@ -106,7 +106,7 @@ namespace PlantsVsZombies.Adventure
         /// <summary>Performs shield track.</summary>
         /// <param name = "z">The z.</param>
         /// <returns>The resulting shield track.</returns>
-        public static string ShieldTrack(Zombie z)
+        public static string? ShieldTrack(Zombie z)
         {
             return z.Kind == ZombieKind.ScreenDoor ? "anim_screendoor" : z.Kind == ZombieKind.Newspaper ? "Zombie_paper_paper" : z.Kind == ZombieKind.Ladder ? "Zombie_ladder_1" : null;
         }
@@ -115,7 +115,7 @@ namespace PlantsVsZombies.Adventure
         /// <param name = "z">The z.</param>
         /// <param name = "stage">The stage.</param>
         /// <returns>The resulting shield image.</returns>
-        public static string ShieldImage(Zombie z, int stage)
+        public static string? ShieldImage(Zombie z, int stage)
         {
             if (stage == 0)
             {
@@ -155,7 +155,7 @@ namespace PlantsVsZombies.Adventure
         public static bool TrackVisible(Zombie z, string track)
         {
             var helm = HelmType(z);
-            string h = HelmTrack(helm), shield = ShieldTrack(z);
+            string? h = HelmTrack(helm), shield = ShieldTrack(z);
             if (helm > 0 && helm < 8 && h != null && Same(track, h) && z.ArmorHealth <= 0)
             {
                 return false;
@@ -180,7 +180,7 @@ namespace PlantsVsZombies.Adventure
         /// <param name = "body">The body.</param>
         /// <param name = "track">The track.</param>
         /// <returns>The resulting image.</returns>
-        public static string Image(Zombie z, string asset, string body, string track)
+        public static string? Image(Zombie z, string asset, string body, string track)
         {
             var helm = HelmType(z);
             var bodyTrack = Same(asset, body);
@@ -203,7 +203,7 @@ namespace PlantsVsZombies.Adventure
         /// <param name = "a">The a.</param>
         /// <param name = "b">The b.</param>
         /// <returns>The resulting same.</returns>
-        private static bool Same(string a, string b)
+        private static bool Same(string a, string? b)
         {
             return string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
         }

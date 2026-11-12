@@ -27,7 +27,7 @@ namespace PlantsVsZombies.Adventure
         /// <param name = "kind">The kind.</param>
         /// <param name = "clip">The clip.</param>
         /// <returns>The resulting fall phase.</returns>
-        public static float FallPhase(int kind, string clip)
+        public static float FallPhase(int kind, string? clip)
         {
             if (kind == 11 || kind == 12 || kind == 14 || kind == 20 || kind == 22 || kind == 24 || kind == 25)
             {

@@ -87,8 +87,8 @@ namespace PlantsVsZombies.Tests.PlayMode
         [TearDown]
         public void TearDown()
         {
-            _game._animations.Dispose();
-            _game._selectorView.Dispose();
+            _game.RequiredAnimations.Dispose();
+            _game.RequiredSelectorView.Dispose();
             _presenter.Dispose();
             UnityEngine.Object.DestroyImmediate(_clip);
             UnityEngine.Object.DestroyImmediate(_audioHost);
@@ -102,13 +102,13 @@ namespace PlantsVsZombies.Tests.PlayMode
         [TestCase(false)]
         public void SaleWaitsForConfirmationAndUsesOriginalSubstitutions(bool accept)
         {
-            var plant = _game.Accounts._accountStore.Get(_profile).Plants[0];
+            var plant = _game.Accounts.RequiredAccountStore.Get(_profile).Plants[0];
             Invoke("HandleProgressionClick", _game.Garden.GardenPlantRect(plant).center);
             Assert.That(_game.Garden._gardenSalePlant, Is.EqualTo(_plant));
             Assert.That(_game.Dave._crazyDaveMessageIndex, Is.EqualTo(1700));
             Assert.That(_game.Dave._crazyDaveText, Is.EqualTo("Offer $150 for Sprout."));
-            Assert.That(_game.Accounts._accountStore.Get(_profile).Plants.Count, Is.EqualTo(1));
-            Assert.That(_game.Accounts._accountStore.Get(_profile).Coins, Is.EqualTo(10));
+            Assert.That(_game.Accounts.RequiredAccountStore.Get(_profile).Plants.Count, Is.EqualTo(1));
+            Assert.That(_game.Accounts.RequiredAccountStore.Get(_profile).Coins, Is.EqualTo(10));
             var rect = accept ? ZenGardenController.s_gardenSaleYes : ZenGardenController.s_gardenSaleNo;
             var input = new GameInputSnapshot(rect.center, true, true, false, true, false, 0, false, false);
             typeof(GameInput).GetProperty("Current")!.GetSetMethod(true)!.Invoke(null, new object[] { input });
@@ -124,12 +124,12 @@ namespace PlantsVsZombies.Tests.PlayMode
         [Test]
         public void MaturePlantUsesItsLocalizedNameAndNativePrice()
         {
-            _game.Accounts._accountStore.Import(_profile, 10, new int[80], new int[100], 0,
+            _game.Accounts.RequiredAccountStore.Import(_profile, 10, new int[80], new int[100], 0,
                 new[] { new GardenPlant { Id = _plant, Kind = PlantKind.Peashooter, Growth = 3, Garden = GardenKind.Greenhouse, Slot = 0 } });
-            var plant = _game.Accounts._accountStore.Get(_profile).Plants[0];
+            var plant = _game.Accounts.RequiredAccountStore.Get(_profile).Plants[0];
             Invoke("HandleProgressionClick", _game.Garden.GardenPlantRect(plant).center);
             Assert.That(_game.Dave._crazyDaveText, Is.EqualTo("Offer $800 for Peashooter."));
-            Assert.That(_game.Accounts._accountStore.Get(_profile).Plants.Count, Is.EqualTo(1));
+            Assert.That(_game.Accounts.RequiredAccountStore.Get(_profile).Plants.Count, Is.EqualTo(1));
         }
 
         /// <summary>Reads a private production dependency.</summary>

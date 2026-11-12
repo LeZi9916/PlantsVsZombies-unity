@@ -115,20 +115,20 @@ namespace PlantsVsZombies.Tests.PlayMode
                 try
                 {
                     draw.Invoke(presenter, new object[] { PlantKind.Peashooter, new Rect(79, 6, 50, 70), false });
-                    var tooltip = owner._originalTooltip;
+                    var tooltip = owner.RequiredOriginalTooltip;
                     Assert.That(tooltip, Is.Not.Null);
                     Assert.That(tooltip.LastError, Is.Null, "The original combat tooltip must lay out with native bitmap fonts.");
                     Assert.That(tooltip.LastLayout, Is.Not.Null);
-                    Assert.That(tooltip.LastLayout.BodyLines, Is.Empty, "Combat hover must not display the plant description.");
-                    Assert.That(tooltip.LastLayout._title.Glyphs.Count, Is.GreaterThan(0), "Combat keeps the original plant name.");
-                    Assert.That(tooltip.LastLayout._warning.Glyphs.Count, Is.GreaterThan(0), "Combat keeps the original insufficient-sun warning.");
+                    Assert.That(tooltip.RequiredLastLayout.BodyLines, Is.Empty, "Combat hover must not display the plant description.");
+                    Assert.That(tooltip.RequiredLastLayout.RequiredTitle.Glyphs.Count, Is.GreaterThan(0), "Combat keeps the original plant name.");
+                    Assert.That(tooltip.RequiredLastLayout.RequiredWarning.Glyphs.Count, Is.GreaterThan(0), "Combat keeps the original insufficient-sun warning.");
                     draw.Invoke(presenter, new object[] { PlantKind.Peashooter, new Rect(36, 154, 50, 70), true });
                     Assert.That(tooltip.LastError, Is.Null);
-                    Assert.That(tooltip.LastLayout.BodyLines.Count, Is.GreaterThan(0), "The seed chooser retains the original plant description.");
-                    var body = Regex.Replace(string.Join(" ", tooltip.LastLayout.BodyLines), "\\s", "");
+                    Assert.That(tooltip.RequiredLastLayout.BodyLines.Count, Is.GreaterThan(0), "The seed chooser retains the original plant description.");
+                    var body = Regex.Replace(string.Join(" ", tooltip.RequiredLastLayout.BodyLines), "\\s", "");
                     var expected = Regex.Replace(presenter.OriginalProgressionText("PEASHOOTER_TOOLTIP"), "\\s", "");
                     Assert.That(body, Is.EqualTo(expected), "The chooser uses only the original LawnStrings description.");
-                    Assert.That(tooltip.LastLayout._warning.Glyphs, Is.Empty, "The chooser does not show a combat availability warning.");
+                    Assert.That(tooltip.RequiredLastLayout.RequiredWarning.Glyphs, Is.Empty, "The chooser does not show a combat availability warning.");
                 }
                 finally
                 {

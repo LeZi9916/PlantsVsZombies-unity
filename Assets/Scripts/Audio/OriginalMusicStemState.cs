@@ -14,6 +14,6 @@ namespace PlantsVsZombies.Audio
         /// <summary>Stores start dsp, end dsp.</summary>
         public double startDsp, endDsp;
         /// <summary>Stores voices.</summary>
-        public OriginalMusicVoiceState[] voices;
+        public OriginalMusicVoiceState[] voices = System.Array.Empty<OriginalMusicVoiceState>();
     }
 }

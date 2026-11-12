@@ -21,13 +21,21 @@ namespace PlantsVsZombies.Adventure
         }
 
         /// <summary>Stores adventure store.</summary>
-        internal AdventureProgressStore _adventureStore;
+        internal AdventureProgressStore? _adventureStore;
+
+        /// <summary>Gets the adventure store, which must already exist wherever it is used.</summary>
+        /// <exception cref="System.InvalidOperationException">The member is not available.</exception>
+        internal AdventureProgressStore RequiredAdventureStore => _adventureStore ?? throw new System.InvalidOperationException("The member '_adventureStore' is not available.");
         /// <summary>Stores adventure campaign.</summary>
-        internal AdventureCampaign _adventureCampaign;
+        internal AdventureCampaign? _adventureCampaign;
+
+        /// <summary>Gets the adventure campaign, which must already exist wherever it is used.</summary>
+        /// <exception cref="System.InvalidOperationException">The member is not available.</exception>
+        internal AdventureCampaign RequiredAdventureCampaign => _adventureCampaign ?? throw new System.InvalidOperationException("The member '_adventureCampaign' is not available.");
         /// <summary>Stores adventure save path.</summary>
-        private string _adventureSavePath;
+        private string? _adventureSavePath;
         /// <summary>Stores adventure load error.</summary>
-        private string _adventureLoadError;
+        private string? _adventureLoadError;
         /// <summary>Stores adventure test board.</summary>
         internal bool _adventureTestBoard;
         /// <summary>Gets or sets use legacy board.</summary>
@@ -94,7 +102,7 @@ namespace PlantsVsZombies.Adventure
             try
             {
                 _adventureCampaign = new AdventureCampaign(_adventureStore, _owner._profiles.SelectedId.Value, _owner.Accounts._accountStore);
-                if (_owner.Accounts.GetSelectedAccount().ZenGardenTutorialStage > 0)
+                if (_owner.Accounts.RequiredGetSelectedAccount().ZenGardenTutorialStage > 0)
                 {
                     _owner.Garden.OpenZenGardenForAdventureIntro();
                     return true;
@@ -102,13 +110,13 @@ namespace PlantsVsZombies.Adventure
 
                 if (_adventureCampaign.Progress.Completed)
                 {
-                    _adventureStore.StartNextCycle(_owner._profiles.SelectedId.Value);
+                    RequiredAdventureStore.StartNextCycle(_owner._profiles.SelectedId.Value);
                 }
 
                 _adventureTestBoard = false;
                 AttachAdventureGame(_adventureCampaign.BeginOrResume());
                 _owner._currentView = PvZGame.ScreenView.Board;
-                var account = _owner.Accounts.GetSelectedAccount();
+                var account = _owner.Accounts.RequiredGetSelectedAccount();
                 if (_adventureCampaign.Progress.NextLevel == 35 && account.HasPendingTacoReward && !account.TacoDiamondPresented)
                 {
                     _owner.Store.OpenStoreForAdventureIntro(601);
@@ -127,29 +135,29 @@ namespace PlantsVsZombies.Adventure
         /// <summary>Performs attach adventure game.</summary>
         /// <param name = "simulation">The simulation.</param>
         /// <param name="isRestart">Whether this board follows a loss or an explicit restart.</param>
-        internal void AttachAdventureGame(GameSimulation simulation, bool isRestart = false)
+        internal void AttachAdventureGame(GameSimulation? simulation, bool isRestart = false)
         {
             _owner._game = simulation;
             _owner.AdventureBoard._hammerAnimationAge = 1f;
             _owner.Opening._adventureOpeningIsRestart = isRestart;
-            _owner._animations.ResetNativePlayback();
-            _owner._game.EventRaised = _owner.Sounds.PlaySound;
-            _owner._game.Adventure.NoticeRaised = AdventureNotice;
-            _owner._game.Adventure.VaseInterludeDialogueEnabled = true;
+            _owner.RequiredAnimations.ResetNativePlayback();
+            _owner.RequiredGame.EventRaised = _owner.Sounds.PlaySound;
+            _owner.RequiredGame.Adventure.NoticeRaised = AdventureNotice;
+            _owner.RequiredGame.Adventure.VaseInterludeDialogueEnabled = true;
             _owner.WaveNotices.InitializeAdventureWaveNotices();
             _owner._deck.Clear();
-            foreach (PlantKind seed in _owner._game.Adventure.SelectedSeeds)
+            foreach (PlantKind seed in _owner.RequiredGame.Adventure.SelectedSeeds)
             {
                 _owner._deck.Add(seed);
             }
 
-            if (_owner.IndependentModes._modeSession == null && _owner._game.Adventure.Level.Mode == AdventureMode.WhackAZombie)
+            if (_owner.IndependentModes._modeSession == null && _owner.RequiredGame.Adventure.Level.Mode == AdventureMode.WhackAZombie)
             {
                 _owner._deck.AddRange(new[] { PlantKind.PotatoMine, PlantKind.GraveBuster, PlantKind.CherryBomb });
             }
 
-            _owner._choosingSeeds = _owner._game.Adventure.Phase == AdventurePhase.ChoosingSeeds;
-            _owner._pendingSeeds = new AdventureSeedChooserState(_owner._game.Adventure.SelectedSeeds);
+            _owner._choosingSeeds = _owner.RequiredGame.Adventure.Phase == AdventurePhase.ChoosingSeeds;
+            _owner._pendingSeeds = new AdventureSeedChooserState(_owner.RequiredGame.Adventure.SelectedSeeds);
             _owner._selected = -1;
             _owner.AdventureBoard._selectedAdventurePacket = -1;
             _owner._shovel = false;
@@ -163,13 +171,13 @@ namespace PlantsVsZombies.Adventure
         {
             if (_adventureTestBoard)
             {
-                StartAdventureTestLevel(_owner._game.Adventure.Level.Number);
+                StartAdventureTestLevel(_owner.RequiredGame.Adventure.Level.Number);
                 return;
             }
 
             try
             {
-                AttachAdventureGame(_adventureCampaign.BeginOrResume(), isRestart: true);
+                AttachAdventureGame(RequiredAdventureCampaign.BeginOrResume(), isRestart: true);
             }
             catch (Exception error)
             {
@@ -181,7 +189,7 @@ namespace PlantsVsZombies.Adventure
         /// <param name = "number">The number.</param>
         /// <param name = "access">The access.</param>
         /// <exception cref = "InvalidOperationException">The operation cannot satisfy its preconditions.</exception>
-        internal void StartAdventureTestLevel(int number, AdventureSeedAccess access = null)
+        internal void StartAdventureTestLevel(int number, AdventureSeedAccess? access = null)
         {
             if (!_owner._smokeMode)
             {
@@ -205,14 +213,14 @@ namespace PlantsVsZombies.Adventure
             if (notice.Kind == AdventureNoticeKind.CoinCollectionStarted)
             {
                 _owner.Sounds.PlayAdventureCoinPickupSound((AdventureCoinKind)notice.Value);
-                _owner._presenter.ShowWalletUntil(_owner._game.Elapsed + 10f);
+                _owner._presenter.ShowWalletUntil(_owner.RequiredGame.Elapsed + 10f);
             }
 
             if (notice.Kind == AdventureNoticeKind.CoinCollected)
             {
                 _owner.IndependentModes._modeAccountSnapshot = null;
                 _owner.Accounts._displayAccountSnapshot = null;
-                _owner._presenter.ShowWalletUntil(_owner._game.Elapsed + 10f);
+                _owner._presenter.ShowWalletUntil(_owner.RequiredGame.Elapsed + 10f);
             }
 
             if (notice.Kind == AdventureNoticeKind.CoinCollectionFailed)

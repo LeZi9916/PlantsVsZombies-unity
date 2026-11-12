@@ -11,12 +11,12 @@ namespace PlantsVsZombies.Adventure
         /// <summary>Stores source rate.</summary>
         public readonly float SourceRate;
         /// <summary>Stores ground.</summary>
-        public readonly float[] Ground;
+        public readonly float[]? Ground;
         /// <summary>Initializes adventure zombie ground clip.</summary>
         /// <param name = "count">The count.</param>
         /// <param name = "rate">The rate.</param>
         /// <param name = "ground">The ground.</param>
-        public AdventureZombieGroundClip(int count, float rate, float[] ground)
+        public AdventureZombieGroundClip(int count, float rate, float[]? ground)
         {
             Count = count;
             SourceRate = rate;

@@ -90,7 +90,7 @@ namespace PlantsVsZombies.Adventure
         /// <summary>Performs head image.</summary>
         /// <param name = "kind">The kind.</param>
         /// <returns>The resulting head image.</returns>
-        public static string HeadImage(int kind)
+        public static string? HeadImage(int kind)
         {
             // PC 0x54581A..0x5458D9, image globals resolved against the PC resource loader.
             switch (kind)

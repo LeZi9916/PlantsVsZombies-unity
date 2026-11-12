@@ -119,6 +119,10 @@ namespace PlantsVsZombies.Profiles
             }
         }
 
+        /// <summary>Gets the selected id, which must already exist wherever it is used.</summary>
+        /// <exception cref="System.InvalidOperationException">The member is not available.</exception>
+        public Guid RequiredSelectedId => SelectedId ?? throw new System.InvalidOperationException("The member 'SelectedId' is not available.");
+
         /// <summary>Creates and selects a profile, and persists the change.</summary>
         /// <param name="name">The display name to trim and validate before checking uniqueness.</param>
         /// <returns>The immutable snapshot of the newly selected profile.</returns>

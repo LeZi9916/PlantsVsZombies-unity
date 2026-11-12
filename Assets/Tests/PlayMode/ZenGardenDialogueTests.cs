@@ -95,12 +95,12 @@ namespace PlantsVsZombies.Tests.PlayMode
         {
             Invoke("OpenZenGarden");
             Assert.That(_game.Dave._crazyDaveMessageIndex, Is.EqualTo(2100));
-            Assert.That(_game.Accounts._accountStore.Get(_profile).Plants.Count, Is.Zero);
+            Assert.That(_game.Accounts.RequiredAccountStore.Get(_profile).Plants.Count, Is.Zero);
             Invoke("AdvanceZenGardenIntroduction");
             Assert.That(_game.Dave._crazyDaveMessageIndex, Is.EqualTo(2101));
-            Assert.That(_game.Accounts._accountStore.Get(_profile).Plants.Count, Is.Zero);
+            Assert.That(_game.Accounts.RequiredAccountStore.Get(_profile).Plants.Count, Is.Zero);
             Invoke("AdvanceZenGardenIntroduction");
-            var account = _game.Accounts._accountStore.Get(_profile);
+            var account = _game.Accounts.RequiredAccountStore.Get(_profile);
             Assert.That(_game.Dave._crazyDaveMessageIndex, Is.EqualTo(2102));
             Assert.That(account.Plants.Count, Is.EqualTo(2));
             Assert.That(account.Plants[0].FeedingsPerGrow, Is.EqualTo(3));
@@ -114,7 +114,7 @@ namespace PlantsVsZombies.Tests.PlayMode
             Assert.That(_game.Garden._gardenTutorialStage, Is.EqualTo(1));
             Assert.That(new PlayerAccountStore(Path.Combine(_root, "fixture.account")).Get(_profile).GardenGiftClaimed, Is.True);
             Invoke("OpenZenGarden");
-            Assert.That(_game.Accounts._accountStore.Get(_profile).Plants.Count, Is.EqualTo(2));
+            Assert.That(_game.Accounts.RequiredAccountStore.Get(_profile).Plants.Count, Is.EqualTo(2));
         }
 
         /// <summary>Restores an interrupted garden tutorial without repeating Dave's seedling gift.</summary>
@@ -127,7 +127,7 @@ namespace PlantsVsZombies.Tests.PlayMode
             Invoke("AdvanceZenGardenIntroduction");
             Invoke("AdvanceZenGardenIntroduction");
             Invoke("AdvanceZenGardenIntroduction");
-            _game.Accounts._accountStore.SetZenGardenTutorialStage(_profile, 3);
+            _game.Accounts.RequiredAccountStore.SetZenGardenTutorialStage(_profile, 3);
             _game.Accounts._accountStore = new PlayerAccountStore(Path.Combine(_root, "fixture.account"));
             Invoke("OpenZenGarden");
             Assert.That(_game.Garden._gardenDaveIntroActive, Is.False);
@@ -150,7 +150,7 @@ namespace PlantsVsZombies.Tests.PlayMode
                 Invoke("AdvanceZenGardenIntroduction");
             }
 
-            _game.Accounts._accountStore.GrantZenGardenTutorialFertilizer(_profile);
+            _game.Accounts.RequiredAccountStore.GrantZenGardenTutorialFertilizer(_profile);
             _game.Accounts._accountStore = new PlayerAccountStore(Path.Combine(_root, "fixture.account"));
             Invoke("OpenZenGarden");
             Assert.That(_game._currentView, Is.EqualTo(PvZGame.ScreenView.Store));
@@ -170,7 +170,7 @@ namespace PlantsVsZombies.Tests.PlayMode
             }
 
             Click(new Vector2(20, 20));
-            var plants = _game.Accounts._accountStore.Get(_profile).Plants;
+            var plants = _game.Accounts.RequiredAccountStore.Get(_profile).Plants;
             var first = plants[0].Id;
             var second = plants[1].Id;
             for (var index = 0; index < 3; index++)
@@ -182,7 +182,7 @@ namespace PlantsVsZombies.Tests.PlayMode
             GameMemberReflection.SetField(_game, "_gardenUpdateUtc", -1L);
             Invoke("UpdateProgression");
             Assert.That(_game.Garden._gardenTutorialStage, Is.EqualTo(4));
-            Assert.That(_game.Accounts._accountStore.Get(_profile).Plants[1].Waterings, Is.Zero);
+            Assert.That(_game.Accounts.RequiredAccountStore.Get(_profile).Plants[1].Waterings, Is.Zero);
             Click(new Vector2(700, 560));
             Assert.That(_game._currentView, Is.EqualTo(PvZGame.ScreenView.Store));
             GameMemberReflection.SetField(_game, "_storeIntroPending", -1);
@@ -197,15 +197,15 @@ namespace PlantsVsZombies.Tests.PlayMode
                 ClearFixtureCareDelay();
             }
 
-            Assert.That(_game.Accounts._accountStore.Get(_profile).Plants[1].Waterings, Is.EqualTo(3));
+            Assert.That(_game.Accounts.RequiredAccountStore.Get(_profile).Plants[1].Waterings, Is.EqualTo(3));
             Click(new Vector2(100, 20));
             ClickPlant(first);
             ClickPlant(second);
             Assert.That(_game.Garden._gardenTutorialStage, Is.EqualTo(6));
             Click(new Vector2(700, 20));
             Assert.That(_game._currentView, Is.EqualTo(PvZGame.ScreenView.Board));
-            Assert.That(_game._game.Adventure.Level.Number, Is.EqualTo(45));
-            Assert.That(_game.Accounts._accountStore.Get(_profile).ZenGardenTutorialStage, Is.Zero);
+            Assert.That(_game.RequiredGame.Adventure.Level.Number, Is.EqualTo(45));
+            Assert.That(_game.Accounts.RequiredAccountStore.Get(_profile).ZenGardenTutorialStage, Is.Zero);
         }
 
         /// <summary>Checks that genuine pointer input cannot select the sale tool during the required tutorial.</summary>
@@ -223,14 +223,14 @@ namespace PlantsVsZombies.Tests.PlayMode
                 Invoke("AdvanceZenGardenIntroduction");
             }
 
-            _game.Accounts._accountStore.SetZenGardenTutorialStage(_profile, storedStage);
+            _game.Accounts.RequiredAccountStore.SetZenGardenTutorialStage(_profile, storedStage);
             Invoke("OpenZenGarden");
-            var firstPlant = _game.Accounts._accountStore.Get(_profile).Plants[0];
+            var firstPlant = _game.Accounts.RequiredAccountStore.Get(_profile).Plants[0];
             SendPointer(new Vector2(420, 20));
             Assert.That(_game.Garden._gardenTool, Is.Not.EqualTo(GardenTool.Sell));
             SendPointer(_game.Garden.GardenPlantRect(firstPlant).center);
             Assert.That(_game.Garden._gardenSalePlant.HasValue, Is.False);
-            Assert.That(_game.Accounts._accountStore.Get(_profile).Plants.Count, Is.EqualTo(2));
+            Assert.That(_game.Accounts.RequiredAccountStore.Get(_profile).Plants.Count, Is.EqualTo(2));
         }
 
         /// <summary>Dispatches a primary-pointer press through the production input route.</summary>
@@ -253,7 +253,7 @@ namespace PlantsVsZombies.Tests.PlayMode
         /// <param name="plantId">The stable plant identifier.</param>
         private void ClickPlant(Guid plantId)
         {
-            foreach (var plant in _game.Accounts._accountStore.Get(_profile).Plants)
+            foreach (var plant in _game.Accounts.RequiredAccountStore.Get(_profile).Plants)
             {
                 if (plant.Id == plantId)
                 {
@@ -268,13 +268,13 @@ namespace PlantsVsZombies.Tests.PlayMode
         /// <summary>Advances fixture care time without waiting for wall-clock cooldowns.</summary>
         private void ClearFixtureCareDelay()
         {
-            var account = _game.Accounts._accountStore.Get(_profile);
+            var account = _game.Accounts.RequiredAccountStore.Get(_profile);
             foreach (var plant in account.Plants)
             {
                 plant.NextCareUtc = 0;
             }
 
-            _game.Accounts._accountStore.Import(_profile, account.Coins, account._purchases, account._modeRecords, account.TreeHeight, account.Plants,
+            _game.Accounts.RequiredAccountStore.Import(_profile, account.Coins, account._purchases, account._modeRecords, account.TreeHeight, account.Plants,
                 account.MinigamesUnlocked, account.PuzzleUnlocked, account.SurvivalUnlocked, account.PacketUpgradeDeclines,
                 account.TreeFoodGiftClaimed, account.GardenGiftClaimed);
         }

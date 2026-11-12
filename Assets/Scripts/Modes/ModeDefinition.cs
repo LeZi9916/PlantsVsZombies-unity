@@ -8,7 +8,7 @@ namespace PlantsVsZombies.Modes
         /// <summary>Gets or sets id.</summary>
         public int Id { get; internal set; }
         /// <summary>Gets or sets name.</summary>
-        public string Name { get; internal set; }
+        public string Name { get; internal set; } = string.Empty;
 
         /// <summary>Gets or sets record index.</summary>
         public int RecordIndex

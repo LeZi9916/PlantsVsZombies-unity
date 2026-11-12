@@ -51,7 +51,7 @@ namespace PlantsVsZombies.Tests.PlayMode
                     owner._game = new GameSimulation(new GameRules { AdventureLevel = 8 }, 7529);
                     Assert.That(owner._game.ChooseDefaultAdventureSeeds(), Is.True);
                     owner._game.Mowers.Clear();
-                    var coin = owner._game.SpawnAdventureCoin(kind, 5f, 2f);
+                    var coin = owner._game.RequiredSpawnAdventureCoin(kind, 5f, 2f);
                     Assert.That(owner._game.CollectAdventureCoin(coin), Is.True);
                     for (var frame = 0; frame < 2; frame++)
                     {

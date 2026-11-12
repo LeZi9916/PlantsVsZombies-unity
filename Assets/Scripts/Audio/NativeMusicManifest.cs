@@ -8,6 +8,6 @@ namespace PlantsVsZombies.Audio
     public sealed class NativeMusicManifest
     {
         /// <summary>Stores clips.</summary>
-        public NativeMusicClip[] clips;
+        public NativeMusicClip[]? clips;
     }
 }

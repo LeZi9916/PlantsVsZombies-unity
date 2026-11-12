@@ -179,40 +179,72 @@ namespace PlantsVsZombies.Game
         };
 
         /// <summary>Stores game.</summary>
-        internal GameSimulation _game;
+        internal GameSimulation? _game;
+
+        /// <summary>Gets the game, which must already exist wherever it is used.</summary>
+        /// <exception cref="System.InvalidOperationException">The member is not available.</exception>
+        internal GameSimulation RequiredGame => _game ?? throw new System.InvalidOperationException("The member '_game' is not available.");
         /// <summary>Stores animations.</summary>
-        internal ReanimationRenderer _animations;
+        internal ReanimationRenderer? _animations;
+
+        /// <summary>Gets the animations, which must already exist wherever it is used.</summary>
+        /// <exception cref="System.InvalidOperationException">The member is not available.</exception>
+        internal ReanimationRenderer RequiredAnimations => _animations ?? throw new System.InvalidOperationException("The member '_animations' is not available.");
         /// <summary>Stores selector view.</summary>
-        internal SelectorView _selectorView;
+        internal SelectorView? _selectorView;
+
+        /// <summary>Gets the selector view, which must already exist wherever it is used.</summary>
+        /// <exception cref="System.InvalidOperationException">The member is not available.</exception>
+        internal SelectorView RequiredSelectorView => _selectorView ?? throw new System.InvalidOperationException("The member '_selectorView' is not available.");
         /// <summary>Stores options view.</summary>
-        internal OptionsView _optionsView;
+        internal OptionsView? _optionsView;
+
+        /// <summary>Gets the options view, which must already exist wherever it is used.</summary>
+        /// <exception cref="System.InvalidOperationException">The member is not available.</exception>
+        internal OptionsView RequiredOptionsView => _optionsView ?? throw new System.InvalidOperationException("The member '_optionsView' is not available.");
         /// <summary>Stores almanac view.</summary>
-        internal AlmanacView _almanacView;
+        internal AlmanacView? _almanacView;
+
+        /// <summary>Gets the almanac view, which must already exist wherever it is used.</summary>
+        /// <exception cref="System.InvalidOperationException">The member is not available.</exception>
+        internal AlmanacView RequiredAlmanacView => _almanacView ?? throw new System.InvalidOperationException("The member '_almanacView' is not available.");
         /// <summary>Stores mode view.</summary>
-        internal ModeSelectionView _modeView;
+        internal ModeSelectionView? _modeView;
+
+        /// <summary>Gets the mode view, which must already exist wherever it is used.</summary>
+        /// <exception cref="System.InvalidOperationException">The member is not available.</exception>
+        internal ModeSelectionView RequiredModeView => _modeView ?? throw new System.InvalidOperationException("The member '_modeView' is not available.");
         /// <summary>Stores help view.</summary>
-        internal HelpView _helpView;
+        internal HelpView? _helpView;
+
+        /// <summary>Gets the help view, which must already exist wherever it is used.</summary>
+        /// <exception cref="System.InvalidOperationException">The member is not available.</exception>
+        internal HelpView RequiredHelpView => _helpView ?? throw new System.InvalidOperationException("The member '_helpView' is not available.");
         /// <summary>Stores profiles.</summary>
-        internal ProfileCatalog _profiles;
+        internal ProfileCatalog? _profiles;
+
+        /// <summary>Gets the profiles, which must already exist wherever it is used.</summary>
+        /// <exception cref="System.InvalidOperationException">The member is not available.</exception>
+        internal ProfileCatalog RequiredProfiles => _profiles ?? throw new System.InvalidOperationException("The member '_profiles' is not available.");
         /// <summary>Stores profile dialog.</summary>
-        internal ProfileDialog _profileDialog;
+        internal ProfileDialog? _profileDialog;
         /// <summary>Stores options bitmap.</summary>
-        internal CanvasBitmapFont _optionsBitmap;
+        internal CanvasBitmapFont? _optionsBitmap;
         /// <summary>Stores mode title bitmap.</summary>
-        internal CanvasBitmapFont _modeTitleBitmap;
+        internal CanvasBitmapFont? _modeTitleBitmap;
         /// <summary>Stores mode label bitmap.</summary>
-        internal CanvasBitmapFont _modeLabelBitmap;
+        internal CanvasBitmapFont? _modeLabelBitmap;
         /// <summary>Stores sun counter bitmap.</summary>
-        internal CanvasBitmapFont _sunCounterBitmap;
+        internal CanvasBitmapFont? _sunCounterBitmap;
         /// <summary>Stores profile load error.</summary>
-        internal string _profileLoadError;
+        internal string? _profileLoadError;
         /// <summary>Stores current view.</summary>
         internal ScreenView _currentView = ScreenView.Selector;
 
         /// <summary>Stores font.</summary>
-        internal Font _font;
+        internal Font? _font;
         /// <summary>Stores root.</summary>
-        internal string _root;
+        internal string _root = string.Empty;
         /// <summary>Stores selected.</summary>
         internal int _selected = -1;
         /// <summary>Stores shovel.</summary>
@@ -220,11 +252,15 @@ namespace PlantsVsZombies.Game
         /// <summary>Stores choosing seeds.</summary>
         internal bool _choosingSeeds;
         /// <summary>Stores pending seeds.</summary>
-        internal AdventureSeedChooserState _pendingSeeds;
+        internal AdventureSeedChooserState? _pendingSeeds;
+
+        /// <summary>Gets the pending seeds, which must already exist wherever it is used.</summary>
+        /// <exception cref="System.InvalidOperationException">The member is not available.</exception>
+        internal AdventureSeedChooserState RequiredPendingSeeds => _pendingSeeds ?? throw new System.InvalidOperationException("The member '_pendingSeeds' is not available.");
         /// <summary>Stores unavailable feature.</summary>
-        internal string _unavailableFeature;
+        internal string? _unavailableFeature;
         /// <summary>Stores unavailable detail.</summary>
-        internal string _unavailableDetail = "尚未实现";
+        internal string? _unavailableDetail = "尚未实现";
         /// <summary>Stores smoke mode.</summary>
         internal bool _smokeMode;
 
@@ -363,19 +399,19 @@ namespace PlantsVsZombies.Game
             Music.UpdateProgressionMusicContext();
             UpdateProgression();
             SaveUtility.OpenWhenRequested();
-            if (_choosingSeeds && _pendingSeeds != null && _currentView == ScreenView.Board && !_optionsView.IsOpen
-                && !_confirmingQuit && _unavailableFeature == null && _game.State != MatchState.Paused)
+            if (_choosingSeeds && _pendingSeeds != null && _currentView == ScreenView.Board && !RequiredOptionsView.IsOpen
+                && !_confirmingQuit && _unavailableFeature == null && RequiredGame.State != MatchState.Paused)
             {
                 _pendingSeeds.Advance(Time.deltaTime);
             }
 
             var openingBlocksSimulation = Opening.UpdateAdventureOpening(Time.deltaTime);
             Opening.UpdateVaseInterlude(Time.deltaTime);
-            if (!openingBlocksSimulation && _currentView == ScreenView.Board && !_choosingSeeds && !_optionsView.IsOpen && (_profileDialog == null || !_profileDialog.IsOpen))
+            if (!openingBlocksSimulation && _currentView == ScreenView.Board && !_choosingSeeds && !RequiredOptionsView.IsOpen && (_profileDialog == null || !_profileDialog.IsOpen))
             {
                 if (!IndependentModes.TickModes(Time.deltaTime))
                 {
-                    _game.Update(Time.deltaTime);
+                    RequiredGame.Update(Time.deltaTime);
                 }
             }
 
@@ -396,7 +432,7 @@ namespace PlantsVsZombies.Game
                     || IndependentModes.IsModeBoard && IndependentModes._modeSession != null && IndependentModes._modeSession.Definition.Mechanic == ModeMechanic.Whack);
             var hidden = _currentView == ScreenView.Board && _game != null && _game.IsAdventure
                 && whackBoard
-                && !_optionsView.IsOpen && !_confirmingQuit && _unavailableFeature == null && !Loading._originalLoadingActive;
+                && !RequiredOptionsView.IsOpen && !_confirmingQuit && _unavailableFeature == null && !Loading._originalLoadingActive;
             var visible = !hidden;
             if (!_cursorVisibilityInitialized || UnityEngine.Cursor.visible != visible)
             {
@@ -544,9 +580,13 @@ namespace PlantsVsZombies.Game
         }
 
         /// <summary>Stores original tooltip.</summary>
-        internal OriginalTooltip _originalTooltip;
+        internal OriginalTooltip? _originalTooltip;
+
+        /// <summary>Gets the original tooltip, which must already exist wherever it is used.</summary>
+        /// <exception cref="System.InvalidOperationException">The member is not available.</exception>
+        internal OriginalTooltip RequiredOriginalTooltip => _originalTooltip ?? throw new System.InvalidOperationException("The member '_originalTooltip' is not available.");
         /// <summary>Stores tooltip inspection.</summary>
-        internal OriginalTooltipRequest _tooltipInspection;
+        internal OriginalTooltipRequest? _tooltipInspection;
 
         /// <summary>Retains native UI commands until the next game update.</summary>
         private Action? _pendingUiAction;

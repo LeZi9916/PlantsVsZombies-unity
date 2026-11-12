@@ -8,7 +8,7 @@ namespace PlantsVsZombies.Simulation
     public sealed class Pea
     {
         /// <summary>Stores presentation snow trail.</summary>
-        public global::PlantsVsZombies.Adventure.AdventureSnowTrail PresentationSnowTrail;
+        public global::PlantsVsZombies.Adventure.AdventureSnowTrail? PresentationSnowTrail;
         /// <summary>Stores presentation plant id.</summary>
         public int PresentationPlantId;
         /// <summary>Stores presentation age.</summary>

@@ -34,12 +34,12 @@ namespace PlantsVsZombies.Adventure
         /// <summary>Retires a selected conveyor packet after the simulation removes it.</summary>
         internal void NormalizeAdventureSelection()
         {
-            if (!_owner._game.IsAdventure)
+            if (!_owner.RequiredGame.IsAdventure)
             {
                 return;
             }
 
-            var board = _owner._game.Adventure;
+            var board = _owner.RequiredGame.Adventure;
             if (_selectedAdventurePacket >= 0)
             {
                 var exists = false;
@@ -61,7 +61,7 @@ namespace PlantsVsZombies.Adventure
         /// <summary>Stores selected adventure packet.</summary>
         internal int _selectedAdventurePacket = -1;
         /// <summary>Stores adventure feedback.</summary>
-        internal string _adventureFeedback;
+        internal string? _adventureFeedback;
         /// <summary>Stores adventure feedback until.</summary>
         internal float _adventureFeedbackUntil;
         /// <summary>Stores choosing imitater.</summary>
@@ -75,7 +75,7 @@ namespace PlantsVsZombies.Adventure
         /// <summary>The native update at which the sun display began its seventy-tick warning.</summary>
         private int _sunWarningStartTick;
         /// <summary>Gets the native update used by input feedback, which stops while the board is paused.</summary>
-        private int SeedFeedbackTick => _owner._game.IsAdventure ? _owner._game.Adventure._ticks : Mathf.FloorToInt(_owner._game.Elapsed * 100f);
+        private int SeedFeedbackTick => _owner.RequiredGame.IsAdventure ? _owner.RequiredGame.Adventure._ticks : Mathf.FloorToInt(_owner.RequiredGame.Elapsed * 100f);
         /// <summary>Gets whether the native insufficient-sun counter currently requests red text.</summary>
         internal bool SunMoneyWarningRed
         {
@@ -135,7 +135,7 @@ namespace PlantsVsZombies.Adventure
         /// <returns>The resulting adventure plant name.</returns>
         internal string AdventurePlantName(PlantKind kind)
         {
-            return kind == PlantKind.ExplodeONut ? "爆炸坚果" : _owner._almanacView.PlantDisplayName((int)kind);
+            return kind == PlantKind.ExplodeONut ? "爆炸坚果" : _owner.RequiredAlmanacView.PlantDisplayName((int)kind);
         }
 
         /// <summary>Performs contains required seed.</summary>
@@ -143,7 +143,7 @@ namespace PlantsVsZombies.Adventure
         /// <returns>The resulting contains required seed.</returns>
         internal bool ContainsRequiredSeed(PlantKind kind)
         {
-            foreach (var seed in _owner._game.Adventure.RequiredSeeds)
+            foreach (var seed in _owner.RequiredGame.Adventure.RequiredSeeds)
             {
                 if (seed == kind)
                 {
@@ -160,7 +160,7 @@ namespace PlantsVsZombies.Adventure
         internal string? AdventureTutorialText(AdventureTutorial tutorial)
         {
             var shovelPlants = 0;
-            foreach (var plant in _owner._game.Plants)
+            foreach (var plant in _owner.RequiredGame.Plants)
             {
                 if (plant.Kind == PlantKind.Peashooter && plant.Row == 2 && plant.Column >= 3 && plant.Column <= 5)
                 {
@@ -176,7 +176,7 @@ namespace PlantsVsZombies.Adventure
         /// <param name = "point">The point.</param>
         internal void HandleAdventureClick(Vector2 point)
         {
-            var board = _owner._game.Adventure;
+            var board = _owner.RequiredGame.Adventure;
             if (_owner.Opening.AdventureIntroActive && !_owner.Opening.AdventureIntroAwaitingSeeds)
             {
                 if (_owner.Opening._bowlingShovelLessonActive)
@@ -197,16 +197,16 @@ namespace PlantsVsZombies.Adventure
             {
                 var unlocked = board.AvailableSeeds;
                 var required = Math.Min(board.Level.PacketSlots, unlocked.Count);
-                _owner._pendingSeeds.LandFlyingSeeds();
+                _owner.RequiredPendingSeeds.LandFlyingSeeds();
                 if (_choosingImitater)
                 {
                     var targets = board.Level.UnlockedSeeds;
                     for (var i = 0; i < targets.Count; i++)
                     {
-                        if (_owner.Opening.AdventureCampaignChooserRect(targets[i]).Contains(point) && _owner._game.SetAdventureImitaterTarget(targets[i]))
+                        if (_owner.Opening.AdventureCampaignChooserRect(targets[i]).Contains(point) && _owner.RequiredGame.SetAdventureImitaterTarget(targets[i]))
                         {
                             var home = _owner.Opening.AdventureCampaignChooserRect(PlantKind.Imitater);
-                            _owner._pendingSeeds.Choose(PlantKind.Imitater, (int)home.x, (int)home.y, _owner.Layout.SeedBankCapacity);
+                            _owner.RequiredPendingSeeds.Choose(PlantKind.Imitater, (int)home.x, (int)home.y, _owner.Layout.SeedBankCapacity);
                             _owner.Sounds.PlayAdventureRewardSound("tap2.ogg");
                             _choosingImitater = false;
                             return;
@@ -235,7 +235,7 @@ namespace PlantsVsZombies.Adventure
                             return;
                         }
 
-                        if (!_owner._pendingSeeds.Contains(unlocked[i]) && _owner._pendingSeeds.Count < required)
+                        if (!_owner.RequiredPendingSeeds.Contains(unlocked[i]) && _owner.RequiredPendingSeeds.Count < required)
                         {
                             if (unlocked[i] == PlantKind.Imitater)
                             {
@@ -244,7 +244,7 @@ namespace PlantsVsZombies.Adventure
                             else
                             {
                                 var home = _owner.Opening.AdventureCampaignChooserRect(unlocked[i]);
-                                _owner._pendingSeeds.Choose(unlocked[i], (int)home.x, (int)home.y, _owner.Layout.SeedBankCapacity);
+                                _owner.RequiredPendingSeeds.Choose(unlocked[i], (int)home.x, (int)home.y, _owner.Layout.SeedBankCapacity);
                                 _owner.Sounds.PlayAdventureRewardSound("tap2.ogg");
                             }
                         }
@@ -253,13 +253,13 @@ namespace PlantsVsZombies.Adventure
                     }
                 }
 
-                if (_owner.Opening.AdventureChooserStartRect.Contains(point) && _owner._pendingSeeds.Count == required)
+                if (_owner.Opening.AdventureChooserStartRect.Contains(point) && _owner.RequiredPendingSeeds.Count == required)
                 {
                     var seeds = new List<PlantKind>(_owner._pendingSeeds);
 
                     try
                     {
-                        var chosen = _owner.Campaign._adventureTestBoard ? _owner._game.ChooseAdventureSeeds(seeds) : _owner.Campaign._adventureCampaign.ChooseSeeds(seeds);
+                        var chosen = _owner.Campaign._adventureTestBoard ? _owner.RequiredGame.ChooseAdventureSeeds(seeds) : _owner.Campaign.RequiredAdventureCampaign.ChooseSeeds(seeds);
                         if (chosen)
                         {
                             _owner._choosingSeeds = false;
@@ -283,7 +283,7 @@ namespace PlantsVsZombies.Adventure
                 return;
             }
 
-            if (_owner._game.State == MatchState.Lost)
+            if (_owner.RequiredGame.State == MatchState.Lost)
             {
                 if (new Rect(316, 340, 168, 48).Contains(point))
                 {
@@ -293,11 +293,11 @@ namespace PlantsVsZombies.Adventure
                 return;
             }
 
-            if (_owner._game.State == MatchState.Paused)
+            if (_owner.RequiredGame.State == MatchState.Paused)
             {
                 if (new Rect(316, 280, 168, 48).Contains(point))
                 {
-                    _owner._game.TogglePause();
+                    _owner.RequiredGame.TogglePause();
                 }
                 else if (new Rect(316, 340, 168, 48).Contains(point))
                 {
@@ -311,7 +311,7 @@ namespace PlantsVsZombies.Adventure
             {
                 if (_owner.Layout.AdventureCoinRect(board.Coins[i]).Contains(point))
                 {
-                    if (!_owner._game.CollectAdventureCoin(board.Coins[i]) && _owner.Campaign._adventureCampaign != null && _owner.Campaign._adventureCampaign.LastPersistenceError != null)
+                    if (!_owner.RequiredGame.CollectAdventureCoin(board.Coins[i]) && _owner.Campaign._adventureCampaign != null && _owner.Campaign._adventureCampaign.LastPersistenceError != null)
                     {
                         AdventureFeedback("金币尚未保存：" + _owner.Campaign._adventureCampaign.LastPersistenceError, 5f);
                     }
@@ -320,11 +320,11 @@ namespace PlantsVsZombies.Adventure
                 }
             }
 
-            for (var i = _owner._game.Suns.Count - 1; i >= 0; i--)
+            for (var i = _owner.RequiredGame.Suns.Count - 1; i >= 0; i--)
             {
-                if (_owner.Layout.AdventureSunRect(_owner._game.Suns[i]).Contains(point))
+                if (_owner.Layout.AdventureSunRect(_owner.RequiredGame.Suns[i]).Contains(point))
                 {
-                    _owner._game.CollectSun(_owner._game.Suns[i]);
+                    _owner.RequiredGame.CollectSun(_owner.RequiredGame.Suns[i]);
                     return;
                 }
             }
@@ -339,7 +339,7 @@ namespace PlantsVsZombies.Adventure
                         _selectedAdventurePacket = _selectedAdventurePacket == board.Packets[i].Id ? -1 : board.Packets[i].Id;
                         _owner._selected = -1;
                         _owner._shovel = false;
-                        _owner._game.CancelAdventureCobCannonAim();
+                        _owner.RequiredGame.CancelAdventureCobCannonAim();
                         return;
                     }
                 }
@@ -350,8 +350,8 @@ namespace PlantsVsZombies.Adventure
                 {
                     if (_owner.Layout.AdventureSeedRect(i).Contains(point))
                     {
-                        var context = _owner._game.AdventurePacketContext(_owner._deck[i]);
-                        if (AdventureSeedBankPresentation.CanPickUp(context) && (board.Level.Mode == AdventureMode.WhackAZombie || _owner._game.SelectAdventureSeed(_owner._deck[i])))
+                        var context = _owner.RequiredGame.AdventurePacketContext(_owner._deck[i]);
+                        if (AdventureSeedBankPresentation.CanPickUp(context) && (board.Level.Mode == AdventureMode.WhackAZombie || _owner.RequiredGame.SelectAdventureSeed(_owner._deck[i])))
                         {
                             _owner._selected = _owner._selected == i ? -1 : i;
                             _owner.Sounds.PlayPresentationSound("seedlift");
@@ -363,7 +363,7 @@ namespace PlantsVsZombies.Adventure
 
                         _owner._shovel = false;
                         _selectedAdventurePacket = -1;
-                        _owner._game.CancelAdventureCobCannonAim();
+                        _owner.RequiredGame.CancelAdventureCobCannonAim();
                         return;
                     }
                 }
@@ -375,26 +375,26 @@ namespace PlantsVsZombies.Adventure
                 _owner.Sounds.PlayPresentationSound("shovel");
                 _owner._selected = -1;
                 _selectedAdventurePacket = -1;
-                _owner._game.CancelAdventureCobCannonAim();
+                _owner.RequiredGame.CancelAdventureCobCannonAim();
                 return;
             }
 
             var col = Mathf.FloorToInt((point.x - BoardLayout.AdventureGridX) / BoardLayout.CellWidth);
             var row = Mathf.FloorToInt((point.y - BoardLayout.AdventureGridY - _owner.Layout.AdventureSlope(col)) / _owner.Layout.AdventurePitch);
-            if (col < 0 || col > 8 || row < 0 || row >= _owner._game.RowCount)
+            if (col < 0 || col > 8 || row < 0 || row >= _owner.RequiredGame.RowCount)
             {
                 return;
             }
 
             if (board.SelectedCobCannonId.HasValue)
             {
-                _owner._game.TryFireAdventureCobCannonAtCell(row, col);
+                _owner.RequiredGame.TryFireAdventureCobCannonAtCell(row, col);
                 return;
             }
 
             if (_owner._shovel)
             {
-                if (_owner._game.TryShovelAdventurePlant(_owner.Layout.AdventureShovelTarget(point)))
+                if (_owner.RequiredGame.TryShovelAdventurePlant(_owner.Layout.AdventureShovelTarget(point)))
                 {
                     _owner._shovel = false;
                     _owner.Sounds.PlayPresentationSound("plant");
@@ -405,7 +405,7 @@ namespace PlantsVsZombies.Adventure
 
             if (_selectedAdventurePacket >= 0)
             {
-                if (_owner._game.TryUseAdventurePacket(_selectedAdventurePacket, row, col))
+                if (_owner.RequiredGame.TryUseAdventurePacket(_selectedAdventurePacket, row, col))
                 {
                     _selectedAdventurePacket = -1;
                 }
@@ -419,7 +419,7 @@ namespace PlantsVsZombies.Adventure
 
             if (_owner._selected >= 0)
             {
-                if (_owner._game.TryPlant(_owner._deck[_owner._selected], row, col))
+                if (_owner.RequiredGame.TryPlant(_owner._deck[_owner._selected], row, col))
                 {
                     _owner._selected = -1;
                 }
@@ -431,14 +431,14 @@ namespace PlantsVsZombies.Adventure
                 return;
             }
 
-            if (_owner._game.TryAimAdventureCobCannon(row, col))
+            if (_owner.RequiredGame.TryAimAdventureCobCannon(row, col))
             {
                 return;
             }
 
             if (board.Level.Mode == AdventureMode.Vasebreaker)
             {
-                _owner._game.SmashAdventureVase(row, col);
+                _owner.RequiredGame.SmashAdventureVase(row, col);
                 return;
             }
 
@@ -457,9 +457,9 @@ namespace PlantsVsZombies.Adventure
             var hitPoint = new Vector2(point.x, point.y - 20f);
             Zombie? target = null;
             var targetRow = -1;
-            for (var i = 0; i < _owner._game.Zombies.Count; i++)
+            for (var i = 0; i < _owner.RequiredGame.Zombies.Count; i++)
             {
-                var zombie = _owner._game.Zombies[i];
+                var zombie = _owner.RequiredGame.Zombies[i];
                 var bodyY = 50 + zombie.Row * 100;
                 if (zombie.GraveRiseTicks > 0)
                 {
@@ -493,7 +493,7 @@ namespace PlantsVsZombies.Adventure
             if (target != null)
             {
                 var hadArmor = target.ArmorHealth > 0f;
-                if (_owner._game.HammerAdventureZombie(target.Id, point.x, point.y) && !hadArmor)
+                if (_owner.RequiredGame.HammerAdventureZombie(target.Id, point.x, point.y) && !hadArmor)
                 {
                     _owner.Sounds.PlayPresentationSound("bonk");
                 }
@@ -503,13 +503,13 @@ namespace PlantsVsZombies.Adventure
         /// <summary>Performs adventure planting feedback.</summary>
         internal void AdventurePlantingFeedback()
         {
-            if (_owner._game.LastAdventurePlantingFailure == AdventurePlantingFailure.Tutorial)
+            if (_owner.RequiredGame.LastAdventurePlantingFailure == AdventurePlantingFailure.Tutorial)
             {
                 return;
             }
 
             var kind = _owner._selected >= 0 && _owner._selected < _owner._deck.Count ? _owner._deck[_owner._selected] : PlantKind.Peashooter;
-            foreach (var packet in _owner._game.Adventure.Packets)
+            foreach (var packet in _owner.RequiredGame.Adventure.Packets)
             {
                 if (packet.Id == _selectedAdventurePacket)
                 {
@@ -517,12 +517,12 @@ namespace PlantsVsZombies.Adventure
                     break;
                 }
             }
-            if (kind == PlantKind.Imitater && _owner._game.Adventure.ImitaterTarget.HasValue)
+            if (kind == PlantKind.Imitater && _owner.RequiredGame.Adventure.ImitaterTarget.HasValue)
             {
-                kind = _owner._game.Adventure.ImitaterTarget.Value;
+                kind = _owner.RequiredGame.Adventure.RequiredImitaterTarget;
             }
 
-            var key = AdventureAdviceRules.PlantingKey(_owner._game.LastAdventurePlantingFailure, kind, !_owner._game.Adventure.Level.IsReplay && _owner._game.Adventure.Level.Number == 41);
+            var key = AdventureAdviceRules.PlantingKey(_owner.RequiredGame.LastAdventurePlantingFailure, kind, !_owner.RequiredGame.Adventure.Level.IsReplay && _owner.RequiredGame.Adventure.Level.Number == 41);
             if (key != null)
             {
                 AdventureFeedback(_owner._presenter.OriginalProgressionText(key), 5f);

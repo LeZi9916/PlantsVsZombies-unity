@@ -41,7 +41,7 @@ namespace PlantsVsZombies.Game
             var mouse = _owner._smokeMode && _smokePointer.HasValue ? _smokePointer.Value : input.Position;
             _owner._presenter.SetPointerPosition(mouse);
             _owner.AdventureBoard._adventurePointer = mouse;
-            _owner._selectorView.HoveredAction = _owner._selectorView.HitTest(mouse);
+            _owner.RequiredSelectorView.HoveredAction = _owner.RequiredSelectorView.HitTest(mouse);
             if (_owner.Loading._originalLoadingActive)
             {
                 if (input.Released && _owner.Loading.OriginalLoadingReady && !(_owner._smokeMode && _owner.Loading._originalShowLoadingForCapture))
@@ -67,14 +67,14 @@ namespace PlantsVsZombies.Game
                 return;
             }
 
-            if (_owner._optionsView.IsOpen)
+            if (_owner.RequiredOptionsView.IsOpen)
             {
-                for (var index = 0; index < input.PhaseCount && _owner._optionsView.IsOpen; index++)
+                for (var index = 0; index < input.PhaseCount && _owner.RequiredOptionsView.IsOpen; index++)
                 {
-                    _owner._optionsView.HandlePointer(mouse, input.GetPhase(index));
+                    _owner.RequiredOptionsView.HandlePointer(mouse, input.GetPhase(index));
                 }
 
-                if (!_owner._optionsView.IsOpen)
+                if (!_owner.RequiredOptionsView.IsOpen)
                 {
                     _owner.Menus.ApplyOptions();
                 }
@@ -162,7 +162,7 @@ namespace PlantsVsZombies.Game
             {
                 if (input.ScrollDelta != 0f)
                 {
-                    _owner._almanacView.HandleScroll(mouse, input.ScrollDelta);
+                    _owner.RequiredAlmanacView.HandleScroll(mouse, input.ScrollDelta);
                 }
 
                 for (var index = 0; index < input.PhaseCount && _owner._currentView == PvZGame.ScreenView.Almanac; index++)
@@ -228,14 +228,14 @@ namespace PlantsVsZombies.Game
 
             if (_owner._currentView == PvZGame.ScreenView.Selector)
             {
-                HandleSelector(_owner._selectorView.HitTest(point));
+                HandleSelector(_owner.RequiredSelectorView.HitTest(point));
                 return;
             }
 
             if (_owner._currentView == PvZGame.ScreenView.Modes)
             {
-                _owner._modeView.HandleClick(point);
-                if (_owner._modeView.Closed)
+                _owner.RequiredModeView.HandleClick(point);
+                if (_owner.RequiredModeView.Closed)
                 {
                     _owner._currentView = PvZGame.ScreenView.Selector;
                 }
@@ -245,7 +245,7 @@ namespace PlantsVsZombies.Game
 
             if (_owner._currentView == PvZGame.ScreenView.Almanac)
             {
-                _owner._almanacView.HandleClick(point);
+                _owner.RequiredAlmanacView.HandleClick(point);
                 _owner.Menus.ReturnFromAlmanacIfClosed();
                 return;
             }
@@ -255,7 +255,7 @@ namespace PlantsVsZombies.Game
                 return;
             }
 
-            if (_owner._game.IsAdventure && _owner._currentView == PvZGame.ScreenView.Board)
+            if (_owner.RequiredGame.IsAdventure && _owner._currentView == PvZGame.ScreenView.Board)
             {
                 _owner.AdventureBoard.HandleAdventureClick(point);
                 return;
@@ -267,7 +267,7 @@ namespace PlantsVsZombies.Game
                 return;
             }
 
-            if (_owner._game.State == MatchState.Won || _owner._game.State == MatchState.Lost)
+            if (_owner.RequiredGame.State == MatchState.Won || _owner.RequiredGame.State == MatchState.Lost)
             {
                 if (new Rect(316, 340, 168, 48).Contains(point))
                 {
@@ -283,11 +283,11 @@ namespace PlantsVsZombies.Game
                 return;
             }
 
-            if (_owner._game.State == MatchState.Paused)
+            if (_owner.RequiredGame.State == MatchState.Paused)
             {
                 if (new Rect(316, 280, 168, 48).Contains(point))
                 {
-                    _owner._game.TogglePause();
+                    _owner.RequiredGame.TogglePause();
                 }
                 else if (new Rect(316, 340, 168, 48).Contains(point))
                 {
@@ -297,31 +297,31 @@ namespace PlantsVsZombies.Game
                 return;
             }
 
-            if (!_owner._game.IsExperimentalLevelOne && new Rect(596, 6, 100, 34).Contains(point))
+            if (!_owner.RequiredGame.IsExperimentalLevelOne && new Rect(596, 6, 100, 34).Contains(point))
             {
                 _owner._choosingSeeds = true;
                 _owner._pendingSeeds = new AdventureSeedChooserState(_owner._deck);
                 return;
             }
 
-            if (_owner._game.LevelOneUsesNativeSkySunRules)
+            if (_owner.RequiredGame.LevelOneUsesNativeSkySunRules)
             {
                 int x = Mathf.FloorToInt(point.x), y = Mathf.FloorToInt(point.y);
-                for (var i = _owner._game.LevelOneNativeSkySuns.Count - 1; i >= 0; i--)
+                for (var i = _owner.RequiredGame.LevelOneNativeSkySuns.Count - 1; i >= 0; i--)
                 {
-                    var sun = _owner._game.LevelOneNativeSkySuns[i];
-                    if (_owner._game.TryClickLevelOneNativeSkySun(sun, x, y))
+                    var sun = _owner.RequiredGame.LevelOneNativeSkySuns[i];
+                    if (_owner.RequiredGame.TryClickLevelOneNativeSkySun(sun, x, y))
                     {
                         return;
                     }
                 }
             }
 
-            for (var i = _owner._game.Suns.Count - 1; i >= 0; i--)
+            for (var i = _owner.RequiredGame.Suns.Count - 1; i >= 0; i--)
             {
-                if (BoardLayout.SunRect(_owner._game.Suns[i]).Contains(point))
+                if (BoardLayout.SunRect(_owner.RequiredGame.Suns[i]).Contains(point))
                 {
-                    _owner._game.CollectSun(_owner._game.Suns[i]);
+                    _owner.RequiredGame.CollectSun(_owner.RequiredGame.Suns[i]);
                     return;
                 }
             }
@@ -333,40 +333,40 @@ namespace PlantsVsZombies.Game
                     continue;
                 }
 
-                if (_owner._game.IsExperimentalLevelOne)
+                if (_owner.RequiredGame.IsExperimentalLevelOne)
                 {
-                    if (_owner._game.LevelOneSelectedSeed.HasValue)
+                    if (_owner.RequiredGame.LevelOneSelectedSeed.HasValue)
                     {
-                        if (_owner._game.CancelLevelOneSeedSelection())
+                        if (_owner.RequiredGame.CancelLevelOneSeedSelection())
                         {
                             _owner._selected = -1;
                         }
                     }
-                    else if (_owner._game.TrySelectLevelOneSeed(_owner._deck[i]))
+                    else if (_owner.RequiredGame.TrySelectLevelOneSeed(_owner._deck[i]))
                     {
                         _owner._selected = i;
                     }
                     else
                     {
-                        _owner.AdventureBoard.RejectSeedClick(_owner._game.CooldownRemaining(_owner._deck[i]) <= 0f && _owner._game.SunAmount < GameSimulation.Cost(_owner._deck[i]));
+                        _owner.AdventureBoard.RejectSeedClick(_owner.RequiredGame.CooldownRemaining(_owner._deck[i]) <= 0f && _owner.RequiredGame.SunAmount < GameSimulation.Cost(_owner._deck[i]));
                     }
 
                     _owner._shovel = false;
                 }
-                else if (_owner._game.CooldownRemaining(_owner._deck[i]) <= 0f && _owner._game.SunAmount >= GameSimulation.Cost(_owner._deck[i]))
+                else if (_owner.RequiredGame.CooldownRemaining(_owner._deck[i]) <= 0f && _owner.RequiredGame.SunAmount >= GameSimulation.Cost(_owner._deck[i]))
                 {
                     _owner._selected = _owner._selected == i ? -1 : i;
                     _owner._shovel = false;
                 }
                 else
                 {
-                    _owner.AdventureBoard.RejectSeedClick(_owner._game.CooldownRemaining(_owner._deck[i]) <= 0f && _owner._game.SunAmount < GameSimulation.Cost(_owner._deck[i]));
+                    _owner.AdventureBoard.RejectSeedClick(_owner.RequiredGame.CooldownRemaining(_owner._deck[i]) <= 0f && _owner.RequiredGame.SunAmount < GameSimulation.Cost(_owner._deck[i]));
                 }
 
                 return;
             }
 
-            if (!_owner._game.IsExperimentalLevelOne && new Rect(522, 0, 70, 72).Contains(point))
+            if (!_owner.RequiredGame.IsExperimentalLevelOne && new Rect(522, 0, 70, 72).Contains(point))
             {
                 _owner._shovel = !_owner._shovel;
                 _owner._selected = -1;
@@ -382,12 +382,12 @@ namespace PlantsVsZombies.Game
 
             if (_owner._shovel)
             {
-                if (_owner._game.RemovePlant(row, column))
+                if (_owner.RequiredGame.RemovePlant(row, column))
                 {
                     _owner._shovel = false;
                 }
             }
-            else if (_owner._selected >= 0 && _owner._game.TryPlant(_owner._deck[_owner._selected], row, column))
+            else if (_owner._selected >= 0 && _owner.RequiredGame.TryPlant(_owner._deck[_owner._selected], row, column))
             {
                 _owner._selected = -1;
             }
@@ -397,17 +397,17 @@ namespace PlantsVsZombies.Game
         internal void CancelBoardSelection()
         {
             _owner.AdventureBoard._selectedAdventurePacket = -1;
-            if (_owner._game.IsAdventure)
+            if (_owner.RequiredGame.IsAdventure)
             {
-                _owner._game.CancelAdventureCobCannonAim();
+                _owner.RequiredGame.CancelAdventureCobCannonAim();
             }
 
-            if (_owner._game.State != MatchState.Playing)
+            if (_owner.RequiredGame.State != MatchState.Playing)
             {
                 return;
             }
 
-            if (_owner._game.IsExperimentalLevelOne && _owner._game.LevelOneSelectedSeed.HasValue && !_owner._game.CancelLevelOneSeedSelection())
+            if (_owner.RequiredGame.IsExperimentalLevelOne && _owner.RequiredGame.LevelOneSelectedSeed.HasValue && !_owner.RequiredGame.CancelLevelOneSeedSelection())
             {
                 return;
             }
@@ -457,7 +457,7 @@ namespace PlantsVsZombies.Game
                     _owner.Store.OpenStore();
                     break;
                 case SelectorAction.Help:
-                    _owner._helpView.Open();
+                    _owner.RequiredHelpView.Open();
                     _owner._currentView = PvZGame.ScreenView.Help;
                     break;
                 case SelectorAction.ChangeUser:
@@ -483,8 +483,8 @@ namespace PlantsVsZombies.Game
         /// <returns>The resulting handle help pointer.</returns>
         private bool HandleHelpPointer(Vector2 point, PointerPhase eventType)
         {
-            var consumed = _owner._helpView.HandlePointer(point, eventType);
-            if (!_owner._helpView.IsOpen)
+            var consumed = _owner.RequiredHelpView.HandlePointer(point, eventType);
+            if (!_owner.RequiredHelpView.IsOpen)
             {
                 _owner._currentView = PvZGame.ScreenView.Selector;
             }
@@ -496,7 +496,7 @@ namespace PlantsVsZombies.Game
         /// <param name = "point">The point.</param>
         private void HandleSeedChooserClick(Vector2 point)
         {
-            _owner._pendingSeeds.LandFlyingSeeds();
+            _owner.RequiredPendingSeeds.LandFlyingSeeds();
             if (ReturnSelectedChooserSeed(point, 7, false, true))
             {
                 return;
@@ -507,12 +507,12 @@ namespace PlantsVsZombies.Game
                 var home = BoardLayout.ChooserSeedRect(i);
                 if (home.Contains(point))
                 {
-                    _owner._pendingSeeds.Choose(_owner._availablePlants[i], (int)home.x, (int)home.y, 7);
+                    _owner.RequiredPendingSeeds.Choose(_owner._availablePlants[i], (int)home.x, (int)home.y, 7);
                     return;
                 }
             }
 
-            if (new Rect(322, 440, 156, 42).Contains(point) && _owner._pendingSeeds.Count > 0)
+            if (new Rect(322, 440, 156, 42).Contains(point) && _owner.RequiredPendingSeeds.Count > 0)
             {
                 _owner._deck.Clear();
                 _owner._deck.AddRange(_owner._pendingSeeds);
@@ -533,9 +533,9 @@ namespace PlantsVsZombies.Game
         /// <returns>Whether a selected bank packet consumed the click.</returns>
         internal bool ReturnSelectedChooserSeed(Vector2 point, int slots, bool mode = false, bool simple = false)
         {
-            for (var i = 0; i < _owner._pendingSeeds.Count; i++)
+            for (var i = 0; i < _owner.RequiredPendingSeeds.Count; i++)
             {
-                var kind = _owner._pendingSeeds[i];
+                var kind = _owner.RequiredPendingSeeds[i];
                 var origin = simple ? Vector2.zero : _owner.Layout.AdventureSeedBankOrigin;
                 var bank = new Rect(origin.x + AdventureSeedSlotLayout.PositionX(i, slots), origin.y + 8f, 50, 70);
                 if (!bank.Contains(point))
@@ -551,7 +551,7 @@ namespace PlantsVsZombies.Game
 
                 var index = simple ? Array.IndexOf(_owner._availablePlants, kind) : mode ? AdventureAvailableSeedIndex(kind) : -1;
                 var home = simple ? BoardLayout.ChooserSeedRect(index) : mode ? BoardLayout.AdventureChooserRect(index) : _owner.Opening.AdventureCampaignChooserRect(kind);
-                if (_owner._pendingSeeds.Return(kind, (int)home.x, (int)home.y, slots))
+                if (_owner.RequiredPendingSeeds.Return(kind, (int)home.x, (int)home.y, slots))
                 {
                     _owner.Sounds.PlayAdventureRewardSound("tap2.ogg");
                 }
@@ -567,7 +567,7 @@ namespace PlantsVsZombies.Game
         /// <returns>The available seed index, or minus one if it is unavailable.</returns>
         internal int AdventureAvailableSeedIndex(PlantKind kind)
         {
-            var seeds = _owner._game.Adventure.AvailableSeeds;
+            var seeds = _owner.RequiredGame.Adventure.AvailableSeeds;
             for (var i = 0; i < seeds.Count; i++)
             {
                 if (seeds[i] == kind)
@@ -584,7 +584,7 @@ namespace PlantsVsZombies.Game
         {
             if (GameInput.Current.EscapePressed)
             {
-                if (_owner._optionsView.IsOpen)
+                if (_owner.RequiredOptionsView.IsOpen)
                 {
                     _owner.Menus.CloseOptions();
                 }
@@ -602,7 +602,7 @@ namespace PlantsVsZombies.Game
                 }
                 else if (_owner._currentView == PvZGame.ScreenView.Almanac)
                 {
-                    _owner._almanacView.HandleBack();
+                    _owner.RequiredAlmanacView.HandleBack();
                     _owner.Menus.ReturnFromAlmanacIfClosed();
                 }
                 else if (_owner._currentView == PvZGame.ScreenView.Modes || _owner._currentView == PvZGame.ScreenView.Garden || _owner._currentView == PvZGame.ScreenView.Import)
@@ -619,14 +619,14 @@ namespace PlantsVsZombies.Game
                 }
                 else if (_owner._currentView == PvZGame.ScreenView.Help)
                 {
-                    _owner._helpView.HandleKey(KeyCode.Escape);
+                    _owner.RequiredHelpView.HandleKey(KeyCode.Escape);
                     _owner._currentView = PvZGame.ScreenView.Selector;
                 }
                 else if (_owner._currentView == PvZGame.ScreenView.Board)
                 {
                     if (_owner._choosingSeeds)
                     {
-                        if (_owner._game.IsAdventure)
+                        if (_owner.RequiredGame.IsAdventure)
                         {
                             _owner._currentView = PvZGame.ScreenView.Selector;
                         }
@@ -635,19 +635,19 @@ namespace PlantsVsZombies.Game
                             _owner._choosingSeeds = false;
                         }
                     }
-                    else if (_owner._game.State == MatchState.Playing)
+                    else if (_owner.RequiredGame.State == MatchState.Playing)
                     {
                         _owner.Menus.OpenOptions();
                     }
-                    else if (_owner._game.State == MatchState.Paused)
+                    else if (_owner.RequiredGame.State == MatchState.Paused)
                     {
-                        _owner._game.TogglePause();
+                        _owner.RequiredGame.TogglePause();
                     }
                 }
             }
-            else if (_owner._currentView == PvZGame.ScreenView.Help && !_owner._optionsView.IsOpen && (GameInput.Current.EnterPressed || Input.GetKeyDown(KeyCode.Space)))
+            else if (_owner._currentView == PvZGame.ScreenView.Help && !_owner.RequiredOptionsView.IsOpen && (GameInput.Current.EnterPressed || Input.GetKeyDown(KeyCode.Space)))
             {
-                _owner._helpView.HandleKey(KeyCode.Return);
+                _owner.RequiredHelpView.HandleKey(KeyCode.Return);
                 _owner._currentView = PvZGame.ScreenView.Selector;
             }
         }

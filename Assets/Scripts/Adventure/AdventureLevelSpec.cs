@@ -134,6 +134,10 @@ namespace PlantsVsZombies.Adventure
         public AdventureRewardKind RewardKind { get; private set; }
         /// <summary>Gets or sets reward seed.</summary>
         public PlantKind? RewardSeed { get; private set; }
+
+        /// <summary>Gets the reward seed, which must already exist wherever it is used.</summary>
+        /// <exception cref="System.InvalidOperationException">The member is not available.</exception>
+        public PlantKind RequiredRewardSeed => RewardSeed ?? throw new System.InvalidOperationException("The member 'RewardSeed' is not available.");
         /// <summary>Gets or sets unlocked seeds.</summary>
         public IReadOnlyList<PlantKind> UnlockedSeeds { get; private set; }
         /// <summary>Gets or sets default seeds.</summary>
@@ -157,7 +161,7 @@ namespace PlantsVsZombies.Adventure
             Mode = mode;
             RewardKind = rewardKind;
             RewardSeed = rewardKind == AdventureRewardKind.Seed ? (PlantKind? )rewardSeed : null;
-            AdventureLevelDefinition raw;
+            AdventureLevelDefinition? raw;
             if (!VerifiedDataCatalog.TryGetAdventureLevel(number, out raw))
             {
                 throw new ArgumentOutOfRangeException("number");

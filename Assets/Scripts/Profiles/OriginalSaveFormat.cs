@@ -288,7 +288,7 @@ namespace PlantsVsZombies.Profiles
         /// <exception cref="ArgumentException">The destination names the retained original file.</exception>
         /// <exception cref="InvalidDataException">The retained original no longer has a supported valid layout.</exception>
         /// <exception cref="IOException">The retained file cannot be read or the destination cannot be written.</exception>
-        public static void ExportUser(string importedCopy, string destination, PlayerAccount account, AdventureProgress adventure)
+        public static void ExportUser(string importedCopy, string destination, PlayerAccount? account, AdventureProgress adventure)
         {
             if (string.Equals(Path.GetFullPath(importedCopy), Path.GetFullPath(destination), StringComparison.OrdinalIgnoreCase))
             {
@@ -308,6 +308,11 @@ namespace PlantsVsZombies.Profiles
                     Array.Copy(source, PlantOffset + i * 88, b, 0, 88);
                     wheelbarrow.Add(b);
                 }
+            }
+
+            if (account == null)
+            {
+                throw new System.ArgumentNullException(nameof(account));
             }
 
             var count = account.Plants.Count + wheelbarrow.Count;

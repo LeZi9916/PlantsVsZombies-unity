@@ -18,43 +18,55 @@ namespace PlantsVsZombies.Diagnostics
     internal sealed class UISmokeTest : MonoBehaviour
     {
         /// <summary>Stores controller.</summary>
-        private PvZGame _controller;
+        private PvZGame? _controller;
         /// <summary>Stores click.</summary>
-        private BoundGameMethod _click;
+        private BoundGameMethod? _click;
+
+        /// <summary>Gets the click, which must already exist wherever it is used.</summary>
+        /// <exception cref="System.InvalidOperationException">The member is not available.</exception>
+        private BoundGameMethod RequiredClick => _click ?? throw new System.InvalidOperationException("The member '_click' is not available.");
         /// <summary>Stores view field.</summary>
-        private BoundGameField _viewField;
+        private BoundGameField? _viewField;
+
+        /// <summary>Gets the view field, which must already exist wherever it is used.</summary>
+        /// <exception cref="System.InvalidOperationException">The member is not available.</exception>
+        private BoundGameField RequiredViewField => _viewField ?? throw new System.InvalidOperationException("The member '_viewField' is not available.");
         /// <summary>Stores options field.</summary>
-        private BoundGameField _optionsField;
+        private BoundGameField? _optionsField;
         /// <summary>Stores almanac field.</summary>
-        private BoundGameField _almanacField;
+        private BoundGameField? _almanacField;
         /// <summary>Stores profiles field.</summary>
-        private BoundGameField _profilesField;
+        private BoundGameField? _profilesField;
         /// <summary>Stores profile dialog field.</summary>
-        private BoundGameField _profileDialogField;
+        private BoundGameField? _profileDialogField;
         /// <summary>Stores help field.</summary>
-        private BoundGameField _helpField;
+        private BoundGameField? _helpField;
         /// <summary>Stores the independent-mode directory inspected by this smoke scenario.</summary>
-        private BoundGameField _modeField;
+        private BoundGameField? _modeField;
         /// <summary>Stores the isolated Adventure progress used to enter the implemented store.</summary>
-        private BoundGameField _adventureStoreField;
+        private BoundGameField? _adventureStoreField;
         /// <summary>Stores quit field.</summary>
-        private BoundGameField _quitField;
+        private BoundGameField? _quitField;
         /// <summary>Stores unavailable field.</summary>
-        private BoundGameField _unavailableField;
+        private BoundGameField? _unavailableField;
         /// <summary>Stores help pointer.</summary>
-        private BoundGameMethod _helpPointer;
+        private BoundGameMethod? _helpPointer;
         /// <summary>Stores almanac pointer.</summary>
-        private BoundGameMethod _almanacPointer;
+        private BoundGameMethod? _almanacPointer;
+
+        /// <summary>Gets the almanac pointer, which must already exist wherever it is used.</summary>
+        /// <exception cref="System.InvalidOperationException">The member is not available.</exception>
+        private BoundGameMethod RequiredAlmanacPointer => _almanacPointer ?? throw new System.InvalidOperationException("The member '_almanacPointer' is not available.");
         /// <summary>Stores game field.</summary>
-        private BoundGameField _gameField;
+        private BoundGameField? _gameField;
         /// <summary>Stores apply options.</summary>
-        private BoundGameMethod _applyOptions;
+        private BoundGameMethod? _applyOptions;
         /// <summary>Stores close options.</summary>
-        private BoundGameMethod _closeOptions;
+        private BoundGameMethod? _closeOptions;
         /// <summary>Stores directory.</summary>
-        private string _directory;
+        private string _directory = string.Empty;
         /// <summary>Stores session.</summary>
-        private string _session;
+        private string _session = string.Empty;
         /// <summary>Stores logic only.</summary>
         private bool _logicOnly;
         /// <summary>Performs start if requested.</summary>
@@ -612,7 +624,7 @@ namespace PlantsVsZombies.Diagnostics
         /// <param name = "y">The y.</param>
         private void Click(float x, float y)
         {
-            _click.Invoke(_controller, new object[] { new Vector2(x, y) });
+            RequiredClick.Invoke(_controller, new object[] { new Vector2(x, y) });
         }
 
         /// <summary>Performs almanac pointer.</summary>
@@ -621,7 +633,7 @@ namespace PlantsVsZombies.Diagnostics
         /// <param name = "type">The type.</param>
         private void AlmanacPointer(float x, float y, PointerPhase type)
         {
-            _almanacPointer.Invoke(_controller, new object[] { new Vector2(x, y), type });
+            RequiredAlmanacPointer.Invoke(_controller, new object[] { new Vector2(x, y), type });
         }
 
         /// <summary>Performs view is.</summary>
@@ -629,7 +641,7 @@ namespace PlantsVsZombies.Diagnostics
         /// <returns>The resulting view is.</returns>
         private bool ViewIs(string name)
         {
-            return string.Equals(_viewField.GetValue(_controller).ToString(), name, StringComparison.Ordinal);
+            return string.Equals(RequiredViewField.GetValue(_controller).ToString(), name, StringComparison.Ordinal);
         }
 
         /// <summary>Performs fail.</summary>

@@ -10,7 +10,7 @@ namespace PlantsVsZombies.Adventure
         /// <summary>Stores world x, world y, scale, altitude, animation rate, initial phase.</summary>
         public float WorldX, WorldY, Scale = 1f, Altitude, AnimationRate, InitialPhase;
         /// <summary>Stores animation.</summary>
-        public string Animation;
+        public string Animation = string.Empty;
         /// <summary>Stores loop, show ducky tube.</summary>
         public bool Loop = true, ShowDuckyTube;
     }

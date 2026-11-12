@@ -10,7 +10,7 @@ namespace PlantsVsZombies.Simulation
         /// <summary>Stores presentation walk2.</summary>
         public bool PresentationWalk2;
         /// <summary>Stores presentation animation.</summary>
-        public string PresentationAnimation;
+        public string PresentationAnimation = string.Empty;
         /// <summary>Stores presentation death.</summary>
         public global::PlantsVsZombies.Adventure.AdventureZombieDeathPresentation PresentationDeath;
         /// <summary>Stores presentation initialized.</summary>
@@ -66,11 +66,11 @@ namespace PlantsVsZombies.Simulation
         /// <summary>Stores presentation garlic counter.</summary>
         public int PresentationGarlicCounter = -1;
         /// <summary>Stores presentation bite clip.</summary>
-        internal string _presentationBiteClip;
+        internal string? _presentationBiteClip;
         /// <summary>Stores presentation bite cycle.</summary>
         internal double _presentationBiteCycle;
         /// <summary>Stores presentation garlic plant.</summary>
-        internal Plant _presentationGarlicPlant;
+        internal Plant? _presentationGarlicPlant;
         /// <summary>Stores presentation garlic held age,  presentation garlic held head age.</summary>
         internal float _presentationGarlicHeldAge, _presentationGarlicHeldHeadAge;
         /// <summary>Stores presentation max armor, presentation max shield, presentation newspaper gasp remaining.</summary>
@@ -92,7 +92,7 @@ namespace PlantsVsZombies.Simulation
         /// <summary>Stores presentation movement rate.</summary>
         public float PresentationMovementRate = -1f;
         /// <summary>Stores presentation movement animation.</summary>
-        internal string _presentationMovementAnimation;
+        internal string? _presentationMovementAnimation;
         /// <summary>Stores presentation walk phase,  presentation tick slow.</summary>
         internal float _presentationWalkPhase, _presentationTickSlow = 1f;
         /// <summary>Stores presentation walk loops.</summary>

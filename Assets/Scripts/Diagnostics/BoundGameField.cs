@@ -10,12 +10,12 @@ namespace PlantsVsZombies.Diagnostics
         /// <summary>Provides the field metadata.</summary>
         private readonly FieldInfo _field;
         /// <summary>Provides the object that declares the field.</summary>
-        private readonly object _owner;
+        private readonly object? _owner;
 
         /// <summary>Binds a field to the object that declares it.</summary>
         /// <param name="field">The field metadata.</param>
         /// <param name="owner">The session or collaborator whose field is read and written.</param>
-        internal BoundGameField(FieldInfo field, object owner)
+        internal BoundGameField(FieldInfo field, object? owner)
         {
             _field = field;
             _owner = owner;

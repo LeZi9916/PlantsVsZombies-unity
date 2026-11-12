@@ -9,12 +9,12 @@ namespace PlantsVsZombies.Diagnostics
         /// <summary>Provides the method metadata.</summary>
         private readonly MethodInfo _method;
         /// <summary>Provides the object that declares the method.</summary>
-        private readonly object _owner;
+        private readonly object? _owner;
 
         /// <summary>Binds a method to the object that declares it.</summary>
         /// <param name="method">The method metadata.</param>
         /// <param name="owner">The session or collaborator the method runs on.</param>
-        internal BoundGameMethod(MethodInfo method, object owner)
+        internal BoundGameMethod(MethodInfo method, object? owner)
         {
             _method = method;
             _owner = owner;

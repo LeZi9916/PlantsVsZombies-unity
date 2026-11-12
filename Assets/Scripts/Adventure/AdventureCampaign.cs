@@ -13,17 +13,21 @@ namespace PlantsVsZombies.Adventure
         /// <summary>Stores store.</summary>
         private readonly AdventureProgressStore _store;
         /// <summary>Stores accounts.</summary>
-        private readonly PlayerAccountStore _accounts;
+        private readonly PlayerAccountStore? _accounts;
+
+        /// <summary>Gets the accounts, which must already exist wherever it is used.</summary>
+        /// <exception cref="System.InvalidOperationException">The member is not available.</exception>
+        private PlayerAccountStore RequiredAccounts => _accounts ?? throw new System.InvalidOperationException("The member '_accounts' is not available.");
         /// <summary>Stores seed access.</summary>
-        private AdventureSeedAccess _seedAccess;
+        private AdventureSeedAccess? _seedAccess;
         /// <summary>Stores packet slots.</summary>
         private int _packetSlots = 6;
         /// <summary>Stores attempt id.</summary>
-        private string _attemptId;
+        private string _attemptId = string.Empty;
         /// <summary>Stores coin save retry utc.</summary>
         private long _coinSaveRetryUtc;
         /// <summary>Gets or sets last persistence error.</summary>
-        public string LastPersistenceError { get; private set; }
+        public string? LastPersistenceError { get; private set; }
 
         /// <summary>Stores roof cleaners.</summary>
         private bool _roofCleaners;
@@ -32,7 +36,7 @@ namespace PlantsVsZombies.Adventure
         /// <summary>Gets or sets profile id.</summary>
         public Guid ProfileId { get; private set; }
         /// <summary>Gets or sets game.</summary>
-        public GameSimulation Game { get; private set; }
+        public GameSimulation? Game { get; private set; }
 
         /// <summary>Gets or sets progress.</summary>
         public AdventureProgress Progress
@@ -48,7 +52,7 @@ namespace PlantsVsZombies.Adventure
         /// <param name = "profileId">The profile id.</param>
         /// <param name = "accounts">The accounts.</param>
         /// <exception cref = "ArgumentNullException">The operation cannot satisfy its preconditions.</exception>
-        public AdventureCampaign(AdventureProgressStore store, Guid profileId, PlayerAccountStore accounts = null)
+        public AdventureCampaign(AdventureProgressStore? store, Guid profileId, PlayerAccountStore? accounts = null)
         {
             if (store == null)
             {
@@ -75,11 +79,11 @@ namespace PlantsVsZombies.Adventure
             _packetSlots = account == null ? 6 : account.PacketSlots;
             _attemptId = Guid.NewGuid().ToString("N");
             LastPersistenceError = null;
-            Game = new GameSimulation(new GameRules { AdventureLevel = p.NextLevel, AdventureCycle = p.Cycle, AdventureDaveSeed = unchecked(p.AttemptSeed + p.NextLevel + (p.Cycle - 1) * 101 + ProfileId.GetHashCode()), AdventurePacketSlots = _packetSlots, AdventureSeedAccess = _seedAccess, AdventureRoofCleaners = roofCleaners || account != null && account.PurchaseCount(23) > 0, AdventurePoolCleaners = poolCleaners || account != null && account.PurchaseCount(22) > 0, AdventureMinigamesUnlocked = account != null && account.MinigamesUnlocked, AdventurePuzzleUnlocked = account != null && account.PuzzleUnlocked, AdventurePottedLoot = account != null && p.CompletedRuns > 0 && account.Plants.Count < 32, AdventureChocolateLoot = account != null && account.PurchaseCount(20) > 0 && account.PurchaseCount(26) < 10, AdventureLootCommit = _accounts == null ? (Func<AdventureCoin, bool>)null : CommitLoot, AdventureFirstAid = account != null && account.PurchaseCount(29) > 0, AdventurePlaceRake = account != null && account.PurchaseCount(24) > 0 ? (Func<bool>)(() =>
+            Game = new GameSimulation(new GameRules { AdventureLevel = p.NextLevel, AdventureCycle = p.Cycle, AdventureDaveSeed = unchecked(p.AttemptSeed + p.NextLevel + (p.Cycle - 1) * 101 + ProfileId.GetHashCode()), AdventurePacketSlots = _packetSlots, AdventureSeedAccess = _seedAccess, AdventureRoofCleaners = roofCleaners || account != null && account.PurchaseCount(23) > 0, AdventurePoolCleaners = poolCleaners || account != null && account.PurchaseCount(22) > 0, AdventureMinigamesUnlocked = account != null && account.MinigamesUnlocked, AdventurePuzzleUnlocked = account != null && account.PuzzleUnlocked, AdventurePottedLoot = account != null && p.CompletedRuns > 0 && account.Plants.Count < 32, AdventureChocolateLoot = account != null && account.PurchaseCount(20) > 0 && account.PurchaseCount(26) < 10, AdventureLootCommit = _accounts == null ? (Func<AdventureCoin, bool>?)null : CommitLoot, AdventureFirstAid = account != null && account.PurchaseCount(29) > 0, AdventurePlaceRake = account != null && account.PurchaseCount(24) > 0 ? (Func<bool>)(() =>
             {
-                _accounts.ConsumeRake(ProfileId);
+                RequiredAccounts.ConsumeRake(ProfileId);
                 return true;
-            }) : null, AdventureCoinCommit = _accounts == null ? (Func<int, bool>)null : CommitCoins }, p.AttemptSeed);
+            }) : null, AdventureCoinCommit = _accounts == null ? (Func<int, bool>?)null : CommitCoins }, p.AttemptSeed);
             if (Game.Adventure.Phase == AdventurePhase.ChoosingSeeds && p.SelectedSeeds.Count > 0)
             {
                 Game.ChooseAdventureSeeds(p.SelectedSeeds);
@@ -168,11 +172,11 @@ namespace PlantsVsZombies.Adventure
             {
                 if (coin.Kind == AdventureCoinKind.MinigameUnlock || coin.Kind == AdventureCoinKind.PuzzleUnlock)
                 {
-                    _accounts.CollectModeUnlock(ProfileId, _attemptId + ":" + coin.Id, coin.Kind == AdventureCoinKind.PuzzleUnlock);
+                    RequiredAccounts.CollectModeUnlock(ProfileId, _attemptId + ":" + coin.Id, coin.Kind == AdventureCoinKind.PuzzleUnlock);
                 }
                 else
                 {
-                    _accounts.CollectBattleLoot(ProfileId, _attemptId + ":" + coin.Id, coin.Kind == AdventureCoinKind.Chocolate, coin.GiftPlant ?? PlantKind.Peashooter, DateTimeOffset.UtcNow.ToUnixTimeSeconds());
+                    RequiredAccounts.CollectBattleLoot(ProfileId, _attemptId + ":" + coin.Id, coin.Kind == AdventureCoinKind.Chocolate, coin.GiftPlant ?? PlantKind.Peashooter, DateTimeOffset.UtcNow.ToUnixTimeSeconds());
                 }
 
                 LastPersistenceError = null;
@@ -203,7 +207,7 @@ namespace PlantsVsZombies.Adventure
 
             try
             {
-                _accounts.CreditBattleCoins(ProfileId, _attemptId, total);
+                RequiredAccounts.CreditBattleCoins(ProfileId, _attemptId, total);
                 LastPersistenceError = null;
                 return true;
             }

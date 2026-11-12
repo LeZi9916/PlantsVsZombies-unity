@@ -8,7 +8,7 @@ namespace PlantsVsZombies.Progression
     {
         /// <param name = "profile">Null represents the native null profile pointer.</param>
         /// <param name = "runtime">The host must provide actual runtime conditions.</param>
-        public static SelectorProgressState Evaluate(SelectorProfileFields profile, SelectorRuntimeFields runtime)
+        public static SelectorProgressState Evaluate(SelectorProfileFields? profile, SelectorRuntimeFields runtime)
         {
             if (runtime == null)
             {
@@ -16,18 +16,18 @@ namespace PlantsVsZombies.Progression
             }
 
             var hasProfile = profile != null;
-            var level = hasProfile ? profile.AdventureLevel : 1;
-            var completed = hasProfile && profile.AdventureCompletions > 0;
+            var level = profile != null ? profile.AdventureLevel : 1;
+            var completed = profile != null && profile.AdventureCompletions > 0;
             var modesRestricted = IsRestricted(runtime, runtime.ModeQueryPassed);
             var completionRestricted = IsRestricted(runtime, runtime.CompletionQueryPassed);
             var gardenRestricted = IsRestricted(runtime, runtime.GardenQueryPassed);
-            var miniGamesUnlocked = hasProfile && (completed || profile.MiniGamesUnlockValue > 0);
-            var puzzleUnlocked = hasProfile && (completed || profile.PuzzleUnlockValue > 0) && !modesRestricted;
-            var survivalUnlocked = hasProfile && (completed || profile.SurvivalUnlockValue > 0) && !modesRestricted;
+            var miniGamesUnlocked = profile != null && (completed || profile.MiniGamesUnlockValue > 0);
+            var puzzleUnlocked = profile != null && (completed || profile.PuzzleUnlockValue > 0) && !modesRestricted;
+            var survivalUnlocked = profile != null && (completed || profile.SurvivalUnlockValue > 0) && !modesRestricted;
             var almanacVisible = runtime.AuxiliaryVisibilityOverride || (hasProfile && (completed || level >= 15));
-            var storeVisible = runtime.AuxiliaryVisibilityOverride || (hasProfile && (completed || profile.StoreEarlyAccessValue != 0 || level >= 25));
+            var storeVisible = runtime.AuxiliaryVisibilityOverride || (profile != null && (completed || profile.StoreEarlyAccessValue != 0 || level >= 25));
             var zenGardenVisible = runtime.AuxiliaryVisibilityOverride || (hasProfile && !gardenRestricted && (completed || level >= 45));
-            return new SelectorProgressState(level, !hasProfile || (level < 2 && !completed), !miniGamesUnlocked, !puzzleUnlocked, !survivalUnlocked, almanacVisible, storeVisible, zenGardenVisible, completed && !completionRestricted, hasProfile && profile.ProfileButtonStyleFlag);
+            return new SelectorProgressState(level, !hasProfile || (level < 2 && !completed), !miniGamesUnlocked, !puzzleUnlocked, !survivalUnlocked, almanacVisible, storeVisible, zenGardenVisible, completed && !completionRestricted, profile != null && profile.ProfileButtonStyleFlag);
         }
 
         /// <summary>Performs is restricted.</summary>

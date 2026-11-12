@@ -20,7 +20,7 @@ namespace PlantsVsZombies.Adventure
         }
 
         /// <summary>Stores award introduction audio.</summary>
-        private AdventureRewardPresentation _awardIntroductionAudio;
+        private AdventureRewardPresentation? _awardIntroductionAudio;
         /// <summary>Stores award seed next.</summary>
         internal static readonly Rect s_awardSeedNext = new Rect(324, 546, 156, 42);
         /// <summary>Stores award menu.</summary>
@@ -78,7 +78,7 @@ namespace PlantsVsZombies.Adventure
         /// <param name = "point">The point.</param>
         internal void HandleAdventureRewardClick(Vector2 point)
         {
-            var reward = _owner._game.Adventure.RewardPresentation;
+            var reward = _owner.RequiredGame.Adventure.RewardPresentation;
             if (reward == null)
             {
                 return;
@@ -93,7 +93,7 @@ namespace PlantsVsZombies.Adventure
 
                 try
                 {
-                    var collected = _owner.Campaign._adventureTestBoard ? _owner._game.CollectAdventureReward() : _owner.Campaign._adventureCampaign.CollectReward();
+                    var collected = _owner.Campaign._adventureTestBoard ? _owner.RequiredGame.CollectAdventureReward() : _owner.Campaign.RequiredAdventureCampaign.CollectReward();
                     if (!collected)
                     {
                         _owner.AdventureBoard.AdventureFeedback("奖励尚未保存：" + (_owner.Campaign._adventureCampaign == null ? "请重试" : _owner.Campaign._adventureCampaign.LastPersistenceError), 5f);
@@ -120,7 +120,7 @@ namespace PlantsVsZombies.Adventure
                 return;
             }
 
-            var next = reward.NativeType == 15 || reward.NativeType == 18 && _owner._game.Adventure.Level.Number == 50 ? new Rect(324, 500, 156, 42) : s_awardSeedNext;
+            var next = reward.NativeType == 15 || reward.NativeType == 18 && _owner.RequiredGame.Adventure.Level.Number == 50 ? new Rect(324, 500, 156, 42) : s_awardSeedNext;
             if (!next.Contains(point))
             {
                 return;
@@ -129,26 +129,26 @@ namespace PlantsVsZombies.Adventure
             _owner.Sounds.PlayAdventureRewardSound("buttonclick.ogg");
             try
             {
-                var intro = CrazyDaveStoreDialog.AdventureRewardIntroduction(_owner._game.Adventure.Level.Number, _owner._game.Adventure.Level.IsReplay);
+                var intro = CrazyDaveStoreDialog.AdventureRewardIntroduction(_owner.RequiredGame.Adventure.Level.Number, _owner.RequiredGame.Adventure.Level.IsReplay);
                 if (!_owner.Campaign._adventureTestBoard && intro >= 0)
                 {
                     _owner.Store.OpenStoreForAdventureIntro(intro);
                     return;
                 }
 
-                if (!_owner.Campaign._adventureTestBoard && !_owner._game.Adventure.Level.IsReplay && _owner._game.Adventure.Level.Number == 44)
+                if (!_owner.Campaign._adventureTestBoard && !_owner.RequiredGame.Adventure.Level.IsReplay && _owner.RequiredGame.Adventure.Level.Number == 44)
                 {
                     _owner.Garden.OpenZenGardenForAdventureIntro();
                     return;
                 }
 
-                if (_owner.Campaign._adventureTestBoard || _owner.Campaign._adventureCampaign.Progress.Completed)
+                if (_owner.Campaign._adventureTestBoard || _owner.Campaign.RequiredAdventureCampaign.Progress.Completed)
                 {
                     _owner._currentView = PvZGame.ScreenView.Selector;
                 }
-                else if (_owner.Campaign._adventureCampaign.StartNextLevel())
+                else if (_owner.Campaign.RequiredAdventureCampaign.StartNextLevel())
                 {
-                    _owner.Campaign.AttachAdventureGame(_owner.Campaign._adventureCampaign.Game);
+                    _owner.Campaign.AttachAdventureGame(_owner.Campaign.RequiredAdventureCampaign.Game);
                 }
             }
             catch (Exception error)
@@ -161,7 +161,7 @@ namespace PlantsVsZombies.Adventure
         /// <returns>The resulting adventure reward name.</returns>
         private string AdventureRewardName()
         {
-            var level = _owner._game.Adventure.Level;
+            var level = _owner.RequiredGame.Adventure.Level;
             if (level.IsReplay)
             {
                 return level.Number == 50 ? "获得金币奖励和向日葵奖杯" : "获得金币奖励";

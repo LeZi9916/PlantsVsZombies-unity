@@ -30,7 +30,7 @@ namespace PlantsVsZombies.Modes
         /// <summary>Gets or sets selected cell.</summary>
         public int SelectedCell { get; internal set; } = -1;
         /// <summary>Gets or sets advice.</summary>
-        public string Advice { get; internal set; }
+        public string Advice { get; internal set; } = string.Empty;
         /// <summary>Gets or sets slot rolling remaining.</summary>
         public float SlotRollingRemaining { get; internal set; }
         /// <summary>Gets or sets slot symbols.</summary>
@@ -100,7 +100,7 @@ namespace PlantsVsZombies.Modes
         }
 
         /// <summary>Gets or sets zombie cards.</summary>
-        public IReadOnlyList<ZombieKind> ZombieCards { get; internal set; }
+        public IReadOnlyList<ZombieKind> ZombieCards { get; internal set; } = System.Array.Empty<ZombieKind>();
 
         /// <summary>Initializes mode session.</summary>
         /// <param name = "originalModeId">The original mode id.</param>
@@ -110,7 +110,7 @@ namespace PlantsVsZombies.Modes
         /// <param name = "roofCleaners">The roof cleaners.</param>
         /// <param name = "poolCleaners">The pool cleaners.</param>
         /// <param name = "unlockedBasicSeeds">The unlocked basic seeds.</param>
-        public ModeSession(int originalModeId, AdventureSeedAccess access = null, int packetSlots = 6, int randomSeed = 12345, bool roofCleaners = false, bool poolCleaners = false, int unlockedBasicSeeds = 40)
+        public ModeSession(int originalModeId, AdventureSeedAccess? access = null, int packetSlots = 6, int randomSeed = 12345, bool roofCleaners = false, bool poolCleaners = false, int unlockedBasicSeeds = 40)
         {
             Definition = ModeCatalog.Get(originalModeId);
             RunId = Guid.NewGuid();

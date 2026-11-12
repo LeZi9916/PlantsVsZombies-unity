@@ -81,7 +81,7 @@ namespace PlantsVsZombies.Reanimation
             /// <param name = "fallback">The fallback.</param>
             /// <returns>The resulting parse.</returns>
             /// <exception cref = "FormatException">The operation cannot satisfy its preconditions.</exception>
-            public static Curve Parse(string source, float fallback)
+            public static Curve Parse(string? source, float fallback)
             {
                 var curve = new Curve();
                 if (string.IsNullOrWhiteSpace(source))
@@ -157,16 +157,24 @@ namespace PlantsVsZombies.Reanimation
         private sealed class Field
         {
             /// <summary>Stores type.</summary>
-            public string Type;
+            public string Type = string.Empty;
             /// <summary>Stores x, y.</summary>
-            public Curve X, Y;
+            public Curve? X, Y;
+
+            /// <summary>Gets the x, which must already exist wherever it is used.</summary>
+            /// <exception cref="System.InvalidOperationException">The member is not available.</exception>
+            public Curve RequiredX => X ?? throw new System.InvalidOperationException("The member 'X' is not available.");
+
+            /// <summary>Gets the y, which must already exist wherever it is used.</summary>
+            /// <exception cref="System.InvalidOperationException">The member is not available.</exception>
+            public Curve RequiredY => Y ?? throw new System.InvalidOperationException("The member 'Y' is not available.");
         }
 
         /// <summary>Defines emitter definition.</summary>
         private sealed class EmitterDefinition
         {
             /// <summary>Stores image, type, name.</summary>
-            public string Image, Type, Name;
+            public string? Image = string.Empty, Type = string.Empty, Name = string.Empty;
             /// <summary>Stores image frames.</summary>
             public int ImageFrames = 1;
             /// <summary>Stores random spin, loops, particle loops, additive, dont follow, has alpha.</summary>
@@ -206,18 +214,30 @@ namespace PlantsVsZombies.Reanimation
             /// <summary>Stores frame.</summary>
             public int Frame;
             /// <summary>Stores random.</summary>
-            public float[] Random;
+            public float[] Random = System.Array.Empty<float>();
             /// <summary>Stores color red, color green, color blue, brightness.</summary>
             public float ColorRed, ColorGreen, ColorBlue, Brightness;
             /// <summary>Stores field random.</summary>
-            public float[, ] FieldRandom;
+            public float[, ]? FieldRandom;
+
+            /// <summary>Gets the field random, which must already exist wherever it is used.</summary>
+            /// <exception cref="System.InvalidOperationException">The member is not available.</exception>
+            public float[, ] RequiredFieldRandom => FieldRandom ?? throw new System.InvalidOperationException("The member 'FieldRandom' is not available.");
         }
 
         /// <summary>Defines emitter.</summary>
         private sealed class Emitter
         {
+            /// <summary>Creates an emitter that spawns particles from the given definition.</summary>
+            /// <param name="definition">The immutable emitter definition parsed from the effect file.</param>
+            public Emitter(EmitterDefinition definition)
+            {
+                Definition = definition;
+            }
+
             /// <summary>Stores definition.</summary>
-            public EmitterDefinition Definition;
+            public readonly EmitterDefinition Definition;
+
             /// <summary>Stores particles.</summary>
             public readonly List<Particle> Particles = new List<Particle>();
             /// <summary>Stores random.</summary>
@@ -234,11 +254,15 @@ namespace PlantsVsZombies.Reanimation
             /// <summary>Stores tick, seen, stop tick, fade duration.</summary>
             public int Tick, Seen, StopTick = -1, FadeDuration;
             /// <summary>Stores fade out.</summary>
-            public EmitterDefinition FadeOut;
+            public EmitterDefinition? FadeOut;
             /// <summary>Stores origin.</summary>
             public Vector2 Origin;
             /// <summary>Stores random.</summary>
-            public OriginalRandomAdapter Random;
+            public OriginalRandomAdapter? Random;
+
+            /// <summary>Gets the random, which must already exist wherever it is used.</summary>
+            /// <exception cref="System.InvalidOperationException">The member is not available.</exception>
+            public OriginalRandomAdapter RequiredRandom => Random ?? throw new System.InvalidOperationException("The member 'Random' is not available.");
             /// <summary>Stores emitters.</summary>
             public readonly List<Emitter> Emitters = new List<Emitter>();
         }
@@ -246,9 +270,13 @@ namespace PlantsVsZombies.Reanimation
         /// <summary>Stores root.</summary>
         private readonly string _root;
         /// <summary>Stores renderer.</summary>
-        private readonly ReanimationRenderer _renderer;
+        private readonly ReanimationRenderer? _renderer;
+
+        /// <summary>Gets the renderer, which must already exist wherever it is used.</summary>
+        /// <exception cref="System.InvalidOperationException">The member is not available.</exception>
+        private ReanimationRenderer RequiredRenderer => _renderer ?? throw new System.InvalidOperationException("The member '_renderer' is not available.");
         /// <summary>Stores definitions.</summary>
-        private readonly Dictionary<string, List<EmitterDefinition>> _definitions = new Dictionary<string, List<EmitterDefinition>>(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, List<EmitterDefinition>?> _definitions = new Dictionary<string, List<EmitterDefinition>?>(StringComparer.OrdinalIgnoreCase);
         /// <summary>Stores systems.</summary>
         private readonly Dictionary<string, SystemInstance> _systems = new Dictionary<string, SystemInstance>();
         /// <summary>Reuses the keys collected while retiring systems after a presentation frame.</summary>
@@ -256,14 +284,14 @@ namespace PlantsVsZombies.Reanimation
         /// <summary>Stores frame.</summary>
         private int _frame;
         /// <summary>Gets or sets last error.</summary>
-        public string LastError { get; private set; }
+        public string LastError { get; private set; } = string.Empty;
         /// <summary>Gets the number of particle objects created before reuse could satisfy a spawn.</summary>
         internal int CreatedParticleCount { get; private set; }
 
         /// <summary>Initializes original particle renderer.</summary>
         /// <param name = "assetRoot">The asset root.</param>
         /// <param name = "animationRenderer">The animation renderer.</param>
-        public OriginalParticleRenderer(string assetRoot, ReanimationRenderer animationRenderer)
+        public OriginalParticleRenderer(string assetRoot, ReanimationRenderer? animationRenderer)
         {
             _root = assetRoot;
             _renderer = animationRenderer;
@@ -282,7 +310,7 @@ namespace PlantsVsZombies.Reanimation
         /// <returns>The resulting random01.</returns>
         private static float Random01(SystemInstance system)
         {
-            return (float)system.Random.NextDouble();
+            return (float)system.RequiredRandom.NextDouble();
         }
 
         /// <summary>Performs system value.</summary>
@@ -379,10 +407,7 @@ namespace PlantsVsZombies.Reanimation
                         continue;
                     }
 
-                    var emitter = new Emitter
-                    {
-                        Definition = definition
-                    };
+                    var emitter = new Emitter(definition);
                     emitter.Duration = Math.Max(1, (int)definition.Track("SystemDuration", definition.Track("ParticleDuration", 100).Value(0, 1)).Value(0, Random01(system)));
                     system.Emitters.Add(emitter);
                 }
@@ -446,7 +471,7 @@ namespace PlantsVsZombies.Reanimation
                     var clipTop = emitter.Definition.Track("ClipTop").Value(time, .5f);
                     var clipBottom = emitter.Definition.Track("ClipBottom").Value(time, .5f);
                     var imageRow = emitter.Definition.Tracks.ContainsKey("ImageRow") ? (int)SystemValue(system, emitter, "ImageRow") : 0;
-                    _renderer.DrawResourceSprite(emitter.Definition.Image, origin + position * scale, size * scale, Mathf.Lerp(particle.PreviousAngle, particle.Angle, fraction),
+                    RequiredRenderer.DrawResourceSprite(emitter.Definition.Image, origin + position * scale, size * scale, Mathf.Lerp(particle.PreviousAngle, particle.Angle, fraction),
                         particle.Frame, 0, 0, stretch, emitter.Definition.Additive, clipTop, clipBottom, imageRow);
                 }
             }
@@ -483,9 +508,9 @@ namespace PlantsVsZombies.Reanimation
         /// <summary>Performs load.</summary>
         /// <param name = "name">The name.</param>
         /// <returns>The resulting load.</returns>
-        private List<EmitterDefinition> Load(string name)
+        private List<EmitterDefinition>? Load(string name)
         {
-            List<EmitterDefinition> result;
+            List<EmitterDefinition>? result;
             if (_definitions.TryGetValue(name, out result))
             {
                 return result;
@@ -617,7 +642,7 @@ namespace PlantsVsZombies.Reanimation
             {
                 for (var j = 0; j < 2; j++)
                 {
-                    particle.FieldRandom[i, j] = Random01(system);
+                    particle.RequiredFieldRandom[i, j] = Random01(system);
                 }
             }
 
@@ -639,7 +664,7 @@ namespace PlantsVsZombies.Reanimation
             {
                 if (systemField.Type == "SystemPosition")
                 {
-                    particle.Position += new Vector2(systemField.X.Value(systemTime, .5f), systemField.Y.Value(systemTime, .5f));
+                    particle.Position += new Vector2(systemField.RequiredX.Value(systemTime, .5f), systemField.RequiredY.Value(systemTime, .5f));
                 }
             }
 
@@ -653,7 +678,7 @@ namespace PlantsVsZombies.Reanimation
             particle.Angle = definition.Track("ParticleSpinAngle").Value(0, Random01(system)) + (definition.RandomSpin ? Random01(system) * 360f : 0);
             particle.PreviousPosition = particle.Position;
             particle.PreviousAngle = particle.Angle;
-            particle.Frame = system.Random.Next(Math.Max(1, definition.ImageFrames));
+            particle.Frame = system.RequiredRandom.Next(Math.Max(1, definition.ImageFrames));
             emitter.Particles.Add(particle);
             emitter.Launched++;
         }
@@ -700,7 +725,7 @@ namespace PlantsVsZombies.Reanimation
                     for (var i = 0; i < definition.Fields.Count; i++)
                     {
                         var field = definition.Fields[i];
-                        float x = field.X.Value(time, particle.FieldRandom[i, 0]), y = field.Y.Value(time, particle.FieldRandom[i, 1]);
+                        float x = field.RequiredX.Value(time, particle.RequiredFieldRandom[i, 0]), y = field.RequiredY.Value(time, particle.RequiredFieldRandom[i, 1]);
                         switch (field.Type)
                         {
                             case "Friction":
@@ -713,7 +738,7 @@ namespace PlantsVsZombies.Reanimation
                                 particle.Position += new Vector2(x, y) * .01f;
                                 break;
                             case "Position":
-                                particle.Position += new Vector2(x - field.X.Value(last, particle.FieldRandom[i, 0]), y - field.Y.Value(last, particle.FieldRandom[i, 1]));
+                                particle.Position += new Vector2(x - field.RequiredX.Value(last, particle.RequiredFieldRandom[i, 0]), y - field.RequiredY.Value(last, particle.RequiredFieldRandom[i, 1]));
                                 break;
                             case "Shake":
                                 particle.Position += new Vector2((Random01(system) * 2 - 1) * x, (Random01(system) * 2 - 1) * y);

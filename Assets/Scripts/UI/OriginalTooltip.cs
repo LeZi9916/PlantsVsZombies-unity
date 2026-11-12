@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using UnityEngine;
+using System.Diagnostics.CodeAnalysis;
 
 namespace PlantsVsZombies.UI
 {
@@ -21,13 +22,25 @@ namespace PlantsVsZombies.UI
         /// <summary>Stores background.</summary>
         public static readonly Color Background = new Color32(255, 255, 200, 255);
         /// <summary>Stores title font,  body font.</summary>
-        private CanvasBitmapFont _titleFont, _bodyFont;
+        private CanvasBitmapFont? _titleFont, _bodyFont;
+
+        /// <summary>Gets the title font, which must already exist wherever it is used.</summary>
+        /// <exception cref="System.InvalidOperationException">The member is not available.</exception>
+        private CanvasBitmapFont RequiredTitleFont => _titleFont ?? throw new System.InvalidOperationException("The member '_titleFont' is not available.");
+
+        /// <summary>Gets the body font, which must already exist wherever it is used.</summary>
+        /// <exception cref="System.InvalidOperationException">The member is not available.</exception>
+        private CanvasBitmapFont RequiredBodyFont => _bodyFont ?? throw new System.InvalidOperationException("The member '_bodyFont' is not available.");
         /// <summary>Stores disposed.</summary>
         private bool _disposed;
         /// <summary>Gets or sets last error.</summary>
-        public string LastError { get; private set; }
+        public string? LastError { get; private set; }
         /// <summary>Gets or sets last layout.</summary>
-        public OriginalTooltipLayout LastLayout { get; private set; }
+        public OriginalTooltipLayout? LastLayout { get; private set; }
+
+        /// <summary>Gets the last layout, which must already exist wherever it is used.</summary>
+        /// <exception cref="System.InvalidOperationException">The member is not available.</exception>
+        public OriginalTooltipLayout RequiredLastLayout => LastLayout ?? throw new System.InvalidOperationException("The member 'LastLayout' is not available.");
 
         /// <summary>Performs ensure fonts.</summary>
         /// <returns>The resulting ensure fonts.</returns>
@@ -65,7 +78,7 @@ namespace PlantsVsZombies.UI
         /// <param name = "result">The result.</param>
         /// <returns>The resulting try layout.</returns>
         /// <exception cref = "ArgumentNullException">The operation cannot satisfy its preconditions.</exception>
-        public bool TryLayout(OriginalTooltipRequest request, out OriginalTooltipLayout result)
+        public bool TryLayout(OriginalTooltipRequest request, [NotNullWhen(true)] out OriginalTooltipLayout? result)
         {
             if (request == null)
             {
@@ -82,31 +95,31 @@ namespace PlantsVsZombies.UI
             try
             {
                 string title = request.Title ?? "", warning = request.Warning ?? "", body = request.Body ?? "";
-                BitmapTextLayout header = _titleFont.Layout(title), alert = _bodyFont.Layout(warning);
+                BitmapTextLayout header = RequiredTitleFont.Layout(title), alert = RequiredBodyFont.Layout(warning);
                 header.ThrowIfMissing();
                 alert.ThrowIfMissing();
                 var maximum = Math.Max((int)header.Width, (int)alert.Width);
                 var minimumWrap = request.UseSeedChooserLineWidth ? request.SeedChooserMaxLineWidth : 100;
                 var wrapWidth = Math.Max(minimumWrap, maximum - 30);
-                var lines = WrapBody(body, wrapWidth, _bodyFont.Data);
+                var lines = WrapBody(body, wrapWidth, RequiredBodyFont.Data);
                 var bodyLayouts = new List<BitmapTextLayout>();
                 foreach (string line in lines)
                 {
-                    var layout = _bodyFont.Layout(line);
+                    var layout = RequiredBodyFont.Layout(line);
                     layout.ThrowIfMissing();
                     bodyLayouts.Add(layout);
                     maximum = Math.Max(maximum, (int)layout.Width);
                 }
 
-                var leading = title.Length == 0 ? 6 : _titleFont.Data.LineHeight + 8;
+                var leading = title.Length == 0 ? 6 : RequiredTitleFont.Data.LineHeight + 8;
                 // Exact PC measurement uses the header font's height for the warning contribution.
                 if (warning.Length > 0)
                 {
-                    leading += _titleFont.Data.LineHeight + 2;
+                    leading += RequiredTitleFont.Data.LineHeight + 2;
                 }
 
                 var width = maximum + 10;
-                var height = leading + lines.Count * (_bodyFont.Data.LineHeight + 2) - 2;
+                var height = leading + lines.Count * (RequiredBodyFont.Data.LineHeight + 2) - 2;
                 var bounds = Place(request, width, height);
                 result = new OriginalTooltipLayout
                 {
@@ -245,7 +258,7 @@ namespace PlantsVsZombies.UI
                 return true;
             }
 
-            OriginalTooltipLayout layout;
+            OriginalTooltipLayout? layout;
             if (!TryLayout(request, out layout))
             {
                 return false;
@@ -265,21 +278,21 @@ namespace PlantsVsZombies.UI
                 var y = (int)bounds.y + 1;
                 if (!string.IsNullOrEmpty(request.Title))
                 {
-                    DrawLine(_titleFont, layout._title, bounds, y + _titleFont.Data.LineHeight, Color.black);
-                    y += _titleFont.Data.LineHeight + 2;
+                    DrawLine(RequiredTitleFont, layout.RequiredTitle, bounds, y + RequiredTitleFont.Data.LineHeight, Color.black);
+                    y += RequiredTitleFont.Data.LineHeight + 2;
                 }
 
                 if (!string.IsNullOrEmpty(request.Warning))
                 {
                     var warning = request.WarningFlashCounter > 0 && request.WarningFlashCounter % 20 < 10 ? Color.black : Color.red;
-                    DrawLine(_bodyFont, layout._warning, bounds, y + _bodyFont.Data.LineHeight, warning);
-                    y += _bodyFont.Data.LineHeight + 2;
+                    DrawLine(RequiredBodyFont, layout.RequiredWarning, bounds, y + RequiredBodyFont.Data.LineHeight, warning);
+                    y += RequiredBodyFont.Data.LineHeight + 2;
                 }
 
                 foreach (BitmapTextLayout line in layout._body)
                 {
-                    DrawLine(_bodyFont, line, bounds, y + _bodyFont.Data.LineHeight, Color.black);
-                    y += _bodyFont.Data.LineHeight + 2;
+                    DrawLine(RequiredBodyFont, line, bounds, y + RequiredBodyFont.Data.LineHeight, Color.black);
+                    y += RequiredBodyFont.Data.LineHeight + 2;
                 }
             }
             finally

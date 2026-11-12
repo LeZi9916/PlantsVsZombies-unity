@@ -8,6 +8,7 @@ using System.Globalization;
 using System.IO;
 using System.Xml;
 using UnityEngine;
+using System.Diagnostics.CodeAnalysis;
 
 namespace PlantsVsZombies.Reanimation
 {
@@ -26,7 +27,7 @@ namespace PlantsVsZombies.Reanimation
             /// <summary>Stores x, y, kx, ky, scale x, scale y, alpha, visibility.</summary>
             public float X, Y, Kx, Ky, ScaleX, ScaleY, Alpha, Visibility;
             /// <summary>Stores texture.</summary>
-            public Texture2D Texture;
+            public Texture2D? Texture;
         }
 
         /// <summary>Defines frame sample.</summary>
@@ -42,9 +43,9 @@ namespace PlantsVsZombies.Reanimation
         private sealed class Track
         {
             /// <summary>Stores name.</summary>
-            public string Name;
+            public string Name = string.Empty;
             /// <summary>Stores frames.</summary>
-            public Frame[] Frames;
+            public Frame[] Frames = System.Array.Empty<Frame>();
         }
 
         /// <summary>Defines clip.</summary>
@@ -64,7 +65,7 @@ namespace PlantsVsZombies.Reanimation
         private sealed class NativePoseBlend
         {
             /// <summary>Stores animation.</summary>
-            public string Animation;
+            public string? Animation = string.Empty;
             /// <summary>Stores started at, fraction.</summary>
             public float StartedAt, Fraction;
             /// <summary>The outer presentation frame that most recently sampled this actor.</summary>
@@ -80,7 +81,7 @@ namespace PlantsVsZombies.Reanimation
         /// <param name = "track">The track.</param>
         /// <param name = "pose">The pose.</param>
         /// <returns>The resulting blend native pose.</returns>
-        private static Frame BlendNativePose(NativePoseBlend blend, string track, Frame pose)
+        private static Frame BlendNativePose(NativePoseBlend? blend, string track, Frame pose)
         {
             if (blend == null)
             {
@@ -105,7 +106,7 @@ namespace PlantsVsZombies.Reanimation
         private sealed class Reanimation
         {
             /// <summary>Stores name.</summary>
-            public string Name;
+            public string Name = string.Empty;
             /// <summary>Stores fps.</summary>
             public float Fps;
             /// <summary>Stores frame count.</summary>
@@ -119,7 +120,7 @@ namespace PlantsVsZombies.Reanimation
             /// <summary>Caches resolved requested clips, including default animation aliases.</summary>
             public readonly Dictionary<string, Clip> RequestedClips = new Dictionary<string, Clip>(StringComparer.OrdinalIgnoreCase);
             /// <summary>Stores attached bounds.</summary>
-            public readonly Dictionary<(Clip Body, Clip Head, Track Anchor), Rect> AttachedBounds = new Dictionary<(Clip Body, Clip Head, Track Anchor), Rect>();
+            public readonly Dictionary<(Clip Body, Clip? Head, Track Anchor), Rect> AttachedBounds = new Dictionary<(Clip Body, Clip? Head, Track Anchor), Rect>();
         }
 
         /// <summary>Stores root.</summary>
@@ -187,11 +188,11 @@ namespace PlantsVsZombies.Reanimation
         /// <summary>Reuses each supported expanded potato-mine glow clip.</summary>
         private readonly Dictionary<int, Clip> _potatoLightClips = new Dictionary<int, Clip>();
         /// <summary>The reusable scene objects used by the current screen batch.</summary>
-        private ObjectSpriteRenderer _objectRenderer;
+        private ObjectSpriteRenderer? _objectRenderer;
         /// <summary>The source opacity classifications shared by all screen and cropped surface pools.</summary>
         private readonly TextureOpacityCache _textureOpacity = new TextureOpacityCache();
         /// <summary>The reusable scene objects used by the active cropped native surface.</summary>
-        private ObjectSpriteRenderer _nativeObjectRenderer;
+        private ObjectSpriteRenderer? _nativeObjectRenderer;
         /// <summary>Stores rendering native surface.</summary>
         private bool _renderingNativeSurface;
         /// <summary>Stores native surface matrix.</summary>
@@ -218,7 +219,11 @@ namespace PlantsVsZombies.Reanimation
         }
 
         /// <summary>Stores native portrait material.</summary>
-        private Material _nativePortraitMaterial;
+        private Material? _nativePortraitMaterial;
+
+        /// <summary>Gets the native portrait material, which must already exist wherever it is used.</summary>
+        /// <exception cref="System.InvalidOperationException">The member is not available.</exception>
+        private Material RequiredNativePortraitMaterial => _nativePortraitMaterial ?? throw new System.InvalidOperationException("The member '_nativePortraitMaterial' is not available.");
         /// <summary>Stores indexed.</summary>
         private bool _indexed;
         /// <summary>Stores disposed.</summary>
@@ -285,7 +290,7 @@ namespace PlantsVsZombies.Reanimation
         }
 
         /// <summary>The reason the most recent Draw or TryGetAnimationInfo call failed.</summary>
-        public string LastError { get; private set; }
+        public string? LastError { get; private set; }
 
         /// <summary>Initializes reanimation renderer.</summary>
         /// <param name = "resourceRoot">The resource root.</param>
@@ -301,14 +306,14 @@ namespace PlantsVsZombies.Reanimation
         }
 
         /// <summary>Draws a looping animation inside a screen-space rectangle, preserving aspect ratio.</summary>
-        public bool Draw(string name, Rect destination, float seconds, string animation = null)
+        public bool Draw(string name, Rect destination, float seconds, string? animation = null)
         {
             using var objectScope = BeginObjectScope();
             return Draw(name, destination, seconds, animation, true);
         }
 
         /// <summary>Set loop to false to hold the last frame of a one-shot animation.</summary>
-        public bool Draw(string name, Rect destination, float seconds, string animation, bool loop)
+        public bool Draw(string name, Rect destination, float seconds, string? animation, bool loop)
         {
             using var objectScope = BeginObjectScope();
             if (IsPeaShooter(name))
@@ -347,7 +352,7 @@ namespace PlantsVsZombies.Reanimation
         /// original track image rectangle, so the animation and cached layout remain unchanged.
         /// Pass an image ID such as IMAGE_REANIM_WALLNUT_CRACKED1, or null for the original image.
         /// </summary>
-        public bool DrawWithImageOverride(string name, Rect destination, float seconds, string trackName, string imageId, string animation = null, bool loop = true)
+        public bool DrawWithImageOverride(string name, Rect destination, float seconds, string trackName, string? imageId, string? animation = null, bool loop = true)
         {
             using var objectScope = BeginObjectScope();
             LastError = null;
@@ -361,8 +366,8 @@ namespace PlantsVsZombies.Reanimation
                 return Fail("A track name and image resource ID are required.");
             }
 
-            Reanimation asset;
-            Clip clip;
+            Reanimation? asset;
+            Clip? clip;
             if (!TryGetClip(name, animation, out asset, out clip))
             {
                 return false;
@@ -397,7 +402,7 @@ namespace PlantsVsZombies.Reanimation
         /// Draws a ground zombie. equipmentIntact controls the cone, bucket, door, or flag;
         /// false restores the ordinary unarmored body and arms.
         /// </summary>
-        public bool DrawZombie(Rect destination, float seconds, ZombieVariant variant, bool equipmentIntact = true, string animation = null, bool loop = true)
+        public bool DrawZombie(Rect destination, float seconds, ZombieVariant variant, bool equipmentIntact = true, string? animation = null, bool loop = true)
         {
             using var objectScope = BeginObjectScope();
             if (variant < ZombieVariant.Normal || variant > ZombieVariant.ScreenDoor)
@@ -433,7 +438,7 @@ namespace PlantsVsZombies.Reanimation
         /// <param name = "imageOverride">The image override.</param>
         /// <param name = "nativePlacement">The native placement.</param>
         /// <returns>The resulting draw attached plant core.</returns>
-        private bool DrawAttachedPlantCore(string name, Rect destination, float bodySeconds, float headSeconds, string headAnimation, bool headLoop, float bodyFramesPerSecond, float headFramesPerSecond, string bodyAnimation, string attachmentTrack, string overrideTrack, Texture2D imageOverride, Matrix4x4? nativePlacement = null)
+        private bool DrawAttachedPlantCore(string? name, Rect destination, float bodySeconds, float headSeconds, string headAnimation, bool headLoop, float bodyFramesPerSecond, float headFramesPerSecond, string bodyAnimation, string attachmentTrack, string? overrideTrack, Texture2D? imageOverride, Matrix4x4? nativePlacement = null)
         {
             LastError = null;
             if (!IsValidDestination(destination) || !IsFinite(bodySeconds) || !IsFinite(headSeconds) || !IsFinite(bodyFramesPerSecond) || !IsFinite(headFramesPerSecond) || bodyFramesPerSecond < 0f || headFramesPerSecond < 0f)
@@ -446,9 +451,9 @@ namespace PlantsVsZombies.Reanimation
                 return Fail("Body animation, head animation and attachment track are required.");
             }
 
-            Reanimation asset;
-            Clip body, head;
-            Track anchor;
+            Reanimation? asset;
+            Clip? body, head;
+            Track? anchor;
             Matrix4x4 inverseBase;
             Rect bounds;
             if (!TryPrepareAttachedPlant(name, bodyAnimation, headAnimation, attachmentTrack, out asset, out body, out head, out anchor, out inverseBase, out bounds))
@@ -501,7 +506,7 @@ namespace PlantsVsZombies.Reanimation
         /// <param name="crazyDaveHeldItem">The item attached to Dave's hand, if any.</param>
         /// <param name="crazyDaveHeldItemAge">The elapsed time of the held item's animation.</param>
         /// <returns>The resulting draw internal.</returns>
-        private bool DrawInternal(string name, Rect destination, float seconds, string animation, bool loop, ZombieVariant variant, bool equipmentIntact, Func<string, bool> trackVisible, string overrideTrack = null, Texture2D imageOverride = null, Matrix4x4? nativePlacement = null, bool cachedFlag = false, NativePoseBlend blend = null, string? crazyDaveHeldItem = null, float crazyDaveHeldItemAge = 0f)
+        private bool DrawInternal(string? name, Rect destination, float seconds, string? animation, bool loop, ZombieVariant variant, bool equipmentIntact, Func<string, bool>? trackVisible, string? overrideTrack = null, Texture2D? imageOverride = null, Matrix4x4? nativePlacement = null, bool cachedFlag = false, NativePoseBlend? blend = null, string? crazyDaveHeldItem = null, float crazyDaveHeldItemAge = 0f)
         {
             LastError = null;
             if (!IsFinite(seconds) || !IsFinite(destination.x) || !IsFinite(destination.y) || !IsFinite(destination.width) || !IsFinite(destination.height) || destination.width <= 0f || destination.height <= 0f)
@@ -509,15 +514,15 @@ namespace PlantsVsZombies.Reanimation
                 return Fail("The destination and time must be finite, with a positive rectangle size.");
             }
 
-            Reanimation asset;
-            Clip clip;
+            Reanimation? asset;
+            Clip? clip;
             if (!TryGetClip(name, animation, out asset, out clip))
             {
                 return false;
             }
 
-            Reanimation flag = null;
-            Clip flagClip = null;
+            Reanimation? flag = null;
+            Clip? flagClip = null;
             if (trackVisible == null && IsZombie(asset) && variant == ZombieVariant.Flag && equipmentIntact && !TryGetClip("Zombie_flagpole", null, out flag, out flagClip))
             {
                 return false;
@@ -533,8 +538,8 @@ namespace PlantsVsZombies.Reanimation
                 }
             }
 
-            Reanimation heldItem = null;
-            Clip heldItemClip = null;
+            Reanimation? heldItem = null;
+            Clip? heldItemClip = null;
             var heldItemBaseInverse = Matrix4x4.identity;
             var heldHammer = crazyDaveHeldItem == "HAMMER";
             var heldWallnut = crazyDaveHeldItem == "WALLNUT";
@@ -594,6 +599,11 @@ namespace PlantsVsZombies.Reanimation
                 // Cached almanac flags are drawn independently at the body origin (0x47ECE0).
                 if (flag != null && cachedFlag)
                 {
+                    if (flagClip == null)
+                    {
+                        throw new System.InvalidOperationException("The value 'flagClip' is not available.");
+                    }
+
                     drawn |= DrawAttachment(flag, flagClip, 0f, originalMatrix * layout, originalColor, 1f);
                 }
 
@@ -628,6 +638,11 @@ namespace PlantsVsZombies.Reanimation
 
                         if (flag != null && !cachedFlag && TrackIs(track.Name, "Zombie_flaghand"))
                         {
+                            if (flagClip == null)
+                            {
+                                throw new System.InvalidOperationException("The value 'flagClip' is not available.");
+                            }
+
                             drawn |= DrawAttachment(flag, flagClip, seconds, originalMatrix * layout * PartMatrix(frame) * flagBaseInverse, originalColor, frame.Alpha);
                         }
 
@@ -653,6 +668,11 @@ namespace PlantsVsZombies.Reanimation
                                 : heldTreeFood || heldFertilizer ? Matrix4x4.Translate(new Vector3(102f, 412f, 0f))
                                 : Matrix4x4.Translate(new Vector3(100f, 393f, 0f)) * Matrix4x4.Scale(new Vector3(1.2f, 1.2f, 1f));
                             var placement = originalMatrix * layout * PartMatrix(frame) * heldItemBaseInverse * offset;
+                            if (heldItemClip == null)
+                            {
+                                throw new System.InvalidOperationException("The value 'heldItemClip' is not available.");
+                            }
+
                             var itemSeconds = heldHammer
                                 ? (heldItemClip.Count - 1f) / heldItem.Fps
                                 : heldTreeFood || heldFertilizer || heldMoneyBag ? 0f : NativeSeconds(heldItemClip, crazyDaveHeldItemAge, 12f, heldItem.Fps, true);
@@ -683,7 +703,7 @@ namespace PlantsVsZombies.Reanimation
         /// Draws source reanimation pixels at an explicit origin and scale. Unlike Draw,
         /// this preserves the original canvas, anchor and size; it never fits a bounding box.
         /// </summary>
-        public bool DrawNative(string name, Vector2 origin, float scale, float seconds, string animation = null, Func<string, bool> trackVisible = null)
+        public bool DrawNative(string? name, Vector2 origin, float scale, float seconds, string? animation = null, Func<string, bool>? trackVisible = null)
         {
             using var objectScope = BeginObjectScope();
             if (!IsFinite(origin.x) || !IsFinite(origin.y) || !IsFinite(scale) || scale <= 0f || !IsFinite(seconds))
@@ -730,10 +750,10 @@ namespace PlantsVsZombies.Reanimation
         /// <param name = "placement">The placement.</param>
         /// <param name = "seconds">The seconds.</param>
         /// <returns>The resulting draw native multi head.</returns>
-        private bool DrawNativeMultiHead(string name, Matrix4x4 placement, float seconds)
+        private bool DrawNativeMultiHead(string? name, Matrix4x4 placement, float seconds)
         {
-            Reanimation asset;
-            Clip body;
+            Reanimation? asset;
+            Clip? body;
             if (!TryGetClip(name, "anim_idle", out asset, out body))
             {
                 return false;
@@ -765,9 +785,9 @@ namespace PlantsVsZombies.Reanimation
                             _ => "anim_head3"
                         }
                         : "anim_idle";
-                    Reanimation ignored;
-                    Clip head;
-                    Track anchor;
+                    Reanimation? ignored;
+                    Clip? head;
+                    Track? anchor;
                     Matrix4x4 inverseBase;
                     Rect bounds;
                     if (!TryPrepareAttachedPlant(name, "anim_idle", headName, anchorName, out ignored, out body, out head, out anchor, out inverseBase, out bounds))
@@ -990,8 +1010,8 @@ namespace PlantsVsZombies.Reanimation
                 return Fail("Boss origin, scale and time must be finite.");
             }
 
-            Reanimation boss, driver;
-            Clip head, driverIdle;
+            Reanimation? boss, driver;
+            Clip? head, driverIdle;
             if (!TryGetClip("Zombie_boss", animation, out boss, out head) || !TryGetClip("Zombie_Boss_driver", "anim_idle", out driver, out driverIdle))
             {
                 return false;
@@ -1064,16 +1084,16 @@ namespace PlantsVsZombies.Reanimation
         }
 
         /// <summary>Returns the padded union of all frames in the selected animation.</summary>
-        public bool TryGetAnimationInfo(string name, string animation, out AnimationInfo info)
+        public bool TryGetAnimationInfo(string name, string? animation, out AnimationInfo info)
         {
             LastError = null;
             info = default(AnimationInfo);
             if (IsPeaShooter(name) && (string.IsNullOrWhiteSpace(animation) || IsAnimation(animation, "anim_full_idle") || IsAnimation(animation, "anim_shooting")))
             {
                 var headName = IsAnimation(animation, "anim_shooting") ? "anim_shooting" : "anim_head_idle";
-                Reanimation attachedAsset;
-                Clip body, head;
-                Track anchor;
+                Reanimation? attachedAsset;
+                Clip? body, head;
+                Track? anchor;
                 Matrix4x4 inverseBase;
                 Rect attachedBounds;
                 if (!TryPrepareAttachedPlant(name, "anim_idle", headName, "anim_stem", out attachedAsset, out body, out head, out anchor, out inverseBase, out attachedBounds))
@@ -1090,8 +1110,8 @@ namespace PlantsVsZombies.Reanimation
                 return true;
             }
 
-            Reanimation asset;
-            Clip clip;
+            Reanimation? asset;
+            Clip? clip;
             if (!TryGetClip(name, animation, out asset, out clip))
             {
                 return false;
@@ -1184,7 +1204,7 @@ namespace PlantsVsZombies.Reanimation
         /// <param name = "actual">The actual.</param>
         /// <param name = "expected">The expected.</param>
         /// <returns>The resulting track is.</returns>
-        private static bool TrackIs(string actual, string expected)
+        private static bool TrackIs(string? actual, string? expected)
         {
             return string.Equals(actual, expected, StringComparison.OrdinalIgnoreCase);
         }
@@ -1196,7 +1216,7 @@ namespace PlantsVsZombies.Reanimation
         /// <param name = "equipmentIntact">The equipment intact.</param>
         /// <param name = "custom">The custom.</param>
         /// <returns>The resulting is track visible.</returns>
-        private static bool IsTrackVisible(Reanimation asset, string track, ZombieVariant variant, bool equipmentIntact, Func<string, bool> custom)
+        private static bool IsTrackVisible(Reanimation asset, string track, ZombieVariant variant, bool equipmentIntact, Func<string, bool>? custom)
         {
             if (custom != null)
             {
@@ -1214,7 +1234,7 @@ namespace PlantsVsZombies.Reanimation
         /// <param name = "custom">The custom.</param>
         /// <param name = "bounds">The bounds.</param>
         /// <returns>The resulting try get bounds.</returns>
-        private bool TryGetBounds(Reanimation asset, Clip clip, ZombieVariant variant, bool equipmentIntact, Func<string, bool> custom, out Rect bounds)
+        private bool TryGetBounds(Reanimation asset, Clip clip, ZombieVariant variant, bool equipmentIntact, Func<string, bool>? custom, out Rect bounds)
         {
             bounds = default(Rect);
             if (custom == null && !IsZombie(asset))
@@ -1322,7 +1342,7 @@ namespace PlantsVsZombies.Reanimation
         /// <param name = "inverseBase">The inverse base.</param>
         /// <param name = "bounds">The bounds.</param>
         /// <returns>The resulting try prepare attached plant.</returns>
-        private bool TryPrepareAttachedPlant(string name, string bodyAnimation, string headAnimation, string attachmentTrack, out Reanimation asset, out Clip body, out Clip head, out Track anchor, out Matrix4x4 inverseBase, out Rect bounds)
+        private bool TryPrepareAttachedPlant(string? name, string bodyAnimation, string headAnimation, string attachmentTrack, [NotNullWhen(true)] out Reanimation? asset, [NotNullWhen(true)] out Clip? body, [NotNullWhen(true)] out Clip? head, [NotNullWhen(true)] out Track? anchor, out Matrix4x4 inverseBase, out Rect bounds)
         {
             asset = null;
             body = null;
@@ -1335,7 +1355,7 @@ namespace PlantsVsZombies.Reanimation
                 return false;
             }
 
-            Reanimation sameAsset;
+            Reanimation? sameAsset;
             if (!TryGetClip(name, headAnimation, out sameAsset, out head))
             {
                 return false;
@@ -1371,8 +1391,8 @@ namespace PlantsVsZombies.Reanimation
         private bool TryGetAttachedPlantBounds(Reanimation asset, Clip body, Clip head, Track anchor, Matrix4x4 inverseBase, out Rect bounds)
         {
             bounds = default(Rect);
-            Clip idle = null, shooting = null;
-            Reanimation ignored;
+            Clip? idle = null, shooting = null;
+            Reanimation? ignored;
             if (FindTrack(asset, "anim_head_idle") != null && !TryGetClip(asset.Name, "anim_head_idle", out ignored, out idle))
             {
                 return false;
@@ -1525,7 +1545,7 @@ namespace PlantsVsZombies.Reanimation
         /// <param name = "asset">The asset.</param>
         /// <param name = "clip">The clip.</param>
         /// <returns>The resulting try get clip.</returns>
-        private bool TryGetClip(string name, string animation, out Reanimation asset, out Clip clip)
+        private bool TryGetClip(string? name, string? animation, [NotNullWhen(true)] out Reanimation? asset, [NotNullWhen(true)] out Clip? clip)
         {
             asset = null;
             clip = null;
@@ -1556,19 +1576,19 @@ namespace PlantsVsZombies.Reanimation
                 }
 
                 var useDefault = string.IsNullOrWhiteSpace(animation);
-                var requestKey = useDefault ? string.Empty : animation;
+                var requestKey = animation == null || useDefault ? string.Empty : animation;
                 if (asset.RequestedClips.TryGetValue(requestKey, out clip))
                 {
                     return true;
                 }
 
-                var clipName = useDefault ? DefaultAnimation(asset.Name) : animation.Trim();
+                var clipName = animation == null || useDefault ? DefaultAnimation(asset.Name) : animation.Trim();
                 if (!string.IsNullOrEmpty(clipName) && !clipName.StartsWith("anim_", StringComparison.OrdinalIgnoreCase) && !clipName.StartsWith("_", StringComparison.Ordinal))
                 {
                     clipName = "anim_" + clipName;
                 }
 
-                Track marker = null;
+                Track? marker = null;
                 if (!string.IsNullOrEmpty(clipName))
                 {
                     marker = FindTrack(asset, clipName);
@@ -1662,7 +1682,7 @@ namespace PlantsVsZombies.Reanimation
         /// <summary>Performs is pea shooter.</summary>
         /// <param name = "name">The name.</param>
         /// <returns>The resulting is pea shooter.</returns>
-        private static bool IsPeaShooter(string name)
+        private static bool IsPeaShooter(string? name)
         {
             if (name == null)
             {
@@ -1681,7 +1701,7 @@ namespace PlantsVsZombies.Reanimation
         /// <param name = "actual">The actual.</param>
         /// <param name = "expected">The expected.</param>
         /// <returns>The resulting is animation.</returns>
-        private static bool IsAnimation(string actual, string expected)
+        private static bool IsAnimation(string? actual, string expected)
         {
             if (string.IsNullOrWhiteSpace(actual))
             {
@@ -1752,8 +1772,13 @@ namespace PlantsVsZombies.Reanimation
         /// <param name = "trackVisible">The track visible.</param>
         /// <param name = "blend">The blend.</param>
         /// <returns>The resulting draw clip pose.</returns>
-        private bool DrawClipPose(Reanimation asset, Clip clip, float seconds, float fps, bool loop, Matrix4x4 parent, Color tint, string overrideTrack = null, Texture2D imageOverride = null, Func<string, bool> trackVisible = null, NativePoseBlend blend = null)
+        private bool DrawClipPose(Reanimation asset, Clip? clip, float seconds, float fps, bool loop, Matrix4x4 parent, Color tint, string? overrideTrack = null, Texture2D? imageOverride = null, Func<string, bool>? trackVisible = null, NativePoseBlend? blend = null)
         {
+            if (clip == null)
+            {
+                throw new System.ArgumentNullException(nameof(clip));
+            }
+
             var time = SampleFrame(clip, seconds, fps, loop);
             var drawn = false;
             var groupCount = _nativeCombatZombie == null || _nativeCombatShieldType == 0 ? 1 : 3;
@@ -2208,7 +2233,7 @@ namespace PlantsVsZombies.Reanimation
         /// <param name = "equipmentIntact">The equipment intact.</param>
         /// <param name = "custom">The custom.</param>
         /// <returns>The resulting try calculate bounds.</returns>
-        private static bool TryCalculateBounds(Reanimation asset, Clip clip, out Rect bounds, bool filterTracks = false, ZombieVariant variant = ZombieVariant.Normal, bool equipmentIntact = false, Func<string, bool> custom = null)
+        private static bool TryCalculateBounds(Reanimation asset, Clip clip, out Rect bounds, bool filterTracks = false, ZombieVariant variant = ZombieVariant.Normal, bool equipmentIntact = false, Func<string, bool>? custom = null)
         {
             float minX = float.PositiveInfinity, minY = float.PositiveInfinity;
             float maxX = float.NegativeInfinity, maxY = float.NegativeInfinity;
@@ -2386,7 +2411,7 @@ namespace PlantsVsZombies.Reanimation
         /// <param name = "seconds">The seconds.</param>
         /// <param name = "ticks">The ticks.</param>
         /// <returns>The resulting prepare native blend.</returns>
-        private NativePoseBlend PrepareNativeBlend(string key, string animation, float seconds, int ticks)
+        private NativePoseBlend? PrepareNativeBlend(string? key, string? animation, float seconds, int ticks)
         {
             if (string.IsNullOrEmpty(key))
             {
@@ -2456,11 +2481,11 @@ namespace PlantsVsZombies.Reanimation
         /// <param name = "animation">The animation.</param>
         /// <param name = "info">The info.</param>
         /// <returns>The resulting try get native animation info.</returns>
-        public bool TryGetNativeAnimationInfo(string name, string animation, out NativeAnimationInfo info)
+        public bool TryGetNativeAnimationInfo(string name, string? animation, out NativeAnimationInfo info)
         {
             info = default(NativeAnimationInfo);
-            Reanimation asset;
-            Clip clip;
+            Reanimation? asset;
+            Clip? clip;
             if (!TryGetClip(name, animation, out asset, out clip))
             {
                 return false;
@@ -2514,11 +2539,11 @@ namespace PlantsVsZombies.Reanimation
         /// <param name="crazyDaveHeldItem">The item attached to Dave's hand, if any.</param>
         /// <param name="crazyDaveHeldItemAge">The elapsed time of the held item's animation.</param>
         /// <returns>The resulting draw native playback.</returns>
-        public bool DrawNativePlayback(string name, Vector2 origin, float scale, float seconds, string animation, bool loop, float framesPerSecond = -1f, Func<string, bool> visible = null, string overrideTrack = null, string overrideImage = null, bool facingLeft = false, string instanceKey = null, int blendTicks = 20, float verticalScale = -1f, float mirrorWidth = 80f, string? crazyDaveHeldItem = null, float crazyDaveHeldItemAge = 0f)
+        public bool DrawNativePlayback(string? name, Vector2 origin, float scale, float seconds, string? animation, bool loop, float framesPerSecond = -1f, Func<string, bool>? visible = null, string? overrideTrack = null, string? overrideImage = null, bool facingLeft = false, string? instanceKey = null, int blendTicks = 20, float verticalScale = -1f, float mirrorWidth = 80f, string? crazyDaveHeldItem = null, float crazyDaveHeldItemAge = 0f)
         {
             using var objectScope = BeginObjectScope();
-            Reanimation asset;
-            Clip clip;
+            Reanimation? asset;
+            Clip? clip;
             if (!TryGetClip(name, animation, out asset, out clip))
             {
                 return false;
@@ -2590,11 +2615,11 @@ namespace PlantsVsZombies.Reanimation
         /// <param name = "instanceKey">The instance key.</param>
         /// <param name = "blendTicks">The blend ticks.</param>
         /// <returns>The resulting draw zombie playback.</returns>
-        public bool DrawZombiePlayback(Vector2 origin, float scale, float seconds, ZombieVariant variant, string animation, bool loop, float rate, bool equipmentIntact = true, Func<string, bool> visible = null, string instanceKey = null, int blendTicks = 20)
+        public bool DrawZombiePlayback(Vector2 origin, float scale, float seconds, ZombieVariant variant, string? animation, bool loop, float rate, bool equipmentIntact = true, Func<string, bool>? visible = null, string? instanceKey = null, int blendTicks = 20)
         {
             using var objectScope = BeginObjectScope();
-            Reanimation asset;
-            Clip clip;
+            Reanimation? asset;
+            Clip? clip;
             if (!TryGetClip("Zombie", animation, out asset, out clip))
             {
                 return false;
@@ -2615,11 +2640,11 @@ namespace PlantsVsZombies.Reanimation
         /// <param name = "instanceKey">The instance key.</param>
         /// <param name = "blendTicks">The blend ticks.</param>
         /// <returns>The resulting draw native attached heads.</returns>
-        public bool DrawNativeAttachedHeads(string name, Vector2 origin, float scale, float bodySeconds, float bodyRate, HeadPlayback[] heads, Func<string, bool> visible = null, bool facingLeft = false, string instanceKey = null, int blendTicks = 20)
+        public bool DrawNativeAttachedHeads(string? name, Vector2 origin, float scale, float bodySeconds, float bodyRate, HeadPlayback[] heads, Func<string, bool>? visible = null, bool facingLeft = false, string? instanceKey = null, int blendTicks = 20)
         {
             using var objectScope = BeginObjectScope();
-            Reanimation asset;
-            Clip body;
+            Reanimation? asset;
+            Clip? body;
             if (!TryGetClip(name, "anim_idle", out asset, out body))
             {
                 return false;
@@ -2636,9 +2661,9 @@ namespace PlantsVsZombies.Reanimation
                 var headIndex = 0;
                 foreach (HeadPlayback playback in heads)
                 {
-                    Clip head;
-                    Reanimation ignored;
-                    Track anchor;
+                    Clip? head;
+                    Reanimation? ignored;
+                    Track? anchor;
                     Matrix4x4 inverseBase;
                     Rect bounds;
                     if (!TryPrepareAttachedPlant(name, "anim_idle", playback.Animation, playback.Anchor, out ignored, out body, out head, out anchor, out inverseBase, out bounds))
@@ -2669,9 +2694,9 @@ namespace PlantsVsZombies.Reanimation
         /// <param name = "asset">The asset.</param>
         /// <param name = "clip">The clip.</param>
         /// <returns>The resulting try get native definition clip.</returns>
-        private bool TryGetNativeDefinitionClip(string name, out Reanimation asset, out Clip clip)
+        private bool TryGetNativeDefinitionClip(string name, [NotNullWhen(true)] out Reanimation? asset, [NotNullWhen(true)] out Clip? clip)
         {
-            Clip ignored;
+            Clip? ignored;
             TryGetClip(name, null, out asset, out ignored);
             clip = null;
             if (asset == null)
@@ -2707,8 +2732,8 @@ namespace PlantsVsZombies.Reanimation
         public bool TryGetNativeDefinitionInfo(string name, out NativeAnimationInfo info)
         {
             info = default(NativeAnimationInfo);
-            Reanimation asset;
-            Clip clip;
+            Reanimation? asset;
+            Clip? clip;
             if (!TryGetNativeDefinitionClip(name, out asset, out clip))
             {
                 return false;
@@ -2735,11 +2760,11 @@ namespace PlantsVsZombies.Reanimation
         /// <param name = "facingLeft">The facing left.</param>
         /// <param name = "mirrorWidth">The mirror width.</param>
         /// <returns>The resulting draw native definition.</returns>
-        public bool DrawNativeDefinition(string name, Vector2 origin, float scale, float seconds, bool loop, float rate = -1f, Func<string, bool> visible = null, bool facingLeft = false, float mirrorWidth = 80f)
+        public bool DrawNativeDefinition(string name, Vector2 origin, float scale, float seconds, bool loop, float rate = -1f, Func<string, bool>? visible = null, bool facingLeft = false, float mirrorWidth = 80f)
         {
             using var objectScope = BeginObjectScope();
-            Reanimation asset;
-            Clip clip;
+            Reanimation? asset;
+            Clip? clip;
             if (!TryGetNativeDefinitionClip(name, out asset, out clip))
             {
                 return false;
@@ -2769,7 +2794,7 @@ namespace PlantsVsZombies.Reanimation
         /// <param name = "headSeconds">The head seconds.</param>
         /// <param name = "facingLeft">The facing left.</param>
         /// <returns>The resulting draw native plant head attachment.</returns>
-        public bool DrawNativePlantHeadAttachment(Vector2 origin, float scale, string parentClip, float parentSeconds, float parentRate, int nativeKind, float headSeconds, bool facingLeft)
+        public bool DrawNativePlantHeadAttachment(Vector2 origin, float scale, string? parentClip, float parentSeconds, float parentRate, int nativeKind, float headSeconds, bool facingLeft)
         {
             using var objectScope = BeginObjectScope();
             int childId;
@@ -2836,7 +2861,7 @@ namespace PlantsVsZombies.Reanimation
                     return false;
             }
 
-            global::PlantsVsZombies.VerifiedData.ReanimationDefinition definition;
+            global::PlantsVsZombies.VerifiedData.ReanimationDefinition? definition;
             if (!global::PlantsVsZombies.VerifiedData.VerifiedDataCatalog.TryGetReanimation(childId, out definition))
             {
                 return false;
@@ -2847,8 +2872,8 @@ namespace PlantsVsZombies.Reanimation
                 childName = Path.GetFileNameWithoutExtension(definition.Path.Replace('\\', '/'));
                 _attachmentNames.Add(childId, childName);
             }
-            Reanimation parent, child;
-            Clip body, head;
+            Reanimation? parent, child;
+            Clip? body, head;
             if (!TryGetClip("Zombie", parentClip, out parent, out body) || !TryGetClip(childName, childClip, out child, out head))
             {
                 return false;
@@ -2894,11 +2919,11 @@ namespace PlantsVsZombies.Reanimation
         /// <param name = "loop">The loop.</param>
         /// <param name = "position">The position.</param>
         /// <returns>The resulting try get native track position.</returns>
-        public bool TryGetNativeTrackPosition(string name, string animation, string trackName, float seconds, float rate, bool loop, out Vector2 position)
+        public bool TryGetNativeTrackPosition(string? name, string? animation, string? trackName, float seconds, float rate, bool loop, out Vector2 position)
         {
             position = default(Vector2);
-            Reanimation asset;
-            Clip clip;
+            Reanimation? asset;
+            Clip? clip;
             if (!TryGetClip(name, animation, out asset, out clip))
             {
                 return false;
@@ -2930,7 +2955,7 @@ namespace PlantsVsZombies.Reanimation
         /// <param name="clipBottom">The fraction hidden from the sprite's bottom edge by its original particle definition.</param>
         /// <param name="imageRow">The original atlas row selected by the particle emitter.</param>
         /// <returns>The resulting draw resource sprite.</returns>
-        public bool DrawResourceSprite(string resource, Vector2 center, float scale, float degrees = 0f, int frame = 0, int columns = 0, int rows = 0, float stretch = 1f, bool additive = false,
+        public bool DrawResourceSprite(string? resource, Vector2 center, float scale, float degrees = 0f, int frame = 0, int columns = 0, int rows = 0, float stretch = 1f, bool additive = false,
             float clipTop = 0f, float clipBottom = 0f, int imageRow = 0)
         {
             using var objectScope = BeginObjectScope();
@@ -2957,6 +2982,11 @@ namespace PlantsVsZombies.Reanimation
             EnsureNativeAtlas();
             Texture2D texture;
             Vector2Int atlas;
+            if (resource == null)
+            {
+                throw new ArgumentNullException(nameof(resource));
+            }
+
             if (!_nativeAtlas.TryGetValue(resource, out atlas))
             {
                 atlas = new Vector2Int(1, 1);
@@ -3209,8 +3239,8 @@ namespace PlantsVsZombies.Reanimation
         public bool DrawNativeFullLastFrame(string name, Vector2 origin, float horizontalScale, float seconds, string animation, bool loop, float rate)
         {
             using var objectScope = BeginObjectScope();
-            Reanimation asset;
-            Clip clip;
+            Reanimation? asset;
+            Clip? clip;
             if (!TryGetClip(name, animation, out asset, out clip))
             {
                 return false;
@@ -3273,9 +3303,9 @@ namespace PlantsVsZombies.Reanimation
         public bool DrawNativePotatoMineLight(Vector2 origin, float scale, float bodySeconds, float bodyRate, float glowTime, int frameCount)
         {
             using var objectScope = BeginObjectScope();
-            Reanimation asset;
-            Clip body, glow;
-            Track anchor;
+            Reanimation? asset;
+            Clip? body, glow;
+            Track? anchor;
             Matrix4x4 inverseBase;
             Rect bounds;
             if (!TryPrepareAttachedPlant("PotatoMine", "anim_armed", "anim_glow", "anim_light", out asset, out body, out glow, out anchor, out inverseBase, out bounds))
@@ -3347,7 +3377,7 @@ namespace PlantsVsZombies.Reanimation
                 return false;
             }
 
-            if (!_nativePortraitMaterial.HasProperty("_ProducerAdditive"))
+            if (!RequiredNativePortraitMaterial.HasProperty("_ProducerAdditive"))
             {
                 if (!_producerGlowShaderWarningReported)
                 {
@@ -3362,9 +3392,13 @@ namespace PlantsVsZombies.Reanimation
         }
 
         /// <summary>Stores native combat zombie.</summary>
-        private Zombie _nativeCombatZombie;
+        private Zombie? _nativeCombatZombie;
+
+        /// <summary>Gets the native combat zombie, which must already exist wherever it is used.</summary>
+        /// <exception cref="System.InvalidOperationException">The member is not available.</exception>
+        private Zombie RequiredNativeCombatZombie => _nativeCombatZombie ?? throw new System.InvalidOperationException("The member '_nativeCombatZombie' is not available.");
         /// <summary>Stores native combat body.</summary>
-        private string _nativeCombatBody;
+        private string _nativeCombatBody = string.Empty;
         /// <summary>The shield render grouping computed once for the current combat callback.</summary>
         private int _nativeCombatShieldType;
         /// <summary>Stores native combat tint.</summary>
@@ -3376,7 +3410,7 @@ namespace PlantsVsZombies.Reanimation
         /// <summary>Stores native sprite additive.</summary>
         private bool _nativeSpriteAdditive;
         /// <summary>Stores native resource image override.</summary>
-        private string _nativeResourceImageOverride;
+        private string? _nativeResourceImageOverride;
         // PC 0x548D40..0x54942E. A single original sprite pass plus its textured ADD pass.
         // The callback includes body and attached heads. Do not redraw the armor afterward.
         /// <summary>Performs draw native zombie combat.</summary>
@@ -3522,7 +3556,7 @@ namespace PlantsVsZombies.Reanimation
         /// <returns>The resulting native zombie track color.</returns>
         private Color NativeZombieTrackColor(int group, float alpha)
         {
-            var z = _nativeCombatZombie;
+            var z = RequiredNativeCombatZombie;
             Color tint = Color.white, additive = Color.clear;
             if (group == 1)
             {
@@ -3587,7 +3621,7 @@ namespace PlantsVsZombies.Reanimation
         /// <param name = "zombieOrigin">The zombie origin.</param>
         /// <param name = "renderRemainder">The render remainder.</param>
         /// <returns>The resulting draw native zombie arm drop.</returns>
-        public bool DrawNativeZombieArmDrop(OriginalParticleRenderer particles, AdventureZombieArmDrop drop, Vector2 zombieOrigin, float renderRemainder = 0f)
+        public bool DrawNativeZombieArmDrop(OriginalParticleRenderer? particles, AdventureZombieArmDrop drop, Vector2 zombieOrigin, float renderRemainder = 0f)
         {
             using var objectScope = BeginObjectScope();
             if (particles == null || drop == null)
@@ -3635,7 +3669,7 @@ namespace PlantsVsZombies.Reanimation
         /// <param name = "zombieOrigin">The zombie origin.</param>
         /// <param name = "renderRemainder">The render remainder.</param>
         /// <returns>The resulting draw native zombie part drop.</returns>
-        public bool DrawNativeZombiePartDrop(OriginalParticleRenderer particles, AdventureZombiePartDrop drop, Vector2 zombieOrigin, float renderRemainder = 0f)
+        public bool DrawNativeZombiePartDrop(OriginalParticleRenderer? particles, AdventureZombiePartDrop drop, Vector2 zombieOrigin, float renderRemainder = 0f)
         {
             using var objectScope = BeginObjectScope();
             if (particles == null || drop == null)
@@ -3703,11 +3737,11 @@ namespace PlantsVsZombies.Reanimation
         /// <param name = "flagSeconds">The flag seconds.</param>
         /// <param name = "backwards">The backwards.</param>
         /// <returns>The resulting draw native zombie flag attachment.</returns>
-        public bool DrawNativeZombieFlagAttachment(Vector2 origin, float scale, string bodyClip, float seconds, float bodyRate, float flagSeconds, bool backwards)
+        public bool DrawNativeZombieFlagAttachment(Vector2 origin, float scale, string? bodyClip, float seconds, float bodyRate, float flagSeconds, bool backwards)
         {
             using var objectScope = BeginObjectScope();
-            Reanimation parent, child;
-            Clip body, flag;
+            Reanimation? parent, child;
+            Clip? body, flag;
             if (!TryGetClip("Zombie", bodyClip, out parent, out body) || !TryGetNativeDefinitionClip("Zombie_FlagPole", out child, out flag))
             {
                 return false;
@@ -3746,7 +3780,12 @@ namespace PlantsVsZombies.Reanimation
         private void DrawNativeSpritePass(Texture texture, float width, float height, Rect uv, int pass, Matrix4x4 matrix)
         {
             var renderer = _renderingNativeSurface ? _nativeObjectRenderer : GetObjectRenderer();
-            renderer.DrawQuad(texture, width, height, uv, matrix, SpriteDrawState.Color, pass, _renderingNativeSurface ? _nativePortraitMaterial.GetFloat("_Grayscale") : 0f, _nativePortraitMaterial.GetFloat("_ProducerAdditive"), _nativeCombatZombie == null ? _nativeSurfaceAdditive : 0f, _nativeCombatZombie == null ? Color.clear : _nativeTrackAdditive);
+            if (renderer == null)
+            {
+                throw new System.InvalidOperationException("The value 'renderer' is not available.");
+            }
+
+            renderer.DrawQuad(texture, width, height, uv, matrix, SpriteDrawState.Color, pass, _renderingNativeSurface ? RequiredNativePortraitMaterial.GetFloat("_Grayscale") : 0f, RequiredNativePortraitMaterial.GetFloat("_ProducerAdditive"), _nativeCombatZombie == null ? _nativeSurfaceAdditive : 0f, _nativeCombatZombie == null ? Color.clear : _nativeTrackAdditive);
         }
 
         /// <summary>Performs draw native surface composite.</summary>

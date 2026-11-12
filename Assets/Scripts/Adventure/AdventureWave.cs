@@ -13,6 +13,6 @@ namespace PlantsVsZombies.Adventure
         /// <summary>Gets or sets is flag.</summary>
         public bool IsFlag { get; internal set; }
         /// <summary>Gets or sets zombies.</summary>
-        public IReadOnlyList<ZombieKind> Zombies { get; internal set; }
+        public IReadOnlyList<ZombieKind> Zombies { get; internal set; } = System.Array.Empty<ZombieKind>();
     }
 }

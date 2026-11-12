@@ -17,7 +17,7 @@ namespace PlantsVsZombies.Adventure
         /// <summary>Stores path.</summary>
         private readonly string _path;
         /// <summary>Stores saved bytes.</summary>
-        private byte[] _savedBytes;
+        private byte[]? _savedBytes;
         /// <summary>Stores records.</summary>
         private Dictionary<Guid, AdventureProgress> _records;
         /// <summary>Stores gate.</summary>
@@ -61,8 +61,7 @@ namespace PlantsVsZombies.Adventure
 
             lock (_gate)
             {
-                AdventureProgress p;
-                return _records.TryGetValue(profileId, out p) ? p.Copy() : new AdventureProgress
+                return _records.TryGetValue(profileId, out var p) ? p.Copy() : new AdventureProgress
                 {
                     ProfileId = profileId
                 };
@@ -78,7 +77,7 @@ namespace PlantsVsZombies.Adventure
         /// <param name = "imitater">The imitater.</param>
         /// <exception cref = "ArgumentNullException">The operation cannot satisfy its preconditions.</exception>
         /// <exception cref = "ArgumentException">The operation cannot satisfy its preconditions.</exception>
-        public void SaveAttempt(Guid profileId, int seed, IReadOnlyList<PlantKind> selected, AdventureSeedAccess access = null, int slots = 6, PlantKind? imitater = null)
+        public void SaveAttempt(Guid profileId, int seed, IReadOnlyList<PlantKind> selected, AdventureSeedAccess? access = null, int slots = 6, PlantKind? imitater = null)
         {
             lock (_gate)
             {
@@ -219,7 +218,7 @@ namespace PlantsVsZombies.Adventure
             }
 
             var bytes = Encode(next);
-            string temp = null;
+            string? temp = null;
             using (var lease = new FileStream(_path + ".lock", FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None))
             {
                 if (!Same(_savedBytes, ReadOrMissing(_path)))
@@ -280,7 +279,7 @@ namespace PlantsVsZombies.Adventure
         /// <param name = "a">The a.</param>
         /// <param name = "b">The b.</param>
         /// <returns>The resulting same.</returns>
-        private static bool Same(byte[] a, byte[] b)
+        private static bool Same(byte[]? a, byte[]? b)
         {
             if (a == null || b == null)
             {
@@ -305,7 +304,7 @@ namespace PlantsVsZombies.Adventure
         /// <param name = "p">The p.</param>
         /// <returns>The resulting read or missing.</returns>
         /// <exception cref = "InvalidDataException">The operation cannot satisfy its preconditions.</exception>
-        private static byte[] ReadOrMissing(string p)
+        private static byte[]? ReadOrMissing(string p)
         {
             try
             {

@@ -142,7 +142,8 @@ namespace PlantsVsZombies.Diagnostics
             yield return game;
             foreach (var property in typeof(PvZGame).GetProperties(BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.DeclaredOnly))
             {
-                if (property.GetIndexParameters().Length != 0 || !property.PropertyType.IsClass || property.PropertyType.Assembly != typeof(PvZGame).Assembly)
+                if (property.GetIndexParameters().Length != 0 || !property.PropertyType.IsClass || property.PropertyType.Assembly != typeof(PvZGame).Assembly
+                    || property.Name.StartsWith("Required", StringComparison.Ordinal))
                 {
                     continue;
                 }

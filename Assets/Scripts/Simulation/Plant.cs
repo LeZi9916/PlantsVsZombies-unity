@@ -7,7 +7,11 @@ namespace PlantsVsZombies.Simulation
     public sealed class Plant
     {
         /// <summary>Gets or sets cherry bomb presentation.</summary>
-        public global::PlantsVsZombies.Adventure.AdventureCherryBombState CherryBombPresentation { get; internal set; }
+        public global::PlantsVsZombies.Adventure.AdventureCherryBombState? CherryBombPresentation { get; internal set; }
+
+        /// <summary>Gets the cherry bomb presentation, which must already exist wherever it is used.</summary>
+        /// <exception cref="System.InvalidOperationException">The member is not available.</exception>
+        public global::PlantsVsZombies.Adventure.AdventureCherryBombState RequiredCherryBombPresentation => CherryBombPresentation ?? throw new System.InvalidOperationException("The member 'CherryBombPresentation' is not available.");
 
         /// <summary>Stores kernel weapon prepared.</summary>
         internal bool _kernelWeaponPrepared;
@@ -22,7 +26,11 @@ namespace PlantsVsZombies.Simulation
         /// <summary>Gets or sets the native chomper bite, digestion, and swallowing presentation.</summary>
         public AdventureChomperState? ChomperPresentation { get; internal set; }
         /// <summary>Gets or sets potato mine presentation.</summary>
-        public global::PlantsVsZombies.Adventure.AdventurePotatoMineState PotatoMinePresentation { get; internal set; }
+        public global::PlantsVsZombies.Adventure.AdventurePotatoMineState? PotatoMinePresentation { get; internal set; }
+
+        /// <summary>Gets the potato mine presentation, which must already exist wherever it is used.</summary>
+        /// <exception cref="System.InvalidOperationException">The member is not available.</exception>
+        public global::PlantsVsZombies.Adventure.AdventurePotatoMineState RequiredPotatoMinePresentation => PotatoMinePresentation ?? throw new System.InvalidOperationException("The member 'PotatoMinePresentation' is not available.");
 
         /// <summary>Stores presentation rate, presentation awake age.</summary>
         public float PresentationRate, PresentationAwakeAge;
@@ -72,6 +80,10 @@ namespace PlantsVsZombies.Simulation
         public int UpgradeBurstTicks;
         /// <summary>Stores the original shared shooting counter and head states for multi-head shooters.</summary>
         public AdventureMultiHeadTimingState? MultiHeadTiming;
+
+        /// <summary>Gets the multi head timing, which must already exist wherever it is used.</summary>
+        /// <exception cref="System.InvalidOperationException">The member is not available.</exception>
+        public AdventureMultiHeadTimingState RequiredMultiHeadTiming => MultiHeadTiming ?? throw new System.InvalidOperationException("The member 'MultiHeadTiming' is not available.");
         /// <summary>Stores the original Starfruit launch countdown; negative means it has not been initialized.</summary>
         public int StarfruitLaunchCountdown = -1;
         /// <summary>Stores the original Starfruit body shooting countdown.</summary>
@@ -114,6 +126,10 @@ namespace PlantsVsZombies.Simulation
         public float PhaseAge;
         /// <summary>Stores timing.</summary>
         public global::PlantsVsZombies.Timing.PlantTimingState? Timing;
+
+        /// <summary>Gets the timing, which must already exist wherever it is used.</summary>
+        /// <exception cref="System.InvalidOperationException">The member is not available.</exception>
+        public global::PlantsVsZombies.Timing.PlantTimingState RequiredTiming => Timing ?? throw new System.InvalidOperationException("The member 'Timing' is not available.");
         /// <summary>Stores mode faces left.</summary>
         public bool ModeFacesLeft;
         /// <summary>Stores mode fire timer.</summary>

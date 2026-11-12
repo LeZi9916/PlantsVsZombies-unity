@@ -93,7 +93,7 @@ namespace PlantsVsZombies.UI
         /// <summary>Stores root.</summary>
         private readonly string _root;
         /// <summary>Stores textures.</summary>
-        private readonly Dictionary<string, Texture2D> _textures = new Dictionary<string, Texture2D>(StringComparer.Ordinal);
+        private readonly Dictionary<string, Texture2D?> _textures = new Dictionary<string, Texture2D?>(StringComparer.Ordinal);
         /// <summary>Stores locked.</summary>
         private readonly HashSet<SelectorAction> _locked = new HashSet<SelectorAction>();
         /// <summary>Stores disposed.</summary>
@@ -270,16 +270,16 @@ namespace PlantsVsZombies.UI
         /// <returns>The resulting get texture.</returns>
         /// <exception cref = "FileNotFoundException">The operation cannot satisfy its preconditions.</exception>
         /// <exception cref = "InvalidDataException">The operation cannot satisfy its preconditions.</exception>
-        private Texture2D GetTexture(string relativePath, bool requiresMask)
+        private Texture2D? GetTexture(string relativePath, bool requiresMask)
         {
-            Texture2D texture;
+            Texture2D? texture;
             if (_textures.TryGetValue(relativePath, out texture))
             {
                 return texture;
             }
 
             texture = null;
-            Texture2D mask = null;
+            Texture2D? mask = null;
             try
             {
                 var basePath = Path.Combine(_root, relativePath.Replace('/', Path.DirectorySeparatorChar));
@@ -352,7 +352,7 @@ namespace PlantsVsZombies.UI
 
         /// <summary>Performs destroy texture.</summary>
         /// <param name = "texture">The texture.</param>
-        private static void DestroyTexture(Texture2D texture)
+        private static void DestroyTexture(Texture2D? texture)
         {
             if (texture == null)
             {
@@ -388,7 +388,7 @@ namespace PlantsVsZombies.UI
             }
 
             _disposed = true;
-            foreach (Texture2D texture in _textures.Values)
+            foreach (Texture2D? texture in _textures.Values)
             {
                 DestroyTexture(texture);
             }

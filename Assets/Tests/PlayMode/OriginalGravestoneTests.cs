@@ -101,15 +101,15 @@ namespace PlantsVsZombies.Tests.PlayMode
         public IEnumerator PreviewHidesGravesAndEnabledBoardUsesNativeStoneAndSoilCells()
         {
             var grave = MatureGrave(0, 7, true);
-            _owner._game.Adventure.GravesEnabled = false;
+            _owner.RequiredGame.Adventure.GravesEnabled = false;
             yield return Capture(() => DrawProduction(grave));
             var hidden = _pixels.GetPixels32();
             yield return Capture(() => { });
             AssertPixelsMatch(hidden, _pixels.GetPixels32(), "The zombie preview must not draw a gravestone or its soil.");
 
-            _owner._game.Adventure.GravesEnabled = true;
-            var stone = _owner.Textures.Load("Tombstones.png");
-            var mound = _owner.Textures.Load("Tombstone_mounds.png");
+            _owner.RequiredGame.Adventure.GravesEnabled = true;
+            var stone = _owner.Textures.RequiredLoad("Tombstones.png");
+            var mound = _owner.Textures.RequiredLoad("Tombstone_mounds.png");
             Assert.That(stone, Is.Not.Null);
             Assert.That(mound, Is.Not.Null);
             Assert.That(stone.width, Is.EqualTo(430));

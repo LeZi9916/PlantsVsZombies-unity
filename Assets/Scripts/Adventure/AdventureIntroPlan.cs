@@ -6,7 +6,11 @@ namespace PlantsVsZombies.Adventure
     public sealed class AdventureIntroPlan
     {
         /// <summary>Stores context.</summary>
-        public AdventureIntroContext Context;
+        public AdventureIntroContext? Context;
+
+        /// <summary>Gets the context, which must already exist wherever it is used.</summary>
+        /// <exception cref="System.InvalidOperationException">The member is not available.</exception>
+        public AdventureIntroContext RequiredContext => Context ?? throw new System.InvalidOperationException("The member 'Context' is not available.");
         /// <summary>Stores choose seeds, non scrolling, scrolled left at start, draw seed bank.</summary>
         public bool ChooseSeeds, NonScrolling, ScrolledLeftAtStart, DrawSeedBank;
         /// <summary>Stores sod time, grave stone time, ready time, lawn mower time, dave time, fog time, boss time.</summary>

@@ -201,7 +201,7 @@ namespace PlantsVsZombies.Adventure
         /// <summary>Performs update.</summary>
         /// <param name = "dt">The dt.</param>
         /// <param name = "nativeTick">The native tick.</param>
-        public void Update(float dt, Action nativeTick = null)
+        public void Update(float dt, Action? nativeTick = null)
         {
             if (dt <= 0 || float.IsNaN(dt) || float.IsInfinity(dt))
             {

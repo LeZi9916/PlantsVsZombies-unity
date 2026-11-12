@@ -8,9 +8,9 @@ namespace PlantsVsZombies.Audio
     public sealed class NativeMusicClip
     {
         /// <summary>Stores key.</summary>
-        public string key;
+        public string key = string.Empty;
         /// <summary>Stores resource.</summary>
-        public string resource;
+        public string resource = string.Empty;
         /// <summary>Stores loop start sample.</summary>
         public int loopStartSample;
         /// <summary>Stores frames.</summary>
@@ -22,7 +22,7 @@ namespace PlantsVsZombies.Audio
         /// <summary>Stores position scale.</summary>
         public int positionScale = 4;
         /// <summary>Stores row time map.</summary>
-        public NativeMusicRow[] rowTimeMap;
+        public NativeMusicRow[]? rowTimeMap;
         /// <summary>Reconstruct the native BASS position, including quarter rows, from the decoded PCM row boundaries.</summary>
         public int PositionAtSample(int sample)
         {

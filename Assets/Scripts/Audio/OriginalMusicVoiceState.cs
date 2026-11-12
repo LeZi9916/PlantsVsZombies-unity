@@ -14,6 +14,6 @@ namespace PlantsVsZombies.Audio
         /// <summary>Stores volume.</summary>
         public float volume;
         /// <summary>Stores clip, load state, mixer.</summary>
-        public string clip, loadState, mixer;
+        public string? clip = string.Empty, loadState = string.Empty, mixer = string.Empty;
     }
 }

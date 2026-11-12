@@ -15,7 +15,7 @@ namespace PlantsVsZombies.Simulation
         /// <summary>Stores adventure packet slots.</summary>
         public int AdventurePacketSlots = 6;
         /// <summary>Stores adventure coin commit.</summary>
-        public Func<int, bool> AdventureCoinCommit;
+        public Func<int, bool>? AdventureCoinCommit;
         /// <summary>Stores adventure first aid.</summary>
         public bool AdventureFirstAid;
         /// <summary>Stores adventure potted loot, adventure chocolate loot, adventure disable loot.</summary>
@@ -23,11 +23,11 @@ namespace PlantsVsZombies.Simulation
         /// <summary>Stores adventure minigames unlocked, adventure puzzle unlocked.</summary>
         public bool AdventureMinigamesUnlocked, AdventurePuzzleUnlocked;
         /// <summary>Stores adventure loot commit.</summary>
-        public Func<AdventureCoin, bool> AdventureLootCommit;
+        public Func<AdventureCoin, bool>? AdventureLootCommit;
         /// <summary>Stores adventure place rake.</summary>
-        public Func<bool> AdventurePlaceRake;
+        public Func<bool>? AdventurePlaceRake;
         /// <summary>Null leaves the first-adventure unlocks and loadouts unchanged. Captured at construction.</summary>
-        public AdventureSeedAccess AdventureSeedAccess;
+        public AdventureSeedAccess? AdventureSeedAccess;
         /// <summary>Opt in to the incomplete, explicitly approximate 1-1 experiment.</summary>
         public bool EnableExperimentalLevelOne = false;
         /// <summary>1..50 opts into the separate Adventure module; 0 retains the legacy demo.</summary>

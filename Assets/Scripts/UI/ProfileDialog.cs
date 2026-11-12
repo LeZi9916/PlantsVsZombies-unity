@@ -50,11 +50,15 @@ namespace PlantsVsZombies.UI
         /// <summary>Stores images.</summary>
         private readonly Dictionary<string, Texture2D> _images = new Dictionary<string, Texture2D>();
         /// <summary>Stores font.</summary>
-        private Font _font;
+        private Font? _font;
         /// <summary>Stores label style.</summary>
-        private GUIStyle _labelStyle;
+        private GUIStyle? _labelStyle;
+
+        /// <summary>Gets the label style, which must already exist wherever it is used.</summary>
+        /// <exception cref="System.InvalidOperationException">The member is not available.</exception>
+        private GUIStyle RequiredLabelStyle => _labelStyle ?? throw new System.InvalidOperationException("The member '_labelStyle' is not available.");
         /// <summary>Stores field style.</summary>
-        private GUIStyle _fieldStyle;
+        private GUIStyle? _fieldStyle;
         /// <summary>Stores page.</summary>
         private Page _page;
         /// <summary>Stores page index.</summary>
@@ -64,11 +68,11 @@ namespace PlantsVsZombies.UI
         /// <summary>Stores target id.</summary>
         private Guid? _targetId;
         /// <summary>Stores target name.</summary>
-        private string _targetName;
+        private string? _targetName;
         /// <summary>Stores edit name.</summary>
         private string _editName = "";
         /// <summary>Stores error.</summary>
-        private string _error;
+        private string? _error;
         /// <summary>Stores request focus.</summary>
         private bool _requestFocus;
         /// <summary>Stores disposed.</summary>
@@ -446,7 +450,7 @@ namespace PlantsVsZombies.UI
                 return;
             }
 
-            List<UserProfile> before = null;
+            List<UserProfile>? before = null;
             try
             {
                 before = Snapshot();
@@ -620,7 +624,7 @@ namespace PlantsVsZombies.UI
         /// <param name = "items">The items.</param>
         /// <param name = "id">The id.</param>
         /// <returns>The resulting find.</returns>
-        private static UserProfile Find(List<UserProfile> items, Guid? id)
+        private static UserProfile? Find(List<UserProfile> items, Guid? id)
         {
             if (!id.HasValue || id.Value == Guid.Empty)
             {
@@ -642,9 +646,9 @@ namespace PlantsVsZombies.UI
         /// <param name = "before">The before.</param>
         /// <param name = "after">The after.</param>
         /// <returns>The resulting find created.</returns>
-        private static UserProfile FindCreated(List<UserProfile> before, List<UserProfile> after)
+        private static UserProfile? FindCreated(List<UserProfile> before, List<UserProfile> after)
         {
-            UserProfile created = null;
+            UserProfile? created = null;
             foreach (UserProfile item in after)
             {
                 if (Find(before, item.Id) != null)
@@ -792,7 +796,7 @@ namespace PlantsVsZombies.UI
         /// <summary>Performs ui texture.</summary>
         /// <param name = "name">The name.</param>
         /// <returns>The resulting ui texture.</returns>
-        private Texture2D UiTexture(string name)
+        private Texture2D? UiTexture(string name)
         {
             Texture2D result;
             return _images.TryGetValue(name, out result) ? result : null;
@@ -846,10 +850,10 @@ namespace PlantsVsZombies.UI
         /// <param name = "wrap">The wrap.</param>
         private void Label(Rect rect, string text, int size, TextAnchor alignment, Color color, bool wrap)
         {
-            _labelStyle.fontSize = size;
-            _labelStyle.alignment = alignment;
-            _labelStyle.wordWrap = wrap;
-            _labelStyle.normal.textColor = color;
+            RequiredLabelStyle.fontSize = size;
+            RequiredLabelStyle.alignment = alignment;
+            RequiredLabelStyle.wordWrap = wrap;
+            RequiredLabelStyle.normal.textColor = color;
             CanvasUI.Label(rect, text, _labelStyle);
         }
 
@@ -913,7 +917,7 @@ namespace PlantsVsZombies.UI
 
         /// <summary>Performs release.</summary>
         /// <param name = "resource">The resource.</param>
-        private static void Release(UnityEngine.Object resource)
+        private static void Release(UnityEngine.Object? resource)
         {
             if (resource == null)
             {

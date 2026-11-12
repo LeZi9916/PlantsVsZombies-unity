@@ -124,7 +124,7 @@ namespace PlantsVsZombies.Modes
         /// <param name = "finishedAdventure">The finished adventure.</param>
         /// <param name = "record">The record.</param>
         /// <returns>The resulting lock reason.</returns>
-        public static string LockReason(int gameModeId, bool finishedAdventure, Func<int, int> record)
+        public static string? LockReason(int gameModeId, bool finishedAdventure, Func<int, int> record)
         {
             var needed = MoreTrophiesNeeded(gameModeId, finishedAdventure, record);
             if (needed <= 0)

@@ -33,12 +33,12 @@ namespace PlantsVsZombies.BoardUI
         /// <returns>The resulting seed rect.</returns>
         internal Rect SeedRect(int index)
         {
-            if (_owner._game.IsAdventure)
+            if (_owner.RequiredGame.IsAdventure)
             {
                 return AdventureSeedRect(index);
             }
 
-            if (_owner._game.IsExperimentalLevelOne)
+            if (_owner.RequiredGame.IsExperimentalLevelOne)
             {
                 var slot = FirstAdventureBoardUi.FirstSeedSlot(0, 0);
                 return new Rect(slot.X + 59 * index, slot.Y, slot.Width, slot.Height);
@@ -72,7 +72,7 @@ namespace PlantsVsZombies.BoardUI
         /// <returns>The resulting adventure packet contains.</returns>
         internal bool AdventurePacketContains(int index, Vector2 point)
         {
-            return (!_owner._game.UsesNativeAdventureConveyor || s_nativeConveyorClip.Contains(point)) && AdventureSeedRect(index, true).Contains(point);
+            return (!_owner.RequiredGame.UsesNativeAdventureConveyor || s_nativeConveyorClip.Contains(point)) && AdventureSeedRect(index, true).Contains(point);
         }
 
         /// <summary>Stores adventure grid x.</summary>
@@ -84,7 +84,7 @@ namespace PlantsVsZombies.BoardUI
         {
             get
             {
-                return _owner._game.Adventure.Level.HasPool || _owner._game.Adventure.Level.HasRoof ? 85f : 100f;
+                return _owner.RequiredGame.Adventure.Level.HasPool || _owner.RequiredGame.Adventure.Level.HasRoof ? 85f : 100f;
             }
         }
 
@@ -93,7 +93,7 @@ namespace PlantsVsZombies.BoardUI
         /// <returns>The resulting adventure slope.</returns>
         internal float AdventureSlope(float column)
         {
-            return _owner._game.Adventure.Level.HasRoof ? Mathf.Max(0f, 5f - column) * 20f - 10f : 0f;
+            return _owner.RequiredGame.Adventure.Level.HasRoof ? Mathf.Max(0f, 5f - column) * 20f - 10f : 0f;
         }
 
         /// <summary>Performs adventure cell y.</summary>
@@ -139,7 +139,7 @@ namespace PlantsVsZombies.BoardUI
         /// <returns>The native tool target, or null when no removable plant is under the pointer.</returns>
         internal Plant? AdventureShovelTarget(Vector2 point)
         {
-            if (!_owner._game.IsAdventure || point.y < 80f || point.x < 0f || point.x >= 800f || point.y >= 600f)
+            if (!_owner.RequiredGame.IsAdventure || point.y < 80f || point.x < 0f || point.x >= 800f || point.y >= 600f)
             {
                 return null;
             }
@@ -147,14 +147,14 @@ namespace PlantsVsZombies.BoardUI
             var column = Mathf.FloorToInt((point.x - AdventureGridX) / CellWidth);
             var row = Mathf.FloorToInt((point.y - AdventureGridY - AdventureSlope(column)) / AdventurePitch);
             Plant? main = null, support = null, pumpkin = null;
-            foreach (var plant in _owner._game.Plants)
+            foreach (var plant in _owner.RequiredGame.Plants)
             {
                 var x = AdventureGridX + plant.Column * CellWidth;
                 var y = AdventureCellY(plant.Row, plant.Column);
                 if (plant.Kind == PlantKind.Pumpkin)
                 {
                     var hasMain = false;
-                    foreach (var other in _owner._game.Plants)
+                    foreach (var other in _owner.RequiredGame.Plants)
                     {
                         if (other.Row == plant.Row && other.Layer == PlantLayer.Main && other.Column <= plant.Column && plant.Column < other.Column + other.ColumnSpan)
                         {
@@ -226,12 +226,12 @@ namespace PlantsVsZombies.BoardUI
             {
                 if (_owner.IndependentModes.IsModeBoard)
                 {
-                    return _owner.IndependentModes._modeSession.PacketSlots;
+                    return _owner.IndependentModes.RequiredModeSession.PacketSlots;
                 }
 
-                if (_owner._game.IsAdventure)
+                if (_owner.RequiredGame.IsAdventure)
                 {
-                    return _owner._game.Adventure.Level.PacketSlots;
+                    return _owner.RequiredGame.Adventure.Level.PacketSlots;
                 }
 
                 return _owner._choosingSeeds ? 7 : _owner._deck.Count;
@@ -243,13 +243,13 @@ namespace PlantsVsZombies.BoardUI
         {
             get
             {
-                if (!_owner.IndependentModes.IsModeBoard && _owner._game.IsAdventure && _owner._game.Adventure.Level.Mode == AdventureMode.WhackAZombie)
+                if (!_owner.IndependentModes.IsModeBoard && _owner.RequiredGame.IsAdventure && _owner.RequiredGame.Adventure.Level.Mode == AdventureMode.WhackAZombie)
                 {
                     var x = _owner.Opening._adventureIntroFrame == null ? 0f : _owner.Opening._adventureIntroFrame.SeedBankX;
-                    return new Vector2(x, _owner._game.Adventure._whackSeedBankY);
+                    return new Vector2(x, _owner.RequiredGame.Adventure._whackSeedBankY);
                 }
 
-                return !_owner.IndependentModes.IsModeBoard && _owner._game.IsAdventure && _owner.Opening._adventureIntroFrame != null
+                return !_owner.IndependentModes.IsModeBoard && _owner.RequiredGame.IsAdventure && _owner.Opening._adventureIntroFrame != null
                     ? new Vector2(_owner.Opening._adventureIntroFrame.SeedBankX, _owner.Opening._adventureIntroFrame.SeedBankY)
                     : Vector2.zero;
             }

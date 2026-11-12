@@ -85,7 +85,7 @@ namespace PlantsVsZombies.Tests.PlayMode
         [TearDown]
         public void TearDown()
         {
-            _game._animations.Dispose();
+            _game.RequiredAnimations.Dispose();
             _presenter.Dispose();
             UnityEngine.Object.DestroyImmediate(_clip);
             UnityEngine.Object.DestroyImmediate(_audioHost);
@@ -110,21 +110,21 @@ namespace PlantsVsZombies.Tests.PlayMode
             Invoke("AdvanceCrazyDaveDialogue");
             Assert.That(_game.Opening._bowlingShovelLessonActive, Is.True);
             Assert.That(_game.Dave._crazyDaveMessageIndex, Is.EqualTo(-1));
-            var pausedTime = _game.Opening._adventureIntro.NativeTime;
+            var pausedTime = _game.Opening.RequiredAdventureIntro.NativeTime;
             Tick(1f);
-            Assert.That(_game.Opening._adventureIntro.NativeTime, Is.EqualTo(pausedTime));
+            Assert.That(_game.Opening.RequiredAdventureIntro.NativeTime, Is.EqualTo(pausedTime));
             Assert.That(_game.Dave._crazyDaveAnimation, Is.Null);
-            Assert.That(_game._game.Plants.Count, Is.EqualTo(3));
+            Assert.That(_game.RequiredGame.Plants.Count, Is.EqualTo(3));
             for (var column = 3; column <= 5; column++)
             {
                 Invoke("HandleAdventureClick", new Vector2(620, 30));
                 Assert.That(_game._shovel, Is.True);
                 Invoke("HandleAdventureClick", new Vector2(80 + 80 * column, 320));
-                Assert.That(_game._game.Plants.Count, Is.EqualTo(5 - column));
+                Assert.That(_game.RequiredGame.Plants.Count, Is.EqualTo(5 - column));
             }
 
             Assert.That(_game.Opening._bowlingShovelLessonActive, Is.False);
-            Assert.That(_game.Opening._adventureIntro.NativeTime, Is.EqualTo(1500));
+            Assert.That(_game.Opening.RequiredAdventureIntro.NativeTime, Is.EqualTo(1500));
             Tick(1.25f);
             Assert.That(_game.Dave._crazyDaveMessageIndex, Is.EqualTo(2410));
             Assert.That(_game.Opening._bowlingLineVisible, Is.False);
@@ -140,7 +140,7 @@ namespace PlantsVsZombies.Tests.PlayMode
             Invoke("AdvanceCrazyDaveDialogue");
             Assert.That(_game.Dave._crazyDaveMessageIndex, Is.EqualTo(-1));
             Tick(1.26f);
-            Assert.That(_game.Opening._adventureIntro.NativeTime, Is.GreaterThanOrEqualTo(_game.Opening._adventureIntro.Plan.PanLeftEnd));
+            Assert.That(_game.Opening.RequiredAdventureIntro.NativeTime, Is.GreaterThanOrEqualTo(_game.Opening.RequiredAdventureIntro.Plan.PanLeftEnd));
         }
 
         /// <summary>Starts the replay at the original second conversation without the shovel lesson.</summary>
@@ -148,7 +148,7 @@ namespace PlantsVsZombies.Tests.PlayMode
         public void ReplayStartsAtBowlingIntroduction()
         {
             StartOpening(2);
-            Assert.That(_game._game.Plants.Count, Is.Zero);
+            Assert.That(_game.RequiredGame.Plants.Count, Is.Zero);
             Assert.That(_game.Opening._bowlingLineVisible, Is.True);
             Tick(2.75f);
             Assert.That(_game.Dave._crazyDaveMessageIndex, Is.EqualTo(2411));

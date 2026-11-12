@@ -9,11 +9,19 @@ namespace PlantsVsZombies.Adventure
     public sealed class AdventureZombieCorpse
     {
         /// <summary>Stores zombie.</summary>
-        public Zombie Zombie;
+        public Zombie? Zombie;
+
+        /// <summary>Gets the zombie, which must already exist wherever it is used.</summary>
+        /// <exception cref="System.InvalidOperationException">The member is not available.</exception>
+        public Zombie RequiredZombie => Zombie ?? throw new System.InvalidOperationException("The member 'Zombie' is not available.");
         /// <summary>Stores animation.</summary>
-        public string Animation;
+        public string? Animation;
         /// <summary>Stores burn.</summary>
-        public AdventureBurnPose Burn;
+        public AdventureBurnPose? Burn;
+
+        /// <summary>Gets the burn, which must already exist wherever it is used.</summary>
+        /// <exception cref="System.InvalidOperationException">The member is not available.</exception>
+        public AdventureBurnPose RequiredBurn => Burn ?? throw new System.InvalidOperationException("The member 'Burn' is not available.");
         /// <summary>Stores frozen seconds, frozen rate, frozen head seconds.</summary>
         public float FrozenSeconds, FrozenRate, FrozenHeadSeconds;
         /// <summary>Stores age, rate, rate scale, duration.</summary>

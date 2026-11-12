@@ -49,11 +49,15 @@ namespace PlantsVsZombies.Audio
         internal void SetVolume(float volume)
         {
             _musicVolume = volume;
-            _musicSource.volume = volume;
+            RequiredMusicSource.volume = volume;
         }
 
         /// <summary>Stores music source.</summary>
-        internal AudioSource _musicSource;
+        internal AudioSource? _musicSource;
+
+        /// <summary>Gets the music source, which must already exist wherever it is used.</summary>
+        /// <exception cref="System.InvalidOperationException">The member is not available.</exception>
+        internal AudioSource RequiredMusicSource => _musicSource ?? throw new System.InvalidOperationException("The member '_musicSource' is not available.");
         /// <summary>Stores music volume.</summary>
         internal float _musicVolume;
 
@@ -88,13 +92,17 @@ namespace PlantsVsZombies.Audio
         /// <summary>Stores dynamic music info.</summary>
         private readonly Dictionary<string, NativeMusicClip> _dynamicMusicInfo = new Dictionary<string, NativeMusicClip>(StringComparer.Ordinal);
         /// <summary>Stores dynamic music stems.</summary>
-        private OriginalMusicStem[] _dynamicMusicStems;
+        private OriginalMusicStem[]? _dynamicMusicStems;
+
+        /// <summary>Gets the dynamic music stems, which must already exist wherever it is used.</summary>
+        /// <exception cref="System.InvalidOperationException">The member is not available.</exception>
+        private OriginalMusicStem[] RequiredDynamicMusicStems => _dynamicMusicStems ?? throw new System.InvalidOperationException("The member '_dynamicMusicStems' is not available.");
         /// <summary>Stores dynamic burst.</summary>
         private readonly OriginalMusicBurst _dynamicBurst = new OriginalMusicBurst();
         /// <summary>Stores playing music cue.</summary>
         private MusicCue _playingMusicCue = MusicCue.None;
         /// <summary>Stores subscribed audio game.</summary>
-        private GameSimulation _subscribedAudioGame;
+        private GameSimulation? _subscribedAudioGame;
         /// <summary>Stores dynamic audio ready.</summary>
         internal bool _dynamicAudioReady;
         /// <summary>Stores dynamic stem info.</summary>
@@ -108,7 +116,7 @@ namespace PlantsVsZombies.Audio
         /// <summary>Stores dynamic audio tasks,  dynamic audio completed.</summary>
         private int _dynamicAudioTasks, _dynamicAudioCompleted;
         /// <summary>Stores owned music listener.</summary>
-        private AudioListener _ownedMusicListener;
+        private AudioListener? _ownedMusicListener;
         /// <summary>Stores next audio listener check.</summary>
         private float _nextAudioListenerCheck;
         /// <summary>Stores dynamic audio failures.</summary>
@@ -410,14 +418,14 @@ namespace PlantsVsZombies.Audio
 
             // PC CutScene::StartLevelIntro and AnimateBoard select Dave's theme, silence,
             // and finally boss music during the final-boss opening.
-            if (_owner.Opening.AdventureIntroActive && _owner._currentView == PvZGame.ScreenView.Board && _owner._game.Adventure.Level.Mode == AdventureMode.Boss)
+            if (_owner.Opening.AdventureIntroActive && _owner._currentView == PvZGame.ScreenView.Board && _owner.RequiredGame.Adventure.Level.Mode == AdventureMode.Boss)
             {
-                if (_owner.Opening._adventureIntro.NativeTime >= _owner.Opening._adventureIntro.Plan.BankOnStart)
+                if (_owner.Opening.RequiredAdventureIntro.NativeTime >= _owner.Opening.RequiredAdventureIntro.Plan.BankOnStart)
                 {
                     return MusicCue.Boss;
                 }
 
-                if (_owner.Opening._adventureIntro.Plan.Context.HasCrazyDaveDialog && (!_owner.Opening._bossDaveGrabbed || _owner.Dave._crazyDaveAnimation == "anim_grab" && _owner.Dave._crazyDaveAnimationAge < .5f))
+                if (_owner.Opening.RequiredAdventureIntro.Plan.RequiredContext.HasCrazyDaveDialog && (!_owner.Opening._bossDaveGrabbed || _owner.Dave._crazyDaveAnimation == "anim_grab" && _owner.Dave._crazyDaveAnimationAge < .5f))
                 {
                     return MusicCue.Title;
                 }
@@ -526,7 +534,7 @@ namespace PlantsVsZombies.Audio
         /// <param name = "cue">The cue.</param>
         private void PlayOriginalMusicCue(MusicCue cue)
         {
-            foreach (var stem in _dynamicMusicStems)
+            foreach (var stem in RequiredDynamicMusicStems)
             {
                 stem.Stop();
             }
@@ -581,8 +589,8 @@ namespace PlantsVsZombies.Audio
 
             var start = AudioSettings.dspTime + OriginalMusicStem.SchedulingLeadSeconds;
             _dynamicMusicNextTickDsp = start;
-            _dynamicMusicStems[0].Gain = 1f;
-            _dynamicMusicStems[1].Gain = _dynamicMusicStems[2].Gain = 0f;
+            RequiredDynamicMusicStems[0].Gain = 1f;
+            RequiredDynamicMusicStems[1].Gain = RequiredDynamicMusicStems[2].Gain = 0f;
             PlayOriginalStem(0, key, start);
             if (IsTerrainCue(cue))
             {
@@ -607,7 +615,7 @@ namespace PlantsVsZombies.Audio
             if (_dynamicMusicClips.TryGetValue(key, out clip) && _dynamicMusicInfo.TryGetValue(key, out info))
             {
                 _dynamicStemInfo[index] = info;
-                _dynamicMusicStems[index].Play(clip, info.loopStartSample, info.sampleRate, dsp, nativeStartSample);
+                RequiredDynamicMusicStems[index].Play(clip, info.loopStartSample, info.sampleRate, dsp, nativeStartSample);
             }
         }
 
@@ -688,7 +696,7 @@ namespace PlantsVsZombies.Audio
             var states = _dynamicMusicStems == null ? new OriginalMusicStemState[0] : new OriginalMusicStemState[_dynamicMusicStems.Length];
             for (var i = 0; i < states.Length; i++)
             {
-                states[i] = _dynamicMusicStems[i].Describe();
+                states[i] = RequiredDynamicMusicStems[i].Describe();
             }
 
             return new MusicOutputReport

@@ -135,7 +135,7 @@ namespace PlantsVsZombies.Adventure
         /// <param name = "kind">The kind.</param>
         /// <param name = "track">The track.</param>
         /// <returns>The resulting arm replacement.</returns>
-        public static string ArmReplacement(int kind, string track)
+        public static string? ArmReplacement(int kind, string track)
         {
             switch (kind)
             {

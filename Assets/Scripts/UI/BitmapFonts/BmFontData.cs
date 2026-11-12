@@ -15,7 +15,7 @@ namespace PlantsVsZombies.UI.BitmapFonts
         /// <summary>Stores pages.</summary>
         private readonly ReadOnlyCollection<string> _pages;
         /// <summary>Gets or sets face.</summary>
-        public string Face { get; private set; }
+        public string? Face { get; private set; } = string.Empty;
         /// <summary>Gets or sets point size.</summary>
         public int PointSize { get; private set; }
         /// <summary>Gets or sets line height.</summary>
@@ -64,7 +64,7 @@ namespace PlantsVsZombies.UI.BitmapFonts
         /// <param name = "pageNames">The page names.</param>
         /// <param name = "glyphs">The glyphs.</param>
         /// <param name = "kernings">The kernings.</param>
-        internal BmFontData(string face, int pointSize, int lineHeight, int baseline, int atlasWidth, int atlasHeight, string[] pageNames, Dictionary<int, BmFontGlyph> glyphs, Dictionary<long, int> kernings)
+        internal BmFontData(string? face, int pointSize, int lineHeight, int baseline, int atlasWidth, int atlasHeight, string[] pageNames, Dictionary<int, BmFontGlyph> glyphs, Dictionary<long, int> kernings)
         {
             Face = face;
             PointSize = pointSize;

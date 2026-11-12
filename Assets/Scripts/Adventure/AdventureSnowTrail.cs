@@ -11,7 +11,7 @@ namespace PlantsVsZombies.Adventure
         /// <summary>Stores age, x, y, previous x, previous y, stop age.</summary>
         public float Age, X, Y, PreviousX, PreviousY, StopAge = -1f;
         /// <summary>Stores projectile.</summary>
-        public Pea Projectile;
+        public Pea? Projectile;
         /// <summary>Gets or sets stopped.</summary>
         public bool Stopped
         {

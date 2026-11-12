@@ -2,6 +2,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 
 namespace PlantsVsZombies.Modes
 {
@@ -23,7 +24,7 @@ namespace PlantsVsZombies.Modes
         /// <param name = "id">The id.</param>
         /// <param name = "definition">The definition.</param>
         /// <returns>The resulting try get.</returns>
-        public static bool TryGet(int id, out ModeDefinition definition)
+        public static bool TryGet(int id, [NotNullWhen(true)] out ModeDefinition? definition)
         {
             return s_definitions.TryGetValue(id, out definition);
         }
@@ -34,7 +35,7 @@ namespace PlantsVsZombies.Modes
         /// <exception cref = "ArgumentOutOfRangeException">The operation cannot satisfy its preconditions.</exception>
         public static ModeDefinition Get(int id)
         {
-            ModeDefinition d;
+            ModeDefinition? d;
             if (!TryGet(id, out d))
             {
                 throw new ArgumentOutOfRangeException("id");

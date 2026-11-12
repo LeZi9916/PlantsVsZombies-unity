@@ -19,11 +19,11 @@ namespace PlantsVsZombies.Adventure
         }
 
         /// <summary>Stores wave notice game.</summary>
-        internal GameSimulation _waveNoticeGame;
+        internal GameSimulation? _waveNoticeGame;
         /// <summary>Stores huge wave notice start,  final wave notice start.</summary>
         internal float _hugeWaveNoticeStart = -1f, _finalWaveNoticeStart = -1f;
         /// <summary>Stores bundled wave animations.</summary>
-        internal global::PlantsVsZombies.Reanimation.ReanimationRenderer _bundledWaveAnimations;
+        internal global::PlantsVsZombies.Reanimation.ReanimationRenderer? _bundledWaveAnimations;
         /// <summary>Performs initialize adventure wave notices.</summary>
         internal void InitializeAdventureWaveNotices()
         {
@@ -51,7 +51,7 @@ namespace PlantsVsZombies.Adventure
 
             if (e.Kind == WaveScheduleEventKind.HugeWaveWarning)
             {
-                _hugeWaveNoticeStart = _owner._game.Elapsed;
+                _hugeWaveNoticeStart = _owner.RequiredGame.Elapsed;
             }
             else if (e.Kind == WaveScheduleEventKind.HugeWaveCleared)
             {
@@ -59,7 +59,7 @@ namespace PlantsVsZombies.Adventure
             }
             else if (e.Kind == WaveScheduleEventKind.FinalWaveApproaching)
             {
-                _finalWaveNoticeStart = _owner._game.Elapsed;
+                _finalWaveNoticeStart = _owner.RequiredGame.Elapsed;
             }
         }
 

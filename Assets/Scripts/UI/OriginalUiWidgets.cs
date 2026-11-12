@@ -41,9 +41,9 @@ namespace PlantsVsZombies.UI
         /// <param name = "rect">The rect.</param>
         /// <param name = "tallBottom">The tall bottom.</param>
         /// <param name = "header">The header.</param>
-        public static void DialogFrame(Func<string, Texture2D> texture, Rect rect, bool tallBottom = true, bool header = true)
+        public static void DialogFrame(Func<string, Texture2D?> texture, Rect rect, bool tallBottom = true, bool header = true)
         {
-            Texture2D tl = texture("dialog_topleft.png"), tr = texture("dialog_topright.png"),
+            Texture2D? tl = texture("dialog_topleft.png"), tr = texture("dialog_topright.png"),
                 bl = texture(tallBottom ? "dialog_bigbottomleft.png" : "dialog_bottomleft.png"),
                 br = texture(tallBottom ? "dialog_bigbottomright.png" : "dialog_bottomright.png");
             if (tl == null || tr == null || bl == null || br == null)
@@ -78,10 +78,10 @@ namespace PlantsVsZombies.UI
         /// <param name = "pressed">The pressed.</param>
         /// <param name = "enabled">The enabled.</param>
         /// <returns>The resulting stone button.</returns>
-        public static Vector2 StoneButton(Func<string, Texture2D> texture, Rect rect, bool hovered = false, bool pressed = false, bool enabled = true)
+        public static Vector2 StoneButton(Func<string, Texture2D?> texture, Rect rect, bool hovered = false, bool pressed = false, bool enabled = true)
         {
             pressed &= enabled;
-            Texture2D left = texture(pressed ? "button_down_left.png" : "button_left.png"),
+            Texture2D? left = texture(pressed ? "button_down_left.png" : "button_left.png"),
                 middle = texture(pressed ? "button_down_middle.png" : "button_middle.png"),
                 right = texture(pressed ? "button_down_right.png" : "button_right.png");
             if (left == null || middle == null || right == null)
@@ -119,7 +119,7 @@ namespace PlantsVsZombies.UI
         /// <param name = "hovered">The hovered.</param>
         /// <param name = "pressed">The pressed.</param>
         /// <param name = "enabled">The enabled.</param>
-        public static void ImageButton(Func<string, Texture2D> texture, Rect rect, string normal, string hover = null, string down = null, bool hovered = false, bool pressed = false, bool enabled = true)
+        public static void ImageButton(Func<string, Texture2D?> texture, Rect rect, string normal, string? hover = null, string? down = null, bool hovered = false, bool pressed = false, bool enabled = true)
         {
             var name = enabled && pressed && down != null ? down : enabled && hovered && hover != null ? hover : normal;
             var image = texture(name);
@@ -148,7 +148,7 @@ namespace PlantsVsZombies.UI
         /// <summary>Performs edit box.</summary>
         /// <param name = "texture">The texture.</param>
         /// <param name = "field">The field.</param>
-        public static void EditBox(Func<string, Texture2D> texture, Rect field)
+        public static void EditBox(Func<string, Texture2D?> texture, Rect field)
         {
             var image = texture("editbox.png");
             if (image == null)
@@ -350,7 +350,7 @@ namespace PlantsVsZombies.UI
         /// <summary>Performs image.</summary>
         /// <param name = "texture">The texture.</param>
         /// <param name = "destination">The destination.</param>
-        public static void Image(Texture2D texture, Rect destination)
+        public static void Image(Texture2D? texture, Rect destination)
         {
             if (texture != null && destination.width > 0 && destination.height > 0)
             {
@@ -361,7 +361,7 @@ namespace PlantsVsZombies.UI
         /// <summary>Performs tile.</summary>
         /// <param name = "texture">The texture.</param>
         /// <param name = "destination">The destination.</param>
-        public static void Tile(Texture2D texture, Rect destination)
+        public static void Tile(Texture2D? texture, Rect destination)
         {
             if (texture == null || destination.width <= 0 || destination.height <= 0)
             {

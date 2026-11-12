@@ -9,7 +9,7 @@ namespace PlantsVsZombies.UI.BitmapFonts
     public sealed class BitmapTextLayout
     {
         /// <summary>Gets or sets font.</summary>
-        public BmFontData Font { get; private set; }
+        public BmFontData? Font { get; private set; }
         /// <summary>Gets or sets scale.</summary>
         public float Scale { get; private set; }
         /// <summary>Gets or sets width.</summary>
@@ -27,11 +27,11 @@ namespace PlantsVsZombies.UI.BitmapFonts
         }
 
         /// <summary>Gets or sets line widths.</summary>
-        public IReadOnlyList<float> LineWidths { get; private set; }
+        public IReadOnlyList<float> LineWidths { get; private set; } = System.Array.Empty<float>();
         /// <summary>Gets or sets glyphs.</summary>
-        public IReadOnlyList<PlacedBitmapGlyph> Glyphs { get; private set; }
+        public IReadOnlyList<PlacedBitmapGlyph> Glyphs { get; private set; } = System.Array.Empty<PlacedBitmapGlyph>();
         /// <summary>Gets or sets missing glyphs.</summary>
-        public IReadOnlyList<MissingBitmapGlyph> MissingGlyphs { get; private set; }
+        public IReadOnlyList<MissingBitmapGlyph> MissingGlyphs { get; private set; } = System.Array.Empty<MissingBitmapGlyph>();
         /// <summary>Gets or sets has glyph bounds.</summary>
         public bool HasGlyphBounds { get; private set; }
         /// <summary>Gets or sets min x.</summary>

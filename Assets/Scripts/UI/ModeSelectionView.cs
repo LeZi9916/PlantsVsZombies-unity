@@ -21,27 +21,27 @@ namespace PlantsVsZombies.UI
             "解谜模式"
         };
         /// <summary>Stores texture.</summary>
-        private readonly Func<string, Texture2D> _texture;
+        private readonly Func<string, Texture2D?> _texture;
         /// <summary>Stores font.</summary>
         private readonly Font _font;
         /// <summary>Stores strings.</summary>
         private readonly Dictionary<string, string> _strings = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         /// <summary>Stores label.</summary>
-        private GUIStyle _label;
+        private GUIStyle? _label;
         /// <summary>Stores category.</summary>
         private int _category;
         /// <summary>Stores locked notice.</summary>
-        private string _lockedNotice;
+        private string? _lockedNotice;
         /// <summary>Gets or sets launch requested.</summary>
-        public Func<int, bool> LaunchRequested { get; set; }
+        public Func<int, bool>? LaunchRequested { get; set; }
         /// <summary>Gets or sets can launch.</summary>
-        public Func<int, bool> CanLaunch { get; set; }
+        public Func<int, bool>? CanLaunch { get; set; }
         /// <summary>Gets or sets lock reason lookup.</summary>
-        public Func<int, string> LockReasonLookup { get; set; }
+        public Func<int, string?>? LockReasonLookup { get; set; }
         /// <summary>Gets or sets progress lookup.</summary>
-        public Func<int, int> ProgressLookup { get; set; }
+        public Func<int, int>? ProgressLookup { get; set; }
         /// <summary>Gets or sets original centered label.</summary>
-        public Func<string, bool, float, float, float, Color, bool> OriginalCenteredLabel { get; set; }
+        public Func<string, bool, float, float, float, Color, bool>? OriginalCenteredLabel { get; set; }
         /// <summary>Gets or sets closed.</summary>
         public bool Closed { get; private set; }
 
@@ -49,7 +49,7 @@ namespace PlantsVsZombies.UI
         /// <param name = "root">The root.</param>
         /// <param name = "textureLoader">The texture loader.</param>
         /// <param name = "displayFont">The display font.</param>
-        public ModeSelectionView(string root, Func<string, Texture2D> textureLoader, Font displayFont)
+        public ModeSelectionView(string root, Func<string, Texture2D?> textureLoader, Font displayFont)
         {
             _texture = textureLoader ?? throw new ArgumentNullException(nameof(textureLoader));
             _font = displayFont;
@@ -172,10 +172,9 @@ namespace PlantsVsZombies.UI
                 var record = ProgressLookup == null ? 0 : ProgressLookup(mode.Id);
                 if (record > 0)
                 {
-                    ModeDefinition definition;
-                    var known = ModeCatalog.TryGet(mode.Id, out definition);
-                    var complete = known && !definition.Endless && (definition.Survival ? record >= (definition.Hard ? 10 : 5) : true);
-                    var progress = complete ? "已完成" : known && definition.Endless ? "纪录 " + record : "旗帜 " + record;
+                    ModeCatalog.TryGet(mode.Id, out var definition);
+                    var complete = definition != null && !definition.Endless && (definition.Survival ? record >= (definition.Hard ? 10 : 5) : true);
+                    var progress = complete ? "已完成" : definition != null && definition.Endless ? "纪录 " + record : "旗帜 " + record;
                     Label(new Rect(card.x - 3, card.y + 108, card.width + 6, 20), progress, 12, Color.yellow, TextAnchor.MiddleCenter, false);
                 }
             }
@@ -216,7 +215,7 @@ namespace PlantsVsZombies.UI
         /// <returns>The resulting playable.</returns>
         private bool Playable(int id)
         {
-            ModeDefinition definition;
+            ModeDefinition? definition;
             if (ModeCatalog.TryGet(id, out definition))
             {
                 return true;
@@ -255,7 +254,7 @@ namespace PlantsVsZombies.UI
         /// <param name = "lines">The lines.</param>
         private void ReadStrings(string[] lines)
         {
-            string key = null;
+            string? key = null;
             var value = new StringBuilder();
             foreach (string line in lines)
             {

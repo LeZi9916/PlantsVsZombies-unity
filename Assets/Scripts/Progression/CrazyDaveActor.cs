@@ -93,7 +93,7 @@ namespace PlantsVsZombies.Progression
             }
 
             if ((_owner.Opening._vaseDialogueActive || _owner.Opening._bowlingShovelLessonActive) && _crazyDaveAnimation == "anim_leave" && _crazyDaveAnimationAge >= .75f
-                && !_owner._animations.TryGetNativeAnimationInfo("CrazyDave", "anim_leave", out _))
+                && !_owner.RequiredAnimations.TryGetNativeAnimationInfo("CrazyDave", "anim_leave", out _))
             {
                 _crazyDaveAnimation = null;
                 return;
@@ -101,7 +101,7 @@ namespace PlantsVsZombies.Progression
             if (_crazyDaveBlinkAge >= 0f)
             {
                 _crazyDaveBlinkAge += delta;
-                if (_owner._animations.TryGetNativeAnimationInfo("CrazyDave", "anim_blink", out var blink)
+                if (_owner.RequiredAnimations.TryGetNativeAnimationInfo("CrazyDave", "anim_blink", out var blink)
                     && _crazyDaveBlinkAge * 15f >= blink.Count)
                 {
                     _crazyDaveBlinkAge = -1f;
@@ -121,7 +121,7 @@ namespace PlantsVsZombies.Progression
                 }
             }
 
-            if ((_crazyDaveAnimationLoop && _crazyDaveAnimation != "anim_talk_handing") || !_owner._animations.TryGetNativeAnimationInfo("CrazyDave", _crazyDaveAnimation, out var info)
+            if ((_crazyDaveAnimationLoop && _crazyDaveAnimation != "anim_talk_handing") || !_owner.RequiredAnimations.TryGetNativeAnimationInfo("CrazyDave", _crazyDaveAnimation, out var info)
                 || _crazyDaveAnimationAge * _crazyDaveAnimationRate < Math.Max(1, info.Count))
             {
                 return;

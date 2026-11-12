@@ -33,14 +33,14 @@ namespace PlantsVsZombies.Rendering
         }
 
         /// <summary>Stores textures.</summary>
-        internal readonly Dictionary<string, Texture2D> _textures = new Dictionary<string, Texture2D>();
+        internal readonly Dictionary<string, Texture2D?> _textures = new Dictionary<string, Texture2D?>();
 
         /// <summary>Loads and retains an original image by file name.</summary>
         /// <param name = "name">The image path relative to the original images directory.</param>
         /// <returns>The cached texture, or null when the file is missing or invalid.</returns>
-        internal Texture2D Load(string name)
+        internal Texture2D? Load(string name)
         {
-            Texture2D texture;
+            Texture2D? texture;
             if (_textures.TryGetValue(name, out texture))
             {
                 return texture;
@@ -77,6 +77,12 @@ namespace PlantsVsZombies.Rendering
             return texture;
         }
 
+        /// <summary>Calls <see cref="Load"/> where a result must exist, failing with a descriptive exception instead of returning null.</summary>
+        /// <param name="name">The <c>name</c> argument forwarded to <see cref="Load"/>.</param>
+        /// <returns>The non-null load result.</returns>
+        /// <exception cref="System.InvalidOperationException">The method returned no result.</exception>
+        internal Texture2D RequiredLoad(string name) => Load(name) ?? throw new System.InvalidOperationException("'Load' returned no result.");
+
         /// <summary>Loads and retains an original resources.xml image with an explicit alpha grid.</summary>
         /// <param name="colorName">The original color image filename.</param>
         /// <param name="maskName">The original alpha grid filename.</param>
@@ -101,6 +107,13 @@ namespace PlantsVsZombies.Rendering
             _textures[key] = texture;
             return texture;
         }
+
+        /// <summary>Calls <see cref="LoadAlphaGrid"/> where a result must exist, failing with a descriptive exception instead of returning null.</summary>
+        /// <param name="colorName">The <c>colorName</c> argument forwarded to <see cref="LoadAlphaGrid"/>.</param>
+        /// <param name="maskName">The <c>maskName</c> argument forwarded to <see cref="LoadAlphaGrid"/>.</param>
+        /// <returns>The non-null load alpha grid result.</returns>
+        /// <exception cref="System.InvalidOperationException">The method returned no result.</exception>
+        internal Texture2D RequiredLoadAlphaGrid(string colorName, string maskName) => LoadAlphaGrid(colorName, maskName) ?? throw new System.InvalidOperationException("'LoadAlphaGrid' returned no result.");
 
         /// <summary>Combines original color artwork with the red channel of its separate alpha image.</summary>
         /// <param name="colorPath">The original RGB or RGBA image path.</param>

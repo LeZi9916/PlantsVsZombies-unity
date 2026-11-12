@@ -8,7 +8,7 @@ namespace PlantsVsZombies.Progression
         /// <summary>Gets or sets id.</summary>
         public int Id { get; internal set; }
         /// <summary>Gets or sets name.</summary>
-        public string Name { get; internal set; }
+        public string Name { get; internal set; } = string.Empty;
         /// <summary>Gets or sets price units.</summary>
         public int PriceUnits { get; internal set; }
         /// <summary>Gets or sets unlock level.</summary>
@@ -20,6 +20,6 @@ namespace PlantsVsZombies.Progression
         /// <summary>Gets or sets consumable.</summary>
         public bool Consumable { get; internal set; }
         /// <summary>Gets or sets icon.</summary>
-        public string Icon { get; internal set; }
+        public string? Icon { get; internal set; }
     }
 }

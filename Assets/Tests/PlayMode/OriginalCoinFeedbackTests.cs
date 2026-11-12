@@ -144,7 +144,7 @@ namespace PlantsVsZombies.Tests.PlayMode
             _owner._game.Adventure.NoticeRaised = notice => noticeHandler.Invoke(_owner, new object[] { notice });
             _owner.IndependentModes._modeSaveError = "金币尚未存入，请再次拾取：fixture-save-failure";
             _owner._game.Rules.AdventureCoinCommit = total => false;
-            var pending = _owner._game.SpawnAdventureCoin(AdventureCoinKind.Gold, 4f, 1f);
+            var pending = _owner._game.RequiredSpawnAdventureCoin(AdventureCoinKind.Gold, 4f, 1f);
             Assert.That(_owner._game.CollectAdventureCoin(pending), Is.True);
             _owner._game.Update(1.5f);
             Assert.That(pending.PersistencePending && !pending.IsBeingCollected, Is.True);

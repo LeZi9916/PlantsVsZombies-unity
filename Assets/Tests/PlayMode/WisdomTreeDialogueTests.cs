@@ -89,14 +89,14 @@ namespace PlantsVsZombies.Tests.PlayMode
         [Test]
         public void FirstVisitGrantsFiveOnlyWhenDialogueIsAdvanced()
         {
-            Assert.That(_game.Accounts._accountStore.Get(_profile).PurchaseCount(28), Is.Zero);
+            Assert.That(_game.Accounts.RequiredAccountStore.Get(_profile).PurchaseCount(28), Is.Zero);
             Invoke("OpenWisdomTree");
             Assert.That(_game.Tree._treeDaveIntroPending, Is.True);
             Invoke("UpdateWisdomTreeDialogue", 2.75f);
             Assert.That(_game.Dave._crazyDaveMessageIndex, Is.EqualTo(3200));
             Assert.That(_game.Dave._crazyDaveText, Is.EqualTo("Hello Tester."));
             Assert.That(_game.Dave._crazyDaveHeldItem, Is.EqualTo("TREE_FOOD"));
-            Assert.That(_game.Accounts._accountStore.Get(_profile).PurchaseCount(28), Is.Zero);
+            Assert.That(_game.Accounts.RequiredAccountStore.Get(_profile).PurchaseCount(28), Is.Zero);
             var input = new GameInputSnapshot(new Vector2(400, 300), true, true, false, true, false, 0, false, false);
             typeof(GameInput).GetProperty("Current")!.GetSetMethod(true)!.Invoke(null, new object[] { input });
             Invoke("HandleInput");
@@ -105,7 +105,7 @@ namespace PlantsVsZombies.Tests.PlayMode
             Assert.That(reloaded.PurchaseCount(28), Is.EqualTo(5));
             Invoke("OpenWisdomTree");
             Assert.That(_game.Tree._treeDaveIntroPending, Is.False);
-            Assert.That(_game.Accounts._accountStore.Get(_profile).PurchaseCount(28), Is.EqualTo(5));
+            Assert.That(_game.Accounts.RequiredAccountStore.Get(_profile).PurchaseCount(28), Is.EqualTo(5));
         }
 
         /// <summary>Sets one private fixture dependency.</summary>

@@ -52,7 +52,7 @@ namespace PlantsVsZombies.Adventure
         /// <param name = "seeds">The seeds.</param>
         /// <param name = "belt">The belt.</param>
         /// <returns>The resulting l.</returns>
-        private static AdventureLevelSpec L(int n, AdventureTerrain t, AdventureMode m, int[] seeds, int[] belt = null)
+        private static AdventureLevelSpec L(int n, AdventureTerrain t, AdventureMode m, int[] seeds, int[]? belt = null)
         {
             var reward = n == 4 ? AdventureRewardKind.Shovel : n == 14 ? AdventureRewardKind.Almanac : n == 24 ? AdventureRewardKind.CarKeys : n == 34 ? AdventureRewardKind.Taco : n == 44 ? AdventureRewardKind.WateringCan : n == 50 ? AdventureRewardKind.SilverSunflower : n % 10 == 9 ? AdventureRewardKind.Note : AdventureRewardKind.Seed;
             return new AdventureLevelSpec(n, t, m, AdventureLevelSpec.AwardSeedId(n), reward, seeds, belt ?? s_noBelt);

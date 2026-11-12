@@ -14,7 +14,7 @@ namespace PlantsVsZombies.UI.BitmapFonts
         /// <summary>Stores line.</summary>
         private readonly int _line;
         /// <summary>Gets or sets name.</summary>
-        public string Name { get; private set; }
+        public string Name { get; private set; } = string.Empty;
 
         /// <summary>Initializes bm font record.</summary>
         /// <param name = "lineNumber">The line number.</param>
@@ -64,7 +64,7 @@ namespace PlantsVsZombies.UI.BitmapFonts
         /// <param name = "text">The text.</param>
         /// <param name = "lineNumber">The line number.</param>
         /// <returns>The resulting read.</returns>
-        public static BmFontRecord Read(string text, int lineNumber)
+        public static BmFontRecord? Read(string text, int lineNumber)
         {
             var i = 0;
             while (i < text.Length && char.IsWhiteSpace(text[i]))

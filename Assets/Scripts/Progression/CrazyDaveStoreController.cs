@@ -22,6 +22,10 @@ namespace PlantsVsZombies.Progression
 
         /// <summary>Tracks Crazy Dave's timed store messages.</summary>
         internal CrazyDaveStoreSpeechClock? _storeSpeechClock;
+
+        /// <summary>Gets the store speech clock, which must already exist wherever it is used.</summary>
+        /// <exception cref="System.InvalidOperationException">The member is not available.</exception>
+        internal CrazyDaveStoreSpeechClock RequiredStoreSpeechClock => _storeSpeechClock ?? throw new System.InvalidOperationException("The member '_storeSpeechClock' is not available.");
         /// <summary>Stores the fractional original store update time.</summary>
         private float _storeSpeechRemainder;
         /// <summary>Starts one store speech message without per-tick delegate allocation.</summary>
@@ -109,7 +113,7 @@ namespace PlantsVsZombies.Progression
                 return;
             }
 
-            var progress = _owner.Campaign._adventureStore.Get(_owner._profiles.SelectedId.Value);
+            var progress = _owner.Campaign.RequiredAdventureStore.Get(_owner.RequiredProfiles.RequiredSelectedId);
             if (progress.CompletedRuns == 0 && progress.NextLevel < 25)
             {
                 _owner.Menus.SetUnavailable("疯狂戴夫的商店", "通过冒险模式 3-4，取得车钥匙后即可进入。");
@@ -125,7 +129,7 @@ namespace PlantsVsZombies.Progression
             _storeIntroTalking = false;
             _storeHatchOpen = true;
             _storeHatchTicks = 0;
-            _storeTacoDiamondVisible = _owner.Accounts.GetSelectedAccount().TacoDiamondPresented;
+            _storeTacoDiamondVisible = _owner.Accounts.RequiredGetSelectedAccount().TacoDiamondPresented;
             _storeTacoDiamondAge = 0f;
             _shopPage = 0;
             _selectedShopItem = -1;
@@ -197,9 +201,9 @@ namespace PlantsVsZombies.Progression
                     BeginStoreHatchOpen();
                 }
 
-                if (next == 603 && _owner.Accounts.GetSelectedAccount().HasPendingTacoReward)
+                if (next == 603 && _owner.Accounts.RequiredGetSelectedAccount().HasPendingTacoReward)
                 {
-                    _owner.Accounts.ProgressionAction(() => _owner.Accounts._accountStore.PresentTacoReward(_owner._profiles.SelectedId.Value));
+                    _owner.Accounts.ProgressionAction(() => _owner.Accounts.RequiredAccountStore.PresentTacoReward(_owner.RequiredProfiles.RequiredSelectedId));
                     if (_owner.Accounts._progressionMessage != null)
                     {
                         return;
@@ -210,7 +214,7 @@ namespace PlantsVsZombies.Progression
                     _owner.Sounds.PlayPresentationSound("diamond");
                 }
 
-                _storeSpeechClock.SetMessage(next, 0);
+                RequiredStoreSpeechClock.SetMessage(next, 0);
                 _owner.Dave.ShowCrazyDaveMessage(next);
                 return;
             }
@@ -239,9 +243,9 @@ namespace PlantsVsZombies.Progression
             {
                 try
                 {
-                    if (_storeAdventureGamePrepared || _owner.Campaign._adventureCampaign.StartNextLevel())
+                    if (_storeAdventureGamePrepared || _owner.Campaign.RequiredAdventureCampaign.StartNextLevel())
                     {
-                        _owner.Campaign.AttachAdventureGame(_owner.Campaign._adventureCampaign.Game);
+                        _owner.Campaign.AttachAdventureGame(_owner.Campaign.RequiredAdventureCampaign.Game);
                         _storeAdventureIntro = false;
                         _storeAdventureGamePrepared = false;
                         _owner._currentView = PvZGame.ScreenView.Board;
@@ -258,7 +262,7 @@ namespace PlantsVsZombies.Progression
             _owner._currentView = _storeReturnView;
             if (_owner._currentView == PvZGame.ScreenView.Garden && _owner.Garden._gardenTutorialStage == 5)
             {
-                _owner.Accounts.ProgressionAction(() => _owner.Accounts._accountStore.SetZenGardenTutorialStage(_owner._profiles.SelectedId.Value, 6));
+                _owner.Accounts.ProgressionAction(() => _owner.Accounts.RequiredAccountStore.SetZenGardenTutorialStage(_owner.RequiredProfiles.RequiredSelectedId, 6));
                 if (_owner.Accounts._progressionMessage == null)
                 {
                     _owner.Accounts._progressionMessage = _owner._presenter.OriginalProgressionText("ADVICE_ZEN_GARDEN_FERTILIZE");
@@ -271,7 +275,7 @@ namespace PlantsVsZombies.Progression
         {
             _owner.Accounts.ProgressionAction(() =>
             {
-                if (_owner.Accounts._accountStore.CollectTacoReward(_owner._profiles.SelectedId.Value))
+                if (_owner.Accounts.RequiredAccountStore.CollectTacoReward(_owner.RequiredProfiles.RequiredSelectedId))
                 {
                     _storeTacoDiamondVisible = false;
                     _owner.Accounts._displayAccountSnapshot = null;
@@ -298,7 +302,7 @@ namespace PlantsVsZombies.Progression
                 return;
             }
 
-            if (_owner._optionsView.IsOpen || (_owner._profileDialog != null && _owner._profileDialog.IsOpen) || _owner._unavailableFeature != null)
+            if (_owner.RequiredOptionsView.IsOpen || (_owner._profileDialog != null && _owner._profileDialog.IsOpen) || _owner._unavailableFeature != null)
             {
                 return;
             }
@@ -310,7 +314,7 @@ namespace PlantsVsZombies.Progression
                 return;
             }
 
-            var progress = _owner.Campaign._adventureStore.Get(_owner._profiles.SelectedId.Value);
+            var progress = _owner.Campaign.RequiredAdventureStore.Get(_owner.RequiredProfiles.RequiredSelectedId);
             var completed = progress.CompletedRuns > 0;
             int? hoveredMessage = null;
             if (_selectedShopItem < 0 && GameInput.Current.InsideViewport)
@@ -422,10 +426,10 @@ namespace PlantsVsZombies.Progression
             {
                 if (new Rect(245, 346, 135, 46).Contains(point))
                 {
-                    var progress = _owner.Campaign._adventureStore.Get(_owner._profiles.SelectedId.Value);
+                    var progress = _owner.Campaign.RequiredAdventureStore.Get(_owner.RequiredProfiles.RequiredSelectedId);
                     _owner.Accounts.ProgressionAction(() =>
                     {
-                        _owner.Accounts._accountStore.Purchase(_owner._profiles.SelectedId.Value, _selectedShopItem, progress.NextLevel, progress.CompletedRuns, PvZGame.UtcSeconds);
+                        _owner.Accounts.RequiredAccountStore.Purchase(_owner.RequiredProfiles.RequiredSelectedId, _selectedShopItem, progress.NextLevel, progress.CompletedRuns, PvZGame.UtcSeconds);
                         if (_selectedShopItem == 29)
                         {
                             _storeSpeechClock?.SetMessage(3400, 800);
@@ -473,7 +477,7 @@ namespace PlantsVsZombies.Progression
                 if (ShopItemRect(i).Contains(point))
                 {
                     var item = ShopCatalog.Get(page[i]);
-                    var progress = _owner.Campaign._adventureStore.Get(_owner._profiles.SelectedId.Value);
+                    var progress = _owner.Campaign.RequiredAdventureStore.Get(_owner.RequiredProfiles.RequiredSelectedId);
                     var account = _owner.Accounts.GetSelectedAccount();
                     if (ShopCatalog.IsUnlocked(item, progress.NextLevel, progress.CompletedRuns) && !ShopCatalog.SoldOut(item, account, PvZGame.UtcSeconds))
                     {

@@ -71,7 +71,7 @@ namespace PlantsVsZombies.Tests.PlayMode
         [TearDown]
         public void TearDown()
         {
-            _game._animations.Dispose();
+            _game.RequiredAnimations.Dispose();
             _presenter.Dispose();
             UnityEngine.Object.DestroyImmediate(_clip);
             UnityEngine.Object.DestroyImmediate(_audioHost);
@@ -101,8 +101,8 @@ namespace PlantsVsZombies.Tests.PlayMode
             }
 
             Assert.That(_game.Opening._adventureIntro, Is.Not.Null);
-            Assert.That(_game.Opening._adventureIntro.Plan.NonScrolling, Is.True);
-            Assert.That(_game.Opening._adventureIntro.Plan.ChooseSeeds, Is.False);
+            Assert.That(_game.Opening.RequiredAdventureIntro.Plan.NonScrolling, Is.True);
+            Assert.That(_game.Opening.RequiredAdventureIntro.Plan.ChooseSeeds, Is.False);
             Assert.That(GetField<int>("_crazyDaveStartIndex"), Is.EqualTo(expected));
         }
 
@@ -120,9 +120,9 @@ namespace PlantsVsZombies.Tests.PlayMode
             Assert.That(Invoke(_game, "TryHandleModeClick", new Vector2(400f, 300f)), Is.True);
             Tick(2.75f);
             Assert.That(_game.Dave._crazyDaveMessageIndex, Is.EqualTo(first));
-            var frozenTime = _game.Opening._adventureIntro.NativeTime;
+            var frozenTime = _game.Opening.RequiredAdventureIntro.NativeTime;
             Tick(.2f);
-            Assert.That(_game.Opening._adventureIntro.NativeTime, Is.EqualTo(frozenTime));
+            Assert.That(_game.Opening.RequiredAdventureIntro.NativeTime, Is.EqualTo(frozenTime));
             for (var index = first + 1; index <= last; index++)
             {
                 Invoke(_game, "AdvanceCrazyDaveDialogue");
@@ -132,7 +132,7 @@ namespace PlantsVsZombies.Tests.PlayMode
             Invoke(_game, "AdvanceCrazyDaveDialogue");
             Assert.That(_game.Dave._crazyDaveMessageIndex, Is.EqualTo(-1));
             Tick(1.26f);
-            Assert.That(_game.Opening._adventureIntro.NativeTime, Is.GreaterThanOrEqualTo(_game.Opening._adventureIntro.Plan.PanLeftEnd));
+            Assert.That(_game.Opening.RequiredAdventureIntro.NativeTime, Is.GreaterThanOrEqualTo(_game.Opening.RequiredAdventureIntro.Plan.PanLeftEnd));
         }
 
         /// <summary>Creates a mode and invokes its real opening initialization.</summary>

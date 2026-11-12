@@ -54,7 +54,7 @@ internal static class Program
         Check(store.Get(id).Coins == money + 5 && !game.CollectAdventureCoin(coin), "The arriving battle coin is durable exactly once");
         var failure = new GameSimulation(new GameRules { AdventureLevel = 8, AdventureCoinCommit = total => false }, 17);
         failure.ChooseDefaultAdventureSeeds();
-        var pending = failure.SpawnAdventureCoin(AdventureCoinKind.Silver, 4, 2);
+        var pending = failure.SpawnAdventureCoin(AdventureCoinKind.Silver, 4, 2) ?? throw new InvalidOperationException("The silver coin was not spawned.");
         Check(failure.CollectAdventureCoin(pending), "Pickup starts before its arrival-time persistence attempt");
         failure.Update(1.5f);
         Check(pending.PersistencePending && !pending.IsBeingCollected, "Persistence failure preserves a retryable coin");

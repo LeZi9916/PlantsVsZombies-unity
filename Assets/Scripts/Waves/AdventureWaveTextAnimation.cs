@@ -46,9 +46,10 @@ namespace PlantsVsZombies.Waves
 
             var poses = new List<AdventureWaveTextPose>();
             int enter = 0, enterLength = 0, leave = 0, leaveLength = 0;
-            foreach (XmlNode track in doc.DocumentElement.SelectNodes("track"))
+            var root = doc.DocumentElement ?? throw new FormatException("The wave text animation has no root element: " + path);
+            foreach (XmlNode track in root.SelectNodes("track") ?? throw new FormatException("The wave text animation has no track list: " + path))
             {
-                var name = track.SelectSingleNode("name").InnerText;
+                var name = (track.SelectSingleNode("name") ?? throw new FormatException("A wave text track has no name: " + path)).InnerText;
                 var index = 0;
                 float f = 0;
                 var pose = new AdventureWaveTextPose
@@ -57,7 +58,7 @@ namespace PlantsVsZombies.Waves
                     ScaleY = 1,
                     Alpha = 1
                 };
-                foreach (XmlNode frame in track.SelectNodes("t"))
+                foreach (XmlNode frame in track.SelectNodes("t") ?? throw new FormatException("A wave text track has no frame list: " + path))
                 {
                     foreach (XmlNode field in frame.ChildNodes)
                     {

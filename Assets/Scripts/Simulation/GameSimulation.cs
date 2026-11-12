@@ -10,6 +10,7 @@ using System;
 using System.Collections.Generic;
 
 using System.IO;
+using System.Diagnostics.CodeAnalysis;
 
 namespace PlantsVsZombies.Simulation
 {
@@ -56,7 +57,7 @@ namespace PlantsVsZombies.Simulation
         public int RowCount { get; private set; } = Rows;
 
         /// <summary>Stores event raised.</summary>
-        public Action<GameEvent> EventRaised;
+        public Action<GameEvent>? EventRaised;
         /// <summary>Reuses the synchronous native reward animation callback.</summary>
         private readonly Action _rewardPresentationTick;
         /// <summary>Accumulates decorative board ticks after independent modes finish without an adventure reward object.</summary>
@@ -82,7 +83,7 @@ namespace PlantsVsZombies.Simulation
         /// <param name = "randomSeed">The random seed.</param>
         /// <exception cref = "ArgumentException">The operation cannot satisfy its preconditions.</exception>
         /// <exception cref = "InvalidOperationException">The operation cannot satisfy its preconditions.</exception>
-        public GameSimulation(GameRules rules = null, int randomSeed = 12345)
+        public GameSimulation(GameRules? rules = null, int randomSeed = 12345)
         {
             _rewardPresentationTick = AdvanceAdventureRewardTick;
             Rules = rules ?? new GameRules();
@@ -147,7 +148,7 @@ namespace PlantsVsZombies.Simulation
         /// <exception cref = "ArgumentOutOfRangeException">The operation cannot satisfy its preconditions.</exception>
         private static PlantDefinition DefinitionFor(PlantKind kind)
         {
-            PlantDefinition definition;
+            PlantDefinition? definition;
             if ((int)kind < (int)PlantKind.Peashooter || (int)kind > (int)PlantKind.ExplodeONut || !VerifiedDataCatalog.TryGetPlant((int)kind, out definition))
             {
                 throw new ArgumentOutOfRangeException(nameof(kind));
@@ -784,7 +785,7 @@ namespace PlantsVsZombies.Simulation
         /// <param name = "plant">The plant.</param>
         private void UpdateTimedPlant(Plant plant)
         {
-            var state = plant.Timing.Value;
+            var state = plant.RequiredTiming;
             var target = false;
             foreach (var zombie in Zombies)
             {
@@ -899,7 +900,7 @@ namespace PlantsVsZombies.Simulation
                 var speedMultiplier = zombie.ChillRemaining > 0f ? 0.5f : 1f;
                 zombie.ChillRemaining = Math.Max(0f, zombie.ChillRemaining - dt);
                 zombie.Age += dt * speedMultiplier;
-                Plant target = null;
+                Plant? target = null;
                 for (var j = 0; j < Plants.Count; j++)
                 {
                     var candidate = Plants[j];
@@ -1032,7 +1033,7 @@ namespace PlantsVsZombies.Simulation
             nut.NativeMotionInitialized = true;
             nut.NativePixelX = (int)(nut.X * 80f);
             nut.NativePixelY = 80 + nut.Row * 100;
-            global::PlantsVsZombies.Adventure.AdventureBowlingPresentation pose;
+            global::PlantsVsZombies.Adventure.AdventureBowlingPresentation? pose;
             if (!Presentation.Bowling.TryGetValue(nut, out pose))
             {
                 pose = new global::PlantsVsZombies.Adventure.AdventureBowlingPresentation
@@ -1050,7 +1051,7 @@ namespace PlantsVsZombies.Simulation
         /// <param name = "nut">The nut.</param>
         /// <param name = "giant">The giant.</param>
         /// <returns>The resulting find adventure bowling native target.</returns>
-        private Zombie FindAdventureBowlingNativeTarget(global::PlantsVsZombies.Adventure.AdventureBowlingNut nut, bool giant)
+        private Zombie? FindAdventureBowlingNativeTarget(global::PlantsVsZombies.Adventure.AdventureBowlingNut nut, bool giant)
         {
             // PC bowling attack rect uses plant mX, mWidth-20=60 and signed horizontal overlap>=0.
             var attack = new NativeRect(nut.NativePixelX, nut.NativePixelY, 60, 80);
@@ -1245,7 +1246,7 @@ namespace PlantsVsZombies.Simulation
         private bool AdvanceAdventureCherryBomb(Plant plant)
         {
             InitializeAdventureCherryBomb(plant);
-            var state = plant.CherryBombPresentation;
+            var state = plant.RequiredCherryBombPresentation;
             if (state.Detonated)
             {
                 return true;
@@ -1277,7 +1278,7 @@ namespace PlantsVsZombies.Simulation
         private void DetonateAdventureCherryBomb(Plant plant)
         {
             InitializeAdventureCherryBomb(plant);
-            var state = plant.CherryBombPresentation;
+            var state = plant.RequiredCherryBombPresentation;
             if (state.Detonated)
             {
                 return;
@@ -1759,7 +1760,7 @@ namespace PlantsVsZombies.Simulation
         /// <param name = "shot">The shot.</param>
         /// <param name = "zombie">The zombie.</param>
         /// <param name = "impact">The impact.</param>
-        private void RecordAdventureIceImpact(Pea shot, Zombie zombie, global::PlantsVsZombies.Adventure.AdventureImpact impact)
+        private void RecordAdventureIceImpact(Pea shot, Zombie? zombie, global::PlantsVsZombies.Adventure.AdventureImpact impact)
         {
             StopAdventureSnowTrail(shot);
             if (!shot.IsSnow)
@@ -2124,7 +2125,7 @@ namespace PlantsVsZombies.Simulation
             var target = fume ? FindAdventureFumeTarget(plant) != null : shortPuff ? FindAdventurePuffTarget(plant) != null
                 : !sunflower && (targetZombie != null || !plant.ModeFacesLeft && CanShootAdventureBoss(plant))
                     && (!scaredy || !HasZombieNear(plant.Row, plant.Column + .5f, 1, 1.5f, true));
-            var state = plant.Timing.Value;
+            var state = plant.RequiredTiming;
             // PC 0x46D240 starts the body animation and its species-specific shooting counter together.
             var track = shortPuff || fume || scaredy || cactus || plant.Kind == PlantKind.CabbagePult || kernel
                 || plant.Kind == PlantKind.MelonPult || plant.Kind == PlantKind.WinterMelon
@@ -2251,7 +2252,7 @@ namespace PlantsVsZombies.Simulation
                 }
             }
 
-            var state = plant.MultiHeadTiming.Value;
+            var state = plant.RequiredMultiHeadTiming;
             var input = new AdventureMultiHeadTimingInput(true, true, true, targets, available, true, 0);
             var bound = AdventureMultiHeadTimingRules.RequiredRandomBound(state, input);
             var result = AdventureMultiHeadTimingRules.Tick(state,
@@ -2367,7 +2368,7 @@ namespace PlantsVsZombies.Simulation
         /// <summary>Performs record adventure chew effect.</summary>
         /// <param name = "z">The z.</param>
         /// <param name = "p">The p.</param>
-        private void RecordAdventureChewEffect(Zombie z, Plant p)
+        private void RecordAdventureChewEffect(Zombie z, Plant? p)
         {
             if (p == null)
             {
@@ -2689,7 +2690,7 @@ namespace PlantsVsZombies.Simulation
         /// <param name = "row">The row.</param>
         /// <param name = "column">The column.</param>
         /// <returns>The resulting place adventure plant.</returns>
-        private Plant PlaceAdventurePlant(PlantKind kind, int row, int column)
+        private Plant? PlaceAdventurePlant(PlantKind kind, int row, int column)
         {
             if ((int)kind >= 40 && (int)kind <= 48)
             {
@@ -2752,6 +2753,14 @@ namespace PlantsVsZombies.Simulation
             Raise(GameEvent.Planted);
             return plant;
         }
+
+        /// <summary>Calls <see cref="PlaceAdventurePlant"/> where a result must exist, failing with a descriptive exception instead of returning null.</summary>
+        /// <param name="kind">The <c>kind</c> argument forwarded to <see cref="PlaceAdventurePlant"/>.</param>
+        /// <param name="row">The <c>row</c> argument forwarded to <see cref="PlaceAdventurePlant"/>.</param>
+        /// <param name="column">The <c>column</c> argument forwarded to <see cref="PlaceAdventurePlant"/>.</param>
+        /// <returns>The non-null place adventure plant result.</returns>
+        /// <exception cref="System.InvalidOperationException">The method returned no result.</exception>
+        private Plant RequiredPlaceAdventurePlant(PlantKind kind, int row, int column) => PlaceAdventurePlant(kind, row, column) ?? throw new System.InvalidOperationException("'PlaceAdventurePlant' returned no result.");
 
         /// <summary>Performs remove adventure plant.</summary>
         /// <param name = "row">The row.</param>
@@ -3363,9 +3372,9 @@ namespace PlantsVsZombies.Simulation
         /// <param name = "submerged">The submerged.</param>
         /// <param name = "sourceKind">The source kind.</param>
         /// <returns>The resulting find adventure target.</returns>
-        private Zombie FindAdventureTarget(int row, float min, float max, bool air, bool submerged = false, PlantKind sourceKind = PlantKind.Peashooter)
+        private Zombie? FindAdventureTarget(int row, float min, float max, bool air, bool submerged = false, PlantKind sourceKind = PlantKind.Peashooter)
         {
-            Zombie best = null;
+            Zombie? best = null;
             foreach (Zombie z in Zombies)
             {
                 if (!z.Hypnotized && AdventureZombieTargetingRules.CanBeAutoTargeted(z, sourceKind) && z.DropRemaining <= 0f && z.Kind != ZombieKind.Bungee && z.Row == row && z.X >= min && z.X <= max && (!z.Airborne || air) && (!z.Submerged || submerged))
@@ -3455,7 +3464,7 @@ namespace PlantsVsZombies.Simulation
                 }
 
                 UpdateAdventureSnowTrail(p);
-                Zombie hit = null;
+                Zombie? hit = null;
                 foreach (Zombie z in Zombies)
                 {
                     if (allowDamage && p.PresentationCanImpact && z.GraveRiseTicks <= 0 && (!p.Homing || z.Id == p.TargetZombieId) && !z.Hypnotized && Math.Abs(z.Row - p.FlightRow) < 0.45f && !p.HitIds.Contains(z.Id) && (!z.Airborne || p.HitsAir) && (!z.Submerged || p.Lobbed) && (AdventurePuffShroomRules.IsShortRange(p.SourceKind)
@@ -3787,7 +3796,7 @@ namespace PlantsVsZombies.Simulation
         private bool AdvanceAdventurePotatoMine(Plant p)
         {
             InitializeAdventurePotatoMine(p);
-            var state = p.PotatoMinePresentation;
+            var state = p.RequiredPotatoMinePresentation;
             switch (p.MinePhase)
             {
                 case MinePhase.Buried:
@@ -3969,8 +3978,8 @@ namespace PlantsVsZombies.Simulation
                 var corpse = Presentation.Corpses[i];
                 corpse.Age += dt;
                 AdvanceAdventureZombieCorpseSound(corpse);
-                corpse.Zombie.PresentationFlash = Math.Max(0, corpse.Zombie.PresentationFlash - dt);
-                corpse.Zombie.PresentationArmorFlash = Math.Max(0, corpse.Zombie.PresentationArmorFlash - dt);
+                corpse.RequiredZombie.PresentationFlash = Math.Max(0, corpse.RequiredZombie.PresentationFlash - dt);
+                corpse.RequiredZombie.PresentationArmorFlash = Math.Max(0, corpse.RequiredZombie.PresentationArmorFlash - dt);
                 if (corpse.Age >= corpse.Duration)
                 {
                     Presentation.Corpses.RemoveAt(i);
@@ -3995,7 +4004,7 @@ namespace PlantsVsZombies.Simulation
 
             foreach (var nut in Adventure.BowlingNuts)
             {
-                global::PlantsVsZombies.Adventure.AdventureBowlingPresentation pose;
+                global::PlantsVsZombies.Adventure.AdventureBowlingPresentation? pose;
                 if (!Presentation.Bowling.TryGetValue(nut, out pose))
                 {
                     var giant = ModeSession != null && ModeSession._giantNuts.Contains(nut);
@@ -4193,7 +4202,7 @@ namespace PlantsVsZombies.Simulation
         /// <summary>Performs adventure presentation impact.</summary>
         /// <param name = "shot">The shot.</param>
         /// <param name = "zombie">The zombie.</param>
-        private void AdventurePresentationImpact(Pea shot, Zombie zombie)
+        private void AdventurePresentationImpact(Pea shot, Zombie? zombie)
         {
             RequestAdventureProjectileImpactSound(shot, zombie);
             if (shot.Butter && zombie != null)
@@ -4389,7 +4398,7 @@ namespace PlantsVsZombies.Simulation
         /// <param name = "producer">The producer.</param>
         /// <param name = "value">The value.</param>
         /// <returns>The resulting create adventure presentation sun.</returns>
-        private global::PlantsVsZombies.Simulation.Sun CreateAdventurePresentationSun(Plant producer, int value = 25)
+        private global::PlantsVsZombies.Simulation.Sun CreateAdventurePresentationSun(Plant? producer, int value = 25)
         {
             var sun = CreateSun(0f, 0f, 0f, value);
             AdventurePresentationSunSpawn(sun, producer);
@@ -4399,7 +4408,7 @@ namespace PlantsVsZombies.Simulation
         /// <summary>Performs adventure presentation sun spawn.</summary>
         /// <param name = "sun">The sun.</param>
         /// <param name = "producer">The producer.</param>
-        private void AdventurePresentationSunSpawn(global::PlantsVsZombies.Simulation.Sun sun, Plant producer)
+        private void AdventurePresentationSunSpawn(global::PlantsVsZombies.Simulation.Sun sun, Plant? producer)
         {
             var pitch = Adventure.Level.HasPool || Adventure.Level.HasRoof ? 85f : 100f;
             if (producer != null)
@@ -4687,7 +4696,7 @@ namespace PlantsVsZombies.Simulation
                 return;
             }
 
-            Zombie target = null;
+            Zombie? target = null;
             foreach (var z in Zombies)
             {
                 if (z.Row == a.RakeRow && !z.Airborne && !z.Submerged && !z.Hypnotized && z.Kind != ZombieKind.Bungee && z.Kind != ZombieKind.Bobsled && z.X - 0.3f <= a.RakeColumn + 63f / 80f && z.X + 0.3f >= a.RakeColumn)
@@ -5161,8 +5170,11 @@ namespace PlantsVsZombies.Simulation
             }
         }
 
-        /// <summary>Gets or sets adventure.</summary>
-        public AdventureBoard Adventure { get; private set; }
+        /// <summary>Stores the adventure board, or null when this simulation does not run an adventure level.</summary>
+        private AdventureBoard? _adventure;
+        /// <summary>Gets the adventure board, which exists exactly when <see cref="IsAdventure"/> is true.</summary>
+        /// <exception cref="InvalidOperationException">This simulation does not run an adventure level.</exception>
+        public AdventureBoard Adventure => _adventure ?? throw new InvalidOperationException("This simulation does not run an adventure level.");
 
         /// <summary>Performs initialize adventure.</summary>
         /// <param name = "initialized">The initialized.</param>
@@ -5171,9 +5183,8 @@ namespace PlantsVsZombies.Simulation
             var level = AdventureLevels.ForRun(Rules.AdventureLevel, Rules.AdventureCycle, Rules.AdventurePacketSlots);
             RowCount = level.Rows;
             SunAmount = level.StartingSun;
-            Adventure = new AdventureBoard
+            _adventure = new AdventureBoard(level)
             {
-                Level = level,
                 Phase = level.ChoosesSeeds ? AdventurePhase.ChoosingSeeds : AdventurePhase.Playing,
                 SelectedSeeds = level.DefaultSeeds,
                 Waves = AdventureWavePlan.Build(level, _random),
@@ -5251,9 +5262,9 @@ namespace PlantsVsZombies.Simulation
         /// <summary>Performs choose adventure seeds.</summary>
         /// <param name = "seeds">The seeds.</param>
         /// <returns>The resulting choose adventure seeds.</returns>
-        public bool ChooseAdventureSeeds(IEnumerable<PlantKind> seeds)
+        public bool ChooseAdventureSeeds(IEnumerable<PlantKind>? seeds)
         {
-            List<PlantKind> selected;
+            List<PlantKind>? selected;
             if (!TryPrepareAdventureSeeds(seeds, out selected))
             {
                 return false;
@@ -5267,7 +5278,7 @@ namespace PlantsVsZombies.Simulation
         /// <summary>Pure validation for hosts that must persist a selection before publishing gameplay.</summary>
         public bool CanChooseAdventureSeeds(IEnumerable<PlantKind> seeds)
         {
-            List<PlantKind> selected;
+            List<PlantKind>? selected;
             return TryPrepareAdventureSeeds(seeds, out selected);
         }
 
@@ -5275,7 +5286,7 @@ namespace PlantsVsZombies.Simulation
         /// <param name = "seeds">The seeds.</param>
         /// <param name = "selected">The selected.</param>
         /// <returns>The resulting try prepare adventure seeds.</returns>
-        private bool TryPrepareAdventureSeeds(IEnumerable<PlantKind> seeds, out List<PlantKind> selected)
+        private bool TryPrepareAdventureSeeds(IEnumerable<PlantKind>? seeds, [NotNullWhen(true)] out List<PlantKind>? selected)
         {
             selected = null;
             if (!IsAdventure || State != MatchState.Playing || Adventure.Phase != AdventurePhase.ChoosingSeeds || seeds == null)
@@ -5315,7 +5326,7 @@ namespace PlantsVsZombies.Simulation
         /// <returns>The resulting choose default adventure seeds.</returns>
         public bool ChooseDefaultAdventureSeeds()
         {
-            return ChooseAdventureSeeds(Adventure == null ? null : Adventure.SelectedSeeds);
+            return ChooseAdventureSeeds(_adventure == null ? null : _adventure.SelectedSeeds);
         }
 
         /// <summary>Performs select adventure seed.</summary>
@@ -6750,9 +6761,9 @@ namespace PlantsVsZombies.Simulation
         /// <param name = "x">The x.</param>
         /// <param name = "row">The row.</param>
         /// <returns>The resulting find adventure cattail target.</returns>
-        private Zombie FindAdventureCattailTarget(float x, float row)
+        private Zombie? FindAdventureCattailTarget(float x, float row)
         {
-            Zombie best = null;
+            Zombie? best = null;
             var distance = float.MaxValue;
             foreach (Zombie z in Zombies)
             {
@@ -6830,7 +6841,7 @@ namespace PlantsVsZombies.Simulation
             }
             else
             {
-                var transformed = PlaceAdventurePlant(target.Value, p.Row, p.Column);
+                var transformed = RequiredPlaceAdventurePlant(target.Value, p.Row, p.Column);
                 transformed.Id = p.Id;
                 transformed.IsImitated = true;
                 transformed.ImitaterTarget = target;
@@ -6973,7 +6984,7 @@ namespace PlantsVsZombies.Simulation
         /// <param name="x">The pickup's horizontal lawn coordinate.</param>
         /// <param name="row">The pickup's lawn row.</param>
         /// <returns>The new pickup, or null when the board or coordinates cannot accept it.</returns>
-        public AdventureCoin SpawnAdventureCoin(AdventureCoinKind kind, float x, float row)
+        public AdventureCoin? SpawnAdventureCoin(AdventureCoinKind kind, float x, float row)
         {
             if (!IsAdventure || State != MatchState.Playing || Adventure.Phase != AdventurePhase.Playing || !Enum.IsDefined(typeof(AdventureCoinKind), kind) || float.IsNaN(x) || float.IsInfinity(x) || float.IsNaN(row) || float.IsInfinity(row) || x < 0 || x >= Columns || row < 0 || row >= RowCount)
             {
@@ -6996,10 +7007,18 @@ namespace PlantsVsZombies.Simulation
             return coin;
         }
 
+        /// <summary>Calls <see cref="SpawnAdventureCoin"/> where a result must exist, failing with a descriptive exception instead of returning null.</summary>
+        /// <param name="kind">The <c>kind</c> argument forwarded to <see cref="SpawnAdventureCoin"/>.</param>
+        /// <param name="x">The <c>x</c> argument forwarded to <see cref="SpawnAdventureCoin"/>.</param>
+        /// <param name="row">The <c>row</c> argument forwarded to <see cref="SpawnAdventureCoin"/>.</param>
+        /// <returns>The non-null spawn adventure coin result.</returns>
+        /// <exception cref="System.InvalidOperationException">The method returned no result.</exception>
+        public AdventureCoin RequiredSpawnAdventureCoin(AdventureCoinKind kind, float x, float row) => SpawnAdventureCoin(kind, x, row) ?? throw new System.InvalidOperationException("'SpawnAdventureCoin' returned no result.");
+
         /// <summary>Starts the original manual money collection flight or commits noncurrency loot.</summary>
         /// <param name="coin">The live pickup clicked by the player.</param>
         /// <returns>Whether collection began; currency is persisted and credited when its flight arrives.</returns>
-        public bool CollectAdventureCoin(AdventureCoin coin)
+        public bool CollectAdventureCoin(AdventureCoin? coin)
         {
             if (!IsAdventure || State != MatchState.Playing || Adventure.Phase != AdventurePhase.Playing || coin == null || coin.IsBeingCollected || !Adventure._coins.Contains(coin))
             {
@@ -7234,7 +7253,7 @@ namespace PlantsVsZombies.Simulation
         /// <param name = "z">The z.</param>
         /// <param name = "attack">The attack.</param>
         /// <returns>The resulting find adventure native plant target.</returns>
-        private Plant FindAdventureNativePlantTarget(Zombie z, global::PlantsVsZombies.Adventure.AdventureBiteAttack attack)
+        private Plant? FindAdventureNativePlantTarget(Zombie z, global::PlantsVsZombies.Adventure.AdventureBiteAttack attack)
         {
             var box = AdventureZombieAttackRectangle(z);
             foreach (var p in Plants)
@@ -7276,7 +7295,7 @@ namespace PlantsVsZombies.Simulation
         /// <param name = "dt">The dt.</param>
         /// <param name = "zombieTarget">The zombie target.</param>
         /// <returns>The resulting advance adventure native eating.</returns>
-        private bool AdvanceAdventureNativeEating(Zombie z, Plant target, float dt, bool zombieTarget = false)
+        private bool AdvanceAdventureNativeEating(Zombie z, Plant? target, float dt, bool zombieTarget = false)
         {
             if (z.Headless || !AdventureNativeChewer(z) || z.PresentationGarlicCounter >= 0)
             {
@@ -7296,7 +7315,7 @@ namespace PlantsVsZombies.Simulation
             }
 
             var clip = AdventurePresentationZombieAnimation(z);
-            global::PlantsVsZombies.Adventure.AdventureZombieGroundClip data;
+            global::PlantsVsZombies.Adventure.AdventureZombieGroundClip? data;
             if (global::PlantsVsZombies.Adventure.AdventureZombieGroundData.TryGet(AdventureZombiePresentationAsset(z), clip, out data))
             {
                 double cycle = z.PresentationAnimationAge * AdventurePresentationZombieRate(z) / data.Count;
@@ -7332,7 +7351,7 @@ namespace PlantsVsZombies.Simulation
         /// <param name = "z">The z.</param>
         /// <param name = "target">The target.</param>
         /// <param name = "zombieTarget">The zombie target.</param>
-        private void AnimateAdventureChew(Zombie z, Plant target, bool zombieTarget)
+        private void AnimateAdventureChew(Zombie z, Plant? target, bool zombieTarget)
         {
             if (target != null && target.Kind == PlantKind.HypnoShroom && !target.Asleep)
             {
@@ -7383,7 +7402,7 @@ namespace PlantsVsZombies.Simulation
             for (var i = 0; i < ticks && z.PresentationGarlicCounter >= 0; i++)
             {
                 var c = ++z.PresentationGarlicCounter;
-                if (c > 20 && c < 170 && !Plants.Contains(z._presentationGarlicPlant))
+                if (c > 20 && c < 170 && (z._presentationGarlicPlant == null || !Plants.Contains(z._presentationGarlicPlant)))
                 {
                     c = 170;
                     z.PresentationGarlicCounter = c;
@@ -7433,7 +7452,7 @@ namespace PlantsVsZombies.Simulation
             {
                 z.PresentationAnimationAge = z._presentationGarlicHeldAge;
                 z.PresentationPlantHeadAge = z._presentationGarlicHeldHeadAge;
-                global::PlantsVsZombies.Adventure.AdventureZombieGroundClip data;
+                global::PlantsVsZombies.Adventure.AdventureZombieGroundClip? data;
                 var clip = AdventurePresentationZombieAnimation(z);
                 if (global::PlantsVsZombies.Adventure.AdventureZombieGroundData.TryGet(AdventureZombiePresentationAsset(z), clip, out data))
                 {
@@ -7454,7 +7473,7 @@ namespace PlantsVsZombies.Simulation
         private global::PlantsVsZombies.Adventure.AdventureZombieCorpse InitializeAdventureZombieCorpse(global::PlantsVsZombies.Adventure.AdventureZombieCorpse corpse)
         {
             int frames;
-            var asset = AdventureZombiePresentationAsset(corpse.Zombie);
+            var asset = AdventureZombiePresentationAsset(corpse.RequiredZombie);
             if (!global::PlantsVsZombies.Adventure.AdventureZombieDeathData.TryGet(asset, corpse.Animation, out frames))
             {
                 corpse.Animation = "anim_death";
@@ -7466,7 +7485,7 @@ namespace PlantsVsZombies.Simulation
             }
 
             corpse.AnimationDuration = global::PlantsVsZombies.Adventure.AdventureZombieDeathRules.AnimationSeconds(frames, corpse.Rate);
-            corpse.InPool = corpse.Zombie.PresentationInPool ?? (Adventure.Level.IsWaterRow(corpse.Zombie.Row) && corpse.Zombie.X >= 0 && corpse.Zombie.X < 9);
+            corpse.InPool = corpse.RequiredZombie.PresentationInPool ?? (Adventure.Level.IsWaterRow(corpse.RequiredZombie.Row) && corpse.RequiredZombie.X >= 0 && corpse.RequiredZombie.X < 9);
             corpse.FadeDuration = global::PlantsVsZombies.Adventure.AdventureZombieDeathRules.FadeSeconds(corpse.InPool);
             corpse.Duration = corpse.AnimationDuration + corpse.FadeDuration;
             return corpse;
@@ -7481,7 +7500,7 @@ namespace PlantsVsZombies.Simulation
                 return;
             }
 
-            var kind = corpse.Zombie.ModeHead >= 26 ? corpse.Zombie.ModeHead : (int)corpse.Zombie.Kind;
+            var kind = corpse.RequiredZombie.ModeHead >= 26 ? corpse.RequiredZombie.ModeHead : (int)corpse.RequiredZombie.Kind;
             var phase = global::PlantsVsZombies.Adventure.AdventureZombieDeathRules.FallPhase(kind, corpse.Animation);
             if (phase < 0 || corpse.Age < corpse.AnimationDuration * phase)
             {
@@ -7654,7 +7673,7 @@ namespace PlantsVsZombies.Simulation
         /// <param name = "particleId">The particle id.</param>
         /// <param name = "anchor">The anchor.</param>
         /// <param name = "image">The image.</param>
-        private void AddAdventureZombiePart(Zombie z, int kind, int particleId, string anchor, string image)
+        private void AddAdventureZombiePart(Zombie z, int kind, int particleId, string? anchor, string? image)
         {
             var clip = AdventurePresentationZombieAnimation(z);
             Presentation.ZombiePartDrops.Add(new global::PlantsVsZombies.Adventure.AdventureZombiePartDrop {
@@ -7802,7 +7821,7 @@ namespace PlantsVsZombies.Simulation
 
             var step = dt * z._presentationTickSlow;
             var rate = AdventurePresentationZombieRate(z);
-            global::PlantsVsZombies.Adventure.AdventureZombieGroundClip data;
+            global::PlantsVsZombies.Adventure.AdventureZombieGroundClip? data;
             if (rate > 0f && global::PlantsVsZombies.Adventure.AdventureZombieGroundData.TryGet(AdventureZombiePresentationAsset(z), clip, out data))
             {
                 z._presentationWalkPhase += step * rate / data.Count;
@@ -7984,7 +8003,7 @@ namespace PlantsVsZombies.Simulation
                 clip = z.PresentationWalk2 ? "anim_walk2" : "anim_walk";
             }
 
-            global::PlantsVsZombies.Adventure.AdventureZombieGroundClip data;
+            global::PlantsVsZombies.Adventure.AdventureZombieGroundClip? data;
             if (!global::PlantsVsZombies.Adventure.AdventureZombieGroundData.TryGet(asset, clip, out data))
             {
                 clip = global::PlantsVsZombies.Adventure.AdventureZombieGroundData.TryGet(asset, "anim_walk", out data) ? "anim_walk" : "anim_idle";
@@ -8054,7 +8073,7 @@ namespace PlantsVsZombies.Simulation
         /// <returns>The resulting adventure zombie playback rate.</returns>
         private static float AdventureZombiePlaybackRate(Zombie z, string clip, float speed)
         {
-            global::PlantsVsZombies.Adventure.AdventureZombieGroundClip data;
+            global::PlantsVsZombies.Adventure.AdventureZombieGroundClip? data;
             if (!global::PlantsVsZombies.Adventure.AdventureZombieGroundData.TryGet(AdventureZombiePresentationAsset(z), clip, out data))
             {
                 return 12f;
@@ -8078,7 +8097,7 @@ namespace PlantsVsZombies.Simulation
             var clip = AdventurePresentationZombieAnimation(z);
             int phase = AdventureZombieFeedbackPhase(z), kind = z.ModeHead >= 26 ? z.ModeHead : (int)z.Kind;
             var sled = z.PresentationHasSled ?? (z.Kind == ZombieKind.Bobsled && !z.UsedAbility);
-            global::PlantsVsZombies.Adventure.AdventureZombieGroundClip data;
+            global::PlantsVsZombies.Adventure.AdventureZombieGroundClip? data;
             if (!global::PlantsVsZombies.Adventure.AdventureZombieFeedbackRules.UsesGround(kind, phase, sled) || !global::PlantsVsZombies.Adventure.AdventureZombieGroundData.TryGet(AdventureZombiePresentationAsset(z), clip, out data) || data.Ground == null)
             {
                 return fallbackDistance;
@@ -8219,7 +8238,7 @@ namespace PlantsVsZombies.Simulation
         /// <summary>Performs request adventure projectile impact sound.</summary>
         /// <param name = "p">The p.</param>
         /// <param name = "z">The z.</param>
-        private void RequestAdventureProjectileImpactSound(Pea p, Zombie z)
+        private void RequestAdventureProjectileImpactSound(Pea p, Zombie? z)
         {
             var type = p.Butter ? 12 : p.Fire ? 6 : p.SourceKind == PlantKind.KernelPult ? 10 : p.ChillSplash ? 5 : p.Splash ? 3 : 0;
             var helm = z != null && z.ArmorHealth > 0 ? global::PlantsVsZombies.Adventure.AdventureZombieEquipmentRules.HelmType(z) : 0;
@@ -8500,7 +8519,7 @@ namespace PlantsVsZombies.Simulation
                 {
                     if (z.AbilityTimer <= 0)
                     {
-                        Plant victim = null;
+                        Plant? victim = null;
                         foreach (Plant p in Plants)
                         {
                             if (p.Row == z.Row && (victim == null || p.Column < victim.Column))
@@ -8558,7 +8577,7 @@ namespace PlantsVsZombies.Simulation
                     continue;
                 }
 
-                Plant target = null;
+                Plant? target = null;
                 var vault = z.Kind == ZombieKind.PoleVaulter || z.Kind == ZombieKind.DolphinRider || z.Kind == ZombieKind.Pogo;
                 var attack = vault && !z.UsedAbility ? AdventureBiteAttack.Vault : z.Kind == ZombieKind.Zomboni || z.Kind == ZombieKind.Catapult ? AdventureBiteAttack.DriveOver : AdventureBiteAttack.Chew;
                 if (!z.Airborne && !z.Hypnotized && !z.Headless)
@@ -8753,7 +8772,11 @@ namespace PlantsVsZombies.Simulation
         }
 
         /// <summary>Stores level one tutorial.</summary>
-        private LevelOneTutorial _levelOneTutorial;
+        private LevelOneTutorial? _levelOneTutorial;
+
+        /// <summary>Gets the level one tutorial, which must already exist wherever it is used.</summary>
+        /// <exception cref="System.InvalidOperationException">The member is not available.</exception>
+        private LevelOneTutorial RequiredLevelOneTutorial => _levelOneTutorial ?? throw new System.InvalidOperationException("The member '_levelOneTutorial' is not available.");
         /// <summary>Stores level one seed selected.</summary>
         private bool _levelOneSeedSelected;
         /// <summary>Stores level one allow plant removal.</summary>
@@ -8773,15 +8796,15 @@ namespace PlantsVsZombies.Simulation
         /// <summary>Stores level one sky sun target y.</summary>
         private float _levelOneSkySunTargetY;
         /// <summary>Stores level one delay provider.</summary>
-        private Func<GameSimulation, int, double> _levelOneDelayProvider;
+        private Func<GameSimulation, int, double>? _levelOneDelayProvider;
         /// <summary>Stores level one completion condition.</summary>
-        private Func<GameSimulation, bool> _levelOneCompletionCondition;
+        private Func<GameSimulation, bool>? _levelOneCompletionCondition;
         /// <summary>Stores level one sky sun factory.</summary>
-        private Func<GameSimulation, Random, global::PlantsVsZombies.Simulation.Sun> _levelOneSkySunFactory;
+        private Func<GameSimulation, Random, global::PlantsVsZombies.Simulation.Sun>? _levelOneSkySunFactory;
         /// <summary>Stores level one use native sky sun.</summary>
         private bool _levelOneUseNativeSkySun;
         /// <summary>Stores level one native sky sun random draw.</summary>
-        private Func<int, int> _levelOneNativeSkySunRandomDraw;
+        private Func<int, int>? _levelOneNativeSkySunRandomDraw;
         /// <summary>Stores level one native sky sun state.</summary>
         private global::PlantsVsZombies.Sun.SkySunState _levelOneNativeSkySunState;
         /// <summary>Stores level one native sky sun elapsed.</summary>
@@ -8789,7 +8812,7 @@ namespace PlantsVsZombies.Simulation
         /// <summary>Stores level one native sky suns.</summary>
         private readonly List<LevelOneNativeSkySun> _levelOneNativeSkySuns = new List<LevelOneNativeSkySun>();
         /// <summary>Stores level one native sky suns view.</summary>
-        private IReadOnlyList<LevelOneNativeSkySun> _levelOneNativeSkySunsView;
+        private IReadOnlyList<LevelOneNativeSkySun>? _levelOneNativeSkySunsView;
         /// <summary>Captured at construction; always false outside experimental 1-1.</summary>
         public bool LevelOneUsesNativeSkySunRules
         {
@@ -8962,7 +8985,7 @@ namespace PlantsVsZombies.Simulation
                 return false;
             }
 
-            return _levelOneTutorial.Stage == LevelOneTutorialStage.AwaitingSeedSelection || _levelOneTutorial.Stage == LevelOneTutorialStage.ZombieOnslaughtPrompt;
+            return RequiredLevelOneTutorial.Stage == LevelOneTutorialStage.AwaitingSeedSelection || RequiredLevelOneTutorial.Stage == LevelOneTutorialStage.ZombieOnslaughtPrompt;
         }
 
         /// <summary>Checks current experimental placement conditions without planting.</summary>
@@ -8982,9 +9005,9 @@ namespace PlantsVsZombies.Simulation
                 return false;
             }
 
-            if (_levelOneTutorial.Stage == LevelOneTutorialStage.AwaitingSeedSelection)
+            if (RequiredLevelOneTutorial.Stage == LevelOneTutorialStage.AwaitingSeedSelection)
             {
-                if (!_levelOneTutorial.OnSeedPickedUp().Changed)
+                if (!RequiredLevelOneTutorial.OnSeedPickedUp().Changed)
                 {
                     return false;
                 }
@@ -9003,7 +9026,7 @@ namespace PlantsVsZombies.Simulation
             }
 
             _levelOneSeedSelected = false;
-            _levelOneTutorial.OnPlantingCursorCancelled();
+            RequiredLevelOneTutorial.OnPlantingCursorCancelled();
             return true;
         }
 
@@ -9113,9 +9136,9 @@ namespace PlantsVsZombies.Simulation
             _levelOneSeedSelected = false;
             // This simulation removes plants immediately; Plants.Count is only
             // an approximation of the original data-array allocation count.
-            if (_levelOneTutorial.Stage == LevelOneTutorialStage.AwaitingPlantPlacement)
+            if (RequiredLevelOneTutorial.Stage == LevelOneTutorialStage.AwaitingPlantPlacement)
             {
-                ApplyLevelOneTutorialEffect(_levelOneTutorial.OnPlantPlaced(Plants.Count));
+                ApplyLevelOneTutorialEffect(RequiredLevelOneTutorial.OnPlantPlaced(Plants.Count));
             }
         }
 
@@ -9128,9 +9151,9 @@ namespace PlantsVsZombies.Simulation
         /// <summary>Performs before experimental level one tick.</summary>
         private void BeforeExperimentalLevelOneTick()
         {
-            if (_levelOneTutorial.Stage == LevelOneTutorialStage.NotStarted)
+            if (RequiredLevelOneTutorial.Stage == LevelOneTutorialStage.NotStarted)
             {
-                _levelOneTutorial.OnFirstActiveGameplayUpdate();
+                RequiredLevelOneTutorial.OnFirstActiveGameplayUpdate();
             }
 
             UpdateLevelOneSeedUsability();
@@ -9196,7 +9219,7 @@ namespace PlantsVsZombies.Simulation
             }
 
             // This host assumes its unmodeled end-state and mode predicates are clear.
-            var context = new global::PlantsVsZombies.Sun.SkySunContext(0, 0, true, false, 0, -1, (int)_levelOneTutorial.Stage, Plants.Count, false);
+            var context = new global::PlantsVsZombies.Sun.SkySunContext(0, 0, true, false, 0, -1, (int)RequiredLevelOneTutorial.Stage, Plants.Count, false);
             var needsDraws = global::PlantsVsZombies.Sun.SkySunRules.NeedsDraws(_levelOneNativeSkySunState, context);
             var xDraw = needsDraws ? DrawLevelOneNativeSkySun(global::PlantsVsZombies.Sun.SkySunRules.XDrawBound) : -1;
             var intervalDraw = needsDraws ? DrawLevelOneNativeSkySun(global::PlantsVsZombies.Sun.SkySunRules.IntervalDrawBound) : -1;
@@ -9229,7 +9252,7 @@ namespace PlantsVsZombies.Simulation
         /// <param name = "allowed">The allowed.</param>
         private void CanDropExperimentalLevelOneSkySun(ref bool allowed)
         {
-            var stage = _levelOneTutorial.Stage;
+            var stage = RequiredLevelOneTutorial.Stage;
             allowed = (stage != LevelOneTutorialStage.AwaitingSeedSelection && stage != LevelOneTutorialStage.AwaitingPlantPlacement) || Plants.Count > 0;
         }
 
@@ -9254,7 +9277,7 @@ namespace PlantsVsZombies.Simulation
         /// <exception cref = "InvalidOperationException">The operation cannot satisfy its preconditions.</exception>
         private void AdvanceExperimentalLevelOneWaves()
         {
-            if (_levelOneTutorial.TutorialBlocksWaveCountdown || LevelOneWavesDispatched >= LevelOneData.WaveCount)
+            if (RequiredLevelOneTutorial.TutorialBlocksWaveCountdown || LevelOneWavesDispatched >= LevelOneData.WaveCount)
             {
                 return;
             }
@@ -9312,9 +9335,9 @@ namespace PlantsVsZombies.Simulation
         /// <summary>Performs update level one seed usability.</summary>
         private void UpdateLevelOneSeedUsability()
         {
-            if (_levelOneTutorial.Stage == LevelOneTutorialStage.AwaitingUsableSeed && _seedCooldownTicks[LevelOneData.PeashooterSeedId] == 0 && SunAmount >= LevelOneData.PeashooterCost)
+            if (RequiredLevelOneTutorial.Stage == LevelOneTutorialStage.AwaitingUsableSeed && _seedCooldownTicks[LevelOneData.PeashooterSeedId] == 0 && SunAmount >= LevelOneData.PeashooterCost)
             {
-                _levelOneTutorial.OnSeedBecameUsable();
+                RequiredLevelOneTutorial.OnSeedBecameUsable();
             }
         }
 
@@ -9354,12 +9377,12 @@ namespace PlantsVsZombies.Simulation
         {
             return new[]
             {
-                ModeSession.MatchUpgrades[1] ? PlantKind.FumeShroom : PlantKind.PuffShroom,
+                RequiredModeSession.MatchUpgrades[1] ? PlantKind.FumeShroom : PlantKind.PuffShroom,
                 PlantKind.Starfruit,
                 PlantKind.MagnetShroom,
                 PlantKind.SnowPea,
-                ModeSession.MatchUpgrades[2] ? PlantKind.TallNut : PlantKind.Wallnut,
-                ModeSession.MatchUpgrades[0] ? PlantKind.Repeater : PlantKind.Peashooter
+                RequiredModeSession.MatchUpgrades[2] ? PlantKind.TallNut : PlantKind.Wallnut,
+                RequiredModeSession.MatchUpgrades[0] ? PlantKind.Repeater : PlantKind.Peashooter
             };
         }
 
@@ -9376,7 +9399,7 @@ namespace PlantsVsZombies.Simulation
                 }
             }
 
-            ModeSession._matchDelay = 0.2f;
+            RequiredModeSession._matchDelay = 0.2f;
         }
 
         /// <summary>Performs mode pick match seed.</summary>
@@ -9566,8 +9589,8 @@ namespace PlantsVsZombies.Simulation
                 return false;
             }
 
-            ModeSession.Score += groups;
-            ModeSession.SelectedCell = -1;
+            RequiredModeSession.Score += groups;
+            RequiredModeSession.SelectedCell = -1;
             foreach (var p in matched)
             {
                 Plants.Remove(p);
@@ -9589,7 +9612,7 @@ namespace PlantsVsZombies.Simulation
                         continue;
                     }
 
-                    Plant falling = null;
+                    Plant? falling = null;
                     for (var above = r - 1; above >= 0; above--)
                     {
                         if (Adventure._craters.Exists(x => x.Row == above && x.Column == c))
@@ -9622,7 +9645,7 @@ namespace PlantsVsZombies.Simulation
         /// <param name = "dt">The dt.</param>
         private void TickModeMatch(float dt)
         {
-            var s = ModeSession;
+            var s = RequiredModeSession;
             s._matchDelay = Math.Max(0, s._matchDelay - dt);
             if (s._matchDelay <= 0 && ResolveModeMatch())
             {
@@ -9732,7 +9755,7 @@ namespace PlantsVsZombies.Simulation
         /// <param name = "dt">The dt.</param>
         private void TickModeBowling(float dt)
         {
-            var s = ModeSession;
+            var s = RequiredModeSession;
             foreach (var nut in new PooledSnapshot<AdventureBowlingNut>(Adventure._nuts))
             {
                 var giant = s._giantNuts.Contains(nut);
@@ -9891,6 +9914,11 @@ namespace PlantsVsZombies.Simulation
             }
 
             a.WaveCountdown -= dt;
+            if (s == null)
+            {
+                throw new System.InvalidOperationException("The value 's' is not available.");
+            }
+
             if (a.CurrentWave > 0 && a.WaveCountdown <= 1f && !s._whackGravesRaised)
             {
                 ModeWhackAddGraves(Math.Max(1, 5 - a._graves.Count));
@@ -9998,7 +10026,7 @@ namespace PlantsVsZombies.Simulation
         /// <summary>Performs initialize mode packets.</summary>
         private void InitializeModePackets()
         {
-            var s = ModeSession;
+            var s = RequiredModeSession;
             s._nextPacket = s.Definition.Mechanic == ModeMechanic.RainingSeeds ? 1f : 4f;
             switch (s.Definition.Mechanic)
             {
@@ -10048,7 +10076,7 @@ namespace PlantsVsZombies.Simulation
         /// <param name = "dt">The dt.</param>
         private void TickModePackets(float dt)
         {
-            var s = ModeSession;
+            var s = RequiredModeSession;
             var m = s.Definition.Mechanic;
             foreach (var rain in new PooledSnapshot<ModeRainPacket>(s.RainPackets))
             {
@@ -10379,7 +10407,7 @@ namespace PlantsVsZombies.Simulation
         /// <param name = "dt">The dt.</param>
         private void TickModeSlot(float dt)
         {
-            var s = ModeSession;
+            var s = RequiredModeSession;
             if (s.SlotRollingRemaining <= 0)
             {
                 return;
@@ -10433,7 +10461,7 @@ namespace PlantsVsZombies.Simulation
         /// <summary>Performs add mode fish.</summary>
         private void AddModeFish()
         {
-            var s = ModeSession;
+            var s = RequiredModeSession;
             s.Fish.Add(new ModeFish {
                 X = 100f + (float)_random.NextDouble() * 600f,
                 Y = 140f + (float)_random.NextDouble() * 300f,
@@ -10493,7 +10521,7 @@ namespace PlantsVsZombies.Simulation
         /// <param name = "dt">The dt.</param>
         private void TickModeAquarium(float dt)
         {
-            var s = ModeSession;
+            var s = RequiredModeSession;
             foreach (var food in new PooledSnapshot<ModeFood>(s.Food))
             {
                 food.Age += dt;
@@ -10514,7 +10542,7 @@ namespace PlantsVsZombies.Simulation
                     continue;
                 }
 
-                ModeFood closest = null;
+                ModeFood? closest = null;
                 var dist = float.MaxValue;
                 if (fish.Hunger <= 15f)
                 {
@@ -10608,7 +10636,7 @@ namespace PlantsVsZombies.Simulation
         /// <summary>Performs initialize mode portals.</summary>
         private void InitializeModePortals()
         {
-            var s = ModeSession;
+            var s = RequiredModeSession;
             s.Portals.Clear();
             s.Portals.Add(new ModePortal { Column = 2, Row = 0, Pair = 0 });
             s.Portals.Add(new ModePortal { Column = 9, Row = 1, Pair = 0 });
@@ -10621,7 +10649,7 @@ namespace PlantsVsZombies.Simulation
         /// <param name = "dt">The dt.</param>
         private void TickModePortals(float dt)
         {
-            var s = ModeSession;
+            var s = RequiredModeSession;
             s._portalTimer -= dt;
             if (s._portalTimer <= 0)
             {
@@ -10706,7 +10734,7 @@ namespace PlantsVsZombies.Simulation
         /// <param name = "dt">The dt.</param>
         private void TickModeSpecialZombies(float dt)
         {
-            var s = ModeSession;
+            var s = RequiredModeSession;
             foreach (var z in new PooledSnapshot<Zombie>(Zombies))
             {
                 var raw = (int)z.Kind;
@@ -10806,6 +10834,11 @@ namespace PlantsVsZombies.Simulation
                 }
             }
 
+            if (s == null)
+            {
+                throw new System.InvalidOperationException("The value 's' is not available.");
+            }
+
             foreach (var shot in new PooledSnapshot<ModeHeadShot>(s.HeadShots))
             {
                 if (shot.Hypnotized)
@@ -10845,7 +10878,11 @@ namespace PlantsVsZombies.Simulation
         }
 
         /// <summary>Gets or sets mode session.</summary>
-        public ModeSession ModeSession { get; private set; }
+        public ModeSession? ModeSession { get; private set; }
+
+        /// <summary>Gets the mode session, which must already exist wherever it is used.</summary>
+        /// <exception cref="System.InvalidOperationException">The member is not available.</exception>
+        public ModeSession RequiredModeSession => ModeSession ?? throw new System.InvalidOperationException("The member 'ModeSession' is not available.");
 
         /// <summary>Stores mode accumulated.</summary>
         private double _modeAccumulated;
@@ -10872,7 +10909,7 @@ namespace PlantsVsZombies.Simulation
         {
             get
             {
-                var m = ModeSession.Definition.Mechanic;
+                var m = RequiredModeSession.Definition.Mechanic;
                 return m != ModeMechanic.PeaHeads && m != ModeMechanic.Stars && m != ModeMechanic.Slots && m != ModeMechanic.Beghouled && m != ModeMechanic.BeghouledTwist && m != ModeMechanic.Whack && m != ModeMechanic.Vases && m != ModeMechanic.IZombie && m != ModeMechanic.Boss && m != ModeMechanic.Aquarium;
             }
         }
@@ -10881,7 +10918,7 @@ namespace PlantsVsZombies.Simulation
         /// <param name = "session">The session.</param>
         /// <param name = "access">The access.</param>
         /// <exception cref = "InvalidOperationException">The operation cannot satisfy its preconditions.</exception>
-        internal void ConfigureMode(ModeSession session, AdventureSeedAccess access)
+        internal void ConfigureMode(ModeSession session, AdventureSeedAccess? access)
         {
             if (!IsAdventure || session == null)
             {
@@ -11092,7 +11129,7 @@ namespace PlantsVsZombies.Simulation
         {
             get
             {
-                return ModeSession.Definition.Mechanic == ModeMechanic.Beghouled || ModeSession.Definition.Mechanic == ModeMechanic.BeghouledTwist;
+                return RequiredModeSession.Definition.Mechanic == ModeMechanic.Beghouled || RequiredModeSession.Definition.Mechanic == ModeMechanic.BeghouledTwist;
             }
         }
 
@@ -11131,7 +11168,7 @@ namespace PlantsVsZombies.Simulation
         /// <summary>Performs apply mode purchases.</summary>
         /// <param name = "firstAid">The first aid.</param>
         /// <param name = "placeRake">The place rake.</param>
-        public void ApplyModePurchases(bool firstAid, Func<bool> placeRake)
+        public void ApplyModePurchases(bool firstAid, Func<bool>? placeRake)
         {
             if (ModeSession == null)
             {
@@ -11234,7 +11271,7 @@ namespace PlantsVsZombies.Simulation
         /// <param name = "dt">The dt.</param>
         private void TickMode(float dt)
         {
-            var s = ModeSession;
+            var s = RequiredModeSession;
             var d = s.Definition;
             Elapsed += dt;
             Adventure._ticks++;
@@ -11437,7 +11474,7 @@ namespace PlantsVsZombies.Simulation
         /// <summary>Performs clear mode stage.</summary>
         private void ClearModeStage()
         {
-            var s = ModeSession;
+            var s = RequiredModeSession;
             if (s.Phase != ModePhase.Playing)
             {
                 return;
@@ -11646,11 +11683,11 @@ namespace PlantsVsZombies.Simulation
         /// <returns>A bracketed original LawnStrings key, or an empty string when no original advice is displayed.</returns>
         public string ModeInstruction()
         {
-            var d = ModeSession.Definition;
+            var d = RequiredModeSession.Definition;
             if (d.Survival)
             {
                 // Original Challenge::InitLevel shows survival advice only before the first stage.
-                return ModeSession.Stage == 1 ? d.Endless ? "[ADVICE_SURVIVE_ENDLESS]" : "[ADVICE_SURVIVE_FLAGS]" : "";
+                return RequiredModeSession.Stage == 1 ? d.Endless ? "[ADVICE_SURVIVE_ENDLESS]" : "[ADVICE_SURVIVE_FLAGS]" : "";
             }
 
             switch (d.Mechanic)
@@ -11669,7 +11706,7 @@ namespace PlantsVsZombies.Simulation
                 case ModeMechanic.Aquarium:
                     return "[ADVICE_ZOMBIQUARIUM_CLICK_TO_FEED]";
                 case ModeMechanic.LastStand:
-                    return ModeSession.Stage == 1 ? "[ADVICE_SURVIVE_FLAGS]" : "";
+                    return RequiredModeSession.Stage == 1 ? "[ADVICE_SURVIVE_FLAGS]" : "";
                 case ModeMechanic.Slots:
                     return "[ADVICE_SLOT_MACHINE_PULL]";
                 default:
@@ -12025,7 +12062,7 @@ namespace PlantsVsZombies.Simulation
         /// <exception cref = "InvalidOperationException">The operation cannot satisfy its preconditions.</exception>
         private void InitializeModeVases()
         {
-            var s = ModeSession;
+            var s = RequiredModeSession;
             s._vaseSeeds.Clear();
             s._vaseSun.Clear();
             Adventure._vases.Clear();
@@ -12218,7 +12255,7 @@ namespace PlantsVsZombies.Simulation
         /// <summary>Performs initialize mode izombie.</summary>
         private void InitializeModeIZombie()
         {
-            var s = ModeSession;
+            var s = RequiredModeSession;
             Array.Clear(s.Brains, 0, s.Brains.Length);
             Array.Clear(s._brainBite, 0, s._brainBite.Length);
             s._sunflowerHealth.Clear();
@@ -12451,7 +12488,7 @@ namespace PlantsVsZombies.Simulation
         {
             get
             {
-                var id = ModeSession.Definition.Id;
+                var id = RequiredModeSession.Definition.Id;
                 return id <= 65 ? 4 : id == 69 ? 6 : 5;
             }
         }
@@ -12500,7 +12537,7 @@ namespace PlantsVsZombies.Simulation
         /// <summary>Performs initialize mode izombie endless.</summary>
         private void InitializeModeIZombieEndless()
         {
-            var stage = ModeSession.Stage - 1;
+            var stage = RequiredModeSession.Stage - 1;
             var style = _random.Next(5);
             int lo = Math.Min(4, Math.Max(2, 2 + stage / 3)), hi = Math.Min(6, Math.Max(2, 3 + stage / 2));
             if (stage >= 10)
@@ -12757,6 +12794,11 @@ namespace PlantsVsZombies.Simulation
             {
                 if (!z.Hypnotized && !z.Headless && z.Kind != ZombieKind.Bungee && !(z.Kind == ZombieKind.Digger && z.AbilityPhase == 2) && z.X < 0.2f)
                 {
+                    if (s == null)
+                    {
+                        throw new System.InvalidOperationException("The value 's' is not available.");
+                    }
+
                     if (s.Brains[z.Row])
                     {
                         Zombies.Remove(z);
@@ -12779,7 +12821,7 @@ namespace PlantsVsZombies.Simulation
         /// <param name = "dt">The dt.</param>
         private void AfterModeIZombie(float dt)
         {
-            var s = ModeSession;
+            var s = RequiredModeSession;
             foreach (var id in new List<int>(s._sunflowerHealth.Keys))
             {
                 var p = Plants.Find(x => x.Id == id);
@@ -12907,10 +12949,14 @@ namespace PlantsVsZombies.Simulation
         }
 
         /// <summary>Gets or sets wave schedule.</summary>
-        public global::PlantsVsZombies.Waves.AdventureWaveScheduleStatus WaveSchedule { get; private set; }
+        public global::PlantsVsZombies.Waves.AdventureWaveScheduleStatus? WaveSchedule { get; private set; }
+
+        /// <summary>Gets the wave schedule, which must already exist wherever it is used.</summary>
+        /// <exception cref="System.InvalidOperationException">The member is not available.</exception>
+        public global::PlantsVsZombies.Waves.AdventureWaveScheduleStatus RequiredWaveSchedule => WaveSchedule ?? throw new System.InvalidOperationException("The member 'WaveSchedule' is not available.");
 
         /// <summary>Stores wave schedule event raised.</summary>
-        public Action<global::PlantsVsZombies.Waves.WaveScheduleEvent> WaveScheduleEventRaised;
+        public Action<global::PlantsVsZombies.Waves.WaveScheduleEvent>? WaveScheduleEventRaised;
         /// <summary>Stores scheduled wave remainder.</summary>
         private double _scheduledWaveRemainder;
         /// <summary>Stores scheduled ice trap ticks.</summary>
@@ -12932,7 +12978,7 @@ namespace PlantsVsZombies.Simulation
         /// <summary>Performs initialize adventure wave scheduler.</summary>
         private void InitializeAdventureWaveScheduler()
         {
-            if (!IsAdventure || Adventure == null)
+            if (!IsAdventure || _adventure == null)
             {
                 return;
             }
@@ -12944,7 +12990,7 @@ namespace PlantsVsZombies.Simulation
         /// <summary>After replacing Adventure.Waves/current wave, reset only the scheduler. It preserves CurrentWave and FlagsSpawned.</summary>
         public void ResetAdventureWaveSchedule(int firstCountdownTicks = -1, bool includeFinalAmbush = true, bool honorAdventureTutorials = false)
         {
-            if (!IsAdventure || Adventure == null)
+            if (!IsAdventure || _adventure == null)
             {
                 return;
             }
@@ -12971,7 +13017,7 @@ namespace PlantsVsZombies.Simulation
         /// <param name = "dt">The dt.</param>
         public void AdvanceScheduledAdventureWaves(float dt)
         {
-            if (!IsAdventure || Adventure == null)
+            if (!IsAdventure || _adventure == null)
             {
                 return;
             }
@@ -13049,16 +13095,16 @@ namespace PlantsVsZombies.Simulation
         /// <param name = "ticks">The ticks.</param>
         private void SetAdventureTutorialWaveCountdown(int ticks)
         {
-            WaveSchedule.CountdownTicks = WaveSchedule.InitialCountdownTicks = ticks;
-            WaveSchedule.HealthToNextWave = -1;
-            WaveSchedule.TutorialReleased = true;
+            RequiredWaveSchedule.CountdownTicks = RequiredWaveSchedule.InitialCountdownTicks = ticks;
+            RequiredWaveSchedule.HealthToNextWave = -1;
+            RequiredWaveSchedule.TutorialReleased = true;
             SynchronizeScheduledWaveFields();
         }
 
         /// <summary>Performs advance scheduled adventure wave tick.</summary>
         private void AdvanceScheduledAdventureWaveTick()
         {
-            var s = WaveSchedule;
+            var s = RequiredWaveSchedule;
             var a = Adventure;
             s.ElapsedTicks++;
             if (s.FinalWaveSoundTicks > 0 && --s.FinalWaveSoundTicks == 0)
@@ -13188,7 +13234,7 @@ namespace PlantsVsZombies.Simulation
             if (index == Adventure.Waves.Count - 1 && global::PlantsVsZombies.Waves.AdventureWaveNoticeRules.AnnounceFinal(nativeMode, finalSurvival, nativeMode == 0 && Adventure.Level.Mode == AdventureMode.Boss))
             {
                 RaiseScheduledWaveEvent(global::PlantsVsZombies.Waves.WaveScheduleEventKind.FinalWaveApproaching, index);
-                WaveSchedule.FinalWaveSoundTicks = 60; // 0x41FCD0: separate delayed sound, not this draw event.
+                RequiredWaveSchedule.FinalWaveSoundTicks = 60; // 0x41FCD0: separate delayed sound, not this draw event.
             }
 
             if (index == 0)
@@ -13408,17 +13454,17 @@ namespace PlantsVsZombies.Simulation
         {
             if (WaveScheduleEventRaised != null)
             {
-                WaveScheduleEventRaised(new global::PlantsVsZombies.Waves.WaveScheduleEvent { Kind = kind, WaveIndex = index, Tick = WaveSchedule.ElapsedTicks });
+                WaveScheduleEventRaised(new global::PlantsVsZombies.Waves.WaveScheduleEvent { Kind = kind, WaveIndex = index, Tick = RequiredWaveSchedule.ElapsedTicks });
             }
         }
 
         /// <summary>Performs synchronize scheduled wave fields.</summary>
         private void SynchronizeScheduledWaveFields()
         {
-            Adventure.WaveCountdown = WaveSchedule.RemainingSeconds;
-            Adventure._waveInitialCountdown = WaveSchedule.InitialCountdownTicks * 0.01f;
-            Adventure._waveTriggerHealth = WaveSchedule.HealthToNextWave;
-            Adventure._previousWaveHealth = WaveSchedule.HealthAtWaveStart;
+            Adventure.WaveCountdown = RequiredWaveSchedule.RemainingSeconds;
+            Adventure._waveInitialCountdown = RequiredWaveSchedule.InitialCountdownTicks * 0.01f;
+            Adventure._waveTriggerHealth = RequiredWaveSchedule.HealthToNextWave;
+            Adventure._previousWaveHealth = RequiredWaveSchedule.HealthAtWaveStart;
         }
     }
 }

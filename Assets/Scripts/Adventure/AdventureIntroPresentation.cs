@@ -111,12 +111,12 @@ namespace PlantsVsZombies.Adventure
             {
                 NativeTime = time,
                 ChooserY = 516,
-                SeedBankX = p.Context.SeedBankStartX,
-                SeedBankY = -p.Context.SeedBankImageHeight,
+                SeedBankX = p.RequiredContext.SeedBankStartX,
+                SeedBankY = -p.RequiredContext.SeedBankImageHeight,
                 SeedBankDarken = 255,
                 SodPosition = p.SodTime > 0 ? Curve(p.SodStart, p.SodEnd, time, 0, 1000, 1) : 1000
             };
-            int initialX = p.ScrolledLeftAtStart ? 220 : 0, streetX = p.Context.LogicalWidth - 1180;
+            int initialX = p.ScrolledLeftAtStart ? 220 : 0, streetX = p.RequiredContext.LogicalWidth - 1180;
             f.BoardX = time <= p.PanRightStart ? initialX : time <= p.PanRightEnd ? -Curve(p.PanRightStart, p.PanRightEnd, time, -initialX, -streetX, 4) : streetX;
             if (time > p.ChooserOffStart)
             {
@@ -138,12 +138,12 @@ namespace PlantsVsZombies.Adventure
 
             if (p.DrawSeedBank && time > p.BankOnStart)
             {
-                f.SeedBankY = Curve(p.BankOnStart, p.BankOnEnd, time, -p.Context.SeedBankImageHeight, 0, 4);
+                f.SeedBankY = Curve(p.BankOnStart, p.BankOnEnd, time, -p.RequiredContext.SeedBankImageHeight, 0, 4);
             }
 
             if (time > p.ChooserOffEnd)
             {
-                f.SeedBankX = Curve(p.ChooserOffEnd, p.PanLeftEnd, time, p.Context.SeedBankStartX, 10, 4);
+                f.SeedBankX = Curve(p.ChooserOffEnd, p.PanLeftEnd, time, p.RequiredContext.SeedBankStartX, 10, 4);
                 f.SeedBankDarken = Curve(p.ChooserOffEnd, p.PanLeftEnd, time, 255, 128, 3);
             }
 
@@ -156,20 +156,20 @@ namespace PlantsVsZombies.Adventure
                 }
             }
 
-            AddSodBlits(p.Context, f);
+            AddSodBlits(p.RequiredContext, f);
             if (p.SodTime > 0 && time >= p.SodStart && time < p.SodEnd)
             {
                 var age = (time - p.SodStart) * .001f;
-                if (p.Context.Level == 1)
+                if (p.RequiredContext.Level == 1)
                 {
                     AddRoll(f, 0, 0, 35, 348, age);
                 }
-                else if (p.Context.Level == 2)
+                else if (p.RequiredContext.Level == 2)
                 {
                     AddRoll(f, 0, -102, 35, 246, age);
                     AddRoll(f, 0, 111, 35, 459, age);
                 }
-                else if (p.Context.Level == 4)
+                else if (p.RequiredContext.Level == 4)
                 {
                     AddRoll(f, -3, -198, 32, 150, age);
                     AddRoll(f, -3, 203, 32, 551, age);
@@ -235,7 +235,7 @@ namespace PlantsVsZombies.Adventure
         /// <param name = "previous">The previous.</param>
         /// <param name = "current">The current.</param>
         /// <param name = "emit">The emit.</param>
-        public static void EventsBetween(AdventureIntroPlan p, int previous, int current, Action<AdventureIntroEvent> emit)
+        public static void EventsBetween(AdventureIntroPlan p, int previous, int current, Action<AdventureIntroEvent>? emit)
         {
             if (emit == null || current <= previous)
             {
@@ -455,7 +455,7 @@ namespace PlantsVsZombies.Adventure
         /// <param name = "trackExists">The track exists.</param>
         /// <param name = "allowed">The allowed.</param>
         /// <returns>The resulting create street preview.</returns>
-        public static List<AdventureIntroPreviewZombie> CreateStreetPreview(AdventureIntroContext c, IEnumerable<int[]> waves, Func<int, int> next, Func<float, float> nextFloat, Func<int, string, bool> trackExists, bool[] allowed = null)
+        public static List<AdventureIntroPreviewZombie> CreateStreetPreview(AdventureIntroContext c, IEnumerable<int[]> waves, Func<int, int> next, Func<float, float> nextFloat, Func<int, string, bool> trackExists, bool[]? allowed = null)
         {
             var result = new List<AdventureIntroPreviewZombie>();
             if (c.IsFinalBoss)

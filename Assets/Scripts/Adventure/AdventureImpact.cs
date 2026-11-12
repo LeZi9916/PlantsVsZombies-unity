@@ -11,7 +11,7 @@ namespace PlantsVsZombies.Adventure
         /// <summary>Stores native particle x, native particle y, native attached x, native attached y.</summary>
         public float NativeParticleX, NativeParticleY, NativeAttachedX, NativeAttachedY;
         /// <summary>Stores attached zombie.</summary>
-        public Zombie AttachedZombie;
+        public Zombie? AttachedZombie;
         /// <summary>Stores id, seed.</summary>
         public int Id, Seed;
         /// <summary>Stores kind.</summary>

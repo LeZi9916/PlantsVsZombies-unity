@@ -105,7 +105,7 @@ namespace PlantsVsZombies.Tests.PlayMode
             {
                 Assert.That(_owner.Layout.AdventureSeedRect(index), Is.EqualTo(new Rect(79 + index * 51, 8, 50, 70)));
                 Assert.That(_owner.Layout.SeedRect(index), Is.EqualTo(_owner.Layout.AdventureSeedRect(index)));
-                _owner._pendingSeeds.GetPosition(_owner._pendingSeeds[index], 0, 0, _owner.Layout.SeedBankCapacity, out var x, out var y);
+                _owner.RequiredPendingSeeds.GetPosition(_owner.RequiredPendingSeeds[index], 0, 0, _owner.Layout.SeedBankCapacity, out var x, out var y);
                 Assert.That((x, y), Is.EqualTo((79 + index * 51, 8)));
             }
         }
@@ -184,13 +184,13 @@ namespace PlantsVsZombies.Tests.PlayMode
             }
 
             AssertColor(Pixel(595, 40), Color.red);
-            Assert.That(_owner._pendingSeeds.Choose(PlantKind.PotatoMine, 181, 128, _owner.Layout.SeedBankCapacity), Is.True);
+            Assert.That(_owner.RequiredPendingSeeds.Choose(PlantKind.PotatoMine, 181, 128, _owner.Layout.SeedBankCapacity), Is.True);
             DrawChooserBank();
             yield return null;
             yield return null;
             Capture();
             AssertColor(Pixel(79 + 4 * 51 + 25, 40), Color.green);
-            _owner._pendingSeeds.Advance(.25f);
+            _owner.RequiredPendingSeeds.Advance(.25f);
             DrawChooserBank();
             yield return null;
             yield return null;
