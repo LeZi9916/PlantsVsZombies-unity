@@ -1152,7 +1152,7 @@ namespace PlantsVsZombies.Simulation
                     if (nut.Explosive)
                     {
                         AdventurePresentationExplodeONut(nut.X, nut.Row);
-                        BlastAdventure(nut.X, nut.Row, 1.5f, 1, 1800f, true);
+                        BlastAdventureRadius(nut.NativePixelX + 40, nut.NativePixelY + 40, nut.Row, 90, 1, 0x21);
                         Raise(GameEvent.Explosion);
                         return true;
                     }
@@ -1294,7 +1294,7 @@ namespace PlantsVsZombies.Simulation
             _random.Next(1);
             _adventureCherryDetonationSounds.Enqueue(new global::PlantsVsZombies.Adventure.AdventureCherryBombSound { Detonation = true, JuicyPitchSteps = juicyPitch });
             Raise(GameEvent.Explosion);
-            BlastAdventure(plant.Column + .5f, plant.Row, 1.5f, 1, 1800f, true);
+            BlastAdventureAshPlant(plant, 115, 1);
             AdventurePresentationExplosion(PlantKind.CherryBomb, plant.Column + .5f, plant.Row);
             RemoveAdventurePlantAndStack(plant);
         }
@@ -1555,23 +1555,29 @@ namespace PlantsVsZombies.Simulation
         /// <param name = "flags">The flags.</param>
         private void HitAdventureExplosionZombie(Zombie zombie, float damage, bool burned, uint flags)
         {
-            if (zombie.GraveRiseTicks > 0)
+            if (!Zombies.Contains(zombie))
             {
+                return;
+            }
+
+            if (!burned)
+            {
+                HitAdventureZombie(zombie, damage, true, flags);
                 return;
             }
 
             // PC 42954D uses BurnBody (54E920); Potato takes the separate damage(1800,0x12)
             // branch. BurnBody compares BODY health, so thick armor cannot absorb an ash kill.
-            if (burned && damage == 1800f && zombie.Kind != ZombieKind.Boss && zombie.Health < 1800f)
+            if (damage == 1800f && zombie.Kind != ZombieKind.Boss && zombie.Health < 1800f)
             {
                 zombie.PresentationDeath = global::PlantsVsZombies.Adventure.AdventureZombieDeathPresentation.Burned;
                 zombie.ArmorHealth = 0;
                 zombie.ShieldHealth = 0;
-                HitAdventureZombie(zombie, damage, true, 0x12);
+                ApplyAdventureZombieDamage(zombie, damage, true, 0x12);
             }
             else
             {
-                HitAdventureZombie(zombie, damage, true, burned ? 0x12U : flags);
+                ApplyAdventureZombieDamage(zombie, damage, true, 0x12);
             }
         }
 
@@ -2991,7 +2997,7 @@ namespace PlantsVsZombies.Simulation
                             DetonateAdventureCherryBomb(p);
                             break;
                         case PlantKind.Jalapeno:
-                            BlastAdventure(4.5f, p.Row, 20f, 0, 1800f, true);
+                            BurnAdventureRow(p.Row);
                             for (var i = Adventure._ice.Count - 1; i >= 0; i--)
                             {
                                 if (Adventure._ice[i].Row == p.Row)
@@ -3032,7 +3038,7 @@ namespace PlantsVsZombies.Simulation
                             RemoveAdventurePlantAndStack(p);
                             break;
                         case PlantKind.DoomShroom:
-                            BlastAdventure(x, p.Row, 3.5f, 2, 1800f, true);
+                            BlastAdventureAshPlant(p, 250, 3);
                             AdventurePresentationExplosion(PlantKind.DoomShroom, x, p.Row);
                             RemoveAdventurePlantAndStack(p);
                             Adventure._craters.Add(new AdventureCellTimer { Row = p.Row, Column = p.Column, Remaining = 180f });
@@ -3473,6 +3479,128 @@ namespace PlantsVsZombies.Simulation
             }
         }
 
+        /// <summary>Gets the native plant or aimed blast center's vertical board coordinate.</summary>
+        /// <param name="x">The horizontal grid coordinate of the blast center.</param>
+        /// <param name="row">The vertical grid coordinate of the blast center.</param>
+        /// <returns>The original board pixel coordinate, including roof slope.</returns>
+        private int AdventureBlastCenterY(float x, float row)
+        {
+            return (int)(120f + row * (Adventure.Level.HasPool || Adventure.Level.HasRoof ? 85f : 100f)
+                + (Adventure.Level.HasRoof ? Math.Max(0f, 5.5f - x) * 20f - 10f : 0f));
+        }
+
+        /// <summary>Applies a Cherry Bomb or Doom-shroom's original radius and row restriction.</summary>
+        /// <param name="plant">The plant whose native eighty-pixel bounds define the center.</param>
+        /// <param name="radius">The original circular radius in board pixels.</param>
+        /// <param name="rows">The maximum original row distance.</param>
+        private void BlastAdventureAshPlant(Plant plant, int radius, int rows)
+        {
+            // PC Plant::DoSpecial 0x474B10: Cherry 115/1, Doom 250/3; target mask 0x7F.
+            var x = plant.Column + .5f;
+            BlastAdventureRadius(80 + plant.Column * 80, AdventureBlastCenterY(x, plant.Row), plant.Row, radius, rows, 0x7F);
+        }
+
+        /// <summary>Checks the native EffectedByDamage gate used by ash plant target masks.</summary>
+        /// <param name="zombie">The candidate zombie.</param>
+        /// <param name="targetFlags">The original damage range mask, separate from damage behavior flags.</param>
+        /// <returns>Whether the original mask admits this live zombie's current movement phase.</returns>
+        private bool CanTakeAdventureAshDamage(Zombie zombie, uint targetFlags)
+        {
+            var phase = AdventureZombieFeedbackPhase(zombie);
+            if (zombie.Hypnotized || zombie.Health <= 0f || (targetFlags & 0x20) == 0 && phase >= 1 && phase <= 3
+                || zombie.PresentationNativeHeight == 9
+                || zombie.Kind == ZombieKind.Bungee && phase != 6 && phase != 7
+                || zombie.Kind == ZombieKind.Boss && !Adventure.BossHeadVulnerable)
+            {
+                return false;
+            }
+
+            // DropRemaining also pauses pool ambushes. Only a linked bungee passenger maps to native height nine.
+            if (zombie.DropRemaining > 0f)
+            {
+                foreach (var carrier in Zombies)
+                {
+                    if (carrier.Kind == ZombieKind.Bungee && carrier.BungeeCarrier && carrier.LinkedZombieId == zombie.Id)
+                    {
+                        return false;
+                    }
+                }
+            }
+
+            // PC 0x54D810 returns directly for these transient phases before the screen-edge gate.
+            if (phase == 12 || phase == 71 || phase == 33 || phase == 34 || phase == 35 || phase == 52
+                || phase == 54 || phase == 58 || phase == 74 || phase == 14 || phase == 19 || phase == 50)
+            {
+                return (targetFlags & 0x10) != 0;
+            }
+
+            if (zombie.Kind != ZombieKind.Bobsled && AdventureZombieTargetingRules.BodyRectangle(zombie).X > 800)
+            {
+                return false;
+            }
+
+            var submerged = zombie.Kind == ZombieKind.Snorkel && zombie.Submerged && !zombie.Eating;
+            var underground = zombie.Kind == ZombieKind.Digger && zombie.AbilityPhase == 0;
+            return (targetFlags & 4) != 0 && submerged || (targetFlags & 0x40) != 0 && underground
+                || (targetFlags & 2) != 0 && zombie.Airborne
+                || (targetFlags & 1) != 0 && !zombie.Airborne && !submerged && !underground;
+        }
+
+        /// <summary>Applies the original circle-to-body-rectangle intersection used by radial ash attacks.</summary>
+        /// <param name="x">The blast center's native horizontal pixel coordinate.</param>
+        /// <param name="y">The blast center's native vertical pixel coordinate.</param>
+        /// <param name="row">The blast's original board row.</param>
+        /// <param name="radius">The circular radius in board pixels.</param>
+        /// <param name="rows">The maximum original row distance.</param>
+        /// <param name="targetFlags">The original damage range mask.</param>
+        private void BlastAdventureRadius(int x, int y, int row, int radius, int rows, uint targetFlags)
+        {
+            // PC Board::KillAllZombiesInRadius 0x4294C0 and GetCircleRectOverlap 0x428460.
+            foreach (var zombie in new PooledSnapshot<Zombie>(Zombies))
+            {
+                if (!CanTakeAdventureAshDamage(zombie, targetFlags)
+                    || zombie.Kind != ZombieKind.Boss && Math.Abs(zombie.Row - row) > rows)
+                {
+                    continue;
+                }
+
+                var nativeX = (int)AdventureZombieNativeRules.NativePositionX(zombie.X, zombie.IsSmall ? .5f : 1f);
+                var body = AdventureZombieTargetingRules.BodyRectangle(zombie, (int)AdventureBiteNativeY(zombie, nativeX));
+                var top = body.Y + zombie.PresentationBiteBodyY;
+                var clip = zombie.PresentationBiteClipHeight > -100 ? zombie.PresentationBiteClipHeight : 0;
+                if (zombie.GraveRiseTicks > 0)
+                {
+                    var altitude = (int)AdventureZombieRiseRules.Altitude(zombie.GraveRiseTicks);
+                    top -= altitude;
+                    clip = -altitude + Math.Min(zombie.GraveRiseTicks, 40);
+                }
+
+                var height = body.Height - clip;
+                var dx = Math.Max(0, Math.Max(body.X - x, x - body.X - body.Width));
+                var dy = y < top ? top - y : Math.Max(0, y - top - height);
+                if (dx * dx + dy * dy <= radius * radius)
+                {
+                    HitAdventureExplosionZombie(zombie, 1800f, true, 0x12);
+                }
+            }
+        }
+
+        /// <summary>Burns eligible zombies throughout the original Jalapeno row without a horizontal cutoff.</summary>
+        /// <param name="row">The original board row ignited by the plant.</param>
+        private void BurnAdventureRow(int row)
+        {
+            // PC Plant::BurnRow 0x474920 removes freeze/chill before BurnBody, preserving equipment.
+            foreach (var zombie in new PooledSnapshot<Zombie>(Zombies))
+            {
+                if ((zombie.Row == row || zombie.Kind == ZombieKind.Boss) && CanTakeAdventureAshDamage(zombie, 0x7F))
+                {
+                    zombie.FrozenRemaining = 0f;
+                    zombie.ChillRemaining = 0f;
+                    HitAdventureExplosionZombie(zombie, 1800f, true, 0x12);
+                }
+            }
+        }
+
         /// <summary>Performs advance adventure projectiles.</summary>
         /// <param name = "dt">The dt.</param>
         /// <param name="allowDamage">Whether live combat targets can receive hits before the level has completed.</param>
@@ -3598,6 +3726,16 @@ namespace PlantsVsZombies.Simulation
                 return;
             }
 
+            ApplyAdventureZombieDamage(z, damage, bypassShield, damageFlags);
+        }
+
+        /// <summary>Applies damage after the caller has admitted the zombie through its native target gate.</summary>
+        /// <param name="z">The admitted live zombie.</param>
+        /// <param name="damage">The damage before equipment absorption.</param>
+        /// <param name="bypassShield">Whether ordinary held-shield absorption is bypassed.</param>
+        /// <param name="damageFlags">The original TakeDamage behavior mask.</param>
+        private void ApplyAdventureZombieDamage(Zombie z, float damage, bool bypassShield, uint damageFlags)
+        {
             AdventurePresentationZombieHit(z, damage, bypassShield, damageFlags);
             // PC TakeDamage bit 1 damages the held shield and also sends the full
             // original damage to the helmet/body; ordinary piercing skips the shield.
@@ -4016,6 +4154,20 @@ namespace PlantsVsZombies.Simulation
         /// <param name = "dt">The dt.</param>
         private void AdventurePresentationTick(float dt)
         {
+            for (var i = Presentation.FootstepEffects.Count - 1; i >= 0; i--)
+            {
+                var effect = Presentation.FootstepEffects[i];
+                effect.Age += dt;
+                if (effect.Age >= .2f)
+                {
+                    Presentation.FootstepEffects.RemoveAt(i);
+                }
+                else
+                {
+                    Presentation.FootstepEffects[i] = effect;
+                }
+            }
+
             for (var i = Presentation.ZombieRiseEffects.Count - 1; i >= 0; i--)
             {
                 var effect = Presentation.ZombieRiseEffects[i];
@@ -7189,7 +7341,7 @@ namespace PlantsVsZombies.Simulation
                 }
 
                 var row = (int)Math.Round(shell.TargetRow);
-                BlastAdventure(shell.TargetX, row, 1.5f, 1, 1800f, true);
+                BlastAdventureRadius((int)(40f + shell.TargetX * 80f), AdventureBlastCenterY(shell.TargetX, shell.TargetRow), row, 115, 1, 0x7F);
                 AdventurePresentationCobImpact(shell.TargetX, shell.TargetRow);
                 if (shell.TargetX >= 7.5f && Math.Abs(shell.TargetRow - 2f) <= 1f)
                 {
@@ -7362,7 +7514,14 @@ namespace PlantsVsZombies.Simulation
             var checks = global::PlantsVsZombies.Adventure.AdventureZombieBiteRules.EatingChecks(z.Age, dt, z.ChillRemaining > 0);
             if (checks > 0)
             {
-                z.Eating = target != null || zombieTarget;
+                if (target != null || zombieTarget)
+                {
+                    z.Eating = true;
+                }
+                else
+                {
+                    StopAdventureNativeEating(z);
+                }
             }
 
             if (!z.Eating)
@@ -7404,6 +7563,26 @@ namespace PlantsVsZombies.Simulation
             return true;
         }
 
+        /// <summary>Restarts native walking and selects its species speed when a latched meal ends.</summary>
+        /// <param name="z">The zombie whose plant or opposing zombie is no longer in eating range.</param>
+        private void StopAdventureNativeEating(Zombie z)
+        {
+            if (!z.Eating)
+            {
+                return;
+            }
+
+            z.Eating = false;
+            var phase = AdventureZombieFeedbackPhase(z);
+            // PC StopEating 0x54B1C0 skips StartWalkAnim for tunnelling diggers and snorkel zombies.
+            // StartWalkAnim 0x54B050 calls PickRandomSpeed 0x540500 before selecting the walking clip.
+            if (phase != 32 && z.Kind != ZombieKind.Snorkel)
+            {
+                PickAdventureZombieNativeSpeed(z, phase);
+                AdventurePresentationZombieAnimation(z);
+            }
+        }
+
         /// <summary>Performs animate adventure chew.</summary>
         /// <param name = "z">The z.</param>
         /// <param name = "target">The target.</param>
@@ -7416,7 +7595,7 @@ namespace PlantsVsZombies.Simulation
                 RemoveAdventurePlantAndStack(target);
                 z.Hypnotized = true;
                 z.Submerged = false;
-                z.Eating = false;
+                // PC 0x547610 retains the eating latch: 0.17 is replaced when StopEating restarts walking.
                 z.PresentationNativeVelocity = .17f;
                 z.Speed = global::PlantsVsZombies.Adventure.AdventureZombieNativeRules.GridSpeed(.17f);
                 Presentation.PlantBiteEffects.Add(new global::PlantsVsZombies.Adventure.AdventurePlantBiteEffect {
@@ -7870,6 +8049,7 @@ namespace PlantsVsZombies.Simulation
             EnsureAdventureZombieEquipment(z);
             RefreshAdventureZombieNativeSpeed(z);
             var clip = AdventurePresentationZombieAnimation(z);
+            z._presentationPreviousWalkCycle = z._presentationWalkLoops + (double)z._presentationWalkPhase;
             z._presentationTickSlow = z.ChillRemaining > 0f ? .5f : 1f;
             if (z.FrozenRemaining > 0f)
             {
@@ -8170,6 +8350,49 @@ namespace PlantsVsZombies.Simulation
             }
 
             return data.VelocityAtPhase(z._presentationWalkPhase, rate * slow) * (z.IsSmall ? .5f : 1f) * (dt * 100f) / 80f;
+        }
+
+        /// <summary>Emits the original football running dust at each authored foot contact.</summary>
+        /// <param name="z">The walking zombie whose animation clock was advanced this tick.</param>
+        /// <param name="gridX">The zombie's horizontal grid position before this tick's movement.</param>
+        private void RecordAdventureZombieFootsteps(Zombie z, float gridX)
+        {
+            if (z.Kind != ZombieKind.Football || z.Wave == -4 || z.PresentationButter > 0f)
+            {
+                return;
+            }
+
+            // PC UpdateZombieWalking 0x546730: these independent events use mX/mY, without mirroring or scaling.
+            var nativeX = (int)AdventureZombieNativeRules.NativePositionX(gridX, z.IsSmall ? .5f : 1f);
+            var nativeY = (int)AdventureBiteNativeY(z, nativeX);
+            var before = z._presentationPreviousWalkCycle;
+            var after = z._presentationWalkLoops + (double)z._presentationWalkPhase;
+            if (AdventureZombieBiteRules.Crossed(before, after, .03f))
+            {
+                AddAdventureZombieFootstep(z, nativeX + 81, nativeY + 106);
+            }
+
+            if (AdventureZombieBiteRules.Crossed(before, after, .61f))
+            {
+                AddAdventureZombieFootstep(z, nativeX + 87, nativeY + 110);
+            }
+        }
+
+        /// <summary>Retains one independent twenty-tick Dust_Foot particle instance.</summary>
+        /// <param name="z">The zombie whose row supplies the original render layer.</param>
+        /// <param name="x">The unscaled original horizontal particle origin.</param>
+        /// <param name="y">The unscaled original vertical particle origin.</param>
+        private void AddAdventureZombieFootstep(Zombie z, int x, int y)
+        {
+            var id = ++Presentation._effectId;
+            Presentation.FootstepEffects.Add(new AdventureZombieFootstepEffect
+            {
+                Id = id,
+                Row = z.Row,
+                Seed = unchecked(z.Id * 397 ^ id),
+                X = x,
+                Y = y
+            });
         }
 
         /// <summary>Performs adventure presentation zombie hit.</summary>
@@ -8652,7 +8875,8 @@ namespace PlantsVsZombies.Simulation
 
                 if (z.Kind == ZombieKind.Snorkel)
                 {
-                    z.Submerged = target == null;
+                    var inPool = z.PresentationInPool ?? (Adventure.Level.IsWaterRow(z.Row) && z.X >= 0f && z.X < 9f);
+                    z.Submerged = inPool && target == null;
                 }
 
                 if (target != null && target.HasLadder && target.Layer != PlantLayer.Support)
@@ -8774,7 +8998,9 @@ namespace PlantsVsZombies.Simulation
                 {
                     z.BiteTimer = 0;
                     var direction = z.Hypnotized || z.Kind == ZombieKind.Digger && z.AbilityPhase == 2 ? 1f : -1f;
+                    var previousX = z.X;
                     z.X += direction * AdventurePresentationWalkingDistance(z, dt, z.Speed * dt * slow);
+                    RecordAdventureZombieFootsteps(z, previousX);
                 }
 
                 if (z.X > 12f && (z.Hypnotized || z.Kind == ZombieKind.Digger && z.AbilityPhase == 2))

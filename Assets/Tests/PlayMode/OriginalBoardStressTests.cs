@@ -20,6 +20,130 @@ namespace PlantsVsZombies.Tests.PlayMode
     /// <summary>Exercises complete production board presentation with read-only original artwork and repeated wave-sized captures.</summary>
     public sealed class OriginalBoardStressTests
     {
+        /// <summary>Checks real native foot dust remains visible and is covered by the following football body layer.</summary>
+        /// <returns>Frame boundaries before comparing original-artwork dust and body captures.</returns>
+        [UnityTest]
+        public IEnumerator OriginalFootballFootDustDrawsBelowTheBody()
+        {
+            var root = Environment.GetEnvironmentVariable("PVZ_BOARD_STRESS_ASSETS");
+            if (string.IsNullOrEmpty(root) || !Directory.Exists(Path.Combine(root, "reanim")))
+            {
+                Assert.Ignore("Set PVZ_BOARD_STRESS_ASSETS to the read-only original runtime asset directory.");
+            }
+
+            Assert.That(File.Exists(Path.Combine(root!, "particles", "Dust_Foot.xml")), Is.True);
+            Assert.That(File.Exists(Path.Combine(root!, "images", "Dust_puffs.png")), Is.True);
+            yield return null;
+            var host = new GameObject("Inactive original football foot-dust fixture");
+            host.SetActive(false);
+            var owner = host.AddComponent<PvZGame>();
+            var animations = new ReanimationRenderer(root!);
+            var presenter = new GamePresenter(owner);
+            var options = new OptionsView(root!);
+            var target = new RenderTexture(Screen.width, Screen.height, 24, RenderTextureFormat.ARGB32);
+            target.Create();
+            var pixels = new Texture2D(Screen.width, Screen.height, TextureFormat.RGBA32, false);
+            var camera = ObjectSpriteRenderer.SceneCamera;
+            var previousTarget = camera.targetTexture;
+            try
+            {
+                owner._root = root!;
+                owner._animations = animations;
+                owner._optionsView = options;
+                owner._currentView = PvZGame.ScreenView.Board;
+                owner._smokeMode = true;
+                owner.AdventureBoard._adventurePointer = new Vector2(-1000f, -1000f);
+                owner._game = new GameSimulation(new GameRules { AdventureLevel = 19 }, 7529);
+                Assert.That(owner._game.ChooseDefaultAdventureSeeds(), Is.True);
+                owner._deck.Clear();
+                var zombie = new Zombie
+                {
+                    Id = 999,
+                    Kind = ZombieKind.Football,
+                    Row = 1,
+                    X = AdventureZombieNativeRules.GridX(300f),
+                    Speed = AdventureZombieNativeRules.GridSpeed(.67f),
+                    Health = 270f,
+                    StartingHealth = 270f,
+                    ArmorHealth = 1400f,
+                    PresentationMaxArmor = 1400f,
+                    PresentationAnimation = "anim_walk",
+                    PresentationAnimationAge = .3f
+                };
+                var footstep = new AdventureZombieFootstepEffect { Id = 444, Row = 1, Seed = 1977, X = 385f, Y = 170f, Age = .05f };
+                var frames = new Color32[4][];
+                camera.targetTexture = target;
+                for (var pass = 0; pass < frames.Length; pass++)
+                {
+                    owner._game.Zombies.Clear();
+                    owner._game.Presentation.FootstepEffects.Clear();
+                    if (pass >= 2)
+                    {
+                        owner._game.Zombies.Add(zombie);
+                    }
+
+                    if (pass == 1 || pass == 3)
+                    {
+                        owner._game.Presentation.FootstepEffects.Add(footstep);
+                    }
+
+                    presenter.Present();
+                    yield return null;
+                    yield return null;
+                    Read(target, pixels);
+                    frames[pass] = pixels.GetPixels32();
+                    Save(pixels, "football-foot-dust-" + pass + ".png");
+                }
+
+                var visibleDust = 0;
+                var bodyOverlap = 0;
+                var coveredDust = 0;
+                for (var index = 0; index < frames[0].Length; index++)
+                {
+                    if (Difference(frames[1][index], frames[0][index]) <= 12)
+                    {
+                        continue;
+                    }
+
+                    visibleDust++;
+                    if (Difference(frames[2][index], frames[0][index]) <= 90)
+                    {
+                        continue;
+                    }
+
+                    bodyOverlap++;
+                    if (Difference(frames[3][index], frames[2][index]) <= 3)
+                    {
+                        coveredDust++;
+                    }
+                }
+
+                Assert.That(visibleDust, Is.GreaterThan(15), "The actual original Dust_Foot definition and atlas must produce visible pixels.");
+                Assert.That(bodyOverlap, Is.GreaterThan(8), "The fixture must overlap the real football body with original dust pixels.");
+                Assert.That(coveredDust, Is.GreaterThanOrEqualTo(Math.Max(8, bodyOverlap / 2)), "Opaque body pixels must cover the lower dust layer.");
+            }
+            finally
+            {
+                camera.targetTexture = previousTarget;
+                presenter.Dispose();
+                animations.Dispose();
+                options.Dispose();
+                foreach (var texture in owner.Textures._textures.Values)
+                {
+                    if (texture != null)
+                    {
+                        UnityEngine.Object.Destroy(texture);
+                    }
+                }
+
+                owner.Textures._textures.Clear();
+                UnityEngine.Object.Destroy(pixels);
+                target.Release();
+                UnityEngine.Object.Destroy(target);
+                UnityEngine.Object.Destroy(host);
+            }
+        }
+
         /// <summary>Checks actual original shadow quads and body placement against the native image helper's top-left semantics.</summary>
         /// <returns>Frame boundaries before exercising the real render pipeline requests.</returns>
         [UnityTest]

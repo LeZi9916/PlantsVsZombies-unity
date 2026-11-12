@@ -523,7 +523,17 @@ namespace PlantsVsZombies.Reanimation
 
             Reanimation? flag = null;
             Clip? flagClip = null;
-            if (trackVisible == null && IsZombie(asset) && variant == ZombieVariant.Flag && equipmentIntact && !TryGetClip("Zombie_flagpole", null, out flag, out flagClip))
+            var combatFlag = IsZombie(asset) && _nativeCombatZombie != null
+                && _nativeCombatZombie.Kind == ZombieKind.Flag && !_nativeCombatZombie.Headless;
+            if (combatFlag)
+            {
+                if (!TryGetNativeDefinitionClip("Zombie_FlagPole", out flag, out flagClip))
+                {
+                    return false;
+                }
+            }
+            else if (trackVisible == null && IsZombie(asset) && variant == ZombieVariant.Flag && equipmentIntact
+                && !TryGetClip("Zombie_flagpole", null, out flag, out flagClip))
             {
                 return false;
             }
@@ -625,7 +635,8 @@ namespace PlantsVsZombies.Reanimation
                         }
 
                         var from = GetFrame(track, current);
-                        if (from.Visibility < 0f || from.Texture == null)
+                        var flagHand = flag != null && !cachedFlag && TrackIs(track.Name, "Zombie_flaghand");
+                        if (from.Visibility < 0f || from.Texture == null && !flagHand)
                         {
                             continue;
                         }
@@ -636,29 +647,45 @@ namespace PlantsVsZombies.Reanimation
                             continue;
                         }
 
-                        if (flag != null && !cachedFlag && TrackIs(track.Name, "Zombie_flaghand"))
+                        if (from.Texture != null)
                         {
-                            if (flagClip == null)
+                            var sprite = NativeZombieTrackMatrix(originalMatrix * layout * PartMatrix(frame), group);
+                            if (!HasDrawableArea(sprite))
+                            {
+                                continue;
+                            }
+
+                            SpriteMatrix = sprite;
+                            var alpha = originalColor.a * Math.Max(0f, Math.Min(1f, frame.Alpha));
+                            SpriteDrawState.Color = _nativeCombatZombie == null ? new Color(originalColor.r, originalColor.g, originalColor.b, alpha) : NativeZombieTrackColor(group, alpha);
+                            var image = imageOverride != null && TrackIs(track.Name, overrideTrack) ? imageOverride : from.Texture;
+                            var nativeImage = NativeZombieImage(asset, track.Name, image);
+                            DrawTexturePart(nativeImage, nativeImage == image ? from.Texture.width : nativeImage.width, nativeImage == image ? from.Texture.height : nativeImage.height);
+                            drawn = true;
+                        }
+
+                        if (flagHand)
+                        {
+                            if (flag == null || flagClip == null)
                             {
                                 throw new System.InvalidOperationException("The value 'flagClip' is not available.");
                             }
 
-                            drawn |= DrawAttachment(flag, flagClip, seconds, originalMatrix * layout * PartMatrix(frame) * flagBaseInverse, originalColor, frame.Alpha);
+                            // PC Zombie::Initialize (0x53DD90) attaches the flag to Zombie_flaghand.
+                            // Reanimation::DrawRenderGroup draws that attachment immediately after its hand track.
+                            var attachment = originalMatrix * layout * PartMatrix(frame) * flagBaseInverse;
+                            if (combatFlag)
+                            {
+                                var tint = new Color(originalColor.r, originalColor.g, originalColor.b, originalColor.a * frame.Alpha);
+                                drawn |= DrawClipPose(flag, flagClip, NativeSeconds(flagClip, RequiredNativeCombatZombie.Age, 15f, flag.Fps, true),
+                                    flag.Fps, false, attachment, tint);
+                            }
+                            else
+                            {
+                                drawn |= DrawAttachment(flag, flagClip, seconds, attachment, originalColor, frame.Alpha);
+                            }
                         }
 
-                        var sprite = NativeZombieTrackMatrix(originalMatrix * layout * PartMatrix(frame), group);
-                        if (!HasDrawableArea(sprite))
-                        {
-                            continue;
-                        }
-
-                        SpriteMatrix = sprite;
-                        var alpha = originalColor.a * Math.Max(0f, Math.Min(1f, frame.Alpha));
-                        SpriteDrawState.Color = _nativeCombatZombie == null ? new Color(originalColor.r, originalColor.g, originalColor.b, alpha) : NativeZombieTrackColor(group, alpha);
-                        var image = imageOverride != null && TrackIs(track.Name, overrideTrack) ? imageOverride : from.Texture;
-                        var nativeImage = NativeZombieImage(asset, track.Name, image);
-                        DrawTexturePart(nativeImage, nativeImage == image ? from.Texture.width : nativeImage.width, nativeImage == image ? from.Texture.height : nativeImage.height);
-                        drawn = true;
                         if (heldItem != null && TrackIs(track.Name, "Dave_handinghand"))
                         {
                             // LawnApp::CrazyDaveTalkMessage attaches these items after the hand track.

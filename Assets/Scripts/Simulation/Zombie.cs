@@ -97,6 +97,8 @@ namespace PlantsVsZombies.Simulation
         internal float _presentationWalkPhase, _presentationTickSlow = 1f;
         /// <summary>Stores presentation walk loops.</summary>
         internal int _presentationWalkLoops;
+        /// <summary>Retains the previous native animation cycle for movement-timed particle events.</summary>
+        internal double _presentationPreviousWalkCycle;
         /// <summary>Stores kind.</summary>
         public ZombieKind Kind;
         /// <summary>Stores row.</summary>

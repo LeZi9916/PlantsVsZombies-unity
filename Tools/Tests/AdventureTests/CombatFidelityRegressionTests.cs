@@ -13,6 +13,9 @@ internal static class CombatFidelityRegressionTests
     {
         MineContact();
         MineExplosionDamageAndDeath();
+        AshBlastRanges();
+        HypnoShroomWalkingSpeed();
+        FootballFootDust();
         TargetEntry();
         ShooterWindupMatchesLaunch();
         NativeShooterTiming();
@@ -21,7 +24,7 @@ internal static class CombatFidelityRegressionTests
         ChomperTransitions();
         NewspaperTransitions();
         HugeWavePreservesPlants();
-        Console.WriteLine("PASS: native mine contact, zombie screen entry, defensive damage, and chomper regressions.");
+        Console.WriteLine("PASS: native ash blast radii, hypnosis walking speeds, football foot dust, mine contact, zombie screen entry, defensive damage, and chomper regressions.");
     }
 
     /// <summary>Fails a focused regression when an original rule is not preserved.</summary>
@@ -54,6 +57,248 @@ internal static class CombatFidelityRegressionTests
         Check(game.ChooseDefaultAdventureSeeds(), "Fixture chooses its earned seed bank.");
         game.ResetAdventureWaveSchedule(100000, false, false);
         return game;
+    }
+
+    /// <summary>Checks species-specific walking speed restoration after consuming an awake Hypno-shroom.</summary>
+    private static void HypnoShroomWalkingSpeed()
+    {
+        // PC StopEating 0x54B1C0 calls StartWalkAnim 0x54B050, which resamples speed at 0x540500.
+        // Snorkel skips that resampling; the host's subsequent pool state resumes swimming at 0.3.
+        var cases = new[]
+        {
+            (ZombieKind.Normal, 0f, 0, 19, .23f, .37f),
+            (ZombieKind.Flag, 0f, 0, 19, .45f, .45f),
+            (ZombieKind.Conehead, 0f, 0, 19, .23f, .37f),
+            (ZombieKind.Buckethead, 0f, 0, 19, .23f, .37f),
+            (ZombieKind.ScreenDoor, 1100f, 0, 19, .23f, .37f),
+            (ZombieKind.Football, 0f, 0, 19, .66f, .68f),
+            (ZombieKind.Newspaper, 150f, 0, 19, .23f, .37f),
+            (ZombieKind.Newspaper, 0f, 0, 19, .89f, .91f),
+            (ZombieKind.Dancing, 0f, 0, 19, .45f, .45f),
+            (ZombieKind.BackupDancer, 0f, 0, 19, .45f, .45f),
+            (ZombieKind.DuckyTube, 0f, 0, 19, .23f, .37f),
+            (ZombieKind.Snorkel, 0f, 0, 29, .3f, .3f),
+            (ZombieKind.JackInTheBox, 0f, 0, 19, .66f, .68f),
+            (ZombieKind.Balloon, 0f, 0, 19, .23f, .37f),
+            (ZombieKind.Yeti, 0f, 0, 19, .4f, .4f),
+            (ZombieKind.Ladder, 500f, 0, 19, .79f, .81f),
+            (ZombieKind.Ladder, 0f, 0, 19, .23f, .37f),
+            (ZombieKind.Imp, 0f, 0, 19, .23f, .37f),
+            (ZombieKind.PoleVaulter, 0f, 0, 19, .23f, .37f),
+            (ZombieKind.Pogo, 0f, 0, 19, .45f, .45f),
+            (ZombieKind.Digger, 0f, 2, 19, .12f, .12f),
+            (ZombieKind.Bobsled, 0f, 0, 19, .23f, .37f),
+            (ZombieKind.DolphinRider, 0f, 0, 29, .23f, .37f)
+        };
+
+        foreach (var item in cases)
+        {
+            CheckHypnoShroomWalkingSpeed(item.Item1, item.Item2, item.Item3, item.Item4, item.Item5, item.Item6);
+        }
+
+        CheckHypnoShroomWalkingSpeed(ZombieKind.Football, 0f, 0, 19, .66f, .68f, chilled: true);
+        CheckHypnoShroomWalkingSpeed(ZombieKind.Football, 0f, 0, 19, .66f, .68f, small: true);
+
+        var pool = Fixture(29);
+        var snorkel = new Zombie { Kind = ZombieKind.Snorkel, Eating = true, PresentationNativePhase = 61,
+            PresentationNativeVelocity = .17f, Speed = .2125f };
+        Invoke(pool, "StopAdventureNativeEating", snorkel);
+        Check(!snorkel.Eating && Math.Abs(snorkel.PresentationNativeVelocity - .17f) < .000001f,
+            "Original StopEating skips StartWalkAnim and speed resampling for snorkel zombies.");
+    }
+
+    /// <summary>Runs the complete eating-to-walking simulation transition for one native zombie state.</summary>
+    /// <param name="kind">The zombie species whose native speed range is checked.</param>
+    /// <param name="shieldHealth">The held equipment selecting newspaper or ladder movement states.</param>
+    /// <param name="abilityPhase">The completed ability state required for diggers to chew above ground.</param>
+    /// <param name="level">The terrain supporting this controlled encounter.</param>
+    /// <param name="minimum">The independently verified minimum native walking velocity.</param>
+    /// <param name="maximum">The independently verified maximum native walking velocity.</param>
+    /// <param name="chilled">Whether an existing chill must survive mind control.</param>
+    /// <param name="small">Whether presentation scaling must preserve the native walking speed.</param>
+    private static void CheckHypnoShroomWalkingSpeed(ZombieKind kind, float shieldHealth, int abilityPhase, int level,
+        float minimum, float maximum, bool chilled = false, bool small = false)
+    {
+        var game = Fixture(level);
+        if (level == 29)
+        {
+            Invoke(game, "PlaceAdventurePlant", PlantKind.LilyPad, 2, 4);
+        }
+
+        var mushroom = (Plant)Invoke(game, "PlaceAdventurePlant", PlantKind.HypnoShroom, 2, 4)!;
+        mushroom.Asleep = false;
+        var zombie = new Zombie
+        {
+            Id = 1000,
+            Kind = kind,
+            Row = 2,
+            X = 4.5f,
+            Health = 270f,
+            StartingHealth = 270f,
+            ShieldHealth = shieldHealth,
+            UsedAbility = true,
+            AbilityPhase = abilityPhase,
+            AbilityTimer = kind == ZombieKind.PoleVaulter ? 0f : 1000f,
+            ChillRemaining = chilled ? 10f : 0f,
+            IsSmall = small
+        };
+        game.Zombies.Add(zombie);
+        Invoke(game, "InitializeAdventureZombieNative", zombie, false);
+        var attack = game.AdventureZombieAttackRectangle(zombie);
+        var plant = game.AdventurePlantEatingRectangle(mushroom);
+        zombie.X += (plant.X + plant.Width * .5f - attack.X - attack.Width * .5f) / 80f;
+
+        for (var tick = 0; tick < 500 && !zombie.Hypnotized; tick++)
+        {
+            game.Update(.01f);
+        }
+
+        Check(zombie.Hypnotized && !game.Plants.Contains(mushroom), "An actual awake mushroom chew applies mind control: " + kind);
+        Check(zombie.Eating, "The chew event retains eating until the original target polling cadence: " + kind);
+        Check(Math.Abs(zombie.PresentationNativeVelocity - .17f) < .000001f,
+            "The chew event's transient velocity precedes StopEating: " + kind);
+        for (var tick = 0; tick < 8 && zombie.Eating; tick++)
+        {
+            game.Update(.01f);
+        }
+
+        Check(!zombie.Eating, "An absent meal releases eating on the original four/eight-tick cadence: " + kind);
+        game.Update(.01f);
+        Check(zombie.PresentationNativeVelocity >= minimum - .000001f && zombie.PresentationNativeVelocity <= maximum + .000001f,
+            "StopEating restores the native species/phase velocity range: " + kind + " actual " + zombie.PresentationNativeVelocity);
+        Check(!chilled || zombie.ChillRemaining > 0f, "Mind control preserves existing chill: " + kind);
+        var startX = zombie.X;
+        for (var tick = 0; tick < 100; tick++)
+        {
+            game.Update(.01f);
+        }
+
+        Check(zombie.X > startX, "The restored native speed produces real rightward movement: " + kind);
+        Check(zombie.PresentationNativeVelocity >= minimum - .000001f && zombie.PresentationNativeVelocity <= maximum + .000001f,
+            "Later simulation ticks do not restore the transient slow velocity: " + kind);
+    }
+
+    /// <summary>Checks the original football foot-dust cycle, placement, exclusions, and twenty-tick lifetime.</summary>
+    private static void FootballFootDust()
+    {
+        CheckFootballFootDustCycle(false, false, false);
+        CheckFootballFootDustCycle(true, false, false);
+        CheckFootballFootDustCycle(false, true, false);
+        CheckFootballFootDustCycle(false, false, true);
+
+        foreach (var state in new[] { "frozen", "eating", "winner", "ordinary" })
+        {
+            var game = CreateFootDustFixture(out var zombie);
+            if (state == "frozen")
+            {
+                zombie.FrozenRemaining = 10f;
+            }
+            else if (state == "eating")
+            {
+                var wallnut = (Plant)Invoke(game, "PlaceAdventurePlant", PlantKind.Wallnut, 2, 4)!;
+                var attack = game.AdventureZombieAttackRectangle(zombie);
+                var target = game.AdventurePlantEatingRectangle(wallnut);
+                zombie.X += (target.X + target.Width * .5f - attack.X - attack.Width * .5f) / 80f;
+                zombie.Eating = true;
+            }
+            else if (state == "winner")
+            {
+                zombie.Wave = -4;
+            }
+            else
+            {
+                zombie.Kind = ZombieKind.Normal;
+                Invoke(game, "InitializeAdventureZombieNative", zombie, false);
+            }
+
+            for (var tick = 0; tick < 100; tick++)
+            {
+                game.Update(.01f);
+                Check(game.Presentation.FootstepEffects.Count == 0, "Foot dust is excluded for this native state: " + state);
+            }
+        }
+
+        var lifetimeGame = CreateFootDustFixture(out _);
+        for (var tick = 0; tick < 10 && lifetimeGame.Presentation.FootstepEffects.Count == 0; tick++)
+        {
+            lifetimeGame.Update(.01f);
+        }
+
+        Check(lifetimeGame.Presentation.FootstepEffects.Count == 1, "The first footfall starts one native dust burst.");
+        var burst = lifetimeGame.Presentation.FootstepEffects[0];
+        for (var tick = 0; tick < 19; tick++)
+        {
+            lifetimeGame.Update(.01f);
+        }
+
+        Check(lifetimeGame.Presentation.FootstepEffects.Count == 1
+            && lifetimeGame.Presentation.FootstepEffects[0].Id == burst.Id
+            && lifetimeGame.Presentation.FootstepEffects[0].X == burst.X
+            && lifetimeGame.Presentation.FootstepEffects[0].Y == burst.Y,
+            "Native foot dust remains at its emitted position while the zombie moves for nineteen updates.");
+        lifetimeGame.Update(.01f);
+        lifetimeGame.Update(.01f);
+        Check(lifetimeGame.Presentation.FootstepEffects.Count == 0, "The original twenty-tick foot-dust emitter is retired.");
+    }
+
+    /// <summary>Creates one isolated walking football at a deterministic velocity within its native random range.</summary>
+    /// <param name="zombie">The initialized football whose real update cycle drives the fixture.</param>
+    /// <returns>The playing night board without plants or scheduled wave interference.</returns>
+    private static GameSimulation CreateFootDustFixture(out Zombie zombie)
+    {
+        var game = Fixture(19);
+        zombie = new Zombie { Id = 2000, Kind = ZombieKind.Football, Row = 2, X = 5f, Health = 270f,
+            StartingHealth = 270f, UsedAbility = true, AbilityTimer = 1000f };
+        game.Zombies.Add(zombie);
+        Invoke(game, "InitializeAdventureZombieNative", zombie, false);
+        zombie.PresentationNativeVelocity = .67f;
+        zombie.Speed = .8375f;
+        return game;
+    }
+
+    /// <summary>Checks both source footfalls through a loop boundary using actual native simulation updates.</summary>
+    /// <param name="hypnotized">Whether the football walks in the reversed direction after mind control.</param>
+    /// <param name="small">Whether the reanimation is half size while source dust offsets remain unscaled.</param>
+    /// <param name="chilled">Whether the source cycle advances at the original chilled half rate.</param>
+    private static void CheckFootballFootDustCycle(bool hypnotized, bool small, bool chilled)
+    {
+        var game = CreateFootDustFixture(out var zombie);
+        zombie.Hypnotized = hypnotized;
+        zombie.IsSmall = small;
+        zombie.ChillRemaining = chilled ? 10f : 0f;
+        // PC 0x54ADC0: native velocity .67, factor 47, thirty walk frames and thirty ground pixels.
+        var cycleStep = .01 * .67 * 47.0 / 30.0 * (chilled ? .5 : 1.0) / (small ? .5 : 1.0);
+        var lastId = -1;
+        var emitted = 0;
+        for (var tick = 1; tick * cycleStep < 1.65; tick++)
+        {
+            var beforeX = (int)(80f * zombie.X - 5f - 27f * (small ? .5f : 1f));
+            var beforeCycle = (tick - 1) * cycleStep;
+            var afterCycle = tick * cycleStep;
+            var first = Math.Floor(afterCycle - .03) > Math.Floor(beforeCycle - .03);
+            var second = Math.Floor(afterCycle - .61) > Math.Floor(beforeCycle - .61);
+            game.Update(.01f);
+            var newEffects = 0;
+            foreach (var effect in game.Presentation.FootstepEffects)
+            {
+                if (effect.Id <= lastId)
+                {
+                    continue;
+                }
+
+                newEffects++;
+                emitted++;
+                lastId = effect.Id;
+                Check(effect.Row == 2 && effect.Age == 0f, "A footfall is born on its native row and simulation tick.");
+                Check(effect.X == beforeX + (first ? 81 : 87) && effect.Y == 250 + (first ? 106 : 110),
+                    "Foot dust uses the old integer body origin and unscaled source-foot offset.");
+            }
+
+            Check(newEffects == (first ? 1 : 0) + (second ? 1 : 0),
+                "Only original .03/.61 footfalls emit once, including reversed, small, chilled, and wrapped cycles.");
+        }
+
+        Check(emitted == 4, "Two original footfalls are emitted in each of two consecutive walk loops.");
     }
 
     /// <summary>Runs the native mine trigger at a controlled body coordinate.</summary>
@@ -207,6 +452,112 @@ internal static class CombatFidelityRegressionTests
         Invoke(burning, "HitAdventureExplosionZombie", burnedVictim, 1800f, true, 0U);
         Check(burning.Presentation.Corpses.Count == 1 && burning.Presentation.Corpses[0].Burn != null,
             "Cherry and other native burn-body explosions retain their distinct charred presentation.");
+    }
+
+    /// <summary>Checks PC 0x474B10/0x4294C0/0x428460 radii against body edges and diagonal corners.</summary>
+    private static void AshBlastRanges()
+    {
+        var cherry = Fixture();
+        var cherryPlant = (Plant)Invoke(cherry, "PlaceAdventurePlant", PlantKind.CherryBomb, 2, 4)!;
+        var cherryEdge = MineVictim(cherry, ZombieKind.Normal, 515);
+        var cherryOutside = MineVictim(cherry, ZombieKind.Normal, 516);
+        var diagonalInside = MineVictim(cherry, ZombieKind.Normal, 500);
+        diagonalInside.Row = 1;
+        var diagonalOutside = MineVictim(cherry, ZombieKind.Normal, 501);
+        diagonalOutside.Row = 1;
+        var outOfRow = MineVictim(cherry, ZombieKind.Normal, 400);
+        outOfRow.Row = 0;
+        outOfRow.PresentationBiteBodyY = 200;
+        var raised = MineVictim(cherry, ZombieKind.Normal, 400);
+        raised.PresentationBiteBodyY = 186;
+        var clipped = MineVictim(cherry, ZombieKind.Normal, 500);
+        clipped.Row = 1;
+        clipped.PresentationBiteClipHeight = 2;
+        Invoke(cherry, "DetonateAdventureCherryBomb", cherryPlant);
+        Check(!cherry.Zombies.Contains(cherryEdge) && !cherry.Zombies.Contains(diagonalInside),
+            "Cherry's original 115-pixel circle includes exact body-edge contact and its nearest diagonal corner.");
+        foreach (var survivor in new[] { cherryOutside, diagonalOutside, outOfRow, raised, clipped })
+        {
+            Check(cherry.Zombies.Contains(survivor) && survivor.Health == 270,
+                "Cherry rejects bodies outside its original circle or one-row limit, including draw offsets and clipping.");
+        }
+
+        var doom = Fixture(29);
+        var doomPlant = (Plant)Invoke(doom, "PlaceAdventurePlant", PlantKind.DoomShroom, 2, 4)!;
+        var doomEdge = MineVictim(doom, ZombieKind.Normal, 650);
+        var doomOutside = MineVictim(doom, ZombieKind.Normal, 651);
+        var thirdRow = MineVictim(doom, ZombieKind.Normal, 400);
+        thirdRow.Row = 5;
+        var fourthRow = MineVictim(doom, ZombieKind.Normal, 400);
+        fourthRow.Row = 6;
+        fourthRow.PresentationBiteBodyY = -340;
+        Invoke(doom, "BlastAdventureAshPlant", doomPlant, 250, 3);
+        Check(!doom.Zombies.Contains(doomEdge) && !doom.Zombies.Contains(thirdRow),
+            "Doom uses the original 250-pixel radius and reaches the third adjacent pool row.");
+        Check(doom.Zombies.Contains(doomOutside) && doom.Zombies.Contains(fourthRow),
+            "Doom rejects a one-pixel radius miss and a fourth-row body even when its draw offset overlaps the center.");
+
+        var rowFire = Fixture();
+        var distantLeft = MineVictim(rowFire, ZombieKind.Normal, -2000);
+        var flying = MineVictim(rowFire, ZombieKind.Balloon);
+        flying.Airborne = true;
+        var submerged = MineVictim(rowFire, ZombieKind.Snorkel);
+        submerged.Submerged = true;
+        var vaulting = MineVictim(rowFire, ZombieKind.PoleVaulter);
+        vaulting.PresentationNativePhase = 12;
+        var rising = MineVictim(rowFire, ZombieKind.Normal);
+        rising.PresentationNativePhase = 74;
+        rising.GraveRiseTicks = 10;
+        var hypnotized = MineVictim(rowFire, ZombieKind.Normal);
+        hypnotized.Hypnotized = true;
+        var offscreen = MineVictim(rowFire, ZombieKind.Normal, 801);
+        var dropped = MineVictim(rowFire, ZombieKind.Normal);
+        dropped.PresentationNativeHeight = 9;
+        var otherRow = MineVictim(rowFire, ZombieKind.Normal);
+        otherRow.Row = 1;
+        var armored = MineVictim(rowFire, ZombieKind.Football, health: 3000, armor: 3000);
+        armored.FrozenRemaining = 3f;
+        armored.ChillRemaining = 4f;
+        Invoke(rowFire, "BurnAdventureRow", 2);
+        foreach (var victim in new[] { distantLeft, flying, submerged, vaulting, rising })
+        {
+            Check(!rowFire.Zombies.Contains(victim), "Jalapeno's original 0x7F row mask admits this body without a horizontal cutoff.");
+        }
+
+        foreach (var survivor in new[] { hypnotized, offscreen, dropped, otherRow })
+        {
+            Check(rowFire.Zombies.Contains(survivor) && survivor.Health == 270,
+                "Jalapeno preserves original mind-control, screen-entry, drop-height, and row exclusions.");
+        }
+
+        Check(armored.Health == 3000 && armored.ArmorHealth == 1200
+            && armored.FrozenRemaining == 0f && armored.ChillRemaining == 0f,
+            "Jalapeno removes freeze and chill before BurnBody while a high-health body's helmet absorbs normal damage.");
+
+        var poolAmbush = Fixture(29);
+        var poolCherry = (Plant)Invoke(poolAmbush, "PlaceAdventurePlant", PlantKind.CherryBomb, 2, 4)!;
+        var emerging = MineVictim(poolAmbush, ZombieKind.Normal);
+        emerging.DropRemaining = .5f;
+        var passenger = MineVictim(poolAmbush, ZombieKind.Normal);
+        passenger.DropRemaining = 4f;
+        var carrier = MineVictim(poolAmbush, ZombieKind.Bungee);
+        carrier.BungeeCarrier = true;
+        carrier.LinkedZombieId = passenger.Id;
+        Invoke(poolAmbush, "DetonateAdventureCherryBomb", poolCherry);
+        Check(!poolAmbush.Zombies.Contains(emerging) && poolAmbush.Zombies.Contains(passenger) && passenger.Health == 270,
+            "The shared drop timer does not make pool ambushes immune while an actual linked bungee passenger remains excluded.");
+
+        var nut = Fixture();
+        var nutEdge = MineVictim(nut, ZombieKind.Normal, 490);
+        var nutOutside = MineVictim(nut, ZombieKind.Normal, 491);
+        var nutFlying = MineVictim(nut, ZombieKind.Balloon);
+        nutFlying.Airborne = true;
+        var nutDying = MineVictim(nut, ZombieKind.Normal);
+        nutDying.PresentationNativePhase = 1;
+        Invoke(nut, "BlastAdventureRadius", 400, 320, 2, 90, 1, 0x21U);
+        Check(!nut.Zombies.Contains(nutEdge) && nut.Zombies.Contains(nutOutside) && nut.Zombies.Contains(nutFlying)
+            && !nut.Zombies.Contains(nutDying),
+            "Explode-o-nut preserves its original ninety-pixel circle and grounded mask, including dying-body bit five.");
     }
 
     /// <summary>Checks the native body edge screen boundary, including its bobsled exception.</summary>

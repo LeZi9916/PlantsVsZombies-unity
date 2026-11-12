@@ -47,6 +47,8 @@ namespace PlantsVsZombies.Adventure
         public readonly List<AdventureZombieSoundEvent> ZombieSounds = new List<AdventureZombieSoundEvent>();
         /// <summary>Retains original grave-rise particles for their independent two-second lifetime.</summary>
         public readonly List<AdventureZombieRiseEffect> ZombieRiseEffects = new List<AdventureZombieRiseEffect>();
+        /// <summary>Retains short-lived native foot-dust bursts below the zombies in their lawn row.</summary>
+        public readonly List<AdventureZombieFootstepEffect> FootstepEffects = new List<AdventureZombieFootstepEffect>(32);
         /// <summary>Counts Whack-a-Zombie dirt-rise sound requests.</summary>
         public int ZombieRiseSoundSerial;
     }

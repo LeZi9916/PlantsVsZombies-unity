@@ -68,11 +68,12 @@ namespace PlantsVsZombies.Tests.PlayMode
             File.WriteAllText(Path.Combine(reanim, "Zombie.reanim"),
                 "<fps>12</fps>" + Marker("anim_walk")
                 + ImageTrack("Zombie_body", "blue", 0, 0)
+                + "<track><name>Zombie_flaghand</name><t><x>30</x><y>0</y><f>0</f></t><t/></track>"
                 + ImageTrack("anim_head", "red", 0, 10)
-                + ImageTrack("anim_hair", "green", 10, 10)
-                + "<track><name>Zombie_flaghand</name><t><x>30</x><y>0</y><f>0</f></t><t/></track>");
+                + ImageTrack("anim_hair", "green", 10, 10));
             File.WriteAllText(Path.Combine(reanim, "Zombie_FlagPole.reanim"),
-                "<fps>12</fps>" + ImageTrack("flagpole", "green", 30, 0));
+                "<fps>12</fps>" + ImageTrack("flagpole", "green", 30, 0)
+                + ImageTrack("flagcloth", "green", 0, 10));
             File.WriteAllText(Path.Combine(reanim, "Zombie_polevaulter.reanim"),
                 "<fps>12</fps>" + Marker("anim_walk")
                 + ImageTrack("Zombie_polevaulter_body1", "blue", 0, 0)
@@ -196,6 +197,29 @@ namespace PlantsVsZombies.Tests.PlayMode
             Capture();
             AssertColor(Pixel(45, 25), Color.red);
             AssertColor(Pixel(55, 25), Color.yellow);
+        }
+
+        /// <summary>Draws the hand's flag before subsequent head tracks in direct, mirrored, and feedback poses.</summary>
+        /// <param name="backwards">Whether the body and its attachment are mirrored together.</param>
+        /// <param name="flash">Whether combat feedback requires a local capture surface.</param>
+        [TestCase(false, false)]
+        [TestCase(true, false)]
+        [TestCase(false, true)]
+        [TestCase(true, true)]
+        public void FlagAttachmentKeepsTheOriginalHandTrackLayer(bool backwards, bool flash)
+        {
+            _zombie.Kind = ZombieKind.Flag;
+            _zombie.PresentationWalkingBackwards = backwards;
+            _zombie.PresentationFlash = flash ? .05f : 0f;
+            BeginFrame();
+            _actors.DrawZombie(_zombie, "Zombie", "anim_walk", new Vector2(4f, 4f), 1f, 0f, 12f, true,
+                "flag-body", "flag-combat");
+            _renderer.EndObjectFrame();
+            Capture();
+            var head = Pixel(backwards ? 92 : 5, 15);
+            var flag = Pixel(backwards ? 62 : 35, 5);
+            Assert.That(head.r, Is.GreaterThan(head.g + .2f), "The later head track must cover the flag cloth.");
+            Assert.That(flag.g, Is.GreaterThan(flag.r + .2f), "The attachment must remain visible beside the head.");
         }
 
         /// <summary>Matches original DropPole prefix hiding after decapitation, while preserving the remaining body.</summary>

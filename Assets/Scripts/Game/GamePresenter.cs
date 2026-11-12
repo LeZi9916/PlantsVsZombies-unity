@@ -57,6 +57,7 @@ namespace PlantsVsZombies.Game
         {
             _hammerParticles?.Clear();
             _levelNameFont?.Dispose();
+            _seedCostFont?.Dispose();
             CanvasUI.Dispose();
         }
 
@@ -138,6 +139,8 @@ namespace PlantsVsZombies.Game
         private string _waveCaption = "";
         /// <summary>Retains the original PC HouseofTerror16 font used by the lower-right level name.</summary>
         private CanvasBitmapFont? _levelNameFont;
+        /// <summary>Retains the original PC Pico129 font used by seed packet prices.</summary>
+        private CanvasBitmapFont? _seedCostFont;
         /// <summary>Stores label.</summary>
         private GUIStyle? _label;
         /// <summary>Wraps the localized original dialogue inside the speech bubble.</summary>
@@ -1081,11 +1084,11 @@ namespace PlantsVsZombies.Game
                 return;
             }
 
-            var resolved = kind == PlantKind.Imitater && _owner.RequiredGame.Adventure.ImitaterTarget.HasValue ? _owner.RequiredGame.Adventure.RequiredImitaterTarget : kind;
-            var height = (int)resolved < 49 ? AlmanacPortraitLayout.PlantHeightOffset((int)resolved) : 0f;
+            // PC 0x4445FA samples the cursor's packet type before DrawSeedType resolves imitation artwork.
+            var height = (int)kind < 49 ? AlmanacPortraitLayout.PlantHeightOffset((int)kind) : 0f;
             // PC CursorObject::Update 0x444100 offsets the mouse by(-25,-35).
-            // Draw 0x4441A0 adds(-10,height-25), with another+30 for flowerpot/puffshroom.
-            if (resolved == PlantKind.FlowerPot || resolved == PlantKind.PuffShroom)
+            // Draw 0x4441A0 adds(-10,height-25), with another +30 for native IDs 35/11.
+            if (kind == PlantKind.CoffeeBean || kind == PlantKind.GraveBuster)
             {
                 height += 30f;
             }
@@ -1142,7 +1145,31 @@ namespace PlantsVsZombies.Game
                 var image = _owner.Textures.Load("Shovel.png");
                 if (image != null)
                 {
-                    DrawImage("Shovel.png", new Rect(rect.x, rect.y, image.width, image.height));
+                    // PC Board::DrawShovel 0x424548/0x42454C offsets the tool by (-7,-3).
+                    DrawImage("Shovel.png", new Rect(rect.x - 7f, rect.y - 3f, image.width, image.height));
+                }
+            }
+        }
+
+        /// <summary>Draws the available shovel alongside the seed bank, below the lawn actors.</summary>
+        private void DrawAdventureShovelBank()
+        {
+            if (_owner.IndependentModes.IsModeBoard)
+            {
+                var mechanic = _owner.IndependentModes.RequiredModeSession.Definition.Mechanic;
+                if (!_owner.Opening.AdventureIntroActive && mechanic != ModeMechanic.IZombie && mechanic != ModeMechanic.Aquarium
+                    && mechanic != ModeMechanic.Beghouled && mechanic != ModeMechanic.BeghouledTwist && mechanic != ModeMechanic.Whack)
+                {
+                    DrawShovelBank(AdventureBoardController.s_adventureShovelButton);
+                }
+            }
+            else
+            {
+                var level = _owner.RequiredGame.Adventure.Level;
+                if (level.Number >= 5 && level.Mode != AdventureMode.WhackAZombie
+                    && (!_owner.Opening.AdventureIntroActive || level.Mode == AdventureMode.Bowling))
+                {
+                    DrawShovelBank(AdventureBoardController.s_adventureShovelButton);
                 }
             }
         }
@@ -1169,7 +1196,8 @@ namespace PlantsVsZombies.Game
             var kind = imitated ? _owner.RequiredGame.Adventure.RequiredImitaterTarget : seed;
             var name = AdventurePlantAnimation(kind);
             var nativeScale = 1f;
-            if (kind == PlantKind.PotatoMine || kind == PlantKind.FlowerPot)
+            // PC ReanimatorCache::MakeCachedPlant 0x47E9A0 scales native IDs 4/35.
+            if (kind == PlantKind.PotatoMine || kind == PlantKind.CoffeeBean)
             {
                 nativeScale = .8f;
                 origin += new Vector2(12, 12);
@@ -1473,7 +1501,6 @@ namespace PlantsVsZombies.Game
 
             if (_owner.RequiredGame.ModeSession == null && _owner.RequiredGame.Adventure.Level.Mode == AdventureMode.Bowling)
             {
-                DrawShovelBank(AdventureBoardController.s_adventureShovelButton);
                 if (_owner.Opening._bowlingShovelLessonActive)
                 {
                     var advice = _owner.AdventureBoard.AdventureTutorialText(_owner.RequiredGame.Adventure.Tutorial);
@@ -1743,6 +1770,9 @@ namespace PlantsVsZombies.Game
                     DrawAdventurePacketReadyFlashes();
                 }
 
+                // PC Board::DrawBottomUI 0x425B40 includes the shovel at layer 100001 during play.
+                DrawAdventureShovelBank();
+
                 foreach (var crater in _owner.RequiredGame.Adventure.Craters)
                 {
                     DrawImage(level.HasRoof ? "crater_roof_center.png" : level.HasPool && level.IsWaterRow(crater.Row) ? level.IsNight ? "crater_water_night.png" : "crater_water_day.png" : "crater.png", new Rect(BoardLayout.AdventureGridX + crater.Column * BoardLayout.CellWidth - 24, _owner.Layout.AdventureCellY(crater.Row, crater.Column) + 45, 128, 44));
@@ -1818,6 +1848,7 @@ namespace PlantsVsZombies.Game
                     }
 
                     DrawAdventureDetachedZombieParts(row, true);
+                    DrawAdventureZombieFootsteps(row);
                     DrawAdventureCorpses(row);
                     foreach (Zombie zombie in _owner.RequiredGame.Zombies)
                     {
@@ -2916,6 +2947,22 @@ namespace PlantsVsZombies.Game
             }
         }
 
+        /// <summary>Draws native foot dust at its fixed board coordinates below the zombie body layer.</summary>
+        /// <param name="row">The lawn row whose original foot-dust bursts are submitted.</param>
+        private void DrawAdventureZombieFootsteps(int row)
+        {
+            foreach (var effect in _owner.RequiredGame.Presentation.FootstepEffects)
+            {
+                if (effect.Row != row)
+                {
+                    continue;
+                }
+
+                RequiredAdventureParticles.Draw(_presentationKeys.Get("native-footstep-", effect.Id), "Dust_Foot",
+                    effect.Age + AdventureRenderRemainder, new Vector2(effect.X, effect.Y), effect.Seed);
+            }
+        }
+
         /// <summary>Performs draw adventure plant bite effects.</summary>
         /// <param name = "row">The row.</param>
         private void DrawAdventurePlantBiteEffects(int row)
@@ -3641,7 +3688,21 @@ namespace PlantsVsZombies.Game
         /// <param name = "card">The card.</param>
         private void DrawAdventurePacketCost(PlantKind kind, Rect card)
         {
-            Label(new Rect(card.x + 2, card.y + 53, 43, 15), NumberLabel(_owner.RequiredGame.AdventureSeedCost(kind)), 13, Color.black, TextAnchor.MiddleRight, true);
+            _seedCostFont ??= CanvasBitmapFont.LoadFromResources("Pico129");
+            var text = kind == PlantKind.Imitater && !_owner.RequiredGame.Adventure.ImitaterTarget.HasValue
+                ? "?" : NumberLabel(_owner.RequiredGame.AdventureSeedCost(kind));
+            var previous = CanvasUI.Matrix;
+            try
+            {
+                CanvasUI.Matrix = previous * Matrix4x4.TRS(new Vector3(card.x, card.y, 0f), Quaternion.identity,
+                    new Vector3(card.width / 50f, card.height / 70f, 1f));
+                // PC 0x49D260 calls ImageFont::GetAscent (vtable +4), not GetHeight, at baseline 54 + ascent.
+                DrawBitmap(_seedCostFont, text, 32f, 54f + _seedCostFont.Data.Base, float.PositiveInfinity, Color.black, false);
+            }
+            finally
+            {
+                CanvasUI.Matrix = previous;
+            }
         }
 
         /// <summary>Performs draw adventure packet ready flashes.</summary>
@@ -3973,7 +4034,7 @@ namespace PlantsVsZombies.Game
 
             if (price)
             {
-                Label(new Rect(card.x + 2 * card.width / 50f, card.y + 53 * card.height / 70f, 43 * card.width / 50f, 15 * card.height / 70f), kind == PlantKind.Imitater && !_owner.RequiredGame.Adventure.ImitaterTarget.HasValue ? "?" : NumberLabel(_owner.RequiredGame.AdventureSeedCost(kind)), Mathf.RoundToInt(13 * card.width / 50f), Color.black, TextAnchor.MiddleRight, true);
+                DrawAdventurePacketCost(kind, card);
             }
         }
 
@@ -4050,14 +4111,14 @@ namespace PlantsVsZombies.Game
                             CanvasUI.DrawTextureWithTexCoords(new Rect(x, 572 - progress.FlagLift(wave), 25, 25), parts, new Rect(2f / 3f, 0, 1f / 3f, 1));
                         }
                     }
-
-                    if (board.Level.Mode != AdventureMode.Boss)
-                    {
-                        CanvasUI.DrawTextureWithTexCoords(new Rect(progress.HeadX, 572, 25, 25), parts, new Rect(0, 0, 1f / 3f, 1));
-                    }
                 }
 
                 DrawImage("FlagMeterLevelProgress.png", new Rect(638, 589, 86, 11));
+                // PC Board::DrawProgressMeter (0x4229F0) draws the moving head over the level-progress lettering.
+                if (parts != null && board.Level.Mode != AdventureMode.Boss)
+                {
+                    CanvasUI.DrawTextureWithTexCoords(new Rect(progress.HeadX, 572, 25, 25), parts, new Rect(0, 0, 1f / 3f, 1));
+                }
             }
 
             if (!ReferenceEquals(_captionBoard, board))
@@ -4085,11 +4146,6 @@ namespace PlantsVsZombies.Game
             }
 
             var packets = board.Level.HasConveyor || board.Level.Mode == AdventureMode.Vasebreaker;
-            if (board.Level.Number >= 5 && board.Level.Mode != AdventureMode.WhackAZombie)
-            {
-                DrawShovelBank(AdventureBoardController.s_adventureShovelButton);
-            }
-
             DrawOriginalUiButton(AdventureBoardController.s_adventureMenuButton, "菜单");
             DrawAdventureProgressAndName();
 
@@ -4487,11 +4543,6 @@ namespace PlantsVsZombies.Game
             if (d.Mechanic == ModeMechanic.Slots)
             {
                 ModeButton(new Rect(500, 8, 95, 64), s.SlotRollingRemaining > 0 ? "转动中" : "拉动 25");
-            }
-
-            if (d.Mechanic != ModeMechanic.IZombie && d.Mechanic != ModeMechanic.Aquarium && d.Mechanic != ModeMechanic.Beghouled && d.Mechanic != ModeMechanic.BeghouledTwist && d.Mechanic != ModeMechanic.Whack)
-            {
-                DrawShovelBank(AdventureBoardController.s_adventureShovelButton);
             }
 
             ModeButton(AdventureBoardController.s_adventureMenuButton, "菜单");
