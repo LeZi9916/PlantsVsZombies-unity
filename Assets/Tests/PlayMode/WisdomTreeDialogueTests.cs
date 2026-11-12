@@ -2,7 +2,6 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Reflection;
 using System.Runtime.Serialization;
 using NUnit.Framework;
 using PlantsVsZombies.Game;
@@ -12,6 +11,7 @@ using PlantsVsZombies.Progression;
 using PlantsVsZombies.Reanimation;
 using PlantsVsZombies.UI;
 using UnityEngine;
+using PlantsVsZombies.Diagnostics;
 
 namespace PlantsVsZombies.Tests.PlayMode
 {
@@ -56,16 +56,16 @@ namespace PlantsVsZombies.Tests.PlayMode
             _game._selectorView = new SelectorView(_root);
             _game._profiles = new ProfileCatalog(Path.Combine(_root, "profiles.dat"));
             _profile = _game._profiles.Create("Tester").Id;
-            _game._accountStore = new PlayerAccountStore(Path.Combine(_root, "fixture.account"));
-            _game._accountStore.CreditBattleCoins(_profile, "tree", 2000);
-            _game._accountStore.Purchase(_profile, 27, 51, 1, 1);
+            _game.Accounts._accountStore = new PlayerAccountStore(Path.Combine(_root, "fixture.account"));
+            _game.Accounts._accountStore.CreditBattleCoins(_profile, "tree", 2000);
+            _game.Accounts._accountStore.Purchase(_profile, 27, 51, 1, 1);
 #pragma warning disable SYSLIB0050
             _game._optionsView = (OptionsView)FormatterServices.GetUninitializedObject(typeof(OptionsView));
 #pragma warning restore SYSLIB0050
             _presenter = new GamePresenter(_game);
             SetField("_presenter", _presenter);
             SetField("_crazyDaveVoice", voice);
-            var sounds = (Dictionary<string, AudioClip>)typeof(PvZGame).GetField("_presentationSounds", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(_game)!;
+            var sounds = (Dictionary<string, AudioClip>)GameMemberReflection.GetField(_game, "_presentationSounds")!;
             for (var variant = 1; variant <= 3; variant++)
             {
                 sounds["crazydavelong" + variant] = _clip;
@@ -89,14 +89,14 @@ namespace PlantsVsZombies.Tests.PlayMode
         [Test]
         public void FirstVisitGrantsFiveOnlyWhenDialogueIsAdvanced()
         {
-            Assert.That(_game._accountStore.Get(_profile).PurchaseCount(28), Is.Zero);
+            Assert.That(_game.Accounts._accountStore.Get(_profile).PurchaseCount(28), Is.Zero);
             Invoke("OpenWisdomTree");
-            Assert.That(_game._treeDaveIntroPending, Is.True);
+            Assert.That(_game.Tree._treeDaveIntroPending, Is.True);
             Invoke("UpdateWisdomTreeDialogue", 2.75f);
-            Assert.That(_game._crazyDaveMessageIndex, Is.EqualTo(3200));
-            Assert.That(_game._crazyDaveText, Is.EqualTo("Hello Tester."));
-            Assert.That(_game._crazyDaveHeldItem, Is.EqualTo("TREE_FOOD"));
-            Assert.That(_game._accountStore.Get(_profile).PurchaseCount(28), Is.Zero);
+            Assert.That(_game.Dave._crazyDaveMessageIndex, Is.EqualTo(3200));
+            Assert.That(_game.Dave._crazyDaveText, Is.EqualTo("Hello Tester."));
+            Assert.That(_game.Dave._crazyDaveHeldItem, Is.EqualTo("TREE_FOOD"));
+            Assert.That(_game.Accounts._accountStore.Get(_profile).PurchaseCount(28), Is.Zero);
             var input = new GameInputSnapshot(new Vector2(400, 300), true, true, false, true, false, 0, false, false);
             typeof(GameInput).GetProperty("Current")!.GetSetMethod(true)!.Invoke(null, new object[] { input });
             Invoke("HandleInput");
@@ -104,8 +104,8 @@ namespace PlantsVsZombies.Tests.PlayMode
             Assert.That(reloaded.TreeFoodGiftClaimed, Is.True);
             Assert.That(reloaded.PurchaseCount(28), Is.EqualTo(5));
             Invoke("OpenWisdomTree");
-            Assert.That(_game._treeDaveIntroPending, Is.False);
-            Assert.That(_game._accountStore.Get(_profile).PurchaseCount(28), Is.EqualTo(5));
+            Assert.That(_game.Tree._treeDaveIntroPending, Is.False);
+            Assert.That(_game.Accounts._accountStore.Get(_profile).PurchaseCount(28), Is.EqualTo(5));
         }
 
         /// <summary>Sets one private fixture dependency.</summary>
@@ -113,7 +113,7 @@ namespace PlantsVsZombies.Tests.PlayMode
         /// <param name="value">The supplied dependency.</param>
         private void SetField(string name, object value)
         {
-            typeof(PvZGame).GetField(name, BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(_game, value);
+            GameMemberReflection.SetField(_game, name, value);
         }
 
         /// <summary>Invokes a production coordinator method.</summary>
@@ -121,7 +121,7 @@ namespace PlantsVsZombies.Tests.PlayMode
         /// <param name="arguments">The method arguments.</param>
         private void Invoke(string name, params object[] arguments)
         {
-            typeof(PvZGame).GetMethod(name, BindingFlags.NonPublic | BindingFlags.Instance)!.Invoke(_game, arguments);
+            GameMemberReflection.Invoke(_game, name, arguments);
         }
     }
 }

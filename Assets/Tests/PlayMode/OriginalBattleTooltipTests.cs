@@ -30,15 +30,15 @@ namespace PlantsVsZombies.Tests.PlayMode
             {
                 owner._game = new GameSimulation(new GameRules { AdventureLevel = 11 }, 7529);
                 owner._currentView = PvZGame.ScreenView.Board;
-                owner._adventureFeedback = "fixture";
-                owner._adventureFeedbackUntil = Time.unscaledTime + 5f;
-                var until = owner._adventureFeedbackUntil;
+                owner.AdventureBoard._adventureFeedback = "fixture";
+                owner.AdventureBoard._adventureFeedbackUntil = Time.unscaledTime + 5f;
+                var until = owner.AdventureBoard._adventureFeedbackUntil;
                 owner._game.TogglePause();
-                owner.PreserveAdventureFeedbackDuringPause(10f);
-                Assert.That(owner._adventureFeedbackUntil, Is.EqualTo(until + 10f).Within(.001f));
+                owner.AdventureBoard.PreserveAdventureFeedbackDuringPause(10f);
+                Assert.That(owner.AdventureBoard._adventureFeedbackUntil, Is.EqualTo(until + 10f).Within(.001f));
                 owner._game.TogglePause();
-                owner.PreserveAdventureFeedbackDuringPause(1f);
-                Assert.That(owner._adventureFeedbackUntil, Is.EqualTo(until + 10f).Within(.001f),
+                owner.AdventureBoard.PreserveAdventureFeedbackDuringPause(1f);
+                Assert.That(owner.AdventureBoard._adventureFeedbackUntil, Is.EqualTo(until + 10f).Within(.001f),
                     "Advice resumes its ordinary countdown after gameplay resumes.");
             }
             finally
@@ -68,11 +68,11 @@ namespace PlantsVsZombies.Tests.PlayMode
                 owner._root = root;
                 foreach (var id in new[] { 1, 6, 31 })
                 {
-                    owner._modeSession = new ModeSession(id);
-                    owner._game = owner._modeSession.Game;
+                    owner.IndependentModes._modeSession = new ModeSession(id);
+                    owner._game = owner.IndependentModes._modeSession.Game;
                     var flags = id == 6 ? "10" : "5";
                     var original = presenter.OriginalProgressionText("ADVICE_SURVIVE_FLAGS");
-                    Assert.That(presenter.ResolveAdventureAdvice(owner._modeSession.Advice), Is.EqualTo(original.Replace("{FLAGS}", flags)));
+                    Assert.That(presenter.ResolveAdventureAdvice(owner.IndependentModes._modeSession.Advice), Is.EqualTo(original.Replace("{FLAGS}", flags)));
                 }
 
                 const string diagnostic = "Storage failure: isolated regression fixture";

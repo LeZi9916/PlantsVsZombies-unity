@@ -44,13 +44,13 @@ namespace PlantsVsZombies.Diagnostics
         /// <returns>The resulting field.</returns>
         private object Field(string name)
         {
-            var field = typeof(PvZGame).GetField(name, Private);
+            var field = GameMemberReflection.FindField(_controller, name, out var owner);
             if (field != null)
             {
-                return field.GetValue(_controller);
+                return field.GetValue(owner);
             }
 
-            var presenter = typeof(PvZGame).GetField("_presenter", Private).GetValue(_controller);
+            var presenter = GameMemberReflection.GetField(_controller, "_presenter");
             return presenter.GetType().GetField(name, Private).GetValue(presenter);
         }
 
@@ -59,7 +59,7 @@ namespace PlantsVsZombies.Diagnostics
         /// <param name = "value">The value.</param>
         private void Set(string name, object value)
         {
-            typeof(PvZGame).GetField(name, Private).SetValue(_controller, value);
+            GameMemberReflection.SetField(_controller, name, value);
         }
 
         /// <summary>Performs call.</summary>
@@ -68,7 +68,8 @@ namespace PlantsVsZombies.Diagnostics
         /// <returns>The resulting call.</returns>
         private object Call(string name, params object[] args)
         {
-            return Invoke(typeof(PvZGame), _controller, name, args);
+            var method = GameMemberReflection.FindMethod(_controller, name, out var owner);
+            return InvokeWithDefaults(method!, owner, args);
         }
 
         /// <summary>Performs sim call.</summary>
@@ -88,7 +89,16 @@ namespace PlantsVsZombies.Diagnostics
         /// <returns>The resulting invoke.</returns>
         private static object Invoke(Type type, object target, string name, object[] args)
         {
-            var method = type.GetMethod(name, Private);
+            return InvokeWithDefaults(type.GetMethod(name, Private), target, args);
+        }
+
+        /// <summary>Invokes a method, filling omitted trailing arguments with their declared defaults.</summary>
+        /// <param name = "method">The method to invoke.</param>
+        /// <param name = "target">The object that declares the method.</param>
+        /// <param name = "args">The supplied leading arguments.</param>
+        /// <returns>The method result.</returns>
+        private static object InvokeWithDefaults(MethodInfo method, object target, object[] args)
+        {
             var parameters = method.GetParameters();
             var supplied = args.Length;
             Array.Resize(ref args, parameters.Length);
@@ -228,7 +238,7 @@ namespace PlantsVsZombies.Diagnostics
                 MovePointer(new Vector2(780, 580));
                 bool entry = false, partial = false, flowers = false, complete = false;
                 var loadingDeadline = Time.unscaledTime + 30f;
-                while (_controller.OriginalLoadingActive && Time.unscaledTime < loadingDeadline)
+                while (_controller.Loading.OriginalLoadingActive && Time.unscaledTime < loadingDeadline)
                 {
                     var width = (float)Field("_originalLoadWidth");
                     var title = (int)Field("_originalTitleTicks");
@@ -251,7 +261,7 @@ namespace PlantsVsZombies.Diagnostics
                         yield return Capture("startup-02-native-flowers");
                     }
 
-                    if (_controller.OriginalLoadingReady && width >= 313.9f && sprouts[4] >= 1.1f)
+                    if (_controller.Loading.OriginalLoadingReady && width >= 313.9f && sprouts[4] >= 1.1f)
                     {
                         complete = true;
                         yield return Capture("startup-03-native-complete-bar");
@@ -262,7 +272,7 @@ namespace PlantsVsZombies.Diagnostics
                     yield return null;
                 }
 
-                Require(entry && partial && flowers && complete, "Real original loading stages did not complete: active=" + _controller.OriginalLoadingActive + ", ready=" + _controller.OriginalLoadingReady + ", progress=" + _controller.OriginalLoadingProgress + ", width=" + Field("_originalLoadWidth") + ", ticks=" + Field("_originalTitleTicks") + ", headAge=" + ((float[])Field("_originalLoadSproutAges"))[4]);
+                Require(entry && partial && flowers && complete, "Real original loading stages did not complete: active=" + _controller.Loading.OriginalLoadingActive + ", ready=" + _controller.Loading.OriginalLoadingReady + ", progress=" + _controller.Loading.OriginalLoadingProgress + ", width=" + Field("_originalLoadWidth") + ", ticks=" + Field("_originalTitleTicks") + ", headAge=" + ((float[])Field("_originalLoadSproutAges"))[4]);
                 Check(((global::PlantsVsZombies.Reanimation.AnimationInfo)Field("_originalSproutInfo")).FrameCount == 18 && ((global::PlantsVsZombies.Reanimation.AnimationInfo)Field("_originalHeadInfo")).FrameCount == 18, "Startup animation counters advanced without the actual original18-frame definitions");
                 var titleTextures = (Dictionary<string, Texture2D>)Field("_originalTitleTextures");
                 Check(titleTextures["grass"].width == 314 && titleTextures["grass"].height == 33 && titleTextures["dirt"].width == 321 && titleTextures["dirt"].height == 53 && titleTextures["sodroll"].width == 73 && titleTextures["sodroll"].height == 71, "Player imported loading artwork at rescaled NPOT dimensions");
@@ -270,13 +280,13 @@ namespace PlantsVsZombies.Diagnostics
             }
 
             var deadline = Time.unscaledTime + 60;
-            while (_controller.OriginalLoadingActive && Time.unscaledTime < deadline)
+            while (_controller.Loading.OriginalLoadingActive && Time.unscaledTime < deadline)
             {
                 yield return null;
             }
 
-            Require(!_controller.OriginalLoadingActive, "Original loading did not finish");
-            _controller.StartAdventureTestLevel(8);
+            Require(!_controller.Loading.OriginalLoadingActive, "Original loading did not finish");
+            _controller.Campaign.StartAdventureTestLevel(8);
             Require(Sim.ChooseAdventureSeeds(new[] {
                 PlantKind.Sunflower,
                 PlantKind.Peashooter,
@@ -621,7 +631,7 @@ namespace PlantsVsZombies.Diagnostics
             yield return new WaitForSecondsRealtime(.25f);
             yield return Capture("08-original-final-wave-animation");
             Check((float)Field("_finalWaveNoticeStart") >= 0f, "Real final-wave scheduler did not create its original reanimation");
-            _controller.StartAdventureTestLevel(5);
+            _controller.Campaign.StartAdventureTestLevel(5);
             Sim.Adventure.Tutorial = AdventureTutorial.Complete;
             Set("_choosingSeeds", false);
             Sim.ResetAdventureWaveSchedule(100000, false, false);
@@ -669,7 +679,7 @@ namespace PlantsVsZombies.Diagnostics
             Sim.Update(.2f);
             Check(Math.Abs(rolling.NativePixelY - bounceY) >= 38 && Math.Abs(rolling.NativePixelY - (80 + rolling.Row * 100)) > 2, "Bowling rebound did not continue diagonally between rows");
             yield return Capture("31-native-bowling-continuous-diagonal");
-            _controller.StartAdventureTestLevel(8);
+            _controller.Campaign.StartAdventureTestLevel(8);
             Require(Sim.ChooseDefaultAdventureSeeds(), "Could not prepare the isolated bite scene");
             Call("AttachAdventureGame", Sim);
             Set("_choosingSeeds", false);
@@ -702,7 +712,7 @@ namespace PlantsVsZombies.Diagnostics
             Check(Sim.Peas.Count > 0 && Sim.Zombies.Contains(chewing), "Original shooter stopped targeting a live headless zombie");
             yield return Capture("33-native-shooter-targets-headless-eating-body");
             _observations.Add("Normal bowling hit changed target row without teleporting visible Y, then advanced diagonally. Bite used native rectangle overlap and chew phases; lost-head eater retained its position/pose, stopped new damage, and stayed targetable by the shooter.");
-            _controller.StartAdventureTestLevel(8);
+            _controller.Campaign.StartAdventureTestLevel(8);
             Require(Sim.ChooseDefaultAdventureSeeds(), "Could not prepare the isolated ice scene");
             Call("AttachAdventureGame", Sim);
             Set("_choosingSeeds", false);
@@ -802,7 +812,7 @@ namespace PlantsVsZombies.Diagnostics
             Require(reward.Stage == AdventureAwardStage.Introduction, "Award never reached introduction");
             Check((MusicCue)Field("_playingMusicCue") == MusicCue.ZenGarden, "Original introduction music did not start");
             var musicReport = Path.Combine(SmokeTestArtifacts.DirectoryPath, "actual-introduction-music.json");
-            _controller.BeginMusicOutputProbe(musicReport, 3f);
+            _controller.Music.BeginMusicOutputProbe(musicReport, 3f);
             yield return Capture("12-native-introduction-during-button-delay");
             Call("HandleClick", new Vector2(402, 566));
             Check(Sim.Adventure.Level.Number == 1, "Original award button enabled before counter180");

@@ -118,7 +118,7 @@ namespace PlantsVsZombies.Tests.PlayMode
                     animations.DrawNativeImage(white, new Rect(0, 0, Screen.width, Screen.height), new Rect(0, 0, 1, 1));
                     drawZombie.Invoke(presenter, new object[] { zombie });
                     animations.EndObjectFrame();
-                    var image = owner.Texture(item.Level == 12 ? "plantshadow2.png" : "plantshadow.png");
+                    var image = owner.Textures.Load(item.Level == 12 ? "plantshadow2.png" : "plantshadow.png");
                     Assert.That(image.width, Is.EqualTo(86));
                     Assert.That(image.height, Is.EqualTo(36));
                     var pool = (ObjectSpriteRenderer)typeof(ReanimationRenderer).GetField("_objectRenderer", flags)!.GetValue(animations)!;
@@ -158,7 +158,7 @@ namespace PlantsVsZombies.Tests.PlayMode
             {
                 presenter.Dispose();
                 animations.Dispose();
-                foreach (var texture in owner._textures.Values)
+                foreach (var texture in owner.Textures._textures.Values)
                 {
                     if (texture != null)
                     {
@@ -166,7 +166,7 @@ namespace PlantsVsZombies.Tests.PlayMode
                     }
                 }
 
-                owner._textures.Clear();
+                owner.Textures._textures.Clear();
                 UnityEngine.Object.Destroy(white);
                 UnityEngine.Object.Destroy(pixels);
                 target.Release();
@@ -207,12 +207,12 @@ namespace PlantsVsZombies.Tests.PlayMode
                 owner._font = font;
                 owner._modeTitleBitmap = CanvasBitmapFont.LoadFromResources("HouseofTerror28");
                 owner._currentView = PvZGame.ScreenView.Board;
-                owner._adventurePointer = new Vector2(-1000f, -1000f);
+                owner.AdventureBoard._adventurePointer = new Vector2(-1000f, -1000f);
                 owner._game = new GameSimulation(new GameRules { AdventureLevel = 9 }, 7529);
                 Assert.That(owner._game.ChooseDefaultAdventureSeeds(), Is.True);
                 owner._game.ResetAdventureWaveSchedule(1000000, false, false);
                 typeof(GameSimulation).GetProperty(nameof(GameSimulation.Elapsed))!.SetValue(owner._game, 100f);
-                owner._waveNoticeGame = owner._game;
+                owner.WaveNotices._waveNoticeGame = owner._game;
                 owner._deck.Clear();
                 owner._deck.AddRange(new[] { PlantKind.Peashooter, PlantKind.Sunflower, PlantKind.Wallnut, PlantKind.PotatoMine, PlantKind.SnowPea, PlantKind.Imitater });
                 owner._game.Adventure.ImitaterTarget = PlantKind.Peashooter;
@@ -252,8 +252,8 @@ namespace PlantsVsZombies.Tests.PlayMode
                 Save(pixels, "00-planted.png");
                 for (var frame = 0; frame < 24; frame++)
                 {
-                    owner._hugeWaveNoticeStart = 100f - frame * .08f;
-                    owner._finalWaveNoticeStart = 100f - frame * .08f;
+                    owner.WaveNotices._hugeWaveNoticeStart = 100f - frame * .08f;
+                    owner.WaveNotices._finalWaveNoticeStart = 100f - frame * .08f;
                     owner._game.Zombies.Clear();
                     for (var index = 0; index < 100; index++)
                     {
@@ -315,7 +315,7 @@ namespace PlantsVsZombies.Tests.PlayMode
                 presenter.Dispose();
                 options.Dispose();
                 animations.Dispose();
-                foreach (var texture in owner._textures.Values)
+                foreach (var texture in owner.Textures._textures.Values)
                 {
                     if (texture != null)
                     {
@@ -323,9 +323,9 @@ namespace PlantsVsZombies.Tests.PlayMode
                     }
                 }
 
-                owner._textures.Clear();
+                owner.Textures._textures.Clear();
                 owner._modeTitleBitmap?.Dispose();
-                owner._bundledWaveAnimations?.Dispose();
+                owner.WaveNotices._bundledWaveAnimations?.Dispose();
                 UnityEngine.Object.Destroy(font);
                 UnityEngine.Object.Destroy(pixels);
                 target.Release();

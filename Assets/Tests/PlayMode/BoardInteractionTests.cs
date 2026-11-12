@@ -5,6 +5,8 @@ using PlantsVsZombies.Adventure;
 using PlantsVsZombies.Game;
 using PlantsVsZombies.Simulation;
 using UnityEngine;
+using PlantsVsZombies.BoardUI;
+using PlantsVsZombies.Diagnostics;
 
 namespace PlantsVsZombies.Tests.PlayMode
 {
@@ -45,17 +47,17 @@ namespace PlantsVsZombies.Tests.PlayMode
             _owner._deck.Add(PlantKind.Repeater);
             var cooldowns = (int[])typeof(GameSimulation).GetField("_seedCooldownTicks", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(_owner._game)!;
             cooldowns[(int)PlantKind.Repeater] = 0;
-            Click(_owner.AdventureSeedRect(0).center);
+            Click(_owner.Layout.AdventureSeedRect(0).center);
             Assert.That(_owner._selected, Is.EqualTo(-1));
-            Assert.That(_owner.SunMoneyWarningRed, Is.False);
+            Assert.That(_owner.AdventureBoard.SunMoneyWarningRed, Is.False);
             _owner._game.Adventure._ticks++;
-            Assert.That(_owner.SunMoneyWarningRed, Is.True);
+            Assert.That(_owner.AdventureBoard.SunMoneyWarningRed, Is.True);
             _owner._game.TogglePause();
             _owner._game.Update(.25f);
-            Assert.That(_owner.SunMoneyWarningRed, Is.True, "Paused boards retain the native warning phase.");
+            Assert.That(_owner.AdventureBoard.SunMoneyWarningRed, Is.True, "Paused boards retain the native warning phase.");
             _owner._game.TogglePause();
             _owner._game.Adventure._ticks += 69;
-            Assert.That(_owner.SunMoneyWarningRed, Is.False);
+            Assert.That(_owner.AdventureBoard.SunMoneyWarningRed, Is.False);
         }
 
         /// <summary>Preserves the native priority of cooldown rejection over an insufficient-sun warning.</summary>
@@ -66,9 +68,9 @@ namespace PlantsVsZombies.Tests.PlayMode
             _owner._deck.Add(PlantKind.Repeater);
             var cooldowns = (int[])typeof(GameSimulation).GetField("_seedCooldownTicks", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(_owner._game)!;
             cooldowns[(int)PlantKind.Repeater] = 25;
-            Click(_owner.AdventureSeedRect(0).center);
+            Click(_owner.Layout.AdventureSeedRect(0).center);
             _owner._game.Adventure._ticks += 11;
-            Assert.That(_owner.SunMoneyWarningRed, Is.False);
+            Assert.That(_owner.AdventureBoard.SunMoneyWarningRed, Is.False);
             Assert.That(_owner._selected, Is.EqualTo(-1));
         }
 
@@ -80,10 +82,10 @@ namespace PlantsVsZombies.Tests.PlayMode
             var shell = new Plant { Kind = PlantKind.Pumpkin, Layer = PlantLayer.Armor, Row = 2, Column = 3, Health = 4000 };
             _owner._game.Plants.Add(main);
             _owner._game.Plants.Add(shell);
-            var center = new Vector2(PvZGame.AdventureGridX + 3 * PvZGame.CellWidth + 40, _owner.AdventureCellY(2, 3) + 40);
-            Assert.That(_owner.AdventureShovelTarget(center), Is.SameAs(main));
+            var center = new Vector2(BoardLayout.AdventureGridX + 3 * BoardLayout.CellWidth + 40, _owner.Layout.AdventureCellY(2, 3) + 40);
+            Assert.That(_owner.Layout.AdventureShovelTarget(center), Is.SameAs(main));
             var rim = center + new Vector2(35, 0);
-            Assert.That(_owner.AdventureShovelTarget(rim), Is.SameAs(shell));
+            Assert.That(_owner.Layout.AdventureShovelTarget(rim), Is.SameAs(shell));
             _owner._shovel = true;
             Click(rim);
             Assert.That(_owner._game.Plants.Contains(shell), Is.False);
@@ -97,7 +99,7 @@ namespace PlantsVsZombies.Tests.PlayMode
         {
             var plant = new Plant { Kind = PlantKind.GraveBuster, Layer = PlantLayer.Main, Row = 2, Column = 3, Health = 300 };
             _owner._game.Plants.Add(plant);
-            Assert.That(_owner.AdventureShovelTarget(new Vector2(320, 320)), Is.Null);
+            Assert.That(_owner.Layout.AdventureShovelTarget(new Vector2(320, 320)), Is.Null);
             Assert.That(_owner._game.TryShovelAdventurePlant(plant), Is.False);
             Assert.That(_owner._game.Plants.Contains(plant), Is.True);
         }
@@ -153,7 +155,7 @@ namespace PlantsVsZombies.Tests.PlayMode
         /// <param name="point">The original eight-hundred-by-six-hundred pointer coordinate.</param>
         private void Click(Vector2 point)
         {
-            typeof(PvZGame).GetMethod("HandleAdventureClick", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(_owner, new object[] { point });
+            GameMemberReflection.Invoke(_owner, "HandleAdventureClick", new object[] { point });
         }
     }
 }

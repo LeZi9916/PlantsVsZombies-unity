@@ -2,13 +2,13 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.Reflection;
 using NUnit.Framework;
 using PlantsVsZombies.Adventure;
 using PlantsVsZombies.Audio;
 using PlantsVsZombies.Game;
 using UnityEngine;
 using UnityEngine.TestTools;
+using PlantsVsZombies.Diagnostics;
 
 namespace PlantsVsZombies.Tests.PlayMode
 {
@@ -139,7 +139,7 @@ namespace PlantsVsZombies.Tests.PlayMode
             {
                 for (var request = 0; request < 64; request++)
                 {
-                    typeof(PvZGame).GetField("_soundVolume", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(game, request / 64f);
+                    GameMemberReflection.SetField(game, "_soundVolume", request / 64f);
                     PlayFoley(game, foley, 100);
                 }
 
@@ -157,7 +157,7 @@ namespace PlantsVsZombies.Tests.PlayMode
             }
             finally
             {
-                ((Dictionary<string, AudioClip>)typeof(PvZGame).GetField("_presentationSounds", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(game)!).Clear();
+                ((Dictionary<string, AudioClip>)GameMemberReflection.GetField(game, "_presentationSounds")!).Clear();
                 UnityEngine.Object.Destroy(host);
             }
         }
@@ -181,7 +181,7 @@ namespace PlantsVsZombies.Tests.PlayMode
             }
             finally
             {
-                ((Dictionary<string, AudioClip>)typeof(PvZGame).GetField("_presentationSounds", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(game)!).Clear();
+                ((Dictionary<string, AudioClip>)GameMemberReflection.GetField(game, "_presentationSounds")!).Clear();
                 UnityEngine.Object.Destroy(host);
             }
         }
@@ -325,9 +325,9 @@ namespace PlantsVsZombies.Tests.PlayMode
             host = new GameObject("Inactive Foley route regression");
             host.SetActive(false);
             var game = host.AddComponent<PvZGame>();
-            typeof(PvZGame).GetField("_soundVoices", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(game, pool);
-            typeof(PvZGame).GetField("_soundVolume", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(game, .7f);
-            var samples = (Dictionary<string, AudioClip>)typeof(PvZGame).GetField("_presentationSounds", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(game)!;
+            GameMemberReflection.SetField(game, "_soundVoices", pool);
+            GameMemberReflection.SetField(game, "_soundVolume", .7f);
+            var samples = (Dictionary<string, AudioClip>)GameMemberReflection.GetField(game, "_presentationSounds")!;
             foreach (var definition in AdventureZombieFoleyData.Definitions.Values)
             {
                 foreach (var sample in definition.Samples)
@@ -345,8 +345,7 @@ namespace PlantsVsZombies.Tests.PlayMode
         /// <param name="tick">The native simulation update associated with the request.</param>
         private static void PlayFoley(PvZGame game, int foley, int tick)
         {
-            typeof(PvZGame).GetMethod("PlayAdventureZombieFoley", BindingFlags.Instance | BindingFlags.NonPublic)!
-                .Invoke(game, new object[] { new AdventureZombieSoundEvent { Foley = foley, Tick = tick } });
+            GameMemberReflection.Invoke(game, "PlayAdventureZombieFoley", new object[] { new AdventureZombieSoundEvent { Foley = foley, Tick = tick } });
         }
 
         /// <summary>Destroys only leased components and tolerates repeated disposal.</summary>

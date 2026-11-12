@@ -10,6 +10,7 @@ using PlantsVsZombies.Modes;
 using PlantsVsZombies.Reanimation;
 using PlantsVsZombies.UI;
 using UnityEngine;
+using PlantsVsZombies.Diagnostics;
 
 namespace PlantsVsZombies.Tests.PlayMode
 {
@@ -59,7 +60,7 @@ namespace PlantsVsZombies.Tests.PlayMode
             SetField("_presenter", _presenter);
             SetField("_crazyDaveVoice", voice);
             SetField("_soundVolume", .7f);
-            var sounds = (Dictionary<string, AudioClip>)typeof(PvZGame).GetField("_presentationSounds", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(_game)!;
+            var sounds = (Dictionary<string, AudioClip>)GameMemberReflection.GetField(_game, "_presentationSounds")!;
             for (var variant = 1; variant <= 3; variant++)
             {
                 sounds["crazydaveshort" + variant] = _clip;
@@ -95,13 +96,13 @@ namespace PlantsVsZombies.Tests.PlayMode
             StartOpening(mode, firstClear);
             if (expected < 0)
             {
-                Assert.That(_game._adventureIntro, Is.Null);
+                Assert.That(_game.Opening._adventureIntro, Is.Null);
                 return;
             }
 
-            Assert.That(_game._adventureIntro, Is.Not.Null);
-            Assert.That(_game._adventureIntro.Plan.NonScrolling, Is.True);
-            Assert.That(_game._adventureIntro.Plan.ChooseSeeds, Is.False);
+            Assert.That(_game.Opening._adventureIntro, Is.Not.Null);
+            Assert.That(_game.Opening._adventureIntro.Plan.NonScrolling, Is.True);
+            Assert.That(_game.Opening._adventureIntro.Plan.ChooseSeeds, Is.False);
             Assert.That(GetField<int>("_crazyDaveStartIndex"), Is.EqualTo(expected));
         }
 
@@ -115,23 +116,23 @@ namespace PlantsVsZombies.Tests.PlayMode
         {
             StartOpening(mode, true);
             Assert.That(Invoke(_presenter, "DrawModesInterface"), Is.True);
-            Assert.That(_game._adventureIntroDrawn, Is.True);
+            Assert.That(_game.Opening._adventureIntroDrawn, Is.True);
             Assert.That(Invoke(_game, "TryHandleModeClick", new Vector2(400f, 300f)), Is.True);
             Tick(2.75f);
-            Assert.That(_game._crazyDaveMessageIndex, Is.EqualTo(first));
-            var frozenTime = _game._adventureIntro.NativeTime;
+            Assert.That(_game.Dave._crazyDaveMessageIndex, Is.EqualTo(first));
+            var frozenTime = _game.Opening._adventureIntro.NativeTime;
             Tick(.2f);
-            Assert.That(_game._adventureIntro.NativeTime, Is.EqualTo(frozenTime));
+            Assert.That(_game.Opening._adventureIntro.NativeTime, Is.EqualTo(frozenTime));
             for (var index = first + 1; index <= last; index++)
             {
                 Invoke(_game, "AdvanceCrazyDaveDialogue");
-                Assert.That(_game._crazyDaveMessageIndex, Is.EqualTo(index));
+                Assert.That(_game.Dave._crazyDaveMessageIndex, Is.EqualTo(index));
             }
 
             Invoke(_game, "AdvanceCrazyDaveDialogue");
-            Assert.That(_game._crazyDaveMessageIndex, Is.EqualTo(-1));
+            Assert.That(_game.Dave._crazyDaveMessageIndex, Is.EqualTo(-1));
             Tick(1.26f);
-            Assert.That(_game._adventureIntro.NativeTime, Is.GreaterThanOrEqualTo(_game._adventureIntro.Plan.PanLeftEnd));
+            Assert.That(_game.Opening._adventureIntro.NativeTime, Is.GreaterThanOrEqualTo(_game.Opening._adventureIntro.Plan.PanLeftEnd));
         }
 
         /// <summary>Creates a mode and invokes its real opening initialization.</summary>
@@ -139,8 +140,8 @@ namespace PlantsVsZombies.Tests.PlayMode
         /// <param name="firstClear">Whether the puzzle has not been completed.</param>
         private void StartOpening(int mode, bool firstClear)
         {
-            _game._modeSession = new ModeSession(mode);
-            _game._game = _game._modeSession.Game;
+            _game.IndependentModes._modeSession = new ModeSession(mode);
+            _game._game = _game.IndependentModes._modeSession.Game;
             SetField("_modeFirstClear", firstClear);
             Invoke(_game, "InitializeAdventureOpening");
         }
@@ -157,7 +158,7 @@ namespace PlantsVsZombies.Tests.PlayMode
         /// <param name="value">The field value.</param>
         private void SetField(string name, object value)
         {
-            typeof(PvZGame).GetField(name, BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(_game, value);
+            GameMemberReflection.SetField(_game, name, value);
         }
 
         /// <summary>Reads a private game field.</summary>
@@ -166,7 +167,7 @@ namespace PlantsVsZombies.Tests.PlayMode
         /// <returns>The field value.</returns>
         private T GetField<T>(string name)
         {
-            return (T)typeof(PvZGame).GetField(name, BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(_game)!;
+            return (T)GameMemberReflection.GetField(_game, name)!;
         }
 
         /// <summary>Invokes a private method on the production object.</summary>
@@ -176,6 +177,11 @@ namespace PlantsVsZombies.Tests.PlayMode
         /// <returns>The method's result, if any.</returns>
         private static object? Invoke(object target, string name, params object[] arguments)
         {
+            if (target is PvZGame game)
+            {
+                return GameMemberReflection.Invoke(game, name, arguments);
+            }
+
             return target.GetType().GetMethod(name, BindingFlags.NonPublic | BindingFlags.Instance)!.Invoke(target, arguments);
         }
     }

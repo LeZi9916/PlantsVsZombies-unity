@@ -14,6 +14,10 @@ resolves the configured URP pipeline and renderer asset GUIDs, checks quality
 overrides, and detects immediate GL rendering that bypasses attached renderers.
 Positive and negative syntax fixtures run before every repository scan.
 
+A coordinator size check keeps `PvZGame.cs` under 700 lines so new responsibilities are
+added to a collaborator (audio, input, menus, adventure, modes, store, garden, tree)
+instead of accumulating in the game coordinator.
+
 Presentation boundary checks reject runtime `OnGUI` callbacks, `GUI`, `GUILayout`
 and `GUIUtility` accesses (including aliases and static imports), and
 `Event.current` input. They also keep drawing methods and direct textured-quad

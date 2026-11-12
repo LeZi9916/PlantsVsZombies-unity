@@ -3,8 +3,8 @@
 using System;
 using System.IO;
 using NUnit.Framework;
-using PlantsVsZombies.Game;
 using UnityEngine;
+using PlantsVsZombies.Rendering;
 
 namespace PlantsVsZombies.Tests.PlayMode
 {
@@ -51,7 +51,7 @@ namespace PlantsVsZombies.Tests.PlayMode
                 mask.Apply();
                 File.WriteAllBytes(colorPath, jpeg ? color.EncodeToJPG(100) : color.EncodeToPNG());
                 File.WriteAllBytes(maskPath, mask.EncodeToPNG());
-                result = PvZGame.LoadMaskedImage(colorPath, maskPath);
+                result = TextureCache.LoadMaskedImage(colorPath, maskPath);
                 Assert.That(result.format, Is.EqualTo(TextureFormat.RGBA32));
                 var pixels = result.GetPixels32();
                 Assert.That(pixels[0].a, Is.Zero);

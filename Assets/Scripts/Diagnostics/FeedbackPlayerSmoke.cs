@@ -38,7 +38,7 @@ namespace PlantsVsZombies.Diagnostics
         /// <returns>The resulting field.</returns>
         private object Field(string name)
         {
-            return typeof(PvZGame).GetField(name, Private).GetValue(_controller);
+            return GameMemberReflection.GetField(_controller, name);
         }
 
         /// <summary>Performs call.</summary>
@@ -47,13 +47,13 @@ namespace PlantsVsZombies.Diagnostics
         /// <returns>The resulting call.</returns>
         private object Call(string name, params object[] args)
         {
-            var method = typeof(PvZGame).GetMethod(name, Private);
+            var method = GameMemberReflection.FindMethod(_controller, name, out var owner);
             if (method != null)
             {
-                return method.Invoke(_controller, args);
+                return method.Invoke(owner, args);
             }
 
-            var presenter = typeof(PvZGame).GetField("_presenter", Private).GetValue(_controller);
+            var presenter = GameMemberReflection.GetField(_controller, "_presenter");
             return presenter.GetType().GetMethod(name, Private).Invoke(presenter, args);
         }
 
@@ -175,15 +175,15 @@ namespace PlantsVsZombies.Diagnostics
         private IEnumerator Run()
         {
             var deadline = Time.unscaledTime + 60;
-            while (_controller.OriginalLoadingActive && Time.unscaledTime < deadline)
+            while (_controller.Loading.OriginalLoadingActive && Time.unscaledTime < deadline)
             {
                 yield return null;
             }
 
-            Check(!_controller.OriginalLoadingActive, "Startup did not finish");
-            _controller.StartAdventureTestLevel(8);
+            Check(!_controller.Loading.OriginalLoadingActive, "Startup did not finish");
+            _controller.Campaign.StartAdventureTestLevel(8);
             Check(Sim.ChooseDefaultAdventureSeeds(), "Could not choose test seeds");
-            typeof(PvZGame).GetField("_choosingSeeds", Private).SetValue(_controller, false);
+            GameMemberReflection.SetField(_controller, "_choosingSeeds", false);
             var sunflower = (Plant)SimCall("PlaceAdventurePlant", PlantKind.Sunflower, 1, 1);
             sunflower.Timing = global::PlantsVsZombies.Timing.PlantTiming.FromRaw(global::PlantsVsZombies.Timing.PlantKind.Sunflower, 150, 0);
             sunflower.ActionTimer = 1.5f;
@@ -271,7 +271,7 @@ namespace PlantsVsZombies.Diagnostics
             progress.Import(campaign.ProfileId, 1, 1);
             Call("HandleSelector", SelectorAction.Adventure);
             Check(Sim.Adventure.Level.IsReplay && Sim.ChooseDefaultAdventureSeeds(), "Replay setup failed");
-            typeof(PvZGame).GetField("_choosingSeeds", Private).SetValue(_controller, false);
+            GameMemberReflection.SetField(_controller, "_choosingSeeds", false);
             typeof(GameSimulation).GetProperty("State").SetValue(Sim, MatchState.Won);
             Sim.Adventure.Phase = AdventurePhase.Reward;
             SimCall("SpawnAdventureRewardPresentation");

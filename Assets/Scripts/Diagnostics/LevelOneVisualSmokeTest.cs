@@ -6,7 +6,6 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
-using System.Reflection;
 using UnityEngine;
 
 namespace PlantsVsZombies.Diagnostics
@@ -39,25 +38,23 @@ namespace PlantsVsZombies.Diagnostics
             }
 
             var startupDeadline = Time.realtimeSinceStartup + 60f;
-            while (controller.OriginalLoadingActive && Time.realtimeSinceStartup < startupDeadline)
+            while (controller.Loading.OriginalLoadingActive && Time.realtimeSinceStartup < startupDeadline)
             {
                 yield return null;
             }
 
-            if (controller.OriginalLoadingActive)
+            if (controller.Loading.OriginalLoadingActive)
             {
                 Fail("Original startup loading did not complete within 60 seconds");
                 yield break;
             }
 
-            var type = typeof(PvZGame);
-            var flags = BindingFlags.NonPublic | BindingFlags.Instance;
-            var gameField = type.GetField("_game", flags);
-            var deckField = type.GetField("_deck", flags);
-            var texturesField = type.GetField("_textures", flags);
-            var click = type.GetMethod("HandleClick", flags);
-            var loadTexture = type.GetMethod("Texture", flags);
-            var cancelSelection = type.GetMethod("CancelBoardSelection", flags);
+            var gameField = GameMemberReflection.BindField(controller, "_game");
+            var deckField = GameMemberReflection.BindField(controller, "_deck");
+            var texturesField = GameMemberReflection.BindField(controller, "_textures");
+            var click = GameMemberReflection.BindMethod(controller, "HandleClick");
+            var loadTexture = GameMemberReflection.BindMethod(controller, "Load");
+            var cancelSelection = GameMemberReflection.BindMethod(controller, "CancelBoardSelection");
             if (gameField == null || deckField == null || texturesField == null || click == null || loadTexture == null || cancelSelection == null)
             {
                 Fail("controller fields unavailable");

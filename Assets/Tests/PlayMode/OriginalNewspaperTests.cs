@@ -106,7 +106,7 @@ namespace PlantsVsZombies.Tests.PlayMode
             {
                 presenter.Dispose();
                 animations.Dispose();
-                foreach (var texture in owner._textures.Values)
+                foreach (var texture in owner.Textures._textures.Values)
                 {
                     if (texture != null)
                     {
@@ -114,7 +114,7 @@ namespace PlantsVsZombies.Tests.PlayMode
                     }
                 }
 
-                owner._textures.Clear();
+                owner.Textures._textures.Clear();
                 target.Release();
                 UnityEngine.Object.Destroy(target);
                 UnityEngine.Object.Destroy(pixels);

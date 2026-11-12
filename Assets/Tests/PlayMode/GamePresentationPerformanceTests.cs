@@ -12,6 +12,7 @@ using PlantsVsZombies.Simulation;
 using PlantsVsZombies.UI;
 using UnityEngine;
 using UnityEngine.TestTools;
+using PlantsVsZombies.Diagnostics;
 
 namespace PlantsVsZombies.Tests.PlayMode
 {
@@ -441,8 +442,8 @@ namespace PlantsVsZombies.Tests.PlayMode
                 var draw = typeof(GamePresenter).GetMethod("DrawAdventurePlant", BindingFlags.Instance | BindingFlags.NonPublic)!;
                 for (var frame = 0; frame < 2; frame++)
                 {
-                    owner._adventurePointer = new Vector2(80f + frame * 80f, 120f);
-                    Assert.That(owner.AdventureShovelTarget(owner._adventurePointer), Is.SameAs(frame == 0 ? first : second));
+                    owner.AdventureBoard._adventurePointer = new Vector2(80f + frame * 80f, 120f);
+                    Assert.That(owner.Layout.AdventureShovelTarget(owner.AdventureBoard._adventurePointer), Is.SameAs(frame == 0 ? first : second));
                     BeginFrame();
                     SpriteDrawState.Matrix = Matrix4x4.Translate(new Vector3(-36f, -76f));
                     draw.Invoke(presenter, new object[] { first });
@@ -563,9 +564,9 @@ namespace PlantsVsZombies.Tests.PlayMode
                 owner._smokeMode = true;
                 presenter = new GamePresenter(owner);
                 var flags = BindingFlags.Instance | BindingFlags.NonPublic;
-                typeof(PvZGame).GetField("_presenter", flags)!.SetValue(owner, presenter);
-                typeof(PvZGame).GetField("_smokePointer", flags)!.SetValue(owner, new Vector2(-1000f, -1000f));
-                typeof(PvZGame).GetField("_zombiePartAudioLoading", flags)!.SetValue(owner, true);
+                GameMemberReflection.SetField(owner, "_presenter", presenter);
+                GameMemberReflection.SetField(owner, "_smokePointer", new Vector2(-1000f, -1000f));
+                GameMemberReflection.SetField(owner, "_zombiePartAudioLoading", true);
                 var method = typeof(PvZGame).GetMethod("Update", flags)!;
                 var update = (Action)Delegate.CreateDelegate(typeof(Action), owner, method);
                 for (var i = 0; i < 8; i++)
@@ -622,11 +623,11 @@ namespace PlantsVsZombies.Tests.PlayMode
                 owner._game = new GameSimulation(new GameRules { AdventureLevel = 8 }, randomSeed: 12345);
                 owner._root = _root;
                 owner._deck.Clear();
-                owner._textures.Add("SeedBank.png", bank);
+                owner.Textures._textures.Add("SeedBank.png", bank);
                 owner._animations = _renderer;
                 owner._currentView = PvZGame.ScreenView.Board;
                 owner._smokeMode = true;
-                owner._adventurePointer = new Vector2(-1000f, -1000f);
+                owner.AdventureBoard._adventurePointer = new Vector2(-1000f, -1000f);
                 options = new OptionsView(_root);
                 owner._optionsView = options;
                 foreach (var mower in owner._game.Mowers)
@@ -667,7 +668,7 @@ namespace PlantsVsZombies.Tests.PlayMode
                 ObjectSpriteRenderer.SceneCamera.targetTexture = null;
                 if (owner != null)
                 {
-                    owner._textures.Clear();
+                    owner.Textures._textures.Clear();
                 }
 
                 presenter?.Dispose();

@@ -151,7 +151,29 @@ namespace PlantsVsZombies.Tests.Architecture
             }
 
             InspectPresentationOwnership(path, root, violations);
+            InspectCoordinatorSize(path, text, violations);
             return violations;
+        }
+
+        /// <summary>The longest allowed game coordinator source, so new responsibilities move to collaborators instead of accumulating there.</summary>
+        private const int CoordinatorLineLimit = 700;
+
+        /// <summary>Keeps the game coordinator thin by bounding the length of its source file.</summary>
+        /// <param name="path">The source path used for diagnostics.</param>
+        /// <param name="text">The C# source text.</param>
+        /// <param name="violations">The destination for coordinator size violations.</param>
+        private static void InspectCoordinatorSize(string path, string text, List<string> violations)
+        {
+            if (Path.GetFileName(path) != "PvZGame.cs")
+            {
+                return;
+            }
+
+            var lines = text.Split('\n').Length - 1;
+            if (lines > CoordinatorLineLimit)
+            {
+                violations.Add(path + ": PvZGame coordinates collaborators and must stay under " + CoordinatorLineLimit + " lines (found " + lines + "); move new responsibilities into a collaborator.");
+            }
         }
 
         /// <summary>Rejects runtime IMGUI callbacks and keeps drawing outside the game-flow coordinator.</summary>

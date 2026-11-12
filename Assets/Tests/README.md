@@ -64,6 +64,16 @@ zombie alpha and clipping, and reusable actor callbacks. The real `PvZGame.Updat
 allocation test uses synthetic assets with audio and persistent progress loading
 disabled; it does not measure a complete loaded Player.
 
+`PvZGame` is a thin coordinator: audio, input routing, menus, the adventure board, independent
+modes, the store, the garden, the Wisdom Tree and the other screens live in collaborator classes
+that it creates on first use, so an inactive test host that never ran `Awake` still reaches working
+instances. `GameCollaboratorTests` checks that creation, that the effects, music and Dave
+components adopt their audio sources and follow later volume changes, and that named-member
+lookup finds each member on the collaborator that declares it. Fixtures and the Player smoke
+scripts reach non-public session state through `GameMemberReflection` (`Assets/Scripts/Diagnostics`),
+which searches the coordinator and then each collaborator and rejects ambiguous names, so they do
+not depend on which collaborator owns a field or method.
+
 Audio prewarms 64 shared pitched voices and preserves the native eight-voice
 Foley limit per category. Projectile impacts admit consecutive hits and reuse the
 oldest same-category voice when saturated. Other full categories drop the new

@@ -30,7 +30,7 @@ namespace PlantsVsZombies.Diagnostics
         /// <returns>The resulting field.</returns>
         private object Field(string name)
         {
-            return typeof(PvZGame).GetField(name, Private).GetValue(_controller);
+            return GameMemberReflection.GetField(_controller, name);
         }
 
         /// <summary>Performs set.</summary>
@@ -38,7 +38,7 @@ namespace PlantsVsZombies.Diagnostics
         /// <param name = "value">The value.</param>
         private void Set(string name, object value)
         {
-            typeof(PvZGame).GetField(name, Private).SetValue(_controller, value);
+            GameMemberReflection.SetField(_controller, name, value);
         }
 
         /// <summary>Performs call.</summary>
@@ -47,15 +47,15 @@ namespace PlantsVsZombies.Diagnostics
         /// <returns>The resulting call.</returns>
         private object Call(string name, params object[] args)
         {
-            return typeof(PvZGame).GetMethod(name, Private).Invoke(_controller, args);
+            return GameMemberReflection.Invoke(_controller, name, args);
         }
 
         /// <summary>Performs view.</summary>
         /// <param name = "view">The view.</param>
         private void View(string view)
         {
-            var field = typeof(PvZGame).GetField("_currentView", Private);
-            field.SetValue(_controller, Enum.Parse(field.FieldType, view));
+            var field = GameMemberReflection.FindField(_controller, "_currentView", out var owner)!;
+            field.SetValue(owner, Enum.Parse(field.FieldType, view));
         }
 
         /// <summary>Gets or sets sim.</summary>
@@ -167,16 +167,16 @@ namespace PlantsVsZombies.Diagnostics
             yield return new WaitForSecondsRealtime(.8f);
             yield return Capture("00-original-loading");
             var deadline = Time.unscaledTime + 60f;
-            while ((!_controller.OriginalLoadingReady || (float)Field("_originalLoadWidth") < 313.99f || (int)Field("_originalTitleTicks") < 500) && Time.unscaledTime < deadline)
+            while ((!_controller.Loading.OriginalLoadingReady || (float)Field("_originalLoadWidth") < 313.99f || (int)Field("_originalTitleTicks") < 500) && Time.unscaledTime < deadline)
             {
                 yield return null;
             }
 
-            Check(_controller.OriginalLoadingReady && (float)Field("_originalLoadWidth") >= 313.99f, "Original loading finishes real progress and title animation");
+            Check(_controller.Loading.OriginalLoadingReady && (float)Field("_originalLoadWidth") >= 313.99f, "Original loading finishes real progress and title animation");
             yield return Capture("00b-original-title-ready");
             Set("_smokeMode", true);
             Call("CompleteOriginalLoading", false);
-            Check(!_controller.OriginalLoadingActive && _controller.DynamicAudioReady, "Original loading completes after real resources");
+            Check(!_controller.Loading.OriginalLoadingActive && _controller.Music.DynamicAudioReady, "Original loading completes after real resources");
             Check((bool)Call("EnsureAdventureStore") && (bool)Call("EnsurePlayerAccount"), "Isolated stores initialized");
             var catalog = (ProfileCatalog)Field("_profiles");
             var id = catalog.SelectedId.Value;
@@ -270,7 +270,7 @@ namespace PlantsVsZombies.Diagnostics
             Check((bool)Call("StartAdventureCampaign"), "Replay launches from normal menu");
             Check(Sim.Adventure.Level.IsReplay && Sim.Adventure.RequiredSeeds.Count == 3 && Sim.Adventure.AvailableSeeds.Count == 41, "Replay and owned seeds wired");
             yield return Capture("09-replay-chooser");
-            _controller.StartAdventureTestLevel(8, accounts.Get(id).SeedAccess());
+            _controller.Campaign.StartAdventureTestLevel(8, accounts.Get(id).SeedAccess());
             Check(Sim.ChooseDefaultAdventureSeeds(), "Test board seed chooser");
             Set("_choosingSeeds", false);
             var plantMethod = typeof(GameSimulation).GetMethod("PlaceAdventurePlant", Private);

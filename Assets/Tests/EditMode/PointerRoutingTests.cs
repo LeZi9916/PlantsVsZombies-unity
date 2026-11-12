@@ -172,6 +172,7 @@ namespace PlantsVsZombies.Tests.EditMode
                 SetCoordinatorField(controller, "_smokeMode", true);
                 SetCoordinatorField(controller, "_musicSource", host.AddComponent<AudioSource>());
                 SetCoordinatorField(controller, "_audioSource", host.AddComponent<AudioSource>());
+                SetCoordinatorField(controller, "_crazyDaveVoice", host.AddComponent<AudioSource>());
                 var presenterType = typeof(PvZGame).Assembly.GetType("PlantsVsZombies.Game.GamePresenter", true)!;
                 var presenter = Activator.CreateInstance(presenterType, BindingFlags.Instance | BindingFlags.NonPublic, null, new object[] { controller }, null)!;
                 SetCoordinatorField(controller, "_presenter", presenter);
@@ -191,8 +192,9 @@ namespace PlantsVsZombies.Tests.EditMode
 
                 var snapshot = new GameInputSnapshot(point, true, true, true, false, false, 0f, false, false);
                 SetInputSnapshot(snapshot);
-                var route = typeof(PvZGame).GetMethod("HandleInput", BindingFlags.Instance | BindingFlags.NonPublic)!;
-                Assert.DoesNotThrow(() => route.Invoke(controller, null));
+                var router = typeof(PvZGame).GetProperty("Router", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(controller)!;
+                var route = router.GetType().GetMethod("HandleInput", BindingFlags.Instance | BindingFlags.NonPublic)!;
+                Assert.DoesNotThrow(() => route.Invoke(router, null));
                 Assert.That(optionsModal ? options.IsOpen : help.IsOpen, Is.False, "Both sampled transitions must reach the original modal.");
                 Assert.That(viewField.GetValue(controller)!.ToString(), Is.EqualTo("Selector"), "The exposed selector must not receive the same click.");
                 Assert.That(typeof(PvZGame).GetField("_almanacView", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(controller), Is.Null);
@@ -320,11 +322,28 @@ namespace PlantsVsZombies.Tests.EditMode
 
         /// <summary>Configures only the dependencies exercised by the real coordinator's input router.</summary>
         /// <param name="controller">The inactive coordinator whose Awake and presentation lifecycle are suppressed.</param>
-        /// <param name="name">The runtime dependency field to assign.</param>
+        /// <param name="name">The runtime dependency field to assign, declared by the coordinator or one of its collaborators.</param>
         /// <param name="value">The isolated test dependency.</param>
         private static void SetCoordinatorField(PvZGame controller, string name, object value)
         {
-            typeof(PvZGame).GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(controller, value);
+            const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
+            var owner = (object)controller;
+            var field = typeof(PvZGame).GetField(name, flags);
+            if (field == null)
+            {
+                foreach (var property in typeof(PvZGame).GetProperties(flags | BindingFlags.DeclaredOnly))
+                {
+                    var collaborator = property.GetValue(controller);
+                    field = collaborator?.GetType().GetField(name, flags);
+                    if (field != null)
+                    {
+                        owner = collaborator!;
+                        break;
+                    }
+                }
+            }
+
+            field!.SetValue(owner, value);
         }
 
         /// <summary>Supplies a deterministic sampled frame without polling physical hardware or constructing GUI events.</summary>

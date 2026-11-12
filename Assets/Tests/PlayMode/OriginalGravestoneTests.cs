@@ -77,12 +77,12 @@ namespace PlantsVsZombies.Tests.PlayMode
             if (_host != null)
             {
                 ObjectSpriteRenderer.SceneCamera.targetTexture = _previousTarget;
-                foreach (var texture in _owner._textures.Values)
+                foreach (var texture in _owner.Textures._textures.Values)
                 {
                     UnityEngine.Object.Destroy(texture);
                 }
 
-                _owner._textures.Clear();
+                _owner.Textures._textures.Clear();
                 _presenter.Dispose();
                 _animations.Dispose();
                 _target.Release();
@@ -107,8 +107,8 @@ namespace PlantsVsZombies.Tests.PlayMode
             AssertPixelsMatch(hidden, _pixels.GetPixels32(), "The zombie preview must not draw a gravestone or its soil.");
 
             _owner._game.Adventure.GravesEnabled = true;
-            var stone = _owner.Texture("Tombstones.png");
-            var mound = _owner.Texture("Tombstone_mounds.png");
+            var stone = _owner.Textures.Load("Tombstones.png");
+            var mound = _owner.Textures.Load("Tombstone_mounds.png");
             Assert.That(stone, Is.Not.Null);
             Assert.That(mound, Is.Not.Null);
             Assert.That(stone.width, Is.EqualTo(430));
@@ -146,7 +146,7 @@ namespace PlantsVsZombies.Tests.PlayMode
         [UnityTest]
         public IEnumerator ZombieRisesFromGraveWithNativeClipping()
         {
-            _owner._textures["plantshadow2.png"] = null!;
+            _owner.Textures._textures["plantshadow2.png"] = null!;
             var zombie = new Zombie
             {
                 Id = 711,

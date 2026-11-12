@@ -1,0 +1,173 @@
+#nullable enable
+using System;
+using System.Collections.Generic;
+using System.IO;
+using UnityEngine;
+using PlantsVsZombies.Game;
+
+namespace PlantsVsZombies.Rendering
+{
+    /// <summary>Loads and retains the original image files used by the board and menus.</summary>
+    internal sealed class TextureCache
+    {
+        /// <summary>Provides the game session whose shared state and services this component uses.</summary>
+        private readonly PvZGame _owner;
+
+        /// <summary>Creates this component for one game session.</summary>
+        /// <param name="owner">The game session that supplies the original resource root.</param>
+        internal TextureCache(PvZGame owner)
+        {
+            _owner = owner;
+        }
+
+        /// <summary>Destroys every retained texture.</summary>
+        internal void ReleaseAll()
+        {
+            foreach (var texture in _textures.Values)
+            {
+                if (texture != null)
+                {
+                    UnityEngine.Object.Destroy(texture);
+                }
+            }
+        }
+
+        /// <summary>Stores textures.</summary>
+        internal readonly Dictionary<string, Texture2D> _textures = new Dictionary<string, Texture2D>();
+
+        /// <summary>Loads and retains an original image by file name.</summary>
+        /// <param name = "name">The image path relative to the original images directory.</param>
+        /// <returns>The cached texture, or null when the file is missing or invalid.</returns>
+        internal Texture2D Load(string name)
+        {
+            Texture2D texture;
+            if (_textures.TryGetValue(name, out texture))
+            {
+                return texture;
+            }
+
+            var path = Path.Combine(_owner._root, "images", name);
+            if (!File.Exists(path))
+            {
+                _textures[name] = null;
+                return null;
+            }
+
+            var maskPath = Path.Combine(Path.GetDirectoryName(path), Path.GetFileNameWithoutExtension(path) + "_.png");
+            if (string.Equals(Path.GetExtension(path), ".jpg", StringComparison.OrdinalIgnoreCase) && File.Exists(maskPath))
+            {
+                texture = LoadMaskedImage(path, maskPath);
+            }
+            else
+            {
+                texture = new Texture2D(2, 2, TextureFormat.RGBA32, false);
+                if (!texture.LoadImage(File.ReadAllBytes(path)))
+                {
+                    UnityEngine.Object.Destroy(texture);
+                    texture = null;
+                }
+                else
+                {
+                    texture.filterMode = FilterMode.Bilinear;
+                    texture.wrapMode = TextureWrapMode.Clamp;
+                }
+            }
+
+            _textures[name] = texture;
+            return texture;
+        }
+
+        /// <summary>Loads and retains an original resources.xml image with an explicit alpha grid.</summary>
+        /// <param name="colorName">The original color image filename.</param>
+        /// <param name="maskName">The original alpha grid filename.</param>
+        /// <returns>The cached RGBA texture, or null when either source is missing.</returns>
+        internal Texture2D? LoadAlphaGrid(string colorName, string maskName)
+        {
+            var key = colorName + "|" + maskName;
+            if (_textures.TryGetValue(key, out var texture))
+            {
+                return texture;
+            }
+
+            var colorPath = Path.Combine(_owner._root, "images", colorName);
+            var maskPath = Path.Combine(_owner._root, "images", maskName);
+            if (!File.Exists(colorPath) || !File.Exists(maskPath))
+            {
+                _textures[key] = null;
+                return null;
+            }
+
+            texture = LoadMaskedImage(colorPath, maskPath);
+            _textures[key] = texture;
+            return texture;
+        }
+
+        /// <summary>Combines original color artwork with the red channel of its separate alpha image.</summary>
+        /// <param name="colorPath">The original RGB or RGBA image path.</param>
+        /// <param name="maskPath">The matching original grayscale alpha image path.</param>
+        /// <returns>A new RGBA texture owned by the caller.</returns>
+        /// <exception cref="IOException">A source image cannot be read.</exception>
+        /// <exception cref="InvalidDataException">An image is invalid or image dimensions differ.</exception>
+        internal static Texture2D LoadMaskedImage(string colorPath, string maskPath)
+        {
+            var color = new Texture2D(2, 2, TextureFormat.RGBA32, false);
+            var mask = new Texture2D(2, 2, TextureFormat.RGBA32, false);
+            Texture2D? merged = null;
+            try
+            {
+                if (!color.LoadImage(File.ReadAllBytes(colorPath)) || !mask.LoadImage(File.ReadAllBytes(maskPath))
+                    || color.width != mask.width || color.height != mask.height)
+                {
+                    throw new InvalidDataException("Original image alpha dimensions or image data are invalid: " + maskPath);
+                }
+
+                var colors = color.GetPixels32();
+                var alpha = mask.GetPixels32();
+                for (var i = 0; i < colors.Length; i++)
+                {
+                    colors[i].a = alpha[i].r;
+                }
+
+                // Loading JPEG changes the source to RGB24; a separate RGBA texture preserves the alpha.
+                merged = new Texture2D(color.width, color.height, TextureFormat.RGBA32, false)
+                {
+                    name = Path.GetFileName(colorPath) + "_masked",
+                    filterMode = FilterMode.Bilinear,
+                    wrapMode = TextureWrapMode.Clamp
+                };
+                merged.SetPixels32(colors);
+                merged.Apply(false, false);
+                return merged;
+            }
+            catch
+            {
+                ReleaseImageTexture(merged);
+                throw;
+            }
+            finally
+            {
+                ReleaseImageTexture(color);
+                ReleaseImageTexture(mask);
+            }
+        }
+
+        /// <summary>Releases a temporary decoded image on the current Unity lifecycle.</summary>
+        /// <param name="texture">The temporary texture to release, if any.</param>
+        private static void ReleaseImageTexture(Texture2D? texture)
+        {
+            if (texture == null)
+            {
+                return;
+            }
+
+            if (Application.isPlaying)
+            {
+                UnityEngine.Object.Destroy(texture);
+            }
+            else
+            {
+                UnityEngine.Object.DestroyImmediate(texture);
+            }
+        }
+    }
+}

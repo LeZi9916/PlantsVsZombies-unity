@@ -2,7 +2,6 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Reflection;
 using System.Runtime.Serialization;
 using NUnit.Framework;
 using PlantsVsZombies.Game;
@@ -13,6 +12,7 @@ using PlantsVsZombies.Reanimation;
 using PlantsVsZombies.Simulation;
 using PlantsVsZombies.UI;
 using UnityEngine;
+using PlantsVsZombies.Diagnostics;
 
 namespace PlantsVsZombies.Tests.PlayMode
 {
@@ -61,12 +61,12 @@ namespace PlantsVsZombies.Tests.PlayMode
             _game._selectorView = new SelectorView(_root);
             _game._profiles = new ProfileCatalog(Path.Combine(_root, "profiles.dat"));
             _profile = _game._profiles.Create("Tester").Id;
-            _game._accountStore = new PlayerAccountStore(Path.Combine(_root, "fixture.account"));
+            _game.Accounts._accountStore = new PlayerAccountStore(Path.Combine(_root, "fixture.account"));
             _plant = Guid.NewGuid();
-            _game._accountStore.Import(_profile, 10, new int[80], new int[100], 0,
+            _game.Accounts._accountStore.Import(_profile, 10, new int[80], new int[100], 0,
                 new[] { new GardenPlant { Id = _plant, Kind = PlantKind.Marigold, Growth = 0, Garden = GardenKind.Greenhouse, Slot = 0 } });
-            _game._gardenKind = GardenKind.Greenhouse;
-            _game._gardenTool = GardenTool.Sell;
+            _game.Garden._gardenKind = GardenKind.Greenhouse;
+            _game.Garden._gardenTool = GardenTool.Sell;
 #pragma warning disable SYSLIB0050
             _game._optionsView = (OptionsView)FormatterServices.GetUninitializedObject(typeof(OptionsView));
 #pragma warning restore SYSLIB0050
@@ -102,34 +102,34 @@ namespace PlantsVsZombies.Tests.PlayMode
         [TestCase(false)]
         public void SaleWaitsForConfirmationAndUsesOriginalSubstitutions(bool accept)
         {
-            var plant = _game._accountStore.Get(_profile).Plants[0];
-            Invoke("HandleProgressionClick", _game.GardenPlantRect(plant).center);
-            Assert.That(_game._gardenSalePlant, Is.EqualTo(_plant));
-            Assert.That(_game._crazyDaveMessageIndex, Is.EqualTo(1700));
-            Assert.That(_game._crazyDaveText, Is.EqualTo("Offer $150 for Sprout."));
-            Assert.That(_game._accountStore.Get(_profile).Plants.Count, Is.EqualTo(1));
-            Assert.That(_game._accountStore.Get(_profile).Coins, Is.EqualTo(10));
-            var rect = accept ? PvZGame.s_gardenSaleYes : PvZGame.s_gardenSaleNo;
+            var plant = _game.Accounts._accountStore.Get(_profile).Plants[0];
+            Invoke("HandleProgressionClick", _game.Garden.GardenPlantRect(plant).center);
+            Assert.That(_game.Garden._gardenSalePlant, Is.EqualTo(_plant));
+            Assert.That(_game.Dave._crazyDaveMessageIndex, Is.EqualTo(1700));
+            Assert.That(_game.Dave._crazyDaveText, Is.EqualTo("Offer $150 for Sprout."));
+            Assert.That(_game.Accounts._accountStore.Get(_profile).Plants.Count, Is.EqualTo(1));
+            Assert.That(_game.Accounts._accountStore.Get(_profile).Coins, Is.EqualTo(10));
+            var rect = accept ? ZenGardenController.s_gardenSaleYes : ZenGardenController.s_gardenSaleNo;
             var input = new GameInputSnapshot(rect.center, true, true, false, true, false, 0, false, false);
             typeof(GameInput).GetProperty("Current")!.GetSetMethod(true)!.Invoke(null, new object[] { input });
             Invoke("HandleInput");
             var restored = new PlayerAccountStore(Path.Combine(_root, "fixture.account")).Get(_profile);
             Assert.That(restored.Plants.Count, Is.EqualTo(accept ? 0 : 1));
             Assert.That(restored.Coins, Is.EqualTo(accept ? 160 : 10));
-            Assert.That(_game._gardenSalePlant, Is.Null);
-            Assert.That(_game._crazyDaveMessageIndex, Is.EqualTo(-1));
+            Assert.That(_game.Garden._gardenSalePlant, Is.Null);
+            Assert.That(_game.Dave._crazyDaveMessageIndex, Is.EqualTo(-1));
         }
 
         /// <summary>Checks that non-marigold plants use their own localized name and native price.</summary>
         [Test]
         public void MaturePlantUsesItsLocalizedNameAndNativePrice()
         {
-            _game._accountStore.Import(_profile, 10, new int[80], new int[100], 0,
+            _game.Accounts._accountStore.Import(_profile, 10, new int[80], new int[100], 0,
                 new[] { new GardenPlant { Id = _plant, Kind = PlantKind.Peashooter, Growth = 3, Garden = GardenKind.Greenhouse, Slot = 0 } });
-            var plant = _game._accountStore.Get(_profile).Plants[0];
-            Invoke("HandleProgressionClick", _game.GardenPlantRect(plant).center);
-            Assert.That(_game._crazyDaveText, Is.EqualTo("Offer $800 for Peashooter."));
-            Assert.That(_game._accountStore.Get(_profile).Plants.Count, Is.EqualTo(1));
+            var plant = _game.Accounts._accountStore.Get(_profile).Plants[0];
+            Invoke("HandleProgressionClick", _game.Garden.GardenPlantRect(plant).center);
+            Assert.That(_game.Dave._crazyDaveText, Is.EqualTo("Offer $800 for Peashooter."));
+            Assert.That(_game.Accounts._accountStore.Get(_profile).Plants.Count, Is.EqualTo(1));
         }
 
         /// <summary>Reads a private production dependency.</summary>
@@ -137,7 +137,7 @@ namespace PlantsVsZombies.Tests.PlayMode
         /// <returns>The field value.</returns>
         private object GetField(string name)
         {
-            return typeof(PvZGame).GetField(name, BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(_game)!;
+            return GameMemberReflection.GetField(_game, name)!;
         }
 
         /// <summary>Sets a private production dependency.</summary>
@@ -145,7 +145,7 @@ namespace PlantsVsZombies.Tests.PlayMode
         /// <param name="value">The field value.</param>
         private void SetField(string name, object value)
         {
-            typeof(PvZGame).GetField(name, BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(_game, value);
+            GameMemberReflection.SetField(_game, name, value);
         }
 
         /// <summary>Invokes production behavior on the fixture.</summary>
@@ -153,7 +153,7 @@ namespace PlantsVsZombies.Tests.PlayMode
         /// <param name="args">The method arguments.</param>
         private void Invoke(string name, params object[] args)
         {
-            typeof(PvZGame).GetMethod(name, BindingFlags.NonPublic | BindingFlags.Instance)!.Invoke(_game, args);
+            GameMemberReflection.Invoke(_game, name, args);
         }
     }
 }

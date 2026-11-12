@@ -11,11 +11,11 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
-using System.Reflection;
 using System.Runtime.Serialization;
 using UnityEngine;
 using UnityEngine.Networking;
 using UnityEngine.TestTools;
+using PlantsVsZombies.Diagnostics;
 
 namespace PlantsVsZombies.Tests.PlayMode
 {
@@ -68,8 +68,8 @@ namespace PlantsVsZombies.Tests.PlayMode
             SetField("_crazyDaveVoice", _voice);
             SetField("_soundVolume", .7f);
             SetField("_crazyDaveStartIndex", 201);
-            _game._adventureIntro = new AdventureIntroClock(AdventureIntroPresentation.CreatePlan(new AdventureIntroContext { Level = 11, HasCrazyDaveDialog = true }));
-            _game._adventureIntroDrawn = true;
+            _game.Opening._adventureIntro = new AdventureIntroClock(AdventureIntroPresentation.CreatePlan(new AdventureIntroContext { Level = 11, HasCrazyDaveDialog = true }));
+            _game.Opening._adventureIntroDrawn = true;
         }
 
         /// <summary>Destroys only the fixture's objects and temporary original-string table.</summary>
@@ -91,27 +91,27 @@ namespace PlantsVsZombies.Tests.PlayMode
         [Test]
         public void OpeningPausesForDialogueAndResumesAfterClick()
         {
-            var sounds = (Dictionary<string, AudioClip>)typeof(PvZGame).GetField("_presentationSounds", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(_game)!;
+            var sounds = (Dictionary<string, AudioClip>)GameMemberReflection.GetField(_game, "_presentationSounds")!;
             sounds["crazydaveshort1"] = _clip;
             sounds["crazydaveshort2"] = _clip;
             sounds["crazydaveshort3"] = _clip;
             Tick(2.75f);
-            Assert.That(_game._adventureIntro.NativeTime, Is.EqualTo(2750));
-            Assert.That(_game._crazyDaveMessageIndex, Is.EqualTo(201));
-            Assert.That(_game._crazyDaveText, Is.EqualTo("First."));
-            Assert.That(_game._crazyDaveAnimation, Is.EqualTo("anim_smalltalk"));
+            Assert.That(_game.Opening._adventureIntro.NativeTime, Is.EqualTo(2750));
+            Assert.That(_game.Dave._crazyDaveMessageIndex, Is.EqualTo(201));
+            Assert.That(_game.Dave._crazyDaveText, Is.EqualTo("First."));
+            Assert.That(_game.Dave._crazyDaveAnimation, Is.EqualTo("anim_smalltalk"));
             Assert.That(_voice.clip, Is.SameAs(_clip));
             Tick(.5f);
-            Assert.That(_game._adventureIntro.NativeTime, Is.EqualTo(2750));
+            Assert.That(_game.Opening._adventureIntro.NativeTime, Is.EqualTo(2750));
             Click();
-            Assert.That(_game._crazyDaveMessageIndex, Is.EqualTo(202));
-            Assert.That(_game._crazyDaveText, Is.EqualTo("Second."));
+            Assert.That(_game.Dave._crazyDaveMessageIndex, Is.EqualTo(202));
+            Assert.That(_game.Dave._crazyDaveText, Is.EqualTo("Second."));
             Click();
-            Assert.That(_game._crazyDaveMessageIndex, Is.EqualTo(-1));
-            Assert.That(_game._crazyDaveAnimation, Is.EqualTo("anim_leave"));
+            Assert.That(_game.Dave._crazyDaveMessageIndex, Is.EqualTo(-1));
+            Assert.That(_game.Dave._crazyDaveAnimation, Is.EqualTo("anim_leave"));
             Assert.That(_voice.isPlaying, Is.False);
             Tick(.1f);
-            Assert.That(_game._adventureIntro.NativeTime, Is.GreaterThan(2750));
+            Assert.That(_game.Opening._adventureIntro.NativeTime, Is.GreaterThan(2750));
         }
 
         /// <summary>Missing original voice data is reported and does not trap the opening.</summary>
@@ -120,12 +120,12 @@ namespace PlantsVsZombies.Tests.PlayMode
         {
             LogAssert.Expect(LogType.Warning, new System.Text.RegularExpressions.Regex("Original Crazy Dave sound crazydaveshort[123] is missing"));
             Tick(2.75f);
-            Assert.That(_game._crazyDaveMessageIndex, Is.EqualTo(201));
+            Assert.That(_game.Dave._crazyDaveMessageIndex, Is.EqualTo(201));
             LogAssert.Expect(LogType.Warning, new System.Text.RegularExpressions.Regex("Original Crazy Dave sound crazydaveshort[123] is missing"));
             Click();
             Click();
             Tick(.1f);
-            Assert.That(_game._adventureIntro.NativeTime, Is.GreaterThan(2750));
+            Assert.That(_game.Opening._adventureIntro.NativeTime, Is.GreaterThan(2750));
         }
 
         /// <summary>Decodes and plays each original short voice through the real dialogue coordinator.</summary>
@@ -139,7 +139,7 @@ namespace PlantsVsZombies.Tests.PlayMode
                 Assert.Ignore("Set PVZ_DAVE_AUDIO_ASSETS to the original sounds directory.");
             }
 
-            var sounds = (Dictionary<string, AudioClip>)typeof(PvZGame).GetField("_presentationSounds", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(_game)!;
+            var sounds = (Dictionary<string, AudioClip>)GameMemberReflection.GetField(_game, "_presentationSounds")!;
             var loaded = new List<AudioClip>();
             try
             {
@@ -189,20 +189,20 @@ namespace PlantsVsZombies.Tests.PlayMode
             _game._animations = new ReanimationRenderer(nativeRoot);
             SetField("_crazyDaveStartIndex", 801);
             SetField("_crazyDaveBlinkTicks", 1000);
-            var sounds = (Dictionary<string, AudioClip>)typeof(PvZGame).GetField("_presentationSounds", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(_game)!;
+            var sounds = (Dictionary<string, AudioClip>)GameMemberReflection.GetField(_game, "_presentationSounds")!;
             sounds["crazydaveshort1"] = _clip;
             sounds["crazydaveshort2"] = _clip;
             sounds["crazydaveshort3"] = _clip;
             Tick(2.75f);
             Click();
-            Assert.That(_game._crazyDaveIdleMouth, Is.EqualTo("IMAGE_REANIM_CRAZYDAVE_MOUTH1"));
+            Assert.That(_game.Dave._crazyDaveIdleMouth, Is.EqualTo("IMAGE_REANIM_CRAZYDAVE_MOUTH1"));
             Click();
-            Assert.That(_game._crazyDaveIdleMouth, Is.EqualTo("IMAGE_REANIM_CRAZYDAVE_MOUTH5"));
+            Assert.That(_game.Dave._crazyDaveIdleMouth, Is.EqualTo("IMAGE_REANIM_CRAZYDAVE_MOUTH5"));
             SetField("_crazyDaveBlinkTicks", 1);
             Tick(.01f);
-            Assert.That(_game._crazyDaveBlinkAge, Is.EqualTo(0f));
+            Assert.That(_game.Dave._crazyDaveBlinkAge, Is.EqualTo(0f));
             Tick(1f);
-            Assert.That(_game._crazyDaveBlinkAge, Is.LessThan(0f));
+            Assert.That(_game.Dave._crazyDaveBlinkAge, Is.LessThan(0f));
         }
 
         /// <summary>Checks the Vasebreaker dialogue and non-scrolling handoff through the host opening loop.</summary>
@@ -211,25 +211,25 @@ namespace PlantsVsZombies.Tests.PlayMode
         {
             File.WriteAllText(Path.Combine(_root, "properties", "LawnStrings.txt"),
                 "[CRAZY_DAVE_2500]\nFirst.\n[CRAZY_DAVE_2501]\nSecond.\n");
-            _game._adventureIntro = new AdventureIntroClock(AdventureIntroPresentation.CreatePlan(new AdventureIntroContext
+            _game.Opening._adventureIntro = new AdventureIntroClock(AdventureIntroPresentation.CreatePlan(new AdventureIntroContext
             {
                 Level = 35,
                 HasCrazyDaveDialog = true,
                 ChooseSeedsOverride = false
             }));
-            Assert.That(_game._adventureIntro.Plan.NonScrolling, Is.True);
+            Assert.That(_game.Opening._adventureIntro.Plan.NonScrolling, Is.True);
             SetField("_crazyDaveStartIndex", 2500);
-            var sounds = (Dictionary<string, AudioClip>)typeof(PvZGame).GetField("_presentationSounds", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(_game)!;
+            var sounds = (Dictionary<string, AudioClip>)GameMemberReflection.GetField(_game, "_presentationSounds")!;
             sounds["crazydaveshort1"] = _clip;
             sounds["crazydaveshort2"] = _clip;
             sounds["crazydaveshort3"] = _clip;
             Tick(2.75f);
-            Assert.That(_game._crazyDaveMessageIndex, Is.EqualTo(2500));
+            Assert.That(_game.Dave._crazyDaveMessageIndex, Is.EqualTo(2500));
             Click();
-            Assert.That(_game._crazyDaveMessageIndex, Is.EqualTo(2501));
+            Assert.That(_game.Dave._crazyDaveMessageIndex, Is.EqualTo(2501));
             Click();
             Tick(1.26f);
-            Assert.That(_game._adventureIntro.NativeTime, Is.GreaterThanOrEqualTo(_game._adventureIntro.Plan.PanLeftEnd));
+            Assert.That(_game.Opening._adventureIntro.NativeTime, Is.GreaterThanOrEqualTo(_game.Opening._adventureIntro.Plan.PanLeftEnd));
         }
 
         /// <summary>Checks the production level 2-5 opening and the original grave reveal.</summary>
@@ -240,7 +240,7 @@ namespace PlantsVsZombies.Tests.PlayMode
                 "[CRAZY_DAVE_401]\nOne.\n[CRAZY_DAVE_402]\nTwo.\n[CRAZY_DAVE_403]\nThree.\n" +
                 "[CRAZY_DAVE_404]\nFour.\n[CRAZY_DAVE_405]\n{SHOW_HAMMER}Five.\n[CRAZY_DAVE_406]\nSix.\n");
             _game._game = new GameSimulation(new GameRules { AdventureLevel = 15 }, 1);
-            var sounds = (Dictionary<string, AudioClip>)typeof(PvZGame).GetField("_presentationSounds", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(_game)!;
+            var sounds = (Dictionary<string, AudioClip>)GameMemberReflection.GetField(_game, "_presentationSounds")!;
             foreach (var prefix in new[] { "crazydaveshort", "crazydavelong", "crazydaveextralong" })
             {
                 for (var variant = 1; variant <= 3; variant++)
@@ -249,28 +249,28 @@ namespace PlantsVsZombies.Tests.PlayMode
                 }
             }
 
-            typeof(PvZGame).GetMethod("InitializeAdventureOpening", BindingFlags.NonPublic | BindingFlags.Instance)!.Invoke(_game, null);
-            Assert.That(_game._adventureIntro.Plan.NonScrolling, Is.True);
+            GameMemberReflection.Invoke(_game, "InitializeAdventureOpening", null);
+            Assert.That(_game.Opening._adventureIntro.Plan.NonScrolling, Is.True);
             Assert.That(_game._game.Adventure.GravesEnabled, Is.False);
-            _game._adventureIntroDrawn = true;
+            _game.Opening._adventureIntroDrawn = true;
             Tick(2.75f);
-            Assert.That(_game._crazyDaveMessageIndex, Is.EqualTo(401));
+            Assert.That(_game.Dave._crazyDaveMessageIndex, Is.EqualTo(401));
             for (var expected = 402; expected <= 405; expected++)
             {
                 Click();
-                Assert.That(_game._crazyDaveMessageIndex, Is.EqualTo(expected));
+                Assert.That(_game.Dave._crazyDaveMessageIndex, Is.EqualTo(expected));
                 Assert.That(_game._game.Adventure.GravesEnabled, Is.False);
             }
 
-            Assert.That(_game._crazyDaveHeldItem, Is.EqualTo("HAMMER"));
+            Assert.That(_game.Dave._crazyDaveHeldItem, Is.EqualTo("HAMMER"));
             Click();
-            Assert.That(_game._crazyDaveMessageIndex, Is.EqualTo(406));
-            Assert.That(_game._crazyDaveHeldItem, Is.Null);
+            Assert.That(_game.Dave._crazyDaveMessageIndex, Is.EqualTo(406));
+            Assert.That(_game.Dave._crazyDaveHeldItem, Is.Null);
             Assert.That(_game._game.Adventure.GravesEnabled, Is.True);
             Click();
-            Assert.That(_game._crazyDaveMessageIndex, Is.EqualTo(-1));
+            Assert.That(_game.Dave._crazyDaveMessageIndex, Is.EqualTo(-1));
             Tick(1.26f);
-            Assert.That(_game._adventureIntro.NativeTime, Is.GreaterThanOrEqualTo(_game._adventureIntro.Plan.PanLeftEnd));
+            Assert.That(_game.Opening._adventureIntro.NativeTime, Is.GreaterThanOrEqualTo(_game.Opening._adventureIntro.Plan.PanLeftEnd));
         }
 
         /// <summary>Checks both Vasebreaker conversations through the production host and input routing.</summary>
@@ -283,10 +283,10 @@ namespace PlantsVsZombies.Tests.PlayMode
                 "[CRAZY_DAVE_2800]\nFirst.\n[CRAZY_DAVE_2801]\nSecond.\n[CRAZY_DAVE_2802]\nThird.\n");
             _game._game = new GameSimulation(new GameRules { AdventureLevel = 35 }, 1);
             _game._game.Adventure.VaseInterludeDialogueEnabled = true;
-            var notice = typeof(PvZGame).GetMethod("AdventureNotice", BindingFlags.NonPublic | BindingFlags.Instance)!;
+            var notice = GameMemberReflection.BindMethod(_game, "AdventureNotice")!;
             _game._game.Adventure.NoticeRaised = item => notice.Invoke(_game, new object[] { item });
-            _game._adventureIntro = null;
-            var sounds = (Dictionary<string, AudioClip>)typeof(PvZGame).GetField("_presentationSounds", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(_game)!;
+            _game.Opening._adventureIntro = null;
+            var sounds = (Dictionary<string, AudioClip>)GameMemberReflection.GetField(_game, "_presentationSounds")!;
             for (var variant = 1; variant <= 3; variant++)
             {
                 sounds["crazydaveshort" + variant] = _clip;
@@ -299,20 +299,20 @@ namespace PlantsVsZombies.Tests.PlayMode
                 var end = stage == 0 ? 2704 : 2802;
                 _game._game.Adventure._vases.Clear();
                 _game._game.Update(2.01f);
-                Assert.That(_game._crazyDaveMessageIndex, Is.EqualTo(start));
+                Assert.That(_game.Dave._crazyDaveMessageIndex, Is.EqualTo(start));
                 Assert.That(_game._game.Adventure.Vases, Is.Empty);
                 for (var index = start + 1; index <= end; index++)
                 {
                     Click();
-                    Assert.That(_game._crazyDaveMessageIndex, Is.EqualTo(index));
+                    Assert.That(_game.Dave._crazyDaveMessageIndex, Is.EqualTo(index));
                     Assert.That(_game._game.Adventure.Vases.Count > 0, Is.EqualTo(index >= populate));
                 }
 
                 Click();
                 Assert.That(_game._game.Adventure.VaseInterludeActive, Is.True);
-                typeof(PvZGame).GetMethod("UpdateVaseInterlude", BindingFlags.NonPublic | BindingFlags.Instance)!.Invoke(_game, new object[] { 1f });
+                GameMemberReflection.Invoke(_game, "UpdateVaseInterlude", new object[] { 1f });
                 Assert.That(_game._game.Adventure.VaseInterludeActive, Is.False);
-                Assert.That(_game._vaseDialogueActive, Is.False);
+                Assert.That(_game.Opening._vaseDialogueActive, Is.False);
             }
         }
 
@@ -322,20 +322,20 @@ namespace PlantsVsZombies.Tests.PlayMode
         {
             File.WriteAllText(Path.Combine(_root, "properties", "LawnStrings.txt"),
                 "[CRAZY_DAVE_405]\n{SHOW_HAMMER}Hammer.\n[CRAZY_DAVE_406]\n{HANDING}Keep.\n[CRAZY_DAVE_407]\nDone.\n");
-            var sounds = (Dictionary<string, AudioClip>)typeof(PvZGame).GetField("_presentationSounds", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(_game)!;
+            var sounds = (Dictionary<string, AudioClip>)GameMemberReflection.GetField(_game, "_presentationSounds")!;
             for (var variant = 1; variant <= 3; variant++)
             {
                 sounds["crazydavelong" + variant] = _clip;
                 sounds["crazydaveshort" + variant] = _clip;
             }
 
-            var show = typeof(PvZGame).GetMethod("ShowCrazyDaveMessage", BindingFlags.NonPublic | BindingFlags.Instance)!;
+            var show = GameMemberReflection.BindMethod(_game, "ShowCrazyDaveMessage")!;
             show.Invoke(_game, new object[] { 405 });
-            Assert.That(_game._crazyDaveHeldItem, Is.EqualTo("HAMMER"));
+            Assert.That(_game.Dave._crazyDaveHeldItem, Is.EqualTo("HAMMER"));
             show.Invoke(_game, new object[] { 406 });
-            Assert.That(_game._crazyDaveHeldItem, Is.EqualTo("HAMMER"));
+            Assert.That(_game.Dave._crazyDaveHeldItem, Is.EqualTo("HAMMER"));
             show.Invoke(_game, new object[] { 407 });
-            Assert.That(_game._crazyDaveHeldItem, Is.Null);
+            Assert.That(_game.Dave._crazyDaveHeldItem, Is.Null);
         }
 
         /// <summary>Checks the final-boss conversation, abduction, music transition, and restart condition.</summary>
@@ -350,32 +350,32 @@ namespace PlantsVsZombies.Tests.PlayMode
 
             File.WriteAllText(Path.Combine(_root, "properties", "LawnStrings.txt"), strings.ToString());
             _game._game = new GameSimulation(new GameRules { AdventureLevel = 50 }, 1);
-            var sounds = (Dictionary<string, AudioClip>)typeof(PvZGame).GetField("_presentationSounds", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(_game)!;
+            var sounds = (Dictionary<string, AudioClip>)GameMemberReflection.GetField(_game, "_presentationSounds")!;
             for (var variant = 1; variant <= 3; variant++)
             {
                 sounds["crazydaveshort" + variant] = _clip;
             }
 
-            var initialize = typeof(PvZGame).GetMethod("InitializeAdventureOpening", BindingFlags.NonPublic | BindingFlags.Instance)!;
-            var music = typeof(PvZGame).GetMethod("ResolveOriginalMusicCue", BindingFlags.NonPublic | BindingFlags.Instance)!;
+            var initialize = GameMemberReflection.BindMethod(_game, "InitializeAdventureOpening")!;
+            var music = GameMemberReflection.BindMethod(_game, "ResolveOriginalMusicCue")!;
             initialize.Invoke(_game, null);
-            Assert.That(_game._adventureIntro.Plan.DaveTime, Is.EqualTo(6500));
+            Assert.That(_game.Opening._adventureIntro.Plan.DaveTime, Is.EqualTo(6500));
             Assert.That(music.Invoke(_game, null), Is.EqualTo(MusicCue.Title));
-            _game._adventureIntroDrawn = true;
+            _game.Opening._adventureIntroDrawn = true;
             Tick(2.75f);
             for (var index = 2300; index <= 2310; index++)
             {
-                Assert.That(_game._crazyDaveMessageIndex, Is.EqualTo(index));
+                Assert.That(_game.Dave._crazyDaveMessageIndex, Is.EqualTo(index));
                 Click();
             }
 
-            Assert.That(_game._crazyDaveMessageIndex, Is.EqualTo(-1));
-            Assert.That(_game._crazyDaveAnimation, Is.EqualTo("anim_grab"));
+            Assert.That(_game.Dave._crazyDaveMessageIndex, Is.EqualTo(-1));
+            Assert.That(_game.Dave._crazyDaveAnimation, Is.EqualTo("anim_grab"));
             Tick(.51f);
             Assert.That(music.Invoke(_game, null), Is.EqualTo(MusicCue.None));
             SetField("_adventureOpeningIsRestart", true);
             initialize.Invoke(_game, null);
-            Assert.That(_game._adventureIntro.Plan.DaveTime, Is.Zero);
+            Assert.That(_game.Opening._adventureIntro.Plan.DaveTime, Is.Zero);
             Assert.That(music.Invoke(_game, null), Is.EqualTo(MusicCue.None));
         }
 
@@ -383,7 +383,7 @@ namespace PlantsVsZombies.Tests.PlayMode
         /// <param name="seconds">The unpaused elapsed seconds.</param>
         private void Tick(float seconds)
         {
-            typeof(PvZGame).GetMethod("UpdateAdventureOpening", BindingFlags.NonPublic | BindingFlags.Instance)!.Invoke(_game, new object[] { seconds });
+            GameMemberReflection.Invoke(_game, "UpdateAdventureOpening", new object[] { seconds });
         }
 
         /// <summary>Sends a primary-pointer press through the production input handler.</summary>
@@ -391,7 +391,7 @@ namespace PlantsVsZombies.Tests.PlayMode
         {
             var input = new GameInputSnapshot(new Vector2(400, 300), true, true, false, true, false, 0, false, false);
             typeof(GameInput).GetProperty("Current")!.GetSetMethod(true)!.Invoke(null, new object[] { input });
-            typeof(PvZGame).GetMethod("HandleInput", BindingFlags.NonPublic | BindingFlags.Instance)!.Invoke(_game, null);
+            GameMemberReflection.Invoke(_game, "HandleInput", null);
         }
 
         /// <summary>Supplies one private dependency of the inactive production coordinator.</summary>
@@ -399,7 +399,7 @@ namespace PlantsVsZombies.Tests.PlayMode
         /// <param name="value">The dependency value.</param>
         private void SetField(string name, object value)
         {
-            typeof(PvZGame).GetField(name, BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(_game, value);
+            GameMemberReflection.SetField(_game, name, value);
         }
     }
 }

@@ -30,7 +30,7 @@ namespace PlantsVsZombies.Diagnostics
         /// <returns>The resulting field.</returns>
         private object Field(string name)
         {
-            return typeof(PvZGame).GetField(name, Private).GetValue(_controller);
+            return GameMemberReflection.GetField(_controller, name);
         }
 
         /// <summary>Performs call.</summary>
@@ -39,13 +39,13 @@ namespace PlantsVsZombies.Diagnostics
         /// <returns>The resulting call.</returns>
         private object Call(string name, params object[] args)
         {
-            var method = typeof(PvZGame).GetMethod(name, Private);
+            var method = GameMemberReflection.FindMethod(_controller, name, out var owner);
             if (method != null)
             {
-                return method.Invoke(_controller, args);
+                return method.Invoke(owner, args);
             }
 
-            var presenter = typeof(PvZGame).GetField("_presenter", Private).GetValue(_controller);
+            var presenter = GameMemberReflection.GetField(_controller, "_presenter");
             return presenter.GetType().GetMethod(name, Private).Invoke(presenter, args);
         }
 
@@ -174,15 +174,15 @@ namespace PlantsVsZombies.Diagnostics
         private IEnumerator Run()
         {
             var timeout = Time.unscaledTime + 60;
-            while (_controller.OriginalLoadingActive && Time.unscaledTime < timeout)
+            while (_controller.Loading.OriginalLoadingActive && Time.unscaledTime < timeout)
             {
                 yield return null;
             }
 
-            Check(!_controller.OriginalLoadingActive, "Loading never completed");
+            Check(!_controller.Loading.OriginalLoadingActive, "Loading never completed");
             Call("HandleSelector", SelectorAction.Adventure);
             Check(Opening != null && !Opening.Complete, "Normal adventure skipped opening");
-            _controller.BeginMusicOutputProbe(Path.Combine(SmokeTestArtifacts.DirectoryPath, "actual-music-output.json"), 3f);
+            _controller.Music.BeginMusicOutputProbe(Path.Combine(SmokeTestArtifacts.DirectoryPath, "actual-music-output.json"), 3f);
             Check(Opening.Frame.BoardX == 220 && Sim.Elapsed == 0, "Initial house/lawn camera or gameplay gate wrong");
             yield return Capture("00-house-before-pan");
             timeout = Time.unscaledTime + 5;
@@ -303,7 +303,7 @@ namespace PlantsVsZombies.Diagnostics
             _controller._tooltipInspection = null;
             Call("SetUnavailable", "提示", "此操作暂时无法继续，请返回后重试。");
             yield return Capture("15-original-message-dialog");
-            typeof(PvZGame).GetField("_unavailableFeature", Private).SetValue(_controller, null);
+            GameMemberReflection.SetField(_controller, "_unavailableFeature", null);
             var catalog = (ProfileCatalog)Field("_profiles");
             var progress = (AdventureProgressStore)Field("_adventureStore");
             progress.Import(catalog.SelectedId.Value, 25, 0);
@@ -314,15 +314,15 @@ namespace PlantsVsZombies.Diagnostics
             Call("HandleClick", new Vector2(407, 350));
             Check((int)Field("_selectedShopItem") >= 0, "Original shop control stopped opening the confirmation");
             yield return Capture("17-original-purchase-dialog");
-            var view = typeof(PvZGame).GetField("_currentView", Private);
-            view.SetValue(_controller, Enum.Parse(view.FieldType, "Import"));
+            var view = GameMemberReflection.FindField(_controller, "_currentView", out var viewOwner)!;
+            view.SetValue(viewOwner, Enum.Parse(view.FieldType, "Import"));
             yield return Capture("18-original-import-controls");
             progress.Import(catalog.SelectedId.Value, 1, 1);
             Check((bool)Call("StartIndependentMode", 61), "Zombie-card mode did not open");
             yield return Capture("19-original-zombie-seed-cards");
 
             // Explicit presentation fixture: this verifies the original note artwork without claiming an earned 1-9 victory.
-            _controller.StartAdventureTestLevel(9);
+            _controller.Campaign.StartAdventureTestLevel(9);
             _controller._choosingSeeds = false;
             typeof(GameSimulation).GetProperty("State").SetValue(Sim, MatchState.Won);
             Sim.Adventure.Phase = AdventurePhase.Finished;
@@ -333,8 +333,8 @@ namespace PlantsVsZombies.Diagnostics
             Check(note.Stage == AdventureAwardStage.Introduction && note.IntroductionAlpha == 0f,
                 "The note fixture did not reach its fully visible introduction");
             yield return Capture("20-original-1-9-note-alpha-grid");
-            var paper = _controller.Texture("ZombieNote.jpg");
-            var ink = _controller.TextureAlphaGrid("ZombieNoteBlack1.png", "ZombieNote1.png");
+            var paper = _controller.Textures.Load("ZombieNote.jpg");
+            var ink = _controller.Textures.LoadAlphaGrid("ZombieNoteBlack1.png", "ZombieNote1.png");
             Check(paper != null && paper.GetPixels32()[0].a < 10, "The original JPEG paper border is opaque");
             Check(ink != null, "The original resources.xml note alpha grid did not load");
             var inkPixels = ink.GetPixels32();

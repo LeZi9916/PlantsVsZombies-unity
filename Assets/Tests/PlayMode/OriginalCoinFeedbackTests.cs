@@ -9,10 +9,10 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
-using System.Reflection;
 using UnityEngine;
 using UnityEngine.Networking;
 using UnityEngine.TestTools;
+using PlantsVsZombies.Diagnostics;
 
 namespace PlantsVsZombies.Tests.PlayMode
 {
@@ -85,8 +85,7 @@ namespace PlantsVsZombies.Tests.PlayMode
             SetField("_presenter", _presenter);
             _owner._game = new GameSimulation(new GameRules { AdventureLevel = 8 }, 7529);
             Assert.That(_owner._game.ChooseDefaultAdventureSeeds(), Is.True);
-            var sounds = (Dictionary<string, AudioClip>)typeof(PvZGame)
-                .GetField("_presentationSounds", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(_owner)!;
+            var sounds = (Dictionary<string, AudioClip>)GameMemberReflection.GetField(_owner, "_presentationSounds")!;
             foreach (var cue in new[] { "coin", "diamond" })
             {
                 var diamond = cue == "diamond";
@@ -109,7 +108,7 @@ namespace PlantsVsZombies.Tests.PlayMode
                 Assert.That(peak, Is.GreaterThan(.01f), "The decoded original sample must contain non-silent audio.");
             }
 
-            var noticeHandler = typeof(PvZGame).GetMethod("AdventureNotice", BindingFlags.Instance | BindingFlags.NonPublic)!;
+            var noticeHandler = GameMemberReflection.BindMethod(_owner, "AdventureNotice")!;
             _owner._game.Adventure.NoticeRaised = notice => noticeHandler.Invoke(_owner, new object[] { notice });
             foreach (var kind in new[] { AdventureCoinKind.Silver, AdventureCoinKind.Gold, AdventureCoinKind.Diamond })
             {
@@ -143,15 +142,15 @@ namespace PlantsVsZombies.Tests.PlayMode
             _owner._game = new GameSimulation(new GameRules { AdventureLevel = 8 }, 7529);
             Assert.That(_owner._game.ChooseDefaultAdventureSeeds(), Is.True);
             _owner._game.Adventure.NoticeRaised = notice => noticeHandler.Invoke(_owner, new object[] { notice });
-            _owner._modeSaveError = "金币尚未存入，请再次拾取：fixture-save-failure";
+            _owner.IndependentModes._modeSaveError = "金币尚未存入，请再次拾取：fixture-save-failure";
             _owner._game.Rules.AdventureCoinCommit = total => false;
             var pending = _owner._game.SpawnAdventureCoin(AdventureCoinKind.Gold, 4f, 1f);
             Assert.That(_owner._game.CollectAdventureCoin(pending), Is.True);
             _owner._game.Update(1.5f);
             Assert.That(pending.PersistencePending && !pending.IsBeingCollected, Is.True);
-            Assert.That(_owner._adventureFeedback, Is.EqualTo(_owner._modeSaveError),
+            Assert.That(_owner.AdventureBoard._adventureFeedback, Is.EqualTo(_owner.IndependentModes._modeSaveError),
                 "A failed arrival-time save must reach the existing host retry diagnostic even though the initial click succeeded.");
-            Assert.That(_owner._adventureFeedbackUntil, Is.GreaterThan(Time.unscaledTime));
+            Assert.That(_owner.AdventureBoard._adventureFeedbackUntil, Is.GreaterThan(Time.unscaledTime));
             _owner._game.Rules.AdventureCoinCommit = total => true;
             Assert.That(_owner._game.CollectAdventureCoin(pending), Is.True);
             _owner._game.Update(.01f);
@@ -163,7 +162,7 @@ namespace PlantsVsZombies.Tests.PlayMode
         /// <param name="value">The isolated fixture dependency.</param>
         private void SetField(string name, object value)
         {
-            typeof(PvZGame).GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(_owner, value);
+            GameMemberReflection.SetField(_owner, name, value);
         }
     }
 }

@@ -2,7 +2,6 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Reflection;
 using System.Runtime.Serialization;
 using NUnit.Framework;
 using PlantsVsZombies.Adventure;
@@ -14,6 +13,7 @@ using PlantsVsZombies.Reanimation;
 using PlantsVsZombies.Simulation;
 using PlantsVsZombies.UI;
 using UnityEngine;
+using PlantsVsZombies.Diagnostics;
 
 namespace PlantsVsZombies.Tests.PlayMode
 {
@@ -67,7 +67,7 @@ namespace PlantsVsZombies.Tests.PlayMode
             _game._selectorView = new SelectorView(_root);
             _game._profiles = new ProfileCatalog(Path.Combine(_root, "profiles.dat"));
             _profile = _game._profiles.Create("Tester").Id;
-            _game._accountStore = new PlayerAccountStore(Path.Combine(_root, "fixture.account"));
+            _game.Accounts._accountStore = new PlayerAccountStore(Path.Combine(_root, "fixture.account"));
 #pragma warning disable SYSLIB0050
             _game._optionsView = (OptionsView)FormatterServices.GetUninitializedObject(typeof(OptionsView));
 #pragma warning restore SYSLIB0050
@@ -108,25 +108,25 @@ namespace PlantsVsZombies.Tests.PlayMode
         {
             var values = new int[80];
             values[21] = purchases;
-            _game._accountStore.Import(_profile, 1000, values, new int[100], 0, Array.Empty<GardenPlant>());
+            _game.Accounts._accountStore.Import(_profile, 1000, values, new int[100], 0, Array.Empty<GardenPlant>());
             _game._game = new GameSimulation(new GameRules { AdventureLevel = 16, AdventurePacketSlots = 6 + purchases }, 1);
             Invoke("InitializeAdventureOpening");
-            _game._adventureIntroDrawn = true;
+            _game.Opening._adventureIntroDrawn = true;
             Invoke("UpdateAdventureOpening", 2.75f);
-            Assert.That(_game._crazyDaveMessageIndex, Is.EqualTo(start));
+            Assert.That(_game.Dave._crazyDaveMessageIndex, Is.EqualTo(start));
             Invoke("AdvanceCrazyDaveDialogue");
             Invoke("AdvanceCrazyDaveDialogue");
-            Assert.That(_game._packetUpgradeOfferActive, Is.True);
-            Assert.That(_game._crazyDaveMessageIndex, Is.EqualTo(start + 2));
-            var before = _game._adventureIntro.NativeTime;
+            Assert.That(_game.Opening._packetUpgradeOfferActive, Is.True);
+            Assert.That(_game.Dave._crazyDaveMessageIndex, Is.EqualTo(start + 2));
+            var before = _game.Opening._adventureIntro.NativeTime;
             Invoke("UpdateAdventureOpening", .5f);
-            Assert.That(_game._adventureIntro.NativeTime, Is.EqualTo(before));
-            var rect = accepted ? PvZGame.s_packetOfferYes : PvZGame.s_packetOfferNo;
+            Assert.That(_game.Opening._adventureIntro.NativeTime, Is.EqualTo(before));
+            var rect = accepted ? AdventureOpeningController.s_packetOfferYes : AdventureOpeningController.s_packetOfferNo;
             var input = new GameInputSnapshot(rect.center, true, true, false, true, false, 0, false, false);
             typeof(GameInput).GetProperty("Current")!.GetSetMethod(true)!.Invoke(null, new object[] { input });
             Invoke("HandleInput");
-            Assert.That(_game._packetUpgradeOfferActive, Is.False);
-            Assert.That(_game._crazyDaveMessageIndex, Is.EqualTo(response));
+            Assert.That(_game.Opening._packetUpgradeOfferActive, Is.False);
+            Assert.That(_game.Dave._crazyDaveMessageIndex, Is.EqualTo(response));
             var account = new PlayerAccountStore(Path.Combine(_root, "fixture.account")).Get(_profile);
             Assert.That(account.PurchaseCount(21), Is.EqualTo(purchases + (accepted ? 1 : 0)));
             Assert.That(account.PacketUpgradeDeclines, Is.EqualTo(accepted ? 0 : 1));
@@ -145,11 +145,11 @@ namespace PlantsVsZombies.Tests.PlayMode
         {
             var values = new int[80];
             values[21] = purchases;
-            _game._accountStore.Import(_profile, coins, values, new int[100], 0, Array.Empty<GardenPlant>(), packetUpgradeDeclines: declines);
+            _game.Accounts._accountStore.Import(_profile, coins, values, new int[100], 0, Array.Empty<GardenPlant>(), packetUpgradeDeclines: declines);
             _game._game = new GameSimulation(new GameRules { AdventureLevel = 16, AdventurePacketSlots = 6 + purchases }, 1);
             Invoke("InitializeAdventureOpening");
             Assert.That((int)GetField("_crazyDaveStartIndex"), Is.EqualTo(-1));
-            Assert.That(_game._packetUpgradeOfferActive, Is.False);
+            Assert.That(_game.Opening._packetUpgradeOfferActive, Is.False);
         }
 
         /// <summary>Reads a private fixture dependency.</summary>
@@ -157,7 +157,7 @@ namespace PlantsVsZombies.Tests.PlayMode
         /// <returns>The field value.</returns>
         private object GetField(string name)
         {
-            return typeof(PvZGame).GetField(name, BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(_game)!;
+            return GameMemberReflection.GetField(_game, name)!;
         }
 
         /// <summary>Sets a private fixture dependency.</summary>
@@ -165,7 +165,7 @@ namespace PlantsVsZombies.Tests.PlayMode
         /// <param name="value">The field value.</param>
         private void SetField(string name, object value)
         {
-            typeof(PvZGame).GetField(name, BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(_game, value);
+            GameMemberReflection.SetField(_game, name, value);
         }
 
         /// <summary>Invokes production behavior on the fixture coordinator.</summary>
@@ -173,7 +173,7 @@ namespace PlantsVsZombies.Tests.PlayMode
         /// <param name="args">The arguments.</param>
         private void Invoke(string name, params object[] args)
         {
-            typeof(PvZGame).GetMethod(name, BindingFlags.NonPublic | BindingFlags.Instance)!.Invoke(_game, args);
+            GameMemberReflection.Invoke(_game, name, args);
         }
     }
 }

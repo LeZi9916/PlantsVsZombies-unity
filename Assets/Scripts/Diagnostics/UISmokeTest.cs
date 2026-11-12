@@ -20,37 +20,37 @@ namespace PlantsVsZombies.Diagnostics
         /// <summary>Stores controller.</summary>
         private PvZGame _controller;
         /// <summary>Stores click.</summary>
-        private MethodInfo _click;
+        private BoundGameMethod _click;
         /// <summary>Stores view field.</summary>
-        private FieldInfo _viewField;
+        private BoundGameField _viewField;
         /// <summary>Stores options field.</summary>
-        private FieldInfo _optionsField;
+        private BoundGameField _optionsField;
         /// <summary>Stores almanac field.</summary>
-        private FieldInfo _almanacField;
+        private BoundGameField _almanacField;
         /// <summary>Stores profiles field.</summary>
-        private FieldInfo _profilesField;
+        private BoundGameField _profilesField;
         /// <summary>Stores profile dialog field.</summary>
-        private FieldInfo _profileDialogField;
+        private BoundGameField _profileDialogField;
         /// <summary>Stores help field.</summary>
-        private FieldInfo _helpField;
+        private BoundGameField _helpField;
         /// <summary>Stores the independent-mode directory inspected by this smoke scenario.</summary>
-        private FieldInfo _modeField;
+        private BoundGameField _modeField;
         /// <summary>Stores the isolated Adventure progress used to enter the implemented store.</summary>
-        private FieldInfo _adventureStoreField;
+        private BoundGameField _adventureStoreField;
         /// <summary>Stores quit field.</summary>
-        private FieldInfo _quitField;
+        private BoundGameField _quitField;
         /// <summary>Stores unavailable field.</summary>
-        private FieldInfo _unavailableField;
+        private BoundGameField _unavailableField;
         /// <summary>Stores help pointer.</summary>
-        private MethodInfo _helpPointer;
+        private BoundGameMethod _helpPointer;
         /// <summary>Stores almanac pointer.</summary>
-        private MethodInfo _almanacPointer;
+        private BoundGameMethod _almanacPointer;
         /// <summary>Stores game field.</summary>
-        private FieldInfo _gameField;
+        private BoundGameField _gameField;
         /// <summary>Stores apply options.</summary>
-        private MethodInfo _applyOptions;
+        private BoundGameMethod _applyOptions;
         /// <summary>Stores close options.</summary>
-        private MethodInfo _closeOptions;
+        private BoundGameMethod _closeOptions;
         /// <summary>Stores directory.</summary>
         private string _directory;
         /// <summary>Stores session.</summary>
@@ -75,23 +75,22 @@ namespace PlantsVsZombies.Diagnostics
             yield return null;
             _controller = FindFirstObjectByType<PvZGame>();
             var flags = BindingFlags.Instance | BindingFlags.NonPublic;
-            var type = typeof(PvZGame);
-            _click = type.GetMethod("HandleClick", flags);
-            _viewField = type.GetField("_currentView", flags);
-            _optionsField = type.GetField("_optionsView", flags);
-            _almanacField = type.GetField("_almanacView", flags);
-            _profilesField = type.GetField("_profiles", flags);
-            _profileDialogField = type.GetField("_profileDialog", flags);
-            _helpField = type.GetField("_helpView", flags);
-            _modeField = type.GetField("_modeView", flags);
-            _adventureStoreField = type.GetField("_adventureStore", flags);
-            _quitField = type.GetField("_confirmingQuit", flags);
-            _unavailableField = type.GetField("_unavailableFeature", flags);
-            _helpPointer = type.GetMethod("HandleHelpPointer", flags);
-            _almanacPointer = type.GetMethod("HandleAlmanacPointer", flags);
-            _gameField = type.GetField("_game", flags);
-            _applyOptions = type.GetMethod("ApplyOptions", flags);
-            _closeOptions = type.GetMethod("CloseOptions", flags);
+            _click = GameMemberReflection.BindMethod(_controller, "HandleClick");
+            _viewField = GameMemberReflection.BindField(_controller, "_currentView");
+            _optionsField = GameMemberReflection.BindField(_controller, "_optionsView");
+            _almanacField = GameMemberReflection.BindField(_controller, "_almanacView");
+            _profilesField = GameMemberReflection.BindField(_controller, "_profiles");
+            _profileDialogField = GameMemberReflection.BindField(_controller, "_profileDialog");
+            _helpField = GameMemberReflection.BindField(_controller, "_helpView");
+            _modeField = GameMemberReflection.BindField(_controller, "_modeView");
+            _adventureStoreField = GameMemberReflection.BindField(_controller, "_adventureStore");
+            _quitField = GameMemberReflection.BindField(_controller, "_confirmingQuit");
+            _unavailableField = GameMemberReflection.BindField(_controller, "_unavailableFeature");
+            _helpPointer = GameMemberReflection.BindMethod(_controller, "HandleHelpPointer");
+            _almanacPointer = GameMemberReflection.BindMethod(_controller, "HandleAlmanacPointer");
+            _gameField = GameMemberReflection.BindField(_controller, "_game");
+            _applyOptions = GameMemberReflection.BindMethod(_controller, "ApplyOptions");
+            _closeOptions = GameMemberReflection.BindMethod(_controller, "CloseOptions");
             if (_controller == null || _click == null || _viewField == null || _optionsField == null || _almanacField == null || _profilesField == null || _profileDialogField == null || _helpField == null || _modeField == null || _adventureStoreField == null || _quitField == null || _unavailableField == null || _helpPointer == null || _almanacPointer == null || _gameField == null || _applyOptions == null || _closeOptions == null)
             {
                 Fail("UI controller is unavailable");
@@ -99,12 +98,12 @@ namespace PlantsVsZombies.Diagnostics
             }
 
             var startupDeadline = Time.realtimeSinceStartup + 60f;
-            while (_controller.OriginalLoadingActive && Time.realtimeSinceStartup < startupDeadline)
+            while (_controller.Loading.OriginalLoadingActive && Time.realtimeSinceStartup < startupDeadline)
             {
                 yield return null;
             }
 
-            if (_controller.OriginalLoadingActive)
+            if (_controller.Loading.OriginalLoadingActive)
             {
                 Fail("Original startup loading did not complete within 60 seconds");
                 yield break;
@@ -444,7 +443,7 @@ namespace PlantsVsZombies.Diagnostics
             }
 
             yield return Capture("options");
-            var musicReport = _controller.GetMusicOutputReport();
+            var musicReport = _controller.Music.GetMusicOutputReport();
             var appliedMusic = musicReport.savedMusicVolume;
             options.HandlePointer(new Vector2(515, 183), PointerPhase.Down);
             options.HandlePointer(new Vector2(515, 183), PointerPhase.Up);
@@ -466,7 +465,7 @@ namespace PlantsVsZombies.Diagnostics
             _applyOptions.Invoke(_controller, null);
             var pausedGame = (GameSimulation)_gameField.GetValue(_controller);
             var pausedElapsed = pausedGame.Elapsed;
-            musicReport = _controller.GetMusicOutputReport();
+            musicReport = _controller.Music.GetMusicOutputReport();
             if (!ViewIs("Almanac") || options.IsOpen || !Mathf.Approximately(musicReport.savedMusicVolume, appliedMusic))
             {
                 Fail("Opening modal almanac applied or lost the options draft; saved=" + musicReport.savedMusicVolume + "; expected=" + appliedMusic);
@@ -487,7 +486,7 @@ namespace PlantsVsZombies.Diagnostics
 
             AlmanacPointer(720, 580, PointerPhase.Down);
             AlmanacPointer(720, 580, PointerPhase.Up);
-            musicReport = _controller.GetMusicOutputReport();
+            musicReport = _controller.Music.GetMusicOutputReport();
             if (!ViewIs("Board") || !options.IsOpen || !Mathf.Approximately(options.MusicVolume, draftMusic) || !Mathf.Approximately(musicReport.savedMusicVolume, appliedMusic))
             {
                 Fail("Closing modal almanac did not restore the unchanged options draft; saved=" + musicReport.savedMusicVolume + "; expected=" + appliedMusic);
@@ -515,7 +514,7 @@ namespace PlantsVsZombies.Diagnostics
             }
 
             _closeOptions.Invoke(_controller, null);
-            musicReport = _controller.GetMusicOutputReport();
+            musicReport = _controller.Music.GetMusicOutputReport();
             if (!options.IsOpen || options.CloseResult != OptionsCloseResult.None || !Mathf.Approximately(musicReport.savedMusicVolume, appliedMusic))
             {
                 Fail("Cancelling restart applied or closed the options draft; saved=" + musicReport.savedMusicVolume + "; expected=" + appliedMusic);
@@ -533,7 +532,7 @@ namespace PlantsVsZombies.Diagnostics
             }
 
             _applyOptions.Invoke(_controller, null);
-            musicReport = _controller.GetMusicOutputReport();
+            musicReport = _controller.Music.GetMusicOutputReport();
             if (!Mathf.Approximately(musicReport.savedMusicVolume, draftMusic))
             {
                 Fail("Confirmed options draft was not applied; saved=" + musicReport.savedMusicVolume + "; expected=" + draftMusic);

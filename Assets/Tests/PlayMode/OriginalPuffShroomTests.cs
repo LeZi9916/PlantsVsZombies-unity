@@ -59,7 +59,7 @@ namespace PlantsVsZombies.Tests.PlayMode
             _presenter = new GamePresenter(_owner);
             _owner._root = _root;
             _owner._animations = _animations;
-            _owner._adventurePointer = new Vector2(-1000f, -1000f);
+            _owner.AdventureBoard._adventurePointer = new Vector2(-1000f, -1000f);
             _target = new RenderTexture(Screen.width, Screen.height, 24, RenderTextureFormat.ARGB32);
             _target.Create();
             _pixels = new Texture2D(Screen.width, Screen.height, TextureFormat.RGBA32, false);
@@ -77,12 +77,12 @@ namespace PlantsVsZombies.Tests.PlayMode
             if (_host != null)
             {
                 ObjectSpriteRenderer.SceneCamera.targetTexture = _previousTarget;
-                foreach (var texture in _owner._textures.Values)
+                foreach (var texture in _owner.Textures._textures.Values)
                 {
                     UnityEngine.Object.Destroy(texture);
                 }
 
-                _owner._textures.Clear();
+                _owner.Textures._textures.Clear();
                 _presenter.Dispose();
                 _animations.Dispose();
                 _target.Release();
@@ -173,7 +173,7 @@ namespace PlantsVsZombies.Tests.PlayMode
             Assert.That(game.Peas.Count, Is.Zero, "Original shooting frames must be visible before projectile creation.");
 
             // Suppress the shared ground shadow so this comparison isolates the original body animation.
-            _owner._textures["plantshadow2.png"] = null!;
+            _owner.Textures._textures["plantshadow2.png"] = null!;
             var draw = typeof(GamePresenter).GetMethod("DrawAdventurePlant", BindingFlags.Instance | BindingFlags.NonPublic)!;
             yield return Capture(() => draw.Invoke(_presenter, new object[] { plant }));
             var actual = _pixels.GetPixels32();
@@ -219,7 +219,7 @@ namespace PlantsVsZombies.Tests.PlayMode
             Assert.That(zombie.Health, Is.EqualTo(270f));
             Assert.That(game.Peas.Count, Is.Zero);
 
-            _owner._textures["plantshadow.png"] = null!;
+            _owner.Textures._textures["plantshadow.png"] = null!;
             var draw = typeof(GamePresenter).GetMethod("DrawAdventurePlant", BindingFlags.Instance | BindingFlags.NonPublic)!;
             yield return Capture(() => draw.Invoke(_presenter, new object[] { plant }));
             var actual = _pixels.GetPixels32();
@@ -280,11 +280,11 @@ namespace PlantsVsZombies.Tests.PlayMode
             yield return Capture(draw);
             var withShadow = _pixels.GetPixels32();
             Save(screenshot);
-            Assert.That(_owner._textures.TryGetValue(shadowName, out var shadow), Is.True, "Production must use the terrain's original shadow image.");
+            Assert.That(_owner.Textures._textures.TryGetValue(shadowName, out var shadow), Is.True, "Production must use the terrain's original shadow image.");
             Assert.That(shadow, Is.Not.Null);
-            _owner._textures[shadowName] = null!;
+            _owner.Textures._textures[shadowName] = null!;
             yield return Capture(draw);
-            _owner._textures[shadowName] = shadow;
+            _owner.Textures._textures[shadowName] = shadow;
             var withoutShadow = _pixels.GetPixels32();
             var expected = new Rect(138.5f, 136f, 43f, 18f);
             var tolerance = new Rect(expected.x - 2f, expected.y - 2f, expected.width + 4f, expected.height + 4f);

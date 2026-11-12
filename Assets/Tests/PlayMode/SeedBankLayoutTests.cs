@@ -15,6 +15,7 @@ using PlantsVsZombies.Simulation;
 using PlantsVsZombies.UI;
 using UnityEngine;
 using UnityEngine.TestTools;
+using PlantsVsZombies.Diagnostics;
 
 namespace PlantsVsZombies.Tests.PlayMode
 {
@@ -59,10 +60,10 @@ namespace PlantsVsZombies.Tests.PlayMode
             _owner._deck.Clear();
             _owner._deck.AddRange(seeds);
             _owner._pendingSeeds = new AdventureSeedChooserState(seeds);
-            _owner._textures.Add("SeedBank.png", Texture(446, 87, Color.red));
-            _owner._textures.Add("SeedPacketSilhouette.png", Texture(50, 70, Color.green));
-            _owner._textures.Add("seeds.png", Texture(450, 70, Color.blue));
-            _owner._textures.Add("packet_plants.png", Texture(650, 70, Color.clear));
+            _owner.Textures._textures.Add("SeedBank.png", Texture(446, 87, Color.red));
+            _owner.Textures._textures.Add("SeedPacketSilhouette.png", Texture(50, 70, Color.green));
+            _owner.Textures._textures.Add("seeds.png", Texture(450, 70, Color.blue));
+            _owner.Textures._textures.Add("packet_plants.png", Texture(650, 70, Color.clear));
             _renderer = new ReanimationRenderer(_root);
             _owner._animations = _renderer;
             _presenter = new GamePresenter(_owner);
@@ -78,7 +79,7 @@ namespace PlantsVsZombies.Tests.PlayMode
         public IEnumerator TearDown()
         {
             ObjectSpriteRenderer.SceneCamera.targetTexture = null;
-            _owner._textures.Clear();
+            _owner.Textures._textures.Clear();
             _presenter.Dispose();
             _renderer.Dispose();
             UnityEngine.Object.DestroyImmediate(_object);
@@ -99,12 +100,12 @@ namespace PlantsVsZombies.Tests.PlayMode
         [Test]
         public void FourSelectedCardsKeepTheTenSlotPacketStride()
         {
-            Assert.That(_owner.SeedBankCapacity, Is.EqualTo(10));
+            Assert.That(_owner.Layout.SeedBankCapacity, Is.EqualTo(10));
             for (var index = 0; index < 4; index++)
             {
-                Assert.That(_owner.AdventureSeedRect(index), Is.EqualTo(new Rect(79 + index * 51, 8, 50, 70)));
-                Assert.That(_owner.SeedRect(index), Is.EqualTo(_owner.AdventureSeedRect(index)));
-                _owner._pendingSeeds.GetPosition(_owner._pendingSeeds[index], 0, 0, _owner.SeedBankCapacity, out var x, out var y);
+                Assert.That(_owner.Layout.AdventureSeedRect(index), Is.EqualTo(new Rect(79 + index * 51, 8, 50, 70)));
+                Assert.That(_owner.Layout.SeedRect(index), Is.EqualTo(_owner.Layout.AdventureSeedRect(index)));
+                _owner._pendingSeeds.GetPosition(_owner._pendingSeeds[index], 0, 0, _owner.Layout.SeedBankCapacity, out var x, out var y);
                 Assert.That((x, y), Is.EqualTo((79 + index * 51, 8)));
             }
         }
@@ -113,13 +114,13 @@ namespace PlantsVsZombies.Tests.PlayMode
         [Test]
         public void ModePacketsUseTheActualModeBankCapacity()
         {
-            _owner._modeSession = new ModeSession(1, packetSlots: 10, unlockedBasicSeeds: 4);
-            _owner._game = _owner._modeSession.Game;
+            _owner.IndependentModes._modeSession = new ModeSession(1, packetSlots: 10, unlockedBasicSeeds: 4);
+            _owner._game = _owner.IndependentModes._modeSession.Game;
             _owner._deck.Clear();
             _owner._deck.AddRange(_owner._game.Adventure.AvailableSeeds);
-            Assert.That(_owner.SeedBankCapacity, Is.EqualTo(10));
+            Assert.That(_owner.Layout.SeedBankCapacity, Is.EqualTo(10));
             Assert.That(_owner._deck.Count, Is.EqualTo(4));
-            Assert.That(_owner.ModeSeedRect(3), Is.EqualTo(new Rect(232, 8, 50, 70)));
+            Assert.That(_owner.IndependentModes.ModeSeedRect(3), Is.EqualTo(new Rect(232, 8, 50, 70)));
         }
 
         /// <summary>Preserves the original first-adventure fixed one-to-four packet counts.</summary>
@@ -131,8 +132,8 @@ namespace PlantsVsZombies.Tests.PlayMode
         public void TutorialFixedPacketCountsRemainUnchanged(int level)
         {
             _owner._game = new GameSimulation(new GameRules { AdventureLevel = level, AdventurePacketSlots = 10 }, 9151);
-            Assert.That(_owner.SeedBankCapacity, Is.EqualTo(level));
-            Assert.That(_owner.AdventureSeedRect(0).x, Is.EqualTo(85));
+            Assert.That(_owner.Layout.SeedBankCapacity, Is.EqualTo(level));
+            Assert.That(_owner.Layout.AdventureSeedRect(0).x, Is.EqualTo(85));
         }
 
         /// <summary>Retains the original ten-pixel return curve position through the final intro frame and first gameplay frame.</summary>
@@ -151,20 +152,20 @@ namespace PlantsVsZombies.Tests.PlayMode
                 clock.Tick();
             }
 
-            _owner._adventureIntro = clock;
-            _owner._adventureIntroFrame = clock.Frame;
-            var lastIntro = _owner.AdventureSeedRect(1);
-            Assert.That(_owner.AdventureIntroActive, Is.True);
-            Assert.That(_owner.AdventureSeedBankOrigin, Is.EqualTo(new Vector2(10, 0)));
+            _owner.Opening._adventureIntro = clock;
+            _owner.Opening._adventureIntroFrame = clock.Frame;
+            var lastIntro = _owner.Layout.AdventureSeedRect(1);
+            Assert.That(_owner.Opening.AdventureIntroActive, Is.True);
+            Assert.That(_owner.Layout.AdventureSeedBankOrigin, Is.EqualTo(new Vector2(10, 0)));
             clock.Tick();
-            _owner._adventureIntroFrame = clock.Frame;
-            Assert.That(_owner.AdventureIntroActive, Is.False);
-            Assert.That(_owner.AdventureSeedRect(1), Is.EqualTo(lastIntro));
+            _owner.Opening._adventureIntroFrame = clock.Frame;
+            Assert.That(_owner.Opening.AdventureIntroActive, Is.False);
+            Assert.That(_owner.Layout.AdventureSeedRect(1), Is.EqualTo(lastIntro));
             Assert.That(lastIntro.x, Is.EqualTo(140));
             typeof(GameSimulation).GetProperty(nameof(GameSimulation.SunAmount))!.SetValue(_owner._game, 9990);
             var cooldowns = (int[])typeof(GameSimulation).GetField("_seedCooldownTicks", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(_owner._game)!;
             Array.Clear(cooldowns, 0, cooldowns.Length);
-            typeof(PvZGame).GetMethod("HandleAdventureClick", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(_owner, new object[] { lastIntro.center });
+            GameMemberReflection.Invoke(_owner, "HandleAdventureClick", new object[] { lastIntro.center });
             Assert.That(_owner._selected, Is.EqualTo(1), "The first gameplay click uses the retained final bank origin.");
         }
 
@@ -183,7 +184,7 @@ namespace PlantsVsZombies.Tests.PlayMode
             }
 
             AssertColor(Pixel(595, 40), Color.red);
-            Assert.That(_owner._pendingSeeds.Choose(PlantKind.PotatoMine, 181, 128, _owner.SeedBankCapacity), Is.True);
+            Assert.That(_owner._pendingSeeds.Choose(PlantKind.PotatoMine, 181, 128, _owner.Layout.SeedBankCapacity), Is.True);
             DrawChooserBank();
             yield return null;
             yield return null;
@@ -207,7 +208,7 @@ namespace PlantsVsZombies.Tests.PlayMode
             CanvasUI.Matrix = Matrix4x4.TRS(new Vector3((Screen.width - 800f * scale) * .5f, (Screen.height - 600f * scale) * .5f),
                 Quaternion.identity, new Vector3(scale, scale, 1));
             _renderer.BeginObjectFrame();
-            typeof(GamePresenter).GetMethod("DrawChooserBank", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(_presenter, new object[] { _owner.SeedBankCapacity });
+            typeof(GamePresenter).GetMethod("DrawChooserBank", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(_presenter, new object[] { _owner.Layout.SeedBankCapacity });
             _renderer.EndObjectFrame();
             CanvasUI.EndFrame();
         }

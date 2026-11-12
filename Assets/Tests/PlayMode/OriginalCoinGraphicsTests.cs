@@ -43,7 +43,7 @@ namespace PlantsVsZombies.Tests.PlayMode
                 owner._root = root;
                 owner._animations = animations;
                 owner._choosingSeeds = true;
-                owner._adventurePointer = new Vector2(-1000f, -1000f);
+                owner.AdventureBoard._adventurePointer = new Vector2(-1000f, -1000f);
                 typeof(GamePresenter).GetField("_renderingBoardObjects", flags)!.SetValue(presenter, true);
                 var draw = typeof(GamePresenter).GetMethod("DrawAdventureBoard", flags)!;
                 foreach (var kind in new[] { AdventureCoinKind.Silver, AdventureCoinKind.Gold, AdventureCoinKind.Diamond })
@@ -142,12 +142,12 @@ namespace PlantsVsZombies.Tests.PlayMode
             {
                 presenter.Dispose();
                 animations.Dispose();
-                foreach (var texture in owner._textures.Values)
+                foreach (var texture in owner.Textures._textures.Values)
                 {
                     UnityEngine.Object.Destroy(texture);
                 }
 
-                owner._textures.Clear();
+                owner.Textures._textures.Clear();
                 UnityEngine.Object.Destroy(host);
             }
         }

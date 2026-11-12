@@ -22,6 +22,10 @@ namespace PlantsVsZombies.Tests.Architecture
             Require(ProjectArchitecture.InspectSource("Sample.cs", valid.Replace("if (enabled)\r\n            {\r\n                return;\r\n            }", "if (enabled) return;", StringComparison.Ordinal)).Any(message => message.Contains("braces", StringComparison.Ordinal)), "unbraced branch");
             Require(ProjectArchitecture.InspectSource("Sample.cs", valid.Replace("#nullable enable\r\n", string.Empty, StringComparison.Ordinal)).Any(message => message.Contains("nullable", StringComparison.Ordinal)), "nullable directive");
             Require(ProjectArchitecture.InspectSource("Sample.cs", valid.Replace("\r\n", "\n", StringComparison.Ordinal)).Any(message => message.Contains("CRLF", StringComparison.Ordinal)), "line endings");
+            var coordinator = valid.Replace("Sample", "PvZGame", StringComparison.Ordinal);
+            Require(ProjectArchitecture.InspectSource("PvZGame.cs", coordinator).Count == 0, "compact coordinator");
+            var bloated = coordinator.Replace("    public class PvZGame", string.Concat(Enumerable.Repeat("    // filler\r\n", 710)) + "    public class PvZGame", StringComparison.Ordinal);
+            Require(ProjectArchitecture.InspectSource("PvZGame.cs", bloated).Any(message => message.Contains("coordinates collaborators", StringComparison.Ordinal)), "oversized coordinator");
             RequirePresentationRule("private void OnGUI() {}", "OnGUI", "runtime GUI callback");
             RequirePresentationRule("private void Present() { GUI.DrawTexture(default, default); }", "IMGUI access", "runtime GUI drawing");
             RequirePresentationRule("private void Present() { UnityEngine.GUI.skin.ToString(); }", "IMGUI access", "runtime GUI skin access");

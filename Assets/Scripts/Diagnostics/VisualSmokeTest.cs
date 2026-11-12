@@ -7,7 +7,6 @@ using PlantsVsZombies.Adventure;
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
-using System.Reflection;
 using UnityEngine;
 
 namespace PlantsVsZombies.Diagnostics
@@ -39,26 +38,24 @@ namespace PlantsVsZombies.Diagnostics
             }
 
             var startupDeadline = Time.realtimeSinceStartup + 60f;
-            while (controller.OriginalLoadingActive && Time.realtimeSinceStartup < startupDeadline)
+            while (controller.Loading.OriginalLoadingActive && Time.realtimeSinceStartup < startupDeadline)
             {
                 yield return null;
             }
 
-            if (controller.OriginalLoadingActive)
+            if (controller.Loading.OriginalLoadingActive)
             {
                 Fail("Original startup loading did not complete within 60 seconds");
                 yield break;
             }
 
-            var type = typeof(PvZGame);
-            var flags = BindingFlags.Instance | BindingFlags.NonPublic;
-            var gameField = type.GetField("_game", flags);
-            var rendererField = type.GetField("_animations", flags);
-            var soundsField = type.GetField("_sounds", flags);
-            var musicField = type.GetField("_musicSource", flags);
-            var deckField = type.GetField("_deck", flags);
-            var pendingField = type.GetField("_pendingSeeds", flags);
-            var click = type.GetMethod("HandleClick", flags);
+            var gameField = GameMemberReflection.BindField(controller, "_game");
+            var rendererField = GameMemberReflection.BindField(controller, "_animations");
+            var soundsField = GameMemberReflection.BindField(controller, "_sounds");
+            var musicField = GameMemberReflection.BindField(controller, "_musicSource");
+            var deckField = GameMemberReflection.BindField(controller, "_deck");
+            var pendingField = GameMemberReflection.BindField(controller, "_pendingSeeds");
+            var click = GameMemberReflection.BindMethod(controller, "HandleClick");
             if (gameField == null || rendererField == null || soundsField == null || musicField == null || deckField == null || pendingField == null || click == null)
             {
                 Fail("Smoke test could not access the game state");
