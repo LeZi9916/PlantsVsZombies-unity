@@ -10,6 +10,12 @@ namespace PlantsVsZombies.Adventure
     {
         /// <summary>Retains the original PC flag meter's native animation state.</summary>
         public readonly AdventureProgressMeterState ProgressMeter = new AdventureProgressMeterState();
+        /// <summary>Retains the native board widget displacement shared by board artwork and its interface.</summary>
+        public readonly AdventureScreenShakeState ScreenShake = new AdventureScreenShakeState();
+        /// <summary>Retains the five native ticks between each Squash's damage and ground or water impact.</summary>
+        internal readonly List<AdventureSquashLanding> _squashLandings = new List<AdventureSquashLanding>();
+        /// <summary>Retains original delayed sound milestones for plant actions resolved atomically by the simulation.</summary>
+        internal readonly List<AdventurePlantSoundCue> _plantSoundCues = new List<AdventurePlantSoundCue>();
         /// <summary>Stores explosions.</summary>
         public readonly List<AdventureExplosion> Explosions = new List<AdventureExplosion>();
         /// <summary>Stores jalapeno fires.</summary>
@@ -18,8 +24,10 @@ namespace PlantsVsZombies.Adventure
         public readonly List<AdventureSnowTrail> SnowTrails = new List<AdventureSnowTrail>();
         /// <summary>Stores ice launch sound serial, chill onset sound serial.</summary>
         public int IceLaunchSoundSerial, ChillOnsetSoundSerial;
-        /// <summary>Stores ice shoot suppressions.</summary>
-        internal int _iceShootSuppressions;
+        /// <summary>Suppresses generic launch samples when the original plant Foley has already been requested.</summary>
+        internal int _nativeShootSuppressions;
+        /// <summary>Suppresses generic Cherry Bomb samples for impacts that use their own native Foley.</summary>
+        internal int _nativeExplosionSuppressions;
         /// <summary>Retains original planting bursts above the board actors for their authored lifetime.</summary>
         public readonly List<AdventurePlantingEffect> PlantingEffects = new List<AdventurePlantingEffect>();
         /// <summary>Stores plant bite effects.</summary>

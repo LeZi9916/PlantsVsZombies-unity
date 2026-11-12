@@ -6,6 +6,8 @@ namespace PlantsVsZombies.Simulation
     /// <summary>Defines plant.</summary>
     public sealed class Plant
     {
+        /// <summary>Gets the pre-explosion body and head state, created when a Doom-shroom first updates awake.</summary>
+        public AdventureDoomShroomState? DoomShroomPresentation { get; internal set; }
         /// <summary>Gets or sets cherry bomb presentation.</summary>
         public global::PlantsVsZombies.Adventure.AdventureCherryBombState? CherryBombPresentation { get; internal set; }
 

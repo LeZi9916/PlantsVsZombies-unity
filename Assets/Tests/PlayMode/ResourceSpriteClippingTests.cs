@@ -54,11 +54,26 @@ namespace PlantsVsZombies.Tests.PlayMode
 
             File.WriteAllText(Path.Combine(_root, "properties", "Resources.xml"),
                 "<ResourceManifest><Resources id=\"Fixture\"><SetDefaults path=\"images\" idprefix=\"IMAGE_\"/>"
-                + "<Image id=\"CLIPATLAS\" path=\"atlas\" cols=\"2\" rows=\"2\"/></Resources></ResourceManifest>");
+                + "<Image id=\"CLIPATLAS\" path=\"atlas\" cols=\"2\" rows=\"2\"/>"
+                + "<Image id=\"ANIMATLAS\" path=\"atlas\" cols=\"3\" rows=\"1\"/></Resources></ResourceManifest>");
             File.WriteAllText(Path.Combine(_root, "particles", "Clipped.xml"),
                 "<Emitter><Image>IMAGE_CLIPATLAS</Image><ImageRow>1</ImageRow><ImageFrames>1</ImageFrames>"
                 + "<SpawnMinActive>1</SpawnMinActive><ParticleDuration>100</ParticleDuration><SystemDuration>100</SystemDuration>"
                 + "<ClipTop>0.25</ClipTop><ClipBottom>0.125</ClipBottom></Emitter>");
+            File.WriteAllText(Path.Combine(_root, "particles", "Fullscreen.xml"),
+                "<Emitter><Image>IMAGE_CLIPATLAS</Image><SpawnMinActive>1</SpawnMinActive><SpawnMaxLaunched>1</SpawnMaxLaunched>"
+                + "<ParticleDuration>30</ParticleDuration><SystemDuration>30</SystemDuration><ParticleScale>1600</ParticleScale>"
+                + "<ParticleAlpha>.5 0</ParticleAlpha><ParticleRed>.5</ParticleRed><ParticleGreen>1</ParticleGreen>"
+                + "<ParticleBlue>1</ParticleBlue><FullScreen>1</FullScreen></Emitter>");
+            File.WriteAllText(Path.Combine(_root, "particles", "Animated.xml"),
+                "<Emitter><Image>IMAGE_ANIMATLAS</Image><ImageFrames>3</ImageFrames><AnimationRate>5</AnimationRate>"
+                + "<SpawnMinActive>1</SpawnMinActive><SpawnMaxLaunched>1</SpawnMaxLaunched>"
+                + "<ParticleDuration>100</ParticleDuration><SystemDuration>100</SystemDuration></Emitter>");
+            File.WriteAllText(Path.Combine(_root, "particles", "Positioned.xml"),
+                "<Emitter><Image>IMAGE_CLIPATLAS</Image><SpawnMinActive>1</SpawnMinActive><SpawnMaxLaunched>1</SpawnMaxLaunched>"
+                + "<ParticleDuration>3</ParticleDuration><SystemDuration>3</SystemDuration><ParticleScale>1 2</ParticleScale>"
+                + "<EmitterOffsetY>-75</EmitterOffsetY><Field><FieldType>Position</FieldType>"
+                + "<X>10 30</X><Y>35 15</Y></Field></Emitter>");
             _renderer = new ReanimationRenderer(_root);
         }
 
@@ -122,6 +137,68 @@ namespace PlantsVsZombies.Tests.PlayMode
             _renderer.EndObjectFrame();
             Assert.That(particles.LastError, Is.Null.Or.Empty);
             AssertQuad(new Rect(24f, 32f, 32f, 20f), new Rect(0f, .0625f, .5f, .3125f));
+        }
+
+        /// <summary>Checks native fullscreen flags fill the fixed viewport instead of scaling or moving particle artwork.</summary>
+        [Test]
+        public void FullscreenParticleUsesUnshiftedViewportAndAuthoredColor()
+        {
+            var particles = new OriginalParticleRenderer(_root, _renderer);
+            var viewport = Matrix4x4.TRS(new Vector3(20f, 30f, 0f), Quaternion.identity, new Vector3(.5f, .5f, 1f));
+            BeginFrame();
+            var shifted = viewport * Matrix4x4.Translate(new Vector3(5f, -8f, 0f));
+            SpriteDrawState.Matrix = shifted;
+            particles.BeginFrame();
+            Assert.That(particles.Draw("fullscreen", "Fullscreen", 0f, new Vector2(-2000f, 2000f), 711,
+                fullScreenMatrix: viewport), Is.True);
+            particles.EndFrame();
+            _renderer.EndObjectFrame();
+            Assert.That(SpriteDrawState.Matrix, Is.EqualTo(shifted));
+            AssertQuad(new Rect(20f, 30f, 400f, 300f), new Rect(0f, 0f, 1f, 1f));
+            var sprites = (List<ObjectSprite>)typeof(ObjectSpriteRenderer)
+                .GetField("_sprites", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(Pool())!;
+            Assert.That(sprites[0].Colors[0].r, Is.EqualTo(.5f).Within(.0001f));
+            Assert.That(sprites[0].Colors[0].g, Is.EqualTo(1f).Within(.0001f));
+            Assert.That(sprites[0].Colors[0].b, Is.EqualTo(1f).Within(.0001f));
+            Assert.That(sprites[0].Colors[0].a, Is.EqualTo(.5f).Within(.0001f));
+        }
+
+        /// <summary>Checks AnimationRate is a normalized cycle rate and animated particles begin at their first atlas frame.</summary>
+        [Test]
+        public void ParticleAnimationRateAdvancesAndLoopsTheWholeAtlasCycle()
+        {
+            var particles = new OriginalParticleRenderer(_root, _renderer);
+            foreach (var sample in new[] { (Age: 0f, Frame: 0), (Age: .061f, Frame: 1), (Age: .131f, Frame: 2), (Age: .2f, Frame: 0) })
+            {
+                BeginFrame();
+                particles.BeginFrame();
+                Assert.That(particles.Draw("animated", "Animated", sample.Age, new Vector2(40f, 40f), 711), Is.True);
+                particles.EndFrame();
+                _renderer.EndObjectFrame();
+                AssertQuad(new Rect(40f - 32f / 3f, 8f, 64f / 3f, 64f), new Rect(sample.Frame / 3f, 0f, 1f / 3f, 1f));
+            }
+        }
+
+        /// <summary>Checks birth applies the authored position immediately and drawing uses sampled time before age increments.</summary>
+        [Test]
+        public void ParticlePositionStartsAtItsAuthoredOffsetAndKeepsSampledDrawTime()
+        {
+            var particles = new OriginalParticleRenderer(_root, _renderer);
+            BeginFrame();
+            particles.BeginFrame();
+            Assert.That(particles.Draw("positioned", "Positioned", 0f, new Vector2(40f, 40f), 711), Is.True);
+            particles.EndFrame();
+            _renderer.EndObjectFrame();
+            // PC birth update: center=(40+10,40-75+35), scale=1 at sampled time zero.
+            AssertQuad(new Rect(34f, -16f, 32f, 32f), new Rect(0f, .5f, .5f, .5f));
+
+            BeginFrame();
+            particles.BeginFrame();
+            Assert.That(particles.Draw("positioned", "Positioned", .015f, new Vector2(40f, 40f), 711), Is.True);
+            particles.EndFrame();
+            _renderer.EndObjectFrame();
+            // At half a render tick the center is (55,-5); sampled time 1/(3-1) gives scale 1.5.
+            AssertQuad(new Rect(31f, -29f, 48f, 48f), new Rect(0f, .5f, .5f, .5f));
         }
 
         /// <summary>Begins one actual production scene submission with an identity pixel transform.</summary>

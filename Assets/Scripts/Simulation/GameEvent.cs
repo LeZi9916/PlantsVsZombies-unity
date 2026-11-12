@@ -28,6 +28,8 @@ namespace PlantsVsZombies.Simulation
         /// <summary>Identifies lost.</summary>
         Lost,
         /// <summary>Identifies sun pickup started.</summary>
-        SunPickupStarted
+        SunPickupStarted,
+        /// <summary>Identifies the original Doom-shroom explosion sample, separate from Cherry Bomb Foley.</summary>
+        DoomExplosion
     }
 }

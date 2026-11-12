@@ -36,6 +36,7 @@ namespace PlantsVsZombies.Game
             _drawCardImage = DrawCardImage;
             _textureLookup = owner.Textures.Load;
             _drawPacketMask = DrawAdventurePacketMask;
+            _doomTrackOffset = DoomShroomTrackOffset;
         }
 
         /// <summary>Updates the logical pointer used by hover artwork and cursor presentation.</summary>
@@ -75,6 +76,10 @@ namespace PlantsVsZombies.Game
         private readonly Dictionary<int, string> _numberLabels = new Dictionary<int, string>();
         /// <summary>Reuses native draw callbacks for all actors in this synchronous presenter.</summary>
         private AdventureActorRenderer? _actorRenderer;
+        /// <summary>Reuses the original Doom-shroom head shake sampler without creating a per-frame callback.</summary>
+        private readonly Func<string, Vector2> _doomTrackOffset;
+        /// <summary>Provides the head shake values consumed synchronously by the current Doom-shroom draw.</summary>
+        private AdventureDoomShroomState? _doomShroomState;
         /// <summary>Reuses the street preview's lightweight zombie poses.</summary>
         private readonly List<Zombie> _openingZombiePoses = new List<Zombie>();
         /// <summary>Reuses the positional probe used by detached zombie parts.</summary>
@@ -161,10 +166,7 @@ namespace PlantsVsZombies.Game
                     return;
                 }
 
-                var scale = Mathf.Min(Screen.width / Width, Screen.height / Height);
-                var offsetX = (Screen.width - Width * scale) * 0.5f;
-                var offsetY = (Screen.height - Height * scale) * 0.5f;
-                CanvasUI.Matrix = Matrix4x4.TRS(new Vector3(offsetX, offsetY, 0), Quaternion.identity, new Vector3(scale, scale, 1f));
+                CanvasUI.Matrix = ViewportMatrix();
                 CanvasUI.Enabled = !_owner.RequiredOptionsView.IsOpen && !_owner._confirmingQuit && _owner._unavailableFeature == null && (_owner._profileDialog == null || !_owner._profileDialog.IsOpen);
                 switch (_owner._currentView)
                 {
@@ -196,9 +198,7 @@ namespace PlantsVsZombies.Game
                         _owner.RequiredHelpView.Draw();
                         break;
                     case PvZGame.ScreenView.Board:
-                        DrawBoard();
-                        DrawInterface();
-                        DrawAdventureHammerHits();
+                        DrawBoardPresentation();
                         DrawAdventureCrazyDave();
                         if (_owner.Opening._packetUpgradeOfferActive)
                         {
@@ -235,6 +235,39 @@ namespace PlantsVsZombies.Game
             {
                 _owner.RequiredAnimations.EndObjectFrame();
                 CanvasUI.EndFrame();
+            }
+        }
+
+        /// <summary>Maps the original logical screen to the current display without a board widget offset.</summary>
+        /// <returns>The unshifted 800 by 600 viewport transform.</returns>
+        private static Matrix4x4 ViewportMatrix()
+        {
+            var scale = Mathf.Min(Screen.width / Width, Screen.height / Height);
+            var offsetX = (Screen.width - Width * scale) * .5f;
+            var offsetY = (Screen.height - Height * scale) * .5f;
+            return Matrix4x4.TRS(new Vector3(offsetX, offsetY, 0f), Quaternion.identity, new Vector3(scale, scale, 1f));
+        }
+
+        /// <summary>Moves board actors and HUD with the PC widget while leaving Dave and the pointer at screen coordinates.</summary>
+        private void DrawBoardPresentation()
+        {
+            var previous = CanvasUI.Matrix;
+            var game = _owner.RequiredGame;
+            if (game.IsAdventure)
+            {
+                var shake = game.Presentation.ScreenShake;
+                CanvasUI.Matrix = previous * Matrix4x4.Translate(new Vector3(shake.OffsetX, shake.OffsetY, 0f));
+            }
+
+            try
+            {
+                DrawBoard();
+                DrawInterface();
+                DrawAdventureHammerHits();
+            }
+            finally
+            {
+                CanvasUI.Matrix = previous;
             }
         }
 
@@ -1286,7 +1319,8 @@ namespace PlantsVsZombies.Game
             var point = explosion.Effect == AdventureExplosionEffect.Pow
                 ? new Vector2(explosion.NativeX, explosion.NativeY)
                 : new Vector2(BoardLayout.AdventureGridX + explosion.X * BoardLayout.CellWidth, _owner.Layout.AdventureCellY(explosion.Row, explosion.X - .5f) + 40f);
-            particles.Draw("native-explosion-" + explosion.Id, explosion.Particle, explosion.Ticks * .01f + AdventureRenderRemainder, point, explosion.Seed);
+            particles.Draw("native-explosion-" + explosion.Id, explosion.Particle, explosion.Ticks * .01f + AdventureRenderRemainder,
+                point, explosion.Seed, fullScreenMatrix: ViewportMatrix());
         }
 
         /// <summary>Retains the hammer particle systems independently of the earlier board particle pass.</summary>
@@ -1775,7 +1809,7 @@ namespace PlantsVsZombies.Game
 
                 foreach (var crater in _owner.RequiredGame.Adventure.Craters)
                 {
-                    DrawImage(level.HasRoof ? "crater_roof_center.png" : level.HasPool && level.IsWaterRow(crater.Row) ? level.IsNight ? "crater_water_night.png" : "crater_water_day.png" : "crater.png", new Rect(BoardLayout.AdventureGridX + crater.Column * BoardLayout.CellWidth - 24, _owner.Layout.AdventureCellY(crater.Row, crater.Column) + 45, 128, 44));
+                    DrawAdventureCrater(crater);
                 }
 
                 foreach (var ice in _owner.RequiredGame.Adventure.IceTrails)
@@ -2367,6 +2401,92 @@ namespace PlantsVsZombies.Game
             _owner.RequiredAnimations.DrawNativePlayback(name, origin, pool ? .8f : .85f, age, clip, true, mower.Active ? pool ? 35f : 70f : 0f);
         }
 
+        /// <summary>Draws one original crater atlas cell with its native terrain, aging and fade.</summary>
+        /// <param name="crater">The occupied cell and remaining original crater lifetime.</param>
+        private void DrawAdventureCrater(AdventureCellTimer crater)
+        {
+            // PC GridItem::DrawCrater 0x458EA0 draws one cel of a two-column image at its original size.
+            var level = _owner.RequiredGame.Adventure.Level;
+            var x = BoardLayout.AdventureGridX + crater.Column * BoardLayout.CellWidth - 8f;
+            var y = _owner.Layout.AdventureCellY(crater.Row, crater.Column) + 40f;
+            var fading = crater.Remaining < 90f;
+            var image = "crater.png";
+            var column = 0;
+            if (level.IsWaterRow(crater.Row))
+            {
+                image = level.IsNight ? "crater_water_night.png" : "crater_water_day.png";
+                column = fading ? 1 : 0;
+                var phase = crater.Row * Mathf.PI + crater.Column * Mathf.PI * .25f
+                    + _owner.RequiredGame.Adventure._ticks * Mathf.PI * 2f / 200f;
+                y += (float)Math.Sin(phase) * 2f;
+            }
+            else if (level.HasRoof)
+            {
+                if (crater.Column < 5)
+                {
+                    image = "crater_roof_left.png";
+                    x += 16f;
+                    y -= 16f;
+                }
+                else
+                {
+                    image = "crater_roof_center.png";
+                    x += 18f;
+                    y -= 9f;
+                }
+
+                column = fading ? 1 : 0;
+            }
+            else
+            {
+                column = level.IsNight ? 1 : 0;
+                if (fading)
+                {
+                    image = "crater_fading.png";
+                }
+            }
+
+            var texture = _owner.Textures.Load(image);
+            if (texture == null)
+            {
+                return;
+            }
+
+            var previous = CanvasUI.Color;
+            if (crater.Remaining < .25f)
+            {
+                var ticks = Math.Max(0, (int)Math.Round(crater.Remaining * 100f));
+                var alpha = (int)Math.Round(ticks * 255f / 25f, MidpointRounding.AwayFromZero);
+                CanvasUI.Color = new Color(previous.r, previous.g, previous.b, previous.a * alpha / 255f);
+            }
+
+            try
+            {
+                DrawTextureWithSource(new Rect(x, y, texture.width * .5f, texture.height), texture, new Rect(column * .5f, 0f, .5f, 1f));
+            }
+            finally
+            {
+                CanvasUI.Color = previous;
+            }
+        }
+
+        /// <summary>Returns the original independent shake of the active Doom-shroom head track.</summary>
+        /// <param name="track">The native image track currently being drawn.</param>
+        /// <returns>The recorded two-dimensional head displacement, or zero for an unaffected track.</returns>
+        private Vector2 DoomShroomTrackOffset(string track)
+        {
+            var state = _doomShroomState;
+            if (state == null)
+            {
+                return Vector2.zero;
+            }
+
+            var head = string.Equals(track, "DoomShroom_head1", StringComparison.OrdinalIgnoreCase) ? 0
+                : string.Equals(track, "DoomShroom_head2", StringComparison.OrdinalIgnoreCase) ? 1
+                : string.Equals(track, "DoomShroom_head3", StringComparison.OrdinalIgnoreCase) ? 2 : -1;
+            return head < 0 ? Vector2.zero : new Vector2(state.HeadShakeX[head], state.HeadShakeY[head]);
+        }
+
         /// <summary>Performs adventure plant height.</summary>
         /// <param name = "plant">The plant.</param>
         /// <returns>The resulting adventure plant height.</returns>
@@ -2477,6 +2597,16 @@ namespace PlantsVsZombies.Game
             var loop = true;
             var rate = plant.PresentationRate > 0 ? plant.PresentationRate : 12f;
             var age = plant.Age + AdventureRenderRemainder;
+            var doom = plant.Kind == PlantKind.DoomShroom && !plant.Asleep ? plant.DoomShroomPresentation : null;
+            if (doom != null)
+            {
+                // PC UpdateDoomShroom 0x46F1A0 selects this authored layer and its three head shake overrides.
+                clip = "anim_explode";
+                rate = AdventureDoomShroomState.Rate;
+                age = doom.SampleSeconds(AdventureRenderRemainder);
+                loop = false;
+            }
+
             if (plant.Kind == PlantKind.GraveBuster)
             {
                 var landing = !AdventureGraveBusterRules.IsEating(plant.ActionTimer);
@@ -2591,9 +2721,11 @@ namespace PlantsVsZombies.Game
                 rate = 12f;
             }
 
+            _doomShroomState = doom;
             ActorRenderer.DrawPlant(plant, name, origin, size, heads == null ? age : plant.Age + AdventureRenderRemainder,
                 clip, loop, rate, heads, _presentationKeys.Get("plant-", plant.Id), new Rect(x - 80, y - 160, 300, 340),
-                plant.Kind == PlantKind.Threepeater || plant.Kind == PlantKind.Cattail ? 10 : 20, AdventureRenderRemainder, _presentationKeys.Get("producer-plant-", plant.Id), highlighted);
+                doom != null ? 0 : plant.Kind == PlantKind.Threepeater || plant.Kind == PlantKind.Cattail ? 10 : 20, AdventureRenderRemainder,
+                _presentationKeys.Get("producer-plant-", plant.Id), highlighted, doom == null ? null : _doomTrackOffset);
 
             if (plant.Kind == PlantKind.FumeShroom && plant.PresentationShotAge >= .35f && plant.PresentationShotAge < 1.35f)
             {

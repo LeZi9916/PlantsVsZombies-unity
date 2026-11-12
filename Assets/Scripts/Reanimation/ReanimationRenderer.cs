@@ -505,8 +505,9 @@ namespace PlantsVsZombies.Reanimation
         /// <param name = "blend">The blend.</param>
         /// <param name="crazyDaveHeldItem">The item attached to Dave's hand, if any.</param>
         /// <param name="crazyDaveHeldItemAge">The elapsed time of the held item's animation.</param>
+        /// <param name="trackOffset">Optional native pixel offsets applied to individual animation tracks.</param>
         /// <returns>The resulting draw internal.</returns>
-        private bool DrawInternal(string? name, Rect destination, float seconds, string? animation, bool loop, ZombieVariant variant, bool equipmentIntact, Func<string, bool>? trackVisible, string? overrideTrack = null, Texture2D? imageOverride = null, Matrix4x4? nativePlacement = null, bool cachedFlag = false, NativePoseBlend? blend = null, string? crazyDaveHeldItem = null, float crazyDaveHeldItemAge = 0f)
+        private bool DrawInternal(string? name, Rect destination, float seconds, string? animation, bool loop, ZombieVariant variant, bool equipmentIntact, Func<string, bool>? trackVisible, string? overrideTrack = null, Texture2D? imageOverride = null, Matrix4x4? nativePlacement = null, bool cachedFlag = false, NativePoseBlend? blend = null, string? crazyDaveHeldItem = null, float crazyDaveHeldItemAge = 0f, Func<string, Vector2>? trackOffset = null)
         {
             LastError = null;
             if (!IsFinite(seconds) || !IsFinite(destination.x) || !IsFinite(destination.y) || !IsFinite(destination.width) || !IsFinite(destination.height) || destination.width <= 0f || destination.height <= 0f)
@@ -647,9 +648,17 @@ namespace PlantsVsZombies.Reanimation
                             continue;
                         }
 
+                        var part = PartMatrix(frame);
+                        if (trackOffset != null)
+                        {
+                            var offset = trackOffset(track.Name);
+                            part.m03 += offset.x;
+                            part.m13 += offset.y;
+                        }
+
                         if (from.Texture != null)
                         {
-                            var sprite = NativeZombieTrackMatrix(originalMatrix * layout * PartMatrix(frame), group);
+                            var sprite = NativeZombieTrackMatrix(originalMatrix * layout * part, group);
                             if (!HasDrawableArea(sprite))
                             {
                                 continue;
@@ -673,7 +682,7 @@ namespace PlantsVsZombies.Reanimation
 
                             // PC Zombie::Initialize (0x53DD90) attaches the flag to Zombie_flaghand.
                             // Reanimation::DrawRenderGroup draws that attachment immediately after its hand track.
-                            var attachment = originalMatrix * layout * PartMatrix(frame) * flagBaseInverse;
+                            var attachment = originalMatrix * layout * part * flagBaseInverse;
                             if (combatFlag)
                             {
                                 var tint = new Color(originalColor.r, originalColor.g, originalColor.b, originalColor.a * frame.Alpha);
@@ -694,7 +703,7 @@ namespace PlantsVsZombies.Reanimation
                                 : heldMoneyBag ? Matrix4x4.Translate(new Vector3(90f, 405f, 0f))
                                 : heldTreeFood || heldFertilizer ? Matrix4x4.Translate(new Vector3(102f, 412f, 0f))
                                 : Matrix4x4.Translate(new Vector3(100f, 393f, 0f)) * Matrix4x4.Scale(new Vector3(1.2f, 1.2f, 1f));
-                            var placement = originalMatrix * layout * PartMatrix(frame) * heldItemBaseInverse * offset;
+                            var placement = originalMatrix * layout * part * heldItemBaseInverse * offset;
                             if (heldItemClip == null)
                             {
                                 throw new System.InvalidOperationException("The value 'heldItemClip' is not available.");
@@ -2565,8 +2574,9 @@ namespace PlantsVsZombies.Reanimation
         /// <param name = "mirrorWidth">The mirror width.</param>
         /// <param name="crazyDaveHeldItem">The item attached to Dave's hand, if any.</param>
         /// <param name="crazyDaveHeldItemAge">The elapsed time of the held item's animation.</param>
+        /// <param name="trackOffset">Optional native pixel offsets applied before each track's placement and scaling.</param>
         /// <returns>The resulting draw native playback.</returns>
-        public bool DrawNativePlayback(string? name, Vector2 origin, float scale, float seconds, string? animation, bool loop, float framesPerSecond = -1f, Func<string, bool>? visible = null, string? overrideTrack = null, string? overrideImage = null, bool facingLeft = false, string? instanceKey = null, int blendTicks = 20, float verticalScale = -1f, float mirrorWidth = 80f, string? crazyDaveHeldItem = null, float crazyDaveHeldItemAge = 0f)
+        public bool DrawNativePlayback(string? name, Vector2 origin, float scale, float seconds, string? animation, bool loop, float framesPerSecond = -1f, Func<string, bool>? visible = null, string? overrideTrack = null, string? overrideImage = null, bool facingLeft = false, string? instanceKey = null, int blendTicks = 20, float verticalScale = -1f, float mirrorWidth = 80f, string? crazyDaveHeldItem = null, float crazyDaveHeldItemAge = 0f, Func<string, Vector2>? trackOffset = null)
         {
             using var objectScope = BeginObjectScope();
             Reanimation? asset;
@@ -2584,7 +2594,7 @@ namespace PlantsVsZombies.Reanimation
                 placement.m11 = verticalScale;
             }
 
-            return DrawInternal(name, new Rect(0, 0, 1, 1), NativeSeconds(clip, seconds, rate, asset.Fps, loop), animation, false, ZombieVariant.Normal, false, visible, overrideTrack, image, placement, false, PrepareNativeBlend(instanceKey, animation, seconds, blendTicks), crazyDaveHeldItem, crazyDaveHeldItemAge);
+            return DrawInternal(name, new Rect(0, 0, 1, 1), NativeSeconds(clip, seconds, rate, asset.Fps, loop), animation, false, ZombieVariant.Normal, false, visible, overrideTrack, image, placement, false, PrepareNativeBlend(instanceKey, animation, seconds, blendTicks), crazyDaveHeldItem, crazyDaveHeldItemAge, trackOffset);
         }
 
         /// <summary>Draws Dave's original blink attached to the current head pose.</summary>

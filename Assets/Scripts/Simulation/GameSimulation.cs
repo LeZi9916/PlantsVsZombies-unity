@@ -1466,14 +1466,24 @@ namespace PlantsVsZombies.Simulation
                 case PlantKind.DoomShroom:
                     effect = global::PlantsVsZombies.Adventure.AdventureExplosionEffect.Doom;
                     break;
+                case PlantKind.IceShroom:
+                    effect = global::PlantsVsZombies.Adventure.AdventureExplosionEffect.IceTrap;
+                    break;
                 case PlantKind.PotatoMine:
                     effect = global::PlantsVsZombies.Adventure.AdventureExplosionEffect.PotatoMine;
                     break;
                 case PlantKind.Jalapeno:
+                    Presentation.ScreenShake.Start(3, -4);
                     AdventurePresentationJalapenoFire(row);
                     return;
                 default:
                     return; // Cob already creates BlastMark + PopcornSplash, not Powie.
+            }
+
+            if (kind != PlantKind.IceShroom)
+            {
+                // PC Plant::DoSpecial 0x474D16 and 0x474DE6 restart this same board shake.
+                Presentation.ScreenShake.Start(3, -4);
             }
 
             Presentation.Explosions.Add(new global::PlantsVsZombies.Adventure.AdventureExplosion {
@@ -1663,7 +1673,7 @@ namespace PlantsVsZombies.Simulation
             // PC 4752E0: both types play native Foley3 AND Foley27, once at actual release.
             RequestAdventureZombieFoley(3);
             RequestAdventureZombieFoley(27);
-            Presentation._iceShootSuppressions++;
+            Presentation._nativeShootSuppressions++;
             Presentation.IceLaunchSoundSerial++;
             if (plant.Kind == PlantKind.SnowPea)
             {
@@ -2177,6 +2187,12 @@ namespace PlantsVsZombies.Simulation
         /// <returns>The resulting advance adventure native timed plant.</returns>
         private bool AdvanceAdventureNativeTimedPlant(Plant plant)
         {
+            if (plant.Kind == PlantKind.DoomShroom)
+            {
+                AdvanceAdventureDoomShroom(plant);
+                return true;
+            }
+
             if (plant.Kind == PlantKind.Chomper)
             {
                 return AdvanceAdventureChomper(plant);
@@ -2263,6 +2279,7 @@ namespace PlantsVsZombies.Simulation
             if (result.SunCreated)
             {
                 Suns.Add(CreateAdventurePresentationSun(plant, 25));
+                RequestAdventureZombieFoley(4);
             }
 
             for (var i = 0; i < result.ProjectilesCreated; i++)
@@ -2879,6 +2896,15 @@ namespace PlantsVsZombies.Simulation
                 Presentation.GraveBusterChompSoundSerial++;
             }
 
+            if (kind == PlantKind.Jalapeno)
+            {
+                RequestAdventureZombieFoley(57);
+            }
+            else if (kind == PlantKind.Plantern)
+            {
+                RequestAdventureZombieFoley(-3);
+            }
+
             if (kind == PlantKind.Sunflower)
             {
                 Adventure._plantedSunflowers++;
@@ -3032,7 +3058,18 @@ namespace PlantsVsZombies.Simulation
 
                     if (p.WakeTimer > 0f)
                     {
-                        p.WakeTimer -= dt;
+                        var wakeTicks = Math.Max(0, (int)Math.Round(p.WakeTimer * 100f) - 1);
+                        p.WakeTimer = wakeTicks * .01f;
+                        if (wakeTicks == 100)
+                        {
+                            // This combined timer retains Coffee's 100-tick crumble followed by the mushroom's 100-tick wake.
+                            RequestAdventureZombieFoley(69);
+                        }
+                        if (wakeTicks == 60)
+                        {
+                            // PC Plant::Update plays Wakeup at the sixty-tick milestone.
+                            RequestAdventureZombieFoley(83);
+                        }
                         if (p.WakeTimer <= 0f)
                         {
                             p.Asleep = false;
@@ -3079,10 +3116,12 @@ namespace PlantsVsZombies.Simulation
                     {
                         case PlantKind.Sunflower:
                         case PlantKind.SunShroom:
+                            RequestAdventureZombieFoley(4);
                             Suns.Add(CreateAdventurePresentationSun(p, p.Kind == PlantKind.SunShroom && p.PresentationAwakeAge < 120f ? 15 : 25));
                             p.ActionTimer = 24f;
                             break;
                         case PlantKind.Marigold:
+                            RequestAdventureZombieFoley(4);
                             p.ActionCount++;
                             SpawnAdventureCoin(_random.Next(100) < 10 ? AdventureCoinKind.Gold : AdventureCoinKind.Silver, p.Column + 0.5f, p.Row);
                             p.ActionTimer = 24f;
@@ -3113,11 +3152,14 @@ namespace PlantsVsZombies.Simulation
                             }
 
                             AdventurePresentationExplosion(PlantKind.Jalapeno, x, p.Row);
+                            RequestAdventureZombieFoley(65);
                             RemoveAdventurePlantAndStack(p);
                             Raise(GameEvent.JalapenoExplosion);
                             break;
                         case PlantKind.IceShroom:
+                            RequestAdventureZombieFoley(18);
                             NotifyAdventureIceTrap();
+                            AdventurePresentationExplosion(PlantKind.IceShroom, x, p.Row);
                             foreach (Zombie z in new PooledSnapshot<Zombie>(Zombies))
                             {
                                 ApplyAdventureIceTrap(z);
@@ -3130,13 +3172,6 @@ namespace PlantsVsZombies.Simulation
                             }
 
                             RemoveAdventurePlantAndStack(p);
-                            break;
-                        case PlantKind.DoomShroom:
-                            BlastAdventureAshPlant(p, 250, 3);
-                            AdventurePresentationExplosion(PlantKind.DoomShroom, x, p.Row);
-                            RemoveAdventurePlantAndStack(p);
-                            Adventure._craters.Add(new AdventureCellTimer { Row = p.Row, Column = p.Column, Remaining = 180f });
-                            Raise(GameEvent.Explosion);
                             break;
                         case PlantKind.GraveBuster:
                             for (var i = Adventure._graves.Count - 1; i >= 0; i--)
@@ -3154,6 +3189,7 @@ namespace PlantsVsZombies.Simulation
                             DropAdventureLootPiece(x, p.Row, global::PlantsVsZombies.Adventure.AdventureGraveBusterRules.LootDropFactor);
                             break;
                         case PlantKind.Blover:
+                            RequestAdventureZombieFoley(-2);
                             for (var i = Zombies.Count - 1; i >= 0; i--)
                             {
                                 if (Zombies[i].Airborne)
@@ -3173,8 +3209,13 @@ namespace PlantsVsZombies.Simulation
                             var squash = FindAdventureTarget(p.Row, x - 1f, x + 1.3f, false);
                             if (squash != null)
                             {
+                                RequestAdventureZombieFoley(41);
                                 BlastAdventure(squash.X, p.Row, 0.5f, 0, 1800f);
+                                // PC UpdateSquash damages at counter 5 and lands at counter 0.
+                                Presentation._squashLandings.Add(new AdventureSquashLanding { Ticks = 5, Water = Adventure.Level.IsWaterRow(p.Row) });
+
                                 RemoveAdventurePlantAndStack(p);
+                                Presentation._nativeExplosionSuppressions++;
                                 Raise(GameEvent.Explosion);
                             }
 
@@ -3183,6 +3224,9 @@ namespace PlantsVsZombies.Simulation
                             var kelp = FindAdventureTarget(p.Row, x - 0.5f, x + 0.7f, false, true, PlantKind.TangleKelp);
                             if (kelp != null)
                             {
+                                RequestAdventureZombieFoley(68);
+                                // PC UpdateTangleKelp 0x46E430 starts at 100 and splashes at counter 20.
+                                Presentation._plantSoundCues.Add(new AdventurePlantSoundCue { Ticks = 80, Foley = 53 });
                                 kelp.PresentationDeath = AdventureZombieDeathPresentation.Eaten;
                                 KillAdventureZombie(kelp);
                                 RemoveAdventurePlantAndStack(p);
@@ -3198,10 +3242,12 @@ namespace PlantsVsZombies.Simulation
                                     {
                                         KillAdventureZombie(z);
                                         RemoveAdventurePlantAndStack(p);
+                                        RequestAdventureZombieFoley(1);
                                         break;
                                     }
 
                                     HitAdventureZombie(z, 20f, true);
+                                    RequestAdventureZombieFoley(1);
                                 }
                             }
 
@@ -3219,6 +3265,7 @@ namespace PlantsVsZombies.Simulation
                             }
                             if (metal != null)
                             {
+                                RequestAdventureZombieFoley(42);
                                 metal.ArmorHealth = 0;
                                 metal.ShieldHealth = 0;
                                 metal.UsedAbility = true;
@@ -3370,6 +3417,21 @@ namespace PlantsVsZombies.Simulation
             }
 
             p.ShootAge = 0;
+            if (p.Kind != PlantKind.SnowPea && p.Kind != PlantKind.WinterMelon)
+            {
+                if (p.Kind != PlantKind.Starfruit)
+                {
+                    RequestAdventureZombieFoley(3);
+                }
+
+                if (AdventurePuffShroomRules.IsShortRange(p.Kind) || p.Kind == PlantKind.ScaredyShroom)
+                {
+                    RequestAdventureZombieFoley(29);
+                }
+
+                Presentation._nativeShootSuppressions++;
+            }
+
             Raise(GameEvent.Shoot);
             return shot;
         }
@@ -3457,10 +3519,13 @@ namespace PlantsVsZombies.Simulation
                 if (AdventureFumeShroomRules.CanDamage(plant, zombie))
                 {
                     HitAdventureZombie(zombie, 20f, true, 2U);
+                    RequestAdventureZombieFoley(1);
                 }
             }
 
             plant._presentationPrefiring = false;
+            RequestAdventureZombieFoley(30);
+            Presentation._nativeShootSuppressions++;
             Raise(GameEvent.Shoot);
         }
 
@@ -3505,6 +3570,7 @@ namespace PlantsVsZombies.Simulation
         /// <param name="plant">The Starfruit whose body shooting counter has expired.</param>
         private void FireAdventureStarfruit(Plant plant)
         {
+            RequestAdventureZombieFoley(3);
             var rowPitch = Adventure.Level.HasPool || Adventure.Level.HasRoof ? 85f : 100f;
             for (var index = 0; index < 5; index++)
             {
@@ -3887,6 +3953,45 @@ namespace PlantsVsZombies.Simulation
             Raise(GameEvent.ZombieDied);
         }
 
+        /// <summary>Starts and advances the original awake Doom-shroom special action once per native tick.</summary>
+        /// <param name="plant">The awake Doom-shroom whose fuse and original exploding body are updated.</param>
+        private void AdvanceAdventureDoomShroom(Plant plant)
+        {
+            var state = plant.DoomShroomPresentation;
+            if (state == null)
+            {
+                state = new AdventureDoomShroomState();
+                plant.DoomShroomPresentation = state;
+                plant.PresentationRate = AdventureDoomShroomState.Rate;
+                RequestAdventureZombieFoley(57);
+            }
+
+            if (state.Countdown > 0)
+            {
+                state.Countdown--;
+            }
+
+            plant.ActionTimer = state.Countdown * .01f;
+            if (state.Countdown == 0)
+            {
+                BlastAdventureAshPlant(plant, 250, 3);
+                AdventurePresentationExplosion(PlantKind.DoomShroom, plant.Column + .5f, plant.Row);
+                RemoveAdventurePlantAndStack(plant);
+                Adventure._craters.Add(new AdventureCellTimer { Row = plant.Row, Column = plant.Column, Remaining = 180f });
+                Raise(GameEvent.DoomExplosion);
+            }
+
+            // PC Reanimation::Update samples each configured track independently on both axes.
+            for (var head = 0; head < state.HeadShakeX.Length; head++)
+            {
+                var amount = head == 0 ? 1f : 2f;
+                state.HeadShakeX[head] = AdventureExplosionRandomFloat(amount * 2f) - amount;
+                state.HeadShakeY[head] = AdventureExplosionRandomFloat(amount * 2f) - amount;
+            }
+
+            state.AnimationTicks++;
+        }
+
         /// <summary>Performs initialize adventure potato mine.</summary>
         /// <param name = "p">The p.</param>
         private void InitializeAdventurePotatoMine(Plant p)
@@ -4255,6 +4360,48 @@ namespace PlantsVsZombies.Simulation
         /// <param name = "dt">The dt.</param>
         private void AdventurePresentationTick(float dt)
         {
+            // PC Board::Update consumes one Rand(2) only while the decremented counter is nonzero.
+            var shake = Presentation.ScreenShake;
+            shake.Tick(shake.TicksRemaining > 1 && _random.Next(2) == 0);
+            for (var i = Presentation._plantSoundCues.Count - 1; i >= 0; i--)
+            {
+                var cue = Presentation._plantSoundCues[i];
+                cue.Ticks--;
+                if (cue.Ticks == 0)
+                {
+                    Presentation._plantSoundCues.RemoveAt(i);
+                    RequestAdventureZombieFoley(cue.Foley);
+                }
+                else
+                {
+                    Presentation._plantSoundCues[i] = cue;
+                }
+            }
+
+            for (var i = Presentation._squashLandings.Count - 1; i >= 0; i--)
+            {
+                var landing = Presentation._squashLandings[i];
+                landing.Ticks--;
+                if (landing.Ticks == 0)
+                {
+                    Presentation._squashLandings.RemoveAt(i);
+                    if (landing.Water)
+                    {
+                        RequestAdventureZombieFoley(1);
+                        RequestAdventureZombieFoley(-4);
+                    }
+                    else
+                    {
+                        shake.Start(1, 4);
+                        RequestAdventureZombieFoley(40);
+                    }
+                }
+                else
+                {
+                    Presentation._squashLandings[i] = landing;
+                }
+            }
+
             for (var i = Presentation.PlantingEffects.Count - 1; i >= 0; i--)
             {
                 var effect = Presentation.PlantingEffects[i];
@@ -4384,7 +4531,12 @@ namespace PlantsVsZombies.Simulation
                 }
 
                 AdvanceAdventureDefensivePlantPresentation(plant, dt);
+                var previousAwakeAge = plant.PresentationAwakeAge;
                 plant.PresentationAwakeAge += dt;
+                if (plant.Kind == PlantKind.SunShroom && previousAwakeAge < 120f && plant.PresentationAwakeAge >= 120f)
+                {
+                    RequestAdventureZombieFoley(63);
+                }
                 if (plant.PresentationShotAge >= 0)
                 {
                     plant.PresentationShotAge += dt;
@@ -4954,6 +5106,8 @@ namespace PlantsVsZombies.Simulation
         /// <param name = "row">The row.</param>
         private void AdventurePresentationCobImpact(float x, float row)
         {
+            // PC Projectile::DoImpact 0x47D410 uses the ash plants' twelve-tick shake.
+            Presentation.ScreenShake.Start(3, -4);
             Presentation.Impacts.Add(new global::PlantsVsZombies.Adventure.AdventureImpact {
                 Id = ++Presentation._effectId,
                 Seed = _random.Next(),
@@ -6944,10 +7098,13 @@ namespace PlantsVsZombies.Simulation
                             if (IsUpgradeAreaTarget(z, p))
                             {
                                 HitAdventureZombie(z, 20f, true);
+                                RequestAdventureZombieFoley(1);
                             }
                         }
 
                         p.ActionCount++;
+                        // PC Gloom-shroom's four area pulses have no launch Foley.
+                        Presentation._nativeShootSuppressions++;
                         Raise(GameEvent.Shoot);
                     }
                     else if (p.Kind == PlantKind.Cattail && (tick == 19 || tick == 1))
@@ -6981,6 +7138,7 @@ namespace PlantsVsZombies.Simulation
             {
                 if (p.ActionTimer <= 0.000001f)
                 {
+                    RequestAdventureZombieFoley(4);
                     Suns.Add(CreateAdventurePresentationSun(p, 25));
                     Suns.Add(CreateAdventurePresentationSun(p, 25));
                     p.ActionCount++;
@@ -7001,6 +7159,7 @@ namespace PlantsVsZombies.Simulation
                             if (z.Kind == ZombieKind.Zomboni || z.Kind == ZombieKind.Catapult)
                             {
                                 HitAdventureZombie(z, 1800f, true);
+                                RequestAdventureZombieFoley(1);
                                 p.Health -= 50f;
                                 p.VehicleHitsTaken++;
                                 if (p.Health <= 0)
@@ -7012,6 +7171,7 @@ namespace PlantsVsZombies.Simulation
                             else
                             {
                                 HitAdventureZombie(z, 20f, true);
+                                RequestAdventureZombieFoley(1);
                             }
                         }
                     }
@@ -7058,6 +7218,7 @@ namespace PlantsVsZombies.Simulation
 
                     if (count > 0)
                     {
+                        RequestAdventureZombieFoley(42);
                         p.ActionCount++;
                         p.ActionTimer = 2f + _random.Next(101) * 0.01f;
                     }
@@ -7281,7 +7442,17 @@ namespace PlantsVsZombies.Simulation
                 return;
             }
 
+            var previousRemaining = p.CannonReloadRemaining;
             p.CannonReloadRemaining = Math.Max(0, p.CannonReloadRemaining - dt);
+            // PC reanim markers: charge has 15 frames at 12 fps, shooting has 42 at 12 fps.
+            var cueRemaining = p.CannonPhase == CobCannonPhase.Loading
+                ? AdventureCobLoadingSeconds - .5f * 15f / 12f
+                : AdventureCobFiringSeconds - .48f * 42f / 12f;
+            if ((p.CannonPhase == CobCannonPhase.Loading || p.CannonPhase == CobCannonPhase.Firing)
+                && previousRemaining > cueRemaining + .000001f && p.CannonReloadRemaining <= cueRemaining + .000001f)
+            {
+                RequestAdventureZombieFoley(p.CannonPhase == CobCannonPhase.Loading ? 64 : 76);
+            }
             if (p.CannonReloadRemaining > 0.000001f)
             {
                 return;
@@ -7309,6 +7480,8 @@ namespace PlantsVsZombies.Simulation
                 });
                 p.CannonPhase = CobCannonPhase.Reloading;
                 p.CannonReloadRemaining = 30f;
+                RequestAdventureZombieFoley(3);
+                Presentation._nativeShootSuppressions++;
                 Raise(GameEvent.Shoot);
                 Adventure.Notice(AdventureNoticeKind.CobFired, p.Id, p.Row, p.Column);
             }
@@ -7436,7 +7609,10 @@ namespace PlantsVsZombies.Simulation
                     coin._collectionRemaining -= dt;
                     if (coin._collectionRemaining <= 0.000001f)
                     {
-                        FinishAdventureCoin(coin);
+                        if (FinishAdventureCoin(coin))
+                        {
+                            RequestAdventureZombieFoley(31);
+                        }
                     }
                 }
                 else if (coin.Age >= 30f && !coin.PersistencePending)
@@ -7475,7 +7651,8 @@ namespace PlantsVsZombies.Simulation
                 }
 
                 Adventure._cobShells.RemoveAt(i);
-                Raise(GameEvent.Explosion);
+                // PC 0x47D410 uses the same direct Doom-shroom sample for the cob blast.
+                Raise(GameEvent.DoomExplosion);
                 Adventure.Notice(AdventureNoticeKind.CobImpact, shell.SourcePlantId, row, (int)shell.TargetX);
             }
         }
@@ -7720,6 +7897,7 @@ namespace PlantsVsZombies.Simulation
                 RequestAdventureZombieFoley(68);
                 RemoveAdventurePlantAndStack(target);
                 z.Hypnotized = true;
+                RequestAdventureZombieFoley(-5);
                 AdventureDancerRules.DetachForMindControl(z, Zombies);
                 // PC 0x547610 calls TrySpawnLevelAward using this zombie after mind control.
                 RememberAdventureRewardPosition(z);
@@ -8748,6 +8926,7 @@ namespace PlantsVsZombies.Simulation
         {
             if (HasUmbrellaNear(row, column))
             {
+                RequestAdventureZombieFoley(73);
                 return;
             }
 
@@ -8845,6 +9024,7 @@ namespace PlantsVsZombies.Simulation
                 {
                     if (HasUmbrellaNear(z.Row, z.TargetColumn))
                     {
+                        RequestAdventureZombieFoley(73);
                         Zombie? passenger = null;
                         foreach (var other in Zombies)
                         {
@@ -8966,6 +9146,10 @@ namespace PlantsVsZombies.Simulation
                             {
                                 RemoveAdventurePlantAndStack(victim);
                             }
+                        }
+                        else if (victim != null)
+                        {
+                            RequestAdventureZombieFoley(73);
                         }
 
                         z.AbilityPhase++;
@@ -9121,6 +9305,7 @@ namespace PlantsVsZombies.Simulation
                         if (target.Kind == PlantKind.HypnoShroom && !target.Asleep && z.Kind != ZombieKind.Gargantuar)
                         {
                             z.Hypnotized = true;
+                            RequestAdventureZombieFoley(-5);
                             AdventureDancerRules.DetachForMindControl(z, Zombies);
                             RememberAdventureRewardPosition(z);
                             z.Submerged = false;

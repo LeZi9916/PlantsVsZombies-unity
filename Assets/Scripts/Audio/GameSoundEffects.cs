@@ -113,6 +113,10 @@ namespace PlantsVsZombies.Audio
                     "cherrybomb.ogg"
                 },
                 {
+                    GameEvent.DoomExplosion,
+                    "doomshroom.ogg"
+                },
+                {
                     GameEvent.MineExplosion,
                     "potato_mine.ogg"
                 },
@@ -402,9 +406,16 @@ namespace PlantsVsZombies.Audio
                 return false;
             }
 
-            if (evt == GameEvent.Shoot && _owner._game.Presentation._iceShootSuppressions > 0)
+            if (evt == GameEvent.Shoot && _owner._game.Presentation._nativeShootSuppressions > 0)
             {
-                _owner._game.Presentation._iceShootSuppressions--;
+                // The simulation already queued the original plant-specific Foley for this release.
+                _owner._game.Presentation._nativeShootSuppressions--;
+                return true;
+            }
+
+            if (evt == GameEvent.Explosion && _owner._game.Presentation._nativeExplosionSuppressions > 0)
+            {
+                _owner._game.Presentation._nativeExplosionSuppressions--;
                 return true;
             }
 
@@ -476,12 +487,20 @@ namespace PlantsVsZombies.Audio
         /// <param name = "evt">The evt.</param>
         private void PlayAdventureZombieFoley(AdventureZombieSoundEvent evt)
         {
-            if (evt.Foley == -1)
+            var directSample = evt.Foley switch
             {
-                AudioClip gulp;
-                if (_presentationSounds.TryGetValue("gulp", out gulp) && gulp != null)
+                -1 => "gulp",
+                -2 => "blover",
+                -3 => "plantern",
+                -4 => "zombiesplash",
+                -5 => "mindcontrolled",
+                _ => null
+            };
+            if (directSample != null)
+            {
+                if (_presentationSounds.TryGetValue(directSample, out var directClip) && directClip != null)
                 {
-                    RequiredAudioSource.PlayOneShot(gulp);
+                    RequiredAudioSource.PlayOneShot(directClip);
                 }
 
                 return;
@@ -526,13 +545,17 @@ namespace PlantsVsZombies.Audio
             }
         }
 
-        /// <summary>Performs load adventure zombie part audio.</summary>
-        /// <returns>The resulting load adventure zombie part audio.</returns>
+        /// <summary>Loads the original native Foley recordings shared by combat actors and plant abilities.</summary>
+        /// <returns>The original audio decoding requests.</returns>
         private IEnumerator LoadAdventureZombiePartAudio()
         {
             var names = new HashSet<string>
             {
-                "gulp"
+                "gulp",
+                "blover",
+                "plantern",
+                "zombiesplash",
+                "mindcontrolled"
             };
             foreach (var definition in AdventureZombieFoleyData.Definitions.Values)
             {
@@ -552,7 +575,7 @@ namespace PlantsVsZombies.Audio
                 var path = Path.Combine(_owner._root, "sounds", name + ".ogg");
                 if (!File.Exists(path))
                 {
-                    Debug.LogError("Missing original zombie Foley: " + path);
+                    Debug.LogError("[Audio] Missing original combat Foley: " + path);
                     continue;
                 }
 
@@ -565,7 +588,7 @@ namespace PlantsVsZombies.Audio
                     }
                     else
                     {
-                        Debug.LogError("Original zombie Foley failed: " + name + ": " + request.error);
+                        Debug.LogError("[Audio] Original combat Foley failed: " + name + ": " + request.error);
                     }
                 }
             }

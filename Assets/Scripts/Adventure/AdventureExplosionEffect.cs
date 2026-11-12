@@ -18,6 +18,8 @@ namespace PlantsVsZombies.Adventure
         /// <summary>Identifies the rocks thrown up while a Grave Buster eats its gravestone.</summary>
         GraveBuster,
         /// <summary>Identifies the dirt burst when a Grave Buster finishes eating.</summary>
-        GraveBusterDie
+        GraveBusterDie,
+        /// <summary>Identifies the original Ice-shroom's full-screen flash and snowflake burst.</summary>
+        IceTrap
     }
 }

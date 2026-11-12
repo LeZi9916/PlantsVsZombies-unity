@@ -177,8 +177,8 @@ namespace PlantsVsZombies.Reanimation
             public string? Image = string.Empty, Type = string.Empty, Name = string.Empty;
             /// <summary>Stores image frames.</summary>
             public int ImageFrames = 1;
-            /// <summary>Stores random spin, loops, particle loops, additive, dont follow, has alpha.</summary>
-            public bool RandomSpin, Loops, ParticleLoops, Additive, DontFollow, HasAlpha;
+            /// <summary>Stores random spin, loops, particle loops, additive, dont follow, has alpha, and fullscreen drawing.</summary>
+            public bool RandomSpin, Loops, ParticleLoops, Additive, DontFollow, HasAlpha, FullScreen;
             /// <summary>Stores tracks.</summary>
             public readonly Dictionary<string, Curve> Tracks = new Dictionary<string, Curve>();
             /// <summary>Stores fields.</summary>
@@ -211,8 +211,14 @@ namespace PlantsVsZombies.Reanimation
             public Vector2 Position, PreviousPosition, Velocity;
             /// <summary>Stores age, duration, angle, previous angle, spin velocity.</summary>
             public float Age, Duration, Angle, PreviousAngle, SpinVelocity;
+            /// <summary>Stores the native normalized time sampled before the most recent age increment.</summary>
+            public float Time;
+            /// <summary>Retains each field's previous shake displacement so jitter never accumulates into drift.</summary>
+            public Vector2[] PreviousShake = System.Array.Empty<Vector2>();
             /// <summary>Stores frame.</summary>
             public int Frame;
+            /// <summary>Stores the normalized animation phase and its fixed rate interpolation sample.</summary>
+            public float AnimationTime, AnimationRandom;
             /// <summary>Stores random.</summary>
             public float[] Random = System.Array.Empty<float>();
             /// <summary>Stores color red, color green, color blue, brightness.</summary>
@@ -377,8 +383,9 @@ namespace PlantsVsZombies.Reanimation
         /// <param name = "seed">The seed.</param>
         /// <param name = "scale">The scale.</param>
         /// <param name = "stopAge">The stop age.</param>
+        /// <param name="fullScreenMatrix">The unshifted viewport transform for original fullscreen particle fills.</param>
         /// <returns>The resulting draw.</returns>
-        public bool Draw(string key, string name, float age, Vector2 origin, int seed, float scale = 1f, float stopAge = -1f)
+        public bool Draw(string key, string name, float age, Vector2 origin, int seed, float scale = 1f, float stopAge = -1f, Matrix4x4? fullScreenMatrix = null)
         {
             SystemInstance system;
             if (!_systems.TryGetValue(key, out system))
@@ -447,7 +454,7 @@ namespace PlantsVsZombies.Reanimation
                 var systemAlpha = SystemValue(system, emitter, "SystemAlpha", 1);
                 foreach (Particle particle in emitter.Particles)
                 {
-                    var time = Mathf.Clamp01(particle.Age / Math.Max(1f, particle.Duration - 1f));
+                    var time = Mathf.Clamp01(particle.Time);
                     var alpha = emitter.Definition.Track("ParticleAlpha", 1).Value(time, particle.Random[0]) * systemAlpha;
                     if (system.StopTick >= 0 && target >= system.StopTick && system.FadeOut != null)
                     {
@@ -467,17 +474,43 @@ namespace PlantsVsZombies.Reanimation
                     var stretch = emitter.Definition.Track("ParticleStretch", 1).Value(time, particle.Random[2]);
                     var brightness = emitter.Definition.Track("ParticleBrightness", 1).Value(time, particle.Brightness);
                     SpriteDrawState.Color = new Color(previous.r * emitter.Definition.Track("ParticleRed", 1).Value(time, particle.ColorRed) * brightness, previous.g * emitter.Definition.Track("ParticleGreen", 1).Value(time, particle.ColorGreen) * brightness, previous.b * emitter.Definition.Track("ParticleBlue", 1).Value(time, particle.ColorBlue) * brightness, previous.a * Mathf.Clamp01(alpha));
+                    if (emitter.Definition.FullScreen)
+                    {
+                        DrawFullScreen(fullScreenMatrix ?? SpriteDrawState.Matrix);
+                        continue;
+                    }
+
                     var position = Vector2.Lerp(particle.PreviousPosition, particle.Position, fraction);
                     var clipTop = emitter.Definition.Track("ClipTop").Value(time, .5f);
                     var clipBottom = emitter.Definition.Track("ClipBottom").Value(time, .5f);
                     var imageRow = emitter.Definition.Tracks.ContainsKey("ImageRow") ? (int)SystemValue(system, emitter, "ImageRow") : 0;
+                    var imageFrame = emitter.Definition.Tracks.ContainsKey("AnimationRate")
+                        ? Math.Max(0, Math.Min(emitter.Definition.ImageFrames - 1, (int)(particle.AnimationTime * emitter.Definition.ImageFrames)))
+                        : particle.Frame;
                     RequiredRenderer.DrawResourceSprite(emitter.Definition.Image, origin + position * scale, size * scale, Mathf.Lerp(particle.PreviousAngle, particle.Angle, fraction),
-                        particle.Frame, 0, 0, stretch, emitter.Definition.Additive, clipTop, clipBottom, imageRow);
+                        imageFrame, 0, 0, stretch, emitter.Definition.Additive, clipTop, clipBottom, imageRow);
                 }
             }
 
             SpriteDrawState.Color = previous;
             return true;
+        }
+
+        /// <summary>Fills the original PC viewport without inheriting a particle's position or scale.</summary>
+        /// <param name="viewport">The unshifted logical-to-screen transform.</param>
+        private void DrawFullScreen(Matrix4x4 viewport)
+        {
+            // PC TodParticleDraw 0x52D370: flag 0x200 fills (-gTransX, -gTransY, 800, 600).
+            var previous = SpriteDrawState.Matrix;
+            try
+            {
+                SpriteDrawState.Matrix = viewport;
+                RequiredRenderer.DrawNativeImage(Texture2D.whiteTexture, new Rect(0f, 0f, 800f, 600f), new Rect(0f, 0f, 1f, 1f));
+            }
+            finally
+            {
+                SpriteDrawState.Matrix = previous;
+            }
         }
 
         /// <summary>Performs move system origin.</summary>
@@ -583,6 +616,9 @@ namespace PlantsVsZombies.Reanimation
                         case "Additive":
                             definition.Additive = child.InnerText == "1";
                             break;
+                        case "FullScreen":
+                            definition.FullScreen = child.InnerText.Trim() == "1";
+                            break;
                         case "SystemField":
                             definition.SystemFields.Add(new Field {
                                 Type = child.SelectSingleNode("FieldType").InnerText,
@@ -626,13 +662,17 @@ namespace PlantsVsZombies.Reanimation
                 particle = new Particle
                 {
                     Random = new float[8],
-                    FieldRandom = new float[definition.Fields.Count, 2]
+                    FieldRandom = new float[definition.Fields.Count, 2],
+                    PreviousShake = new Vector2[definition.Fields.Count]
                 };
                 CreatedParticleCount++;
             }
 
             particle.Age = 0f;
+            particle.Time = -1f;
+            System.Array.Clear(particle.PreviousShake, 0, particle.PreviousShake.Length);
             particle.SpinVelocity = 0f;
+            particle.AnimationTime = 0f;
             for (var i = 0; i < particle.Random.Length; i++)
             {
                 particle.Random[i] = Random01(system);
@@ -678,9 +718,94 @@ namespace PlantsVsZombies.Reanimation
             particle.Angle = definition.Track("ParticleSpinAngle").Value(0, Random01(system)) + (definition.RandomSpin ? Random01(system) * 360f : 0);
             particle.PreviousPosition = particle.Position;
             particle.PreviousAngle = particle.Angle;
-            particle.Frame = system.RequiredRandom.Next(Math.Max(1, definition.ImageFrames));
+            if (definition.Tracks.ContainsKey("AnimationRate"))
+            {
+                // Original animated particles always start at the first atlas frame.
+                particle.AnimationRandom = Random01(system);
+                particle.Frame = 0;
+            }
+            else
+            {
+                particle.Frame = system.RequiredRandom.Next(Math.Max(1, definition.ImageFrames));
+            }
+
+            // PC SpawnParticle 0x52BD35 updates once before the particle can first be drawn.
+            AdvanceParticle(system, definition, particle);
+            particle.PreviousPosition = particle.Position;
+            particle.PreviousAngle = particle.Angle;
             emitter.Particles.Add(particle);
             emitter.Launched++;
+        }
+
+        /// <summary>Samples one native particle update, including the update performed at birth.</summary>
+        /// <param name="system">The effect owning the replayable decorative random stream.</param>
+        /// <param name="definition">The original emitter's authored fields and tracks.</param>
+        /// <param name="particle">The live particle whose current sample and next age are advanced.</param>
+        private void AdvanceParticle(SystemInstance system, EmitterDefinition definition, Particle particle)
+        {
+            particle.PreviousPosition = particle.Position;
+            particle.PreviousAngle = particle.Angle;
+            var time = particle.Age / Math.Max(1f, particle.Duration - 1f);
+            var last = particle.Time;
+            for (var i = 0; i < definition.Fields.Count; i++)
+            {
+                var field = definition.Fields[i];
+                var x = field.RequiredX.Value(time, particle.RequiredFieldRandom[i, 0]);
+                var y = field.RequiredY.Value(time, particle.RequiredFieldRandom[i, 1]);
+                switch (field.Type)
+                {
+                    case "Friction":
+                        particle.Velocity = new Vector2(particle.Velocity.x * (1 - x), particle.Velocity.y * (1 - y));
+                        break;
+                    case "Acceleration":
+                        particle.Velocity += new Vector2(x, y) * .01f;
+                        break;
+                    case "Velocity":
+                        particle.Position += new Vector2(x, y) * .01f;
+                        break;
+                    case "Position":
+                        // PC FloatTrackEvaluateFromLastTime 0x52BD50 returns zero before the first sample.
+                        var previousX = last < 0f ? 0f : field.RequiredX.Value(last, particle.RequiredFieldRandom[i, 0]);
+                        var previousY = last < 0f ? 0f : field.RequiredY.Value(last, particle.RequiredFieldRandom[i, 1]);
+                        particle.Position += new Vector2(x - previousX, y - previousY);
+                        break;
+                    case "Shake":
+                        // PC UpdateParticleField 0x52C04A removes the previous jitter before adding this tick's sample.
+                        var shake = new Vector2((Random01(system) * 2 - 1) * x, (Random01(system) * 2 - 1) * y);
+                        particle.Position += shake - particle.PreviousShake[i];
+                        particle.PreviousShake[i] = shake;
+                        break;
+                    case "Circle":
+                        var tangent = new Vector2(-particle.Position.y, particle.Position.x).normalized;
+                        particle.Position += tangent * ((x + particle.Position.magnitude * y) * .01f);
+                        break;
+                    case "Away":
+                        particle.Position += particle.Position.normalized * ((x + particle.Position.magnitude * y) * .01f);
+                        break;
+                    case "GroundConstraint":
+                        if (particle.Position.y >= y)
+                        {
+                            particle.Position = new Vector2(particle.Position.x, y);
+                            var reflect = definition.Track("CollisionReflect").Value(time, particle.Random[6]);
+                            particle.SpinVelocity = particle.Velocity.y * definition.Track("CollisionSpin").Value(time, particle.Random[7]) / 1000f * Mathf.Rad2Deg;
+                            particle.Velocity = new Vector2(particle.Velocity.x * reflect, -particle.Velocity.y * reflect);
+                        }
+
+                        break;
+                }
+            }
+
+            particle.Position += particle.Velocity;
+            particle.Angle += definition.Track("ParticleSpinSpeed").Value(time, particle.Random[3]) * .01f + particle.SpinVelocity;
+            if (definition.Tracks.TryGetValue("AnimationRate", out var animationRate))
+            {
+                // PC 0x52C460 advances a normalized cycle, not a frame count, each 100 Hz update.
+                particle.AnimationTime += animationRate.Value(time, particle.AnimationRandom) * .01f;
+                particle.AnimationTime -= Mathf.Floor(particle.AnimationTime);
+            }
+
+            particle.Time = time;
+            particle.Age++;
         }
 
         /// <summary>Performs step.</summary>
@@ -719,53 +844,7 @@ namespace PlantsVsZombies.Reanimation
                         }
                     }
 
-                    particle.PreviousPosition = particle.Position;
-                    particle.PreviousAngle = particle.Angle;
-                    float time = particle.Age / Math.Max(1f, particle.Duration - 1), last = Math.Max(0, particle.Age - 1) / Math.Max(1f, particle.Duration - 1);
-                    for (var i = 0; i < definition.Fields.Count; i++)
-                    {
-                        var field = definition.Fields[i];
-                        float x = field.RequiredX.Value(time, particle.RequiredFieldRandom[i, 0]), y = field.RequiredY.Value(time, particle.RequiredFieldRandom[i, 1]);
-                        switch (field.Type)
-                        {
-                            case "Friction":
-                                particle.Velocity = new Vector2(particle.Velocity.x * (1 - x), particle.Velocity.y * (1 - y));
-                                break;
-                            case "Acceleration":
-                                particle.Velocity += new Vector2(x, y) * .01f;
-                                break;
-                            case "Velocity":
-                                particle.Position += new Vector2(x, y) * .01f;
-                                break;
-                            case "Position":
-                                particle.Position += new Vector2(x - field.RequiredX.Value(last, particle.RequiredFieldRandom[i, 0]), y - field.RequiredY.Value(last, particle.RequiredFieldRandom[i, 1]));
-                                break;
-                            case "Shake":
-                                particle.Position += new Vector2((Random01(system) * 2 - 1) * x, (Random01(system) * 2 - 1) * y);
-                                break;
-                            case "Circle":
-                                var tangent = new Vector2(-particle.Position.y, particle.Position.x).normalized;
-                                particle.Position += tangent * ((x + particle.Position.magnitude * y) * .01f);
-                                break;
-                            case "Away":
-                                particle.Position += particle.Position.normalized * ((x + particle.Position.magnitude * y) * .01f);
-                                break;
-                            case "GroundConstraint":
-                                if (particle.Position.y >= y)
-                                {
-                                    particle.Position = new Vector2(particle.Position.x, y);
-                                    var reflect = definition.Track("CollisionReflect").Value(time, particle.Random[6]);
-                                    particle.SpinVelocity = particle.Velocity.y * definition.Track("CollisionSpin").Value(time, particle.Random[7]) / 1000f * Mathf.Rad2Deg;
-                                    particle.Velocity = new Vector2(particle.Velocity.x * reflect, -particle.Velocity.y * reflect);
-                                }
-
-                                break;
-                        }
-                    }
-
-                    particle.Position += particle.Velocity;
-                    particle.Angle += definition.Track("ParticleSpinSpeed").Value(time, particle.Random[3]) * .01f + particle.SpinVelocity;
-                    particle.Age++;
+                    AdvanceParticle(system, definition, particle);
                 }
 
                 if (!stopped && (emitter.Age < emitter.Duration || definition.Loops))

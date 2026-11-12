@@ -50,6 +50,8 @@ namespace PlantsVsZombies.Game
         private int _blendTicks;
         /// <summary>The reused attached head buffer, or null for a single body animation.</summary>
         private HeadPlayback[]? _heads;
+        /// <summary>The optional original per-track shake offsets for the plant currently being drawn.</summary>
+        private Func<string, Vector2>? _plantTrackOffset;
         /// <summary>The visible native zombie costume.</summary>
         private ZombieVariant _variant;
         /// <summary>Whether the zombie uses an attached plant head.</summary>
@@ -83,8 +85,9 @@ namespace PlantsVsZombies.Game
         /// <param name="remainder">The render interpolation remainder.</param>
         /// <param name="surfaceKey">The stable feedback surface identity.</param>
         /// <param name="highlighted">Whether the held shovel highlights this plant.</param>
+        /// <param name="trackOffset">Optional native per-track shake offsets for this plant's body animation.</param>
         internal void DrawPlant(Plant plant, string name, Vector2 origin, float scale, float seconds, string clip,
-            bool loop, float rate, HeadPlayback[]? heads, string key, Rect viewport, int blendTicks, float remainder, string surfaceKey, bool highlighted = false)
+            bool loop, float rate, HeadPlayback[]? heads, string key, Rect viewport, int blendTicks, float remainder, string surfaceKey, bool highlighted = false, Func<string, Vector2>? trackOffset = null)
         {
             _plant = plant;
             _name = name;
@@ -95,6 +98,7 @@ namespace PlantsVsZombies.Game
             _loop = loop;
             _rate = rate;
             _heads = heads;
+            _plantTrackOffset = trackOffset;
             _key = key;
             _blendTicks = blendTicks;
             _remainder = remainder;
@@ -205,7 +209,7 @@ namespace PlantsVsZombies.Game
                 ? RequiredRenderer.DrawNativeAttachedHeads(_name, _origin, _scale, _seconds, _rate, _heads, visible, _plant.ModeFacesLeft, _key, _blendTicks)
                 : RequiredRenderer.DrawNativePlayback(_name, _origin, _scale, _seconds, _clip, _loop, _rate, visible,
                     AdventureDefensivePlantRules.DamageTrack(_plant.Kind), AdventureDefensivePlantRules.DamageImage(_plant.Kind, _plant.Health),
-                    _plant.ModeFacesLeft, _key, _blendTicks);
+                    _plant.ModeFacesLeft, _key, _blendTicks, trackOffset: _plantTrackOffset);
             var mine = _plant.PotatoMinePresentation;
             if (_plant.Kind == PlantKind.PotatoMine && mine != null && mine.LightCreated && _plant.MinePhase == MinePhase.Armed)
             {
