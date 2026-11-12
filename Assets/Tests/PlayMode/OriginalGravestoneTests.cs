@@ -40,7 +40,7 @@ namespace PlantsVsZombies.Tests.PlayMode
         private Vector2 _offset;
 
         /// <summary>Creates a real-asset graphics fixture with no game lifecycle or persistent data.</summary>
-        /// <returns>A frame boundary allowing URP initialization.</returns>
+        /// <returns>A frame boundary allowing render pipeline initialization.</returns>
         [UnitySetUp]
         public IEnumerator SetUp()
         {
@@ -348,7 +348,7 @@ namespace PlantsVsZombies.Tests.PlayMode
             }
         }
 
-        /// <summary>Captures the actual URP board camera after submitting original artwork over a white background.</summary>
+        /// <summary>Captures the actual board scene camera after submitting original artwork over a white background.</summary>
         /// <param name="draw">The production or independent reference drawing operation.</param>
         /// <returns>Frame boundaries allowing Canvas and the board camera to complete their submissions.</returns>
         private IEnumerator Capture(Action draw)

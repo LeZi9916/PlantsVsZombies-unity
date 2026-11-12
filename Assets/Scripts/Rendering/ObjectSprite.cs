@@ -11,7 +11,7 @@ namespace PlantsVsZombies.Rendering
         internal GameObject GameObject { get; }
         /// <summary>Gets the dynamic quad mesh owned by this sprite.</summary>
         internal Mesh Mesh { get; }
-        /// <summary>Gets the renderer used by the Universal Render Pipeline.</summary>
+        /// <summary>Gets the renderer drawn by the project's render pipeline.</summary>
         internal MeshRenderer Renderer { get; }
         /// <summary>Gets the per-draw material values reused by this sprite.</summary>
         internal MaterialPropertyBlock Properties { get; } = new MaterialPropertyBlock();

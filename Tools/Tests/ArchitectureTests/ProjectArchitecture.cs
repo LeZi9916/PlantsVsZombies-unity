@@ -281,22 +281,33 @@ namespace PlantsVsZombies.Tests.Architecture
             }
         }
 
-        /// <summary>Resolves the global URP asset and verifies quality settings inherit or select it.</summary>
+        /// <summary>Resolves the global pipeline asset, requires it to be the project's own pipeline, and verifies quality settings inherit or select it.</summary>
         /// <param name="repository">The repository root.</param>
         /// <param name="violations">The destination for violations.</param>
         private static void InspectPipeline(string repository, List<string> violations)
         {
             using var manifest = JsonDocument.Parse(File.ReadAllText(Path.Combine(repository, "Packages", "manifest.json")));
-            if (!manifest.RootElement.GetProperty("dependencies").TryGetProperty("com.unity.render-pipelines.universal", out _))
+            foreach (var dependency in manifest.RootElement.GetProperty("dependencies").EnumerateObject())
             {
-                violations.Add("Packages/manifest.json: URP dependency is missing.");
+                if (dependency.Name.StartsWith("com.unity.render-pipelines.", StringComparison.Ordinal))
+                {
+                    violations.Add("Packages/manifest.json: " + dependency.Name + " is not used; the project renders through PvZRenderPipeline.");
+                }
+            }
+
+            var scriptMetaPath = Path.Combine(repository, "Assets", "Scripts", "Rendering", "Pipeline", "PvZRenderPipelineAsset.cs.meta");
+            var scriptGuid = File.Exists(scriptMetaPath) ? Regex.Match(File.ReadAllText(scriptMetaPath), @"^guid:\s*([0-9a-f]{32})\s*$", RegexOptions.Multiline) : Match.Empty;
+            if (!scriptGuid.Success)
+            {
+                violations.Add("Assets/Scripts/Rendering/Pipeline/PvZRenderPipelineAsset.cs.meta: the pipeline asset script is missing.");
+                return;
             }
 
             var graphics = File.ReadAllText(Path.Combine(repository, "ProjectSettings", "GraphicsSettings.asset"));
             var selected = Regex.Match(graphics, @"m_CustomRenderPipeline:\s*\{fileID:\s*[1-9]\d*,\s*guid:\s*([0-9a-f]{32})");
             if (!selected.Success)
             {
-                violations.Add("ProjectSettings/GraphicsSettings.asset: select a persisted URP asset.");
+                violations.Add("ProjectSettings/GraphicsSettings.asset: select a persisted PvZRenderPipelineAsset.");
                 return;
             }
 
@@ -310,10 +321,9 @@ namespace PlantsVsZombies.Tests.Architecture
             }
 
             var pipeline = File.ReadAllText(pipelineMeta.Substring(0, pipelineMeta.Length - ".meta".Length));
-            var renderer = Regex.Match(pipeline, @"m_RendererDataList:\s*\r?\n\s*-\s*\{fileID:\s*[1-9]\d*,\s*guid:\s*([0-9a-f]{32})");
-            if (!renderer.Success || !assets.Any(path => Regex.IsMatch(File.ReadAllText(path), @"^guid:\s*" + renderer.Groups[1].Value + @"\s*$", RegexOptions.Multiline)))
+            if (!Regex.IsMatch(pipeline, @"m_Script:\s*\{fileID:\s*11500000,\s*guid:\s*" + scriptGuid.Groups[1].Value + @","))
             {
-                violations.Add(Path.GetRelativePath(repository, pipelineMeta) + ": renderer data does not resolve to a project asset.");
+                violations.Add(Path.GetRelativePath(repository, pipelineMeta) + ": the selected pipeline asset is not a PvZRenderPipelineAsset.");
             }
 
             var quality = File.ReadAllText(Path.Combine(repository, "ProjectSettings", "QualitySettings.asset"));
@@ -321,7 +331,7 @@ namespace PlantsVsZombies.Tests.Architecture
             {
                 if (entry.Groups[1].Value != "0" && entry.Groups[2].Value != selectedGuid)
                 {
-                    violations.Add("ProjectSettings/QualitySettings.asset: a quality level overrides the selected URP asset.");
+                    violations.Add("ProjectSettings/QualitySettings.asset: a quality level overrides the selected pipeline asset.");
                 }
             }
         }

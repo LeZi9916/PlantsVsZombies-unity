@@ -12,7 +12,7 @@ using System.Diagnostics.CodeAnalysis;
 
 namespace PlantsVsZombies.Reanimation
 {
-    /// <summary>Samples original PopCap animations and submits their textured tracks to URP scene renderers.</summary>
+    /// <summary>Samples original PopCap animations and submits their textured tracks to pooled scene renderers.</summary>
     public sealed class ReanimationRenderer : IDisposable
     {
         /// <summary>Limits dictionary buffers retained after actors leave the visible presentation.</summary>

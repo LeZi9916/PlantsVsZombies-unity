@@ -3,11 +3,10 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Rendering;
-using UnityEngine.Rendering.Universal;
 
 namespace PlantsVsZombies.Rendering
 {
-    /// <summary>Renders ordered texture quads through pooled GameObjects and a URP camera.</summary>
+    /// <summary>Renders ordered texture quads through pooled GameObjects and the project's render pipeline cameras.</summary>
     /// <remarks>Call on Unity's main thread. Layer 31 is reserved for sprite cameras and interface canvases.</remarks>
     public sealed class ObjectSpriteRenderer : IDisposable
     {
@@ -43,8 +42,8 @@ namespace PlantsVsZombies.Rendering
         private readonly GameObject _root;
         /// <summary>The camera that renders this pool into its destination surface.</summary>
         private readonly Camera _camera;
-        /// <summary>The reused request submitted to the Universal Render Pipeline.</summary>
-        private readonly UniversalRenderPipeline.SingleCameraRequest _request = new UniversalRenderPipeline.SingleCameraRequest();
+        /// <summary>The reused request submitted to the active render pipeline.</summary>
+        private readonly RenderPipeline.StandardRequest _request = new RenderPipeline.StandardRequest();
         /// <summary>The isolated world position used only while rendering cropped native surfaces.</summary>
         private readonly Vector3 _capturePosition;
         /// <summary>Whether this pool has participated in direct scene presentation.</summary>
@@ -261,10 +260,10 @@ namespace PlantsVsZombies.Rendering
             sprite.Renderer.SetPropertyBlock(properties);
         }
 
-        /// <summary>Renders the submitted objects into the supplied surface through URP.</summary>
+        /// <summary>Renders the submitted objects into the supplied surface through a render pipeline request.</summary>
         /// <param name = "destination">The render texture receiving this batch.</param>
         /// <exception cref = "ObjectDisposedException">This pool has already been disposed.</exception>
-        /// <exception cref = "InvalidOperationException">The active pipeline does not support URP camera requests.</exception>
+        /// <exception cref = "InvalidOperationException">The active pipeline does not support standard render requests.</exception>
         public void RenderTo(RenderTexture destination)
         {
             ThrowIfDisposed();
@@ -276,7 +275,7 @@ namespace PlantsVsZombies.Rendering
             _request.destination = destination;
             if (!RenderPipeline.SupportsRenderRequest(_camera, _request))
             {
-                throw new InvalidOperationException("PvZ sprite rendering requires the configured Universal Render Pipeline.");
+                throw new InvalidOperationException("PvZ sprite rendering requires the configured PvZ render pipeline.");
             }
 
             var previousActive = RenderTexture.active;
@@ -354,7 +353,7 @@ namespace PlantsVsZombies.Rendering
             }
         }
 
-        /// <summary>Creates a camera with the unlit URP settings shared by scene and cropped-surface rendering.</summary>
+        /// <summary>Creates a camera with the unlit settings shared by scene and cropped-surface rendering.</summary>
         /// <param name="cameraObject">The object that owns the new camera.</param>
         /// <returns>The disabled orthographic camera.</returns>
         private static Camera CreateCamera(GameObject cameraObject)
@@ -370,10 +369,6 @@ namespace PlantsVsZombies.Rendering
             camera.useOcclusionCulling = false;
             camera.allowHDR = false;
             camera.allowMSAA = false;
-            var cameraData = cameraObject.AddComponent<UniversalAdditionalCameraData>();
-            cameraData.renderPostProcessing = false;
-            cameraData.requiresColorOption = CameraOverrideOption.Off;
-            cameraData.requiresDepthOption = CameraOverrideOption.Off;
             return camera;
         }
 

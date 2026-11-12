@@ -595,7 +595,7 @@ namespace PlantsVsZombies.Tests.PlayMode
         }
 
         /// <summary>Checks the real board presenter lets a zombie overlap the native bank instead of hiding behind it.</summary>
-        /// <returns>Frame boundaries for Canvas and URP rendering before reading the overlap pixel.</returns>
+        /// <returns>Frame boundaries for Canvas and scene camera rendering before reading the overlap pixel.</returns>
         [UnityTest]
         public IEnumerator PlayingSeedBankIsBehindZombieArtwork()
         {

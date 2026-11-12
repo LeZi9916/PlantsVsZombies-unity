@@ -34,7 +34,7 @@ namespace PlantsVsZombies.Tests.PlayMode
         private string _root = "";
         /// <summary>Owns decoded source textures used to distinguish occupied slots from empty silhouettes.</summary>
         private readonly List<Texture2D> _textures = new List<Texture2D>();
-        /// <summary>Receives the real Canvas and URP camera output.</summary>
+        /// <summary>Receives the real Canvas and scene camera output.</summary>
         private RenderTexture _target = null!;
         /// <summary>Reads the frame in original logical coordinates.</summary>
         private Texture2D _pixels = null!;

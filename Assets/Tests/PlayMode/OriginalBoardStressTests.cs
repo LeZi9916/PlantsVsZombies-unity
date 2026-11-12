@@ -21,7 +21,7 @@ namespace PlantsVsZombies.Tests.PlayMode
     public sealed class OriginalBoardStressTests
     {
         /// <summary>Checks actual original shadow quads and body placement against the native image helper's top-left semantics.</summary>
-        /// <returns>Frame boundaries before exercising the real URP render requests.</returns>
+        /// <returns>Frame boundaries before exercising the real render pipeline requests.</returns>
         [UnityTest]
         public IEnumerator OriginalZombieShadowUsesNativeImageTopLeft()
         {

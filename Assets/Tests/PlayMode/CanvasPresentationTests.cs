@@ -51,7 +51,7 @@ namespace PlantsVsZombies.Tests.PlayMode
         }
 
         /// <summary>Preserves UI backgrounds, scene animations, and foreground interface layering.</summary>
-        /// <returns>Frame boundaries allowing the native Canvas and URP camera to publish their geometry.</returns>
+        /// <returns>Frame boundaries allowing the native Canvas and scene camera to publish their geometry.</returns>
         [UnityTest]
         public IEnumerator InterleavesCanvasAndSceneRenderers()
         {

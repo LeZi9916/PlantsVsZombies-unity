@@ -10,8 +10,10 @@ dotnet run --project Tools/Tests/ArchitectureTests/ArchitectureTests.csproj -c R
 The scanner uses the pinned Roslyn parser package. It checks production namespaces,
 single-file type ownership, public nested types, partial declarations, nullable
 directives, braces, line endings, script metadata and duplicate GUIDs. It also
-resolves the configured URP pipeline and renderer asset GUIDs, checks quality
-overrides, and detects immediate GL rendering that bypasses attached renderers.
+resolves the configured pipeline asset GUID, requires it to be a
+`PvZRenderPipelineAsset`, rejects `com.unity.render-pipelines.*` package
+dependencies, checks quality overrides, and detects immediate GL rendering that
+bypasses attached renderers.
 Positive and negative syntax fixtures run before every repository scan.
 
 A coordinator size check keeps `PvZGame.cs` under 700 lines so new responsibilities are

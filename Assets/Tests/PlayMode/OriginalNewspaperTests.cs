@@ -188,7 +188,7 @@ namespace PlantsVsZombies.Tests.PlayMode
         }
 
         /// <summary>Copies the completed graphics target into readable pixels.</summary>
-        /// <param name="target">The completed URP output.</param>
+        /// <param name="target">The completed render pipeline output.</param>
         /// <param name="pixels">The reusable readback image.</param>
         private static void Read(RenderTexture target, Texture2D pixels)
         {

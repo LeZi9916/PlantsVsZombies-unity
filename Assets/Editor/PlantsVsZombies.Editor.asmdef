@@ -2,9 +2,7 @@
     "name": "PlantsVsZombies.Editor",
     "rootNamespace": "PlantsVsZombies.Editor",
     "references": [
-        "PlantsVsZombies.Runtime",
-        "Unity.RenderPipelines.Core.Runtime",
-        "Unity.RenderPipelines.Universal.Runtime"
+        "PlantsVsZombies.Runtime"
     ],
     "includePlatforms": [
         "Editor"

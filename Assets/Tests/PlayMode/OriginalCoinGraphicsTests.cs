@@ -21,7 +21,7 @@ namespace PlantsVsZombies.Tests.PlayMode
     public sealed class OriginalCoinGraphicsTests
     {
         /// <summary>Checks original static currency faces, glow, diamond pivot, shrinking, and fading during real collection.</summary>
-        /// <returns>A frame boundary allowing URP initialization before submitting real original textures.</returns>
+        /// <returns>A frame boundary allowing render pipeline initialization before submitting real original textures.</returns>
         [UnityTest]
         public IEnumerator FlyingMoneyUsesOriginalFacesGlowDiamondPivotAndOpacity()
         {

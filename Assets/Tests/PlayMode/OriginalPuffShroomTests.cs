@@ -41,7 +41,7 @@ namespace PlantsVsZombies.Tests.PlayMode
         private Vector2 _offset;
 
         /// <summary>Creates a uniquely owned real-asset graphics fixture without starting game lifecycle or disk-backed profiles.</summary>
-        /// <returns>A frame boundary allowing URP to finish initialization.</returns>
+        /// <returns>A frame boundary allowing the render pipeline to finish initialization.</returns>
         [UnitySetUp]
         public IEnumerator SetUp()
         {
@@ -312,7 +312,7 @@ namespace PlantsVsZombies.Tests.PlayMode
 
         /// <summary>Submits one production draw over a flat test background and captures its actual camera pixels.</summary>
         /// <param name="draw">The production presenter operation under test.</param>
-        /// <returns>Frame boundaries allowing the Canvas and URP scene camera to publish their geometry.</returns>
+        /// <returns>Frame boundaries allowing the Canvas and scene camera to publish their geometry.</returns>
         private IEnumerator Capture(Action draw)
         {
             ObjectSpriteRenderer.BeginSceneFrame();

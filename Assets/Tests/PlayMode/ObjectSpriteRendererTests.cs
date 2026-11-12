@@ -4,14 +4,14 @@ using System;
 using System.Collections;
 using NUnit.Framework;
 using PlantsVsZombies.Rendering;
+using PlantsVsZombies.Rendering.Pipeline;
 using UnityEngine;
 using UnityEngine.Rendering;
-using UnityEngine.Rendering.Universal;
 using UnityEngine.TestTools;
 
 namespace PlantsVsZombies.Tests.PlayMode
 {
-    /// <summary>Verifies rendered pixels and resource ownership through the actual URP camera path.</summary>
+    /// <summary>Verifies rendered pixels and resource ownership through the actual render pipeline camera path.</summary>
     public sealed class ObjectSpriteRendererTests
     {
         /// <summary>The texture used for solid-color geometry.</summary>
@@ -27,13 +27,13 @@ namespace PlantsVsZombies.Tests.PlayMode
         private ObjectSpriteRenderer _renderer = null!;
 
         /// <summary>Initializes the active render pipeline and allocates isolated synthetic resources.</summary>
-        /// <returns>A frame boundary allowing Unity to initialize URP before rendering.</returns>
+        /// <returns>A frame boundary allowing Unity to initialize the render pipeline before rendering.</returns>
         [UnitySetUp]
         public IEnumerator SetUp()
         {
             yield return null;
             Assert.That(SystemInfo.graphicsDeviceType, Is.Not.EqualTo(GraphicsDeviceType.Null), "GPU tests require a graphics device.");
-            Assert.That(GraphicsSettings.currentRenderPipeline, Is.InstanceOf<UniversalRenderPipelineAsset>());
+            Assert.That(GraphicsSettings.currentRenderPipeline, Is.InstanceOf<PvZRenderPipelineAsset>());
             _white = new Texture2D(1, 1, TextureFormat.RGBA32, false, true);
             _white.SetPixel(0, 0, Color.white);
             _white.Apply();
@@ -83,7 +83,7 @@ namespace PlantsVsZombies.Tests.PlayMode
             AssertColor(_pixels.GetPixel(2, 2), Color.red);
         }
 
-        /// <summary>Checks standard source-alpha blending through the URP shader.</summary>
+        /// <summary>Checks standard source-alpha blending through the sprite shader.</summary>
         [Test]
         public void BlendsTranslucentObjects()
         {
@@ -250,7 +250,7 @@ namespace PlantsVsZombies.Tests.PlayMode
         }
 
         /// <summary>Checks direct camera presentation, shared painter order, and retirement of an unused secondary pool.</summary>
-        /// <returns>Frame boundaries allowing URP to render the published scene objects.</returns>
+        /// <returns>Frame boundaries allowing the scene camera to render the published scene objects.</returns>
         [UnityTest]
         public IEnumerator PresentsSceneObjectsWithoutFrameCompositing()
         {
@@ -373,7 +373,7 @@ namespace PlantsVsZombies.Tests.PlayMode
             _renderer.DrawQuad(_white, width, height, new Rect(0f, 0f, 1f, 1f), matrix, color, 0);
         }
 
-        /// <summary>Renders through URP and reads back pixels while preserving the active target.</summary>
+        /// <summary>Renders through the pipeline and reads back pixels while preserving the active target.</summary>
         private void Capture()
         {
             _renderer.RenderTo(_target);

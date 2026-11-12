@@ -19,12 +19,12 @@ git submodule update --init --recursive
 | `Assets/Scripts/Game` | 游戏生命周期、界面导航与游戏流程协调 |
 | `Assets/Scripts/Simulation` | 模拟状态、游戏规则与模拟主循环 |
 | `Assets/Scripts/Adventure` | 冒险流程、波次、奖励与表现状态 |
-| `Assets/Scripts/Rendering` | URP 相机、对象池、MeshRenderer 和渲染资源生命周期 |
+| `Assets/Scripts/Rendering` | 自定义渲染管线（`Pipeline/`）、相机、对象池、MeshRenderer 和渲染资源生命周期 |
 | `Assets/Scripts/Reanimation` | 原版动画解析、采样与渲染命令生成 |
 | `Assets/Scripts/UI` | Canvas 界面、独立输入路由及位图字体 |
 | `Assets/Scripts/Diagnostics` | 显式命令行触发的冒烟验证组件 |
 | `Assets/Scripts/VerifiedData` | 原版静态数据模型、只读目录与可重生成的数据表 |
-| `Assets/Editor` | 场景、构建、资源导入与 URP 配置工具 |
+| `Assets/Editor` | 场景、构建、资源导入与渲染管线配置工具 |
 | `Assets/Tests` | Unity EditMode 与 PlayMode 回归 |
 | `Tools/CSharp` | 独立 C# 开发工具 |
 | `Tools/Tests` | 独立验证项目与隔离 Unity 测试脚本 |
@@ -33,9 +33,9 @@ git submodule update --init --recursive
 
 ## 渲染
 
-项目使用 Unity 随附的 **URP 17.3.0**。`Assets/Settings` 内的 Pipeline、Renderer、Global Settings 与 Volume Profile 是 Unity Editor 生成的共享资产；Graphics 与所有 Quality 等级引用相同的 Pipeline。
+项目使用自定义的轻量渲染管线 **PvZRenderPipeline**（`Assets/Scripts/Rendering/Pipeline`），不依赖 URP 或任何渲染管线包，只提供游戏需要的无光照 2D 绘制：按深度排序的相机、清屏与视口、不透明/透明两个绘制阶段、渲染到 RenderTexture 的 render request、uGUI 与 Editor 视图。`Assets/Settings/PvZRenderPipeline.asset` 由菜单 **PlantsVsZombies > Configure Render Pipeline** 生成，Graphics 与所有 Quality 等级引用它，且所有 Quality 等级关闭 MSAA。结构、支持范围及扩展方式见该目录的 `README.md`。
 
-棋盘图像与动画四边形提交到复用的 `GameObject + MeshFilter + MeshRenderer` 对象，由启用的 URP 场景相机直接显示。对象池复用网格、顶点缓冲及材质属性，资源随渲染器 `Dispose` 释放。第 31 层 `PvZ Rendering` 专供游戏渲染相机使用。
+棋盘图像与动画四边形提交到复用的 `GameObject + MeshFilter + MeshRenderer` 对象，由启用的场景相机直接显示。对象池复用网格、顶点缓冲及材质属性，资源随渲染器 `Dispose` 释放。第 31 层 `PvZ Rendering` 专供游戏渲染相机使用。
 
 界面图像、文字、输入框、滑块与弹窗由 Canvas 组件显示，`GamePresenter` 提交每帧表现，`PvZGame` 只保留生命周期、跨界面共享状态与每帧执行顺序；音效与音乐（`Audio`）、输入路由与菜单（`Game`）、冒险开场/关卡/奖励（`Adventure`）、独立模式（`Modes`）、商店/花园/智慧树/Dave（`Progression`）、存档工具（`Profiles`）、纹理缓存（`Rendering`）和棋盘布局（`BoardUI`）分别由 `PvZGame` 按需创建的协作类负责。架构测试限制 `PvZGame.cs` 不超过 700 行。输入在帧更新时独立采样，使用与相机、Canvas 相同的 800×600 逻辑视口换算；宽屏留边不参与棋盘点击。运行时不再依赖 `OnGUI`、`GUI` 绘制或 `Event.current`。
 

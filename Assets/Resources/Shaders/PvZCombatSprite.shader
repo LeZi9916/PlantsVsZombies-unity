@@ -19,7 +19,7 @@ Shader "PlantsVsZombies/CombatSprite"
     }
     SubShader
     {
-        Tags { "RenderPipeline"="UniversalPipeline" "Queue"="Transparent" "RenderType"="Transparent" }
+        Tags { "RenderPipeline"="PvZRenderPipeline" "Queue"="Transparent" "RenderType"="Transparent" }
         Pass
         {
             Name "PvZSprite"
@@ -31,7 +31,7 @@ Shader "PlantsVsZombies/CombatSprite"
             HLSLPROGRAM
             #pragma vertex SpriteVertex
             #pragma fragment SpriteFragment
-            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+            #include "Assets/Scripts/Rendering/Pipeline/ShaderLibrary/PvZPipelineCore.hlsl"
             struct Attributes
             {
                 float4 positionOS : POSITION;
@@ -45,8 +45,8 @@ Shader "PlantsVsZombies/CombatSprite"
                 half4 color : COLOR;
                 float2 screenPixel : TEXCOORD1;
             };
-            TEXTURE2D(_MainTex);
-            SAMPLER(sampler_MainTex);
+            Texture2D _MainTex;
+            SamplerState sampler_MainTex;
             CBUFFER_START(UnityPerMaterial)
                 float _Grayscale;
                 float _Additive;
@@ -73,7 +73,7 @@ Shader "PlantsVsZombies/CombatSprite"
                     clip(_ClipRect.zw - input.screenPixel);
                 }
 
-                half4 source = SAMPLE_TEXTURE2D(_MainTex, sampler_MainTex, input.uv);
+                half4 source = _MainTex.Sample(sampler_MainTex, input.uv);
                 if (_RenderMode > 0.5 && _RenderMode < 1.5)
                 {
                     source.rgb *= saturate(_NativeAddColor.rgb + _Additive.xxx);
