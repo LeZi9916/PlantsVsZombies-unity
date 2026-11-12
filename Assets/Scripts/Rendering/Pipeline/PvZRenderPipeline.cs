@@ -49,25 +49,25 @@ namespace PlantsVsZombies.Rendering.Pipeline
         }
 
         /// <summary>Reports whether a render request type can be processed by this pipeline.</summary>
-        /// <typeparam name="RequestData">The type of the submitted request.</typeparam>
+        /// <typeparam name="TRequestData">The type of the submitted request.</typeparam>
         /// <param name="camera">The camera that would render the request.</param>
         /// <param name="data">The request to check.</param>
         /// <returns><see langword="true"/> for <see cref="RenderPipeline.StandardRequest"/>; otherwise <see langword="false"/>.</returns>
-        protected override bool IsRenderRequestSupported<RequestData>(Camera camera, RequestData data)
+        protected override bool IsRenderRequestSupported<TRequestData>(Camera camera, TRequestData data)
         {
             return data is StandardRequest;
         }
 
         /// <summary>Renders one camera into the two-dimensional render texture named by a standard request.</summary>
-        /// <typeparam name="RequestData">The type of the submitted request.</typeparam>
+        /// <typeparam name="TRequestData">The type of the submitted request.</typeparam>
         /// <param name="context">The context receiving the recorded rendering commands.</param>
         /// <param name="camera">The camera to render; its target texture is restored afterwards.</param>
         /// <param name="renderRequest">The request naming the destination texture.</param>
-        protected override void ProcessRenderRequests<RequestData>(ScriptableRenderContext context, Camera camera, RequestData renderRequest)
+        protected override void ProcessRenderRequests<TRequestData>(ScriptableRenderContext context, Camera camera, TRequestData renderRequest)
         {
             if (renderRequest is not StandardRequest request)
             {
-                Debug.LogWarning($"{nameof(PvZRenderPipeline)}: Render request type {typeof(RequestData).FullName} is not supported.", camera);
+                Debug.LogWarning($"{nameof(PvZRenderPipeline)}: Render request type {typeof(TRequestData).FullName} is not supported.", camera);
                 return;
             }
 
