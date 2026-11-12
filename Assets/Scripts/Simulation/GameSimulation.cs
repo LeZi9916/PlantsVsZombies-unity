@@ -746,21 +746,81 @@ namespace PlantsVsZombies.Simulation
             return false;
         }
 
-        /// <summary>Checks whether a dancer already occupies its intended summon position.</summary>
-        /// <param name="row">The summon lane.</param>
-        /// <param name="x">The summon board x coordinate.</param>
-        /// <returns>True when a backup dancer is nearby.</returns>
-        private bool HasBackupDancerNear(int row, float x)
+        /// <summary>Stores the shared original dance frame clock in native board updates.</summary>
+        private int _dancerClockTicks;
+
+        /// <summary>Advances the original dancer phase and fills only this leader's vacant backup slots.</summary>
+        /// <param name="zombie">The live dancer being advanced.</param>
+        private void AdvanceAdventureDancer(Zombie zombie)
         {
-            foreach (var zombie in Zombies)
+            if (zombie.DancerState == null)
             {
-                if (zombie.Kind == ZombieKind.BackupDancer && zombie.Row == row && Math.Abs(zombie.X - x) < 1.2f)
+                AdventureDancerRules.Initialize(zombie, zombie.Kind == ZombieKind.Dancing ? _random.Next(12) : 0);
+            }
+
+            var previousPhase = zombie.PresentationNativePhase;
+            var needsBackup = zombie.Kind == ZombieKind.Dancing
+                && AdventureDancerRules.NeedsBackup(zombie, Zombies, Presentation.Corpses, Adventure.Level);
+            var chilled = AdventureDancerRules.GroupAffected(zombie, Zombies, true);
+            if (!AdventureDancerRules.Tick(zombie, _dancerClockTicks, needsBackup, chilled))
+            {
+                return;
+            }
+
+            if (previousPhase == 41)
+            {
+                var enemies = 0;
+                foreach (var other in Zombies)
                 {
-                    return true;
+                    if (other.Health > 0f && !other.Headless && !other.Hypnotized)
+                    {
+                        enemies++;
+                    }
+                }
+
+                if (enemies <= 15)
+                {
+                    RequestAdventureZombieFoley(100);
                 }
             }
 
-            return false;
+            if (zombie.Headless)
+            {
+                return;
+            }
+
+            var state = zombie.DancerState!;
+            var nativeX = (int)AdventureZombieNativeRules.NativePositionX(zombie.X, AdventureDancerRules.Scale(zombie));
+            for (var slot = 0; slot < 4; slot++)
+            {
+                var row = zombie.Row + (slot == 0 ? -1 : slot == 1 ? 1 : 0);
+                if (!AdventureDancerRules.CanSummonInRow(Adventure.Level, row)
+                    || AdventureDancerRules.Occupied(Zombies, Presentation.Corpses, state.Followers[slot]))
+                {
+                    continue;
+                }
+
+                // PC 0x5443F0: four independently owned slots, exactly one hundred native pixels apart.
+                var backupX = nativeX + (slot == 2 ? -100 : slot == 3 ? 100 : 0);
+                var backup = SpawnAdventureZombie(ZombieKind.BackupDancer, row, 0f, zombie.Wave);
+                backup.X = AdventureZombieNativeRules.GridX(backupX, AdventureDancerRules.Scale(backup));
+                backup.PresentationPreviousX = backup.X;
+                backup.Hypnotized = zombie.Hypnotized;
+                backup.PresentationNativePhase = 50;
+                backup.PresentationAnimationAge = 0f;
+                backup.DancerState!.LeaderId = zombie.Id;
+                backup.DancerState.PhaseTicks = AdventureDancerRules.RiseTicks;
+                state.Followers[slot] = backup.Id;
+                Presentation.ZombieRiseEffects.Add(new AdventureZombieRiseEffect
+                {
+                    Id = ++Presentation._effectId,
+                    Row = row,
+                    X = backupX + 60f,
+                    Y = AdventureBiteNativeY(backup, backupX) + 110f,
+                    Dancer = true
+                });
+                RequestAdventureZombieFoley(79);
+            }
         }
 
         /// <summary>Checks whether a timer list contains a specific board cell.</summary>
@@ -1063,7 +1123,7 @@ namespace PlantsVsZombies.Simulation
                     continue;
                 }
 
-                var x = (int)global::PlantsVsZombies.Adventure.AdventureZombieNativeRules.NativePositionX(z.X, z.IsSmall ? .5f : 1f);
+                var x = (int)global::PlantsVsZombies.Adventure.AdventureZombieNativeRules.NativePositionX(z.X, AdventureDancerRules.Scale(z));
                 var backwards = z.PresentationWalkingBackwards ?? (z.Hypnotized || z.Kind == ZombieKind.Digger && z.AbilityPhase == 2);
                 var body = global::PlantsVsZombies.Adventure.AdventureBowlingNativeRules.ZombieBounds((int)z.Kind, phase, x, (int)AdventureBiteNativeY(z, x), backwards, z.PresentationBiteBodyY, z.PresentationBiteClipHeight);
                 if (body.X > 800)
@@ -1814,7 +1874,7 @@ namespace PlantsVsZombies.Simulation
             }
             else
             {
-                var zx = zombie == null ? 0 : (int)global::PlantsVsZombies.Adventure.AdventureZombieNativeRules.NativePositionX(zombie.X, zombie.IsSmall ? .5f : 1f);
+                var zx = zombie == null ? 0 : (int)global::PlantsVsZombies.Adventure.AdventureZombieNativeRules.NativePositionX(zombie.X, AdventureDancerRules.Scale(zombie));
                 var zy = zombie == null ? 0 : (int)AdventureBiteNativeY(zombie, zx);
                 global::PlantsVsZombies.Adventure.AdventureIceRules.SnowImpact(x, y, zombie != null, zx, zy, zombie == null ? 0 : AdventureZombieFeedbackPhase(zombie), shot.Backward, out x, out y);
                 if (zombie != null)
@@ -1846,7 +1906,7 @@ namespace PlantsVsZombies.Simulation
             }
 
             var grid = z.PresentationPreviousX + (z.X - z.PresentationPreviousX) * Math.Max(0f, Math.Min(1f, fraction));
-            x = global::PlantsVsZombies.Adventure.AdventureZombieNativeRules.NativePositionX(grid, z.IsSmall ? .5f : 1f);
+            x = global::PlantsVsZombies.Adventure.AdventureZombieNativeRules.NativePositionX(grid, AdventureDancerRules.Scale(z));
             y = AdventureBiteNativeY(z, x) + impact.NativeAttachedY;
             x += impact.NativeAttachedX;
         }
@@ -2454,8 +2514,8 @@ namespace PlantsVsZombies.Simulation
                 ParticleId = 35,
                 Row = z.Row,
                 Kind = z.Kind,
-                NativeX = global::PlantsVsZombies.Adventure.AdventureZombieNativeRules.NativePositionX(z.X, z.IsSmall ? .5f : 1f),
-                NativeY = AdventureBiteNativeY(z, global::PlantsVsZombies.Adventure.AdventureZombieNativeRules.NativePositionX(z.X, z.IsSmall ? .5f : 1f)),
+                NativeX = global::PlantsVsZombies.Adventure.AdventureZombieNativeRules.NativePositionX(z.X, AdventureDancerRules.Scale(z)),
+                NativeY = AdventureBiteNativeY(z, global::PlantsVsZombies.Adventure.AdventureZombieNativeRules.NativePositionX(z.X, AdventureDancerRules.Scale(z))),
                 OffsetX = x,
                 OffsetY = y + z.PresentationBiteBodyY,
                 Seed = z.Id * 397 ^ Presentation._effectId
@@ -2517,7 +2577,40 @@ namespace PlantsVsZombies.Simulation
 
             _seedCooldownTicks[(int)kind] = DefinitionFor(ResolveAdventureSeed(kind)).RechargeThresholdRaw + 1;
             PlaceAdventurePlant(kind, row, column);
+            RecordAdventurePlantingEffect(kind, row, column);
             planted = true;
+        }
+
+        /// <summary>Creates the original PC planting burst only after a successful player placement.</summary>
+        /// <param name="kind">The planted seed type, before any later Imitater transformation.</param>
+        /// <param name="row">The planted board row.</param>
+        /// <param name="column">The planted board column.</param>
+        private void RecordAdventurePlantingEffect(PlantKind kind, int row, int column)
+        {
+            // PC Board::DoPlantingEffects 0x418AB0: coffee is flying and produces no soil or water burst.
+            if (kind == PlantKind.CoffeeBean)
+            {
+                return;
+            }
+
+            var level = Adventure.Level;
+            var y = 80f + row * (level.HasPool || level.HasRoof ? 85f : 100f) + 74f;
+            if (level.HasRoof)
+            {
+                y += Math.Max(0f, 5f - column) * 20f - 10f;
+            }
+
+            y += kind == PlantKind.LilyPad ? 15f : kind == PlantKind.FlowerPot ? 30f : 0f;
+            var id = ++Presentation._effectId;
+            Presentation.PlantingEffects.Add(new global::PlantsVsZombies.Adventure.AdventurePlantingEffect
+            {
+                Id = id,
+                Row = row,
+                Seed = id * 397 ^ row * 9 + column,
+                X = 40f + column * 80f + 41f,
+                Y = y,
+                Pool = level.IsWaterRow(row)
+            });
         }
 
         /// <summary>Performs can plant adventure.</summary>
@@ -2561,6 +2654,7 @@ namespace PlantsVsZombies.Simulation
             else
             {
                 PlaceAdventurePlant(p.Kind, row, column);
+                RecordAdventurePlantingEffect(p.Kind, row, column);
             }
 
             RemoveAdventurePacket(p);
@@ -3333,7 +3427,7 @@ namespace PlantsVsZombies.Simulation
                     continue;
                 }
 
-                var nativeX = AdventureZombieNativeRules.NativePositionX(zombie.X, zombie.IsSmall ? .5f : 1f);
+                var nativeX = AdventureZombieNativeRules.NativePositionX(zombie.X, AdventureDancerRules.Scale(zombie));
                 var bodyY = (int)AdventureBiteNativeY(zombie, nativeX);
                 var body = AdventureZombieTargetingRules.BodyRectangle(zombie, bodyY);
                 var velocity = zombie.Eating || zombie.FrozenRemaining > 0f || zombie.PresentationButter > 0f
@@ -3564,7 +3658,7 @@ namespace PlantsVsZombies.Simulation
                     continue;
                 }
 
-                var nativeX = (int)AdventureZombieNativeRules.NativePositionX(zombie.X, zombie.IsSmall ? .5f : 1f);
+                var nativeX = (int)AdventureZombieNativeRules.NativePositionX(zombie.X, AdventureDancerRules.Scale(zombie));
                 var body = AdventureZombieTargetingRules.BodyRectangle(zombie, (int)AdventureBiteNativeY(zombie, nativeX));
                 var top = body.Y + zombie.PresentationBiteBodyY;
                 var clip = zombie.PresentationBiteClipHeight > -100 ? zombie.PresentationBiteClipHeight : 0;
@@ -3573,6 +3667,12 @@ namespace PlantsVsZombies.Simulation
                     var altitude = (int)AdventureZombieRiseRules.Altitude(zombie.GraveRiseTicks);
                     top -= altitude;
                     clip = -altitude + Math.Min(zombie.GraveRiseTicks, 40);
+                }
+                else if (zombie.PresentationNativePhase == 50 && zombie.DancerState != null)
+                {
+                    var altitude = AdventureDancerRules.RiseAltitude(zombie.DancerState.PhaseTicks);
+                    top -= altitude;
+                    clip = -altitude;
                 }
 
                 var height = body.Height - clip;
@@ -3652,7 +3752,7 @@ namespace PlantsVsZombies.Simulation
                 Zombie? hit = null;
                 foreach (Zombie z in Zombies)
                 {
-                    if (allowDamage && p.PresentationCanImpact && z.GraveRiseTicks <= 0 && (!p.Homing || z.Id == p.TargetZombieId) && !z.Hypnotized && Math.Abs(z.Row - p.FlightRow) < 0.45f && !p.HitIds.Contains(z.Id) && (!z.Airborne || p.HitsAir) && (!z.Submerged || p.Lobbed) && (AdventurePuffShroomRules.IsShortRange(p.SourceKind)
+                    if (allowDamage && p.PresentationCanImpact && z.GraveRiseTicks <= 0 && z.PresentationNativePhase != 50 && (!p.Homing || z.Id == p.TargetZombieId) && !z.Hypnotized && Math.Abs(z.Row - p.FlightRow) < 0.45f && !p.HitIds.Contains(z.Id) && (!z.Airborne || p.HitsAir) && (!z.Submerged || p.Lobbed) && (AdventurePuffShroomRules.IsShortRange(p.SourceKind)
                         ? AdventurePuffShroomRules.Collides(p, z)
                         : z.X >= Math.Min(before, p.X) - 0.25f && z.X <= Math.Max(before, p.X) + 0.25f))
                     {
@@ -3721,7 +3821,8 @@ namespace PlantsVsZombies.Simulation
         /// <param name = "damageFlags">The damage flags.</param>
         private void HitAdventureZombie(Zombie z, float damage, bool bypassShield = false, uint damageFlags = 0)
         {
-            if (!Zombies.Contains(z) || z.GraveRiseTicks > 0)
+            if (!Zombies.Contains(z) || z.GraveRiseTicks > 0
+                || z.PresentationNativePhase == 50 && (damageFlags & 0x10) == 0)
             {
                 return;
             }
@@ -4087,7 +4188,7 @@ namespace PlantsVsZombies.Simulation
                 }
 
                 var body = AdventureZombieTargetingRules.BodyRectangle(zombie);
-                var nativeX = (int)AdventureZombieNativeRules.NativePositionX(zombie.X, zombie.IsSmall ? .5f : 1f);
+                var nativeX = (int)AdventureZombieNativeRules.NativePositionX(zombie.X, AdventureDancerRules.Scale(zombie));
                 var top = (int)AdventureBiteNativeY(zombie, nativeX) + body.Y + zombie.PresentationBiteBodyY;
                 var height = Math.Max(0, body.Height - (zombie.PresentationBiteClipHeight > -100 ? zombie.PresentationBiteClipHeight : 0));
                 var dx = Math.Max(0, Math.Max(body.X - centerX, centerX - body.X - body.Width));
@@ -4154,6 +4255,20 @@ namespace PlantsVsZombies.Simulation
         /// <param name = "dt">The dt.</param>
         private void AdventurePresentationTick(float dt)
         {
+            for (var i = Presentation.PlantingEffects.Count - 1; i >= 0; i--)
+            {
+                var effect = Presentation.PlantingEffects[i];
+                effect.Age += dt;
+                if (effect.Age + .000001f >= (effect.Pool ? .4f : .3f))
+                {
+                    Presentation.PlantingEffects.RemoveAt(i);
+                }
+                else
+                {
+                    Presentation.PlantingEffects[i] = effect;
+                }
+            }
+
             for (var i = Presentation.FootstepEffects.Count - 1; i >= 0; i--)
             {
                 var effect = Presentation.FootstepEffects[i];
@@ -4508,7 +4623,7 @@ namespace PlantsVsZombies.Simulation
             var inPool = zombie.PresentationInPool ?? (Adventure.Level.IsWaterRow(zombie.Row) && zombie.X >= 0 && zombie.X < 9);
             var backwards = zombie.PresentationWalkingBackwards ?? (zombie.Hypnotized || zombie.Kind == ZombieKind.Digger && zombie.AbilityPhase >= 1 && phase != 38);
             var hasSled = zombie.PresentationHasSled ?? (zombie.Kind == ZombieKind.Bobsled && !zombie.UsedAbility);
-            var scale = zombie.IsSmall ? .5f : 1f;
+            var scale = AdventureDancerRules.Scale(zombie);
             var pose = global::PlantsVsZombies.Adventure.AdventureBurnPresentationRules.Resolve(kind, phase, inPool, zombie.Airborne, !zombie.Headless, hasSled, backwards, !zombie.ThrownImp, scale, zombie.PresentationHealthBeforeHit);
             // PC removes ice/butter and stops hit coloration before choosing the burn visual.
             zombie.FrozenRemaining = 0;
@@ -4571,7 +4686,7 @@ namespace PlantsVsZombies.Simulation
                     float heightDifference = 0;
                     if (target != null)
                     {
-                        var floorX = 40 + target.X * 80 - 57f * (target.IsSmall ? .5f : 1f) + 40;
+                        var floorX = 40 + target.X * 80 - 57f * (AdventureDancerRules.Scale(target)) + 40;
                         var targetY = 80 + target.Row * pitch + (Adventure.Level.HasRoof ? Math.Max(0, 440 - floorX) * .25f - 10 : 0) - 30;
                         if (target.Kind == ZombieKind.Gargantuar || target.Kind == ZombieKind.Catapult)
                         {
@@ -4963,7 +5078,7 @@ namespace PlantsVsZombies.Simulation
         private void RememberAdventureRewardPosition(Zombie zombie)
         {
             // PC 0x54DE40: GetZombieRect centre. The basic body rect is (36,0,42,115).
-            var scale = zombie.IsSmall ? .5f : 1f;
+            var scale = AdventureDancerRules.Scale(zombie);
             var sourceX = 40f + zombie.X * 80f - 57f * scale - 20f * (1f - scale);
             var floor = 80f + zombie.Row * (Adventure.Level.HasPool || Adventure.Level.HasRoof ? 85f : 100f);
             if (Adventure.Level.HasRoof)
@@ -5029,6 +5144,13 @@ namespace PlantsVsZombies.Simulation
                     rectW = 90;
                     rectH = 430;
                     break;
+            }
+
+            // PC GetZombieRect (0x54DE40) mirrors the local body rectangle after mind control.
+            if (zombie.Hypnotized)
+            {
+                var bodyWidth = zombie.Kind == ZombieKind.Gargantuar ? 180 : 120;
+                rectX = bodyWidth - rectW - rectX;
             }
 
             Adventure._lastRewardX = (int)sourceX + (rectX + rectW / 2) * scale + 20f * (1f - scale);
@@ -5677,7 +5799,8 @@ namespace PlantsVsZombies.Simulation
                 }
             }
 
-            var cleared = Zombies.Count == 0;
+            // PC Board::HasZombies (0x4148E0) excludes mind-controlled zombies.
+            var cleared = Zombies.TrueForAll(zombie => zombie.Hypnotized);
             if (Adventure.Level.Mode == AdventureMode.Boss)
             {
                 cleared &= Adventure.BossHealth <= 0f && Adventure._balls.Count == 0;
@@ -5693,6 +5816,8 @@ namespace PlantsVsZombies.Simulation
 
             if (cleared)
             {
+                // PC TrySpawnLevelAward (0x54BBC0) removes remaining allies without loot.
+                Zombies.Clear();
                 State = MatchState.Won;
                 Adventure.Phase = AdventurePhase.Reward;
                 if (ModeSession == null)
@@ -6343,8 +6468,9 @@ namespace PlantsVsZombies.Simulation
                     }
                 }
             }
-            else if (ModeSession == null && Adventure.Level.Mode == AdventureMode.Vasebreaker && Adventure._vases.Count == 0 && Zombies.Count == 0 && Adventure.VaseStage < 2)
+            else if (ModeSession == null && Adventure.Level.Mode == AdventureMode.Vasebreaker && Adventure._vases.Count == 0 && Zombies.TrueForAll(zombie => zombie.Hypnotized) && Adventure.VaseStage < 2)
             {
+                Zombies.Clear();
                 // Board::UpdateLevelEndSequence starts at 500 and presents Dave at 300.
                 Adventure.VaseInterludeActive = true;
                 Adventure._vaseInterludeTicks = 200;
@@ -7360,7 +7486,7 @@ namespace PlantsVsZombies.Simulation
         public NativeRect AdventureZombieAttackRectangle(Zombie z)
         {
             int kind = z.ModeHead >= 26 ? z.ModeHead : (int)z.Kind, phase = AdventureZombieFeedbackPhase(z);
-            var x = (int)global::PlantsVsZombies.Adventure.AdventureZombieNativeRules.NativePositionX(z.X, z.IsSmall ? .5f : 1f);
+            var x = (int)global::PlantsVsZombies.Adventure.AdventureZombieNativeRules.NativePositionX(z.X, AdventureDancerRules.Scale(z));
             var y = (int)AdventureBiteNativeY(z, x);
             var backwards = z.PresentationWalkingBackwards ?? (z.Hypnotized || z.Kind == ZombieKind.Digger && z.AbilityPhase == 2);
             return global::PlantsVsZombies.Adventure.AdventureZombieBiteRules.AttackRect(kind, phase, Adventure.Level.Mode == global::PlantsVsZombies.Adventure.AdventureMode.Bowling, backwards, x, y, z.PresentationBiteBodyY, z.PresentationBiteClipHeight, z.Kind == ZombieKind.Gargantuar ? 180 : 120);
@@ -7594,6 +7720,9 @@ namespace PlantsVsZombies.Simulation
                 RequestAdventureZombieFoley(68);
                 RemoveAdventurePlantAndStack(target);
                 z.Hypnotized = true;
+                AdventureDancerRules.DetachForMindControl(z, Zombies);
+                // PC 0x547610 calls TrySpawnLevelAward using this zombie after mind control.
+                RememberAdventureRewardPosition(z);
                 z.Submerged = false;
                 // PC 0x547610 retains the eating latch: 0.17 is replaced when StopEating restarts walking.
                 z.PresentationNativeVelocity = .17f;
@@ -7603,8 +7732,8 @@ namespace PlantsVsZombies.Simulation
                     ParticleId = 88,
                     Row = z.Row,
                     Kind = z.Kind,
-                    NativeX = global::PlantsVsZombies.Adventure.AdventureZombieNativeRules.NativePositionX(z.X, z.IsSmall ? .5f : 1f),
-                    NativeY = AdventureBiteNativeY(z, global::PlantsVsZombies.Adventure.AdventureZombieNativeRules.NativePositionX(z.X, z.IsSmall ? .5f : 1f)),
+                    NativeX = global::PlantsVsZombies.Adventure.AdventureZombieNativeRules.NativePositionX(z.X, AdventureDancerRules.Scale(z)),
+                    NativeY = AdventureBiteNativeY(z, global::PlantsVsZombies.Adventure.AdventureZombieNativeRules.NativePositionX(z.X, AdventureDancerRules.Scale(z))),
                     OffsetX = 60,
                     OffsetY = 40,
                     Seed = z.Id * 397 ^ Presentation._effectId
@@ -7708,6 +7837,12 @@ namespace PlantsVsZombies.Simulation
         /// <returns>The resulting initialize adventure zombie corpse.</returns>
         private global::PlantsVsZombies.Adventure.AdventureZombieCorpse InitializeAdventureZombieCorpse(global::PlantsVsZombies.Adventure.AdventureZombieCorpse corpse)
         {
+            if (AdventureDancerRules.IsDancer(corpse.RequiredZombie))
+            {
+                // PC normal death replaces dance phases before drawing its non-mirrored death clip.
+                corpse.RequiredZombie.PresentationNativePhase = 1;
+            }
+
             int frames;
             var asset = AdventureZombiePresentationAsset(corpse.RequiredZombie);
             if (!global::PlantsVsZombies.Adventure.AdventureZombieDeathData.TryGet(asset, corpse.Animation, out frames))
@@ -7852,7 +7987,12 @@ namespace PlantsVsZombies.Simulation
                     r10 = _random.Next(10);
                 }
 
-                z.X = global::PlantsVsZombies.Adventure.AdventureZombieNativeRules.GridX(global::PlantsVsZombies.Adventure.AdventureZombieNativeRules.SpawnSourceX((int)z.Kind, r40, r10), z.IsSmall ? .5f : 1f);
+                z.X = global::PlantsVsZombies.Adventure.AdventureZombieNativeRules.GridX(global::PlantsVsZombies.Adventure.AdventureZombieNativeRules.SpawnSourceX((int)z.Kind, r40, r10), AdventureDancerRules.Scale(z));
+            }
+
+            if (AdventureDancerRules.IsDancer(z))
+            {
+                AdventureDancerRules.Initialize(z, z.Kind == ZombieKind.Dancing ? _random.Next(12) : 0);
             }
 
             PickAdventureZombieNativeSpeed(z, AdventureZombieFeedbackPhase(z));
@@ -7882,7 +8022,7 @@ namespace PlantsVsZombies.Simulation
 
             if (z.Kind == ZombieKind.Zomboni)
             {
-                var nativeX = global::PlantsVsZombies.Adventure.AdventureZombieNativeRules.NativePositionX(z.X, z.IsSmall ? .5f : 1f);
+                var nativeX = global::PlantsVsZombies.Adventure.AdventureZombieNativeRules.NativePositionX(z.X, AdventureDancerRules.Scale(z));
                 z.PresentationNativeVelocity = global::PlantsVsZombies.Adventure.AdventureZombieNativeRules.ZamboniVelocity(nativeX, z.PresentationNativeVelocity);
                 z.Speed = global::PlantsVsZombies.Adventure.AdventureZombieNativeRules.GridSpeed(z.PresentationNativeVelocity);
             }
@@ -7919,7 +8059,7 @@ namespace PlantsVsZombies.Simulation
                 ParticleId = particleId,
                 X = z.X,
                 Row = z.Row,
-                Scale = z.IsSmall ? .5f : 1f,
+                Scale = AdventureDancerRules.Scale(z),
                 Asset = AdventureZombiePresentationAsset(z),
                 Animation = clip,
                 AnimationAge = z.PresentationAnimationAge,
@@ -8050,8 +8190,9 @@ namespace PlantsVsZombies.Simulation
             RefreshAdventureZombieNativeSpeed(z);
             var clip = AdventurePresentationZombieAnimation(z);
             z._presentationPreviousWalkCycle = z._presentationWalkLoops + (double)z._presentationWalkPhase;
-            z._presentationTickSlow = z.ChillRemaining > 0f ? .5f : 1f;
-            if (z.FrozenRemaining > 0f)
+            z._presentationTickSlow = (AdventureDancerRules.IsDancer(z)
+                ? AdventureDancerRules.GroupAffected(z, Zombies, true) : z.ChillRemaining > 0f) ? .5f : 1f;
+            if (z.FrozenRemaining > 0f || AdventureDancerRules.IsDancer(z) && z.PresentationButter > 0f)
             {
                 return;
             }
@@ -8171,7 +8312,11 @@ namespace PlantsVsZombies.Simulation
         public string AdventurePresentationZombieAnimation(Zombie z)
         {
             string asset = AdventureZombiePresentationAsset(z), clip;
-            if (z.PresentationNewspaperGaspRemaining > 0f)
+            if (AdventureDancerRules.IsDancer(z))
+            {
+                clip = AdventureDancerRules.Animation(z);
+            }
+            else if (z.PresentationNewspaperGaspRemaining > 0f)
             {
                 clip = "anim_gasp";
             }
@@ -8265,6 +8410,20 @@ namespace PlantsVsZombies.Simulation
         public float AdventurePresentationZombieRate(Zombie z)
         {
             var clip = AdventurePresentationZombieAnimation(z);
+            if (AdventureDancerRules.IsDancer(z))
+            {
+                var fixedRate = AdventureDancerRules.FixedRate(z);
+                if (fixedRate >= 0f)
+                {
+                    return fixedRate;
+                }
+
+                if (AdventureDancerRules.GroupAffected(z, Zombies, false))
+                {
+                    return 0f;
+                }
+            }
+
             if (z.PresentationNewspaperGaspRemaining > 0f)
             {
                 return 8f;
@@ -8316,7 +8475,7 @@ namespace PlantsVsZombies.Simulation
                 return 12f;
             }
 
-            return data.GroundDistance > .000001f ? speed * 80f * .01f * 47f * data.Count / data.GroundDistance / (z.IsSmall ? .5f : 1f) : data.SourceRate;
+            return data.GroundDistance > .000001f ? speed * 80f * .01f * 47f * data.Count / data.GroundDistance / (AdventureDancerRules.Scale(z)) : data.SourceRate;
         }
 
         /// <summary>Performs adventure presentation walking distance.</summary>
@@ -8326,7 +8485,8 @@ namespace PlantsVsZombies.Simulation
         /// <returns>The resulting adventure presentation walking distance.</returns>
         private float AdventurePresentationWalkingDistance(Zombie z, float dt, float fallbackDistance)
         {
-            if (dt <= 0f || z.PresentationNewspaperGaspRemaining > 0f || z.FrozenRemaining > 0f || z.DropRemaining > 0f || z.Eating)
+            if (dt <= 0f || z.PresentationNewspaperGaspRemaining > 0f || z.FrozenRemaining > 0f || z.DropRemaining > 0f || z.Eating
+                || AdventureDancerRules.IsDancer(z) && !AdventureDancerRules.CanWalk(z, Zombies))
             {
                 return 0f;
             }
@@ -8349,7 +8509,7 @@ namespace PlantsVsZombies.Simulation
                 z.PresentationAnimationAge = (z._presentationWalkLoops + z._presentationWalkPhase) * data.Count / rate;
             }
 
-            return data.VelocityAtPhase(z._presentationWalkPhase, rate * slow) * (z.IsSmall ? .5f : 1f) * (dt * 100f) / 80f;
+            return data.VelocityAtPhase(z._presentationWalkPhase, rate * slow) * (AdventureDancerRules.Scale(z)) * (dt * 100f) / 80f;
         }
 
         /// <summary>Emits the original football running dust at each authored foot contact.</summary>
@@ -8363,7 +8523,7 @@ namespace PlantsVsZombies.Simulation
             }
 
             // PC UpdateZombieWalking 0x546730: these independent events use mX/mY, without mirroring or scaling.
-            var nativeX = (int)AdventureZombieNativeRules.NativePositionX(gridX, z.IsSmall ? .5f : 1f);
+            var nativeX = (int)AdventureZombieNativeRules.NativePositionX(gridX, AdventureDancerRules.Scale(z));
             var nativeY = (int)AdventureBiteNativeY(z, nativeX);
             var before = z._presentationPreviousWalkCycle;
             var after = z._presentationWalkLoops + (double)z._presentationWalkPhase;
@@ -8494,7 +8654,7 @@ namespace PlantsVsZombies.Simulation
                 NativeKind = kind,
                 X = z.X,
                 Row = z.Row,
-                Scale = z.IsSmall ? .5f : 1f,
+                Scale = AdventureDancerRules.Scale(z),
                 Asset = AdventureZombiePresentationAsset(z),
                 Animation = clip,
                 AnimationAge = z.PresentationAnimationAge,
@@ -8607,6 +8767,7 @@ namespace PlantsVsZombies.Simulation
         private void AdvanceAdventureZombies(float dt)
         {
             AdvanceAdventurePlantHitCounters(dt);
+            _dancerClockTicks++;
             foreach (Zombie z in new PooledSnapshot<Zombie>(Zombies))
             {
                 if (!Zombies.Contains(z))
@@ -8660,7 +8821,8 @@ namespace PlantsVsZombies.Simulation
                     continue;
                 }
 
-                var slow = z.ChillRemaining > 0f ? 0.5f : 1f;
+                var slow = (AdventureDancerRules.IsDancer(z)
+                    ? AdventureDancerRules.GroupAffected(z, Zombies, true) : z.ChillRemaining > 0f) ? .5f : 1f;
                 z.ChillRemaining = Math.Max(0, z.ChillRemaining - dt);
                 if (AdvanceAdventureGarlicBite(z, dt))
                 {
@@ -8736,25 +8898,13 @@ namespace PlantsVsZombies.Simulation
                     continue;
                 }
 
-                if (z.Kind == ZombieKind.Dancing && z.AbilityTimer <= 0 && !z.Hypnotized)
+                if (AdventureDancerRules.IsDancer(z))
                 {
-                    for (var dr = -1; dr <= 1; dr++)
+                    AdvanceAdventureDancer(z);
+                    if (z.PresentationNativePhase == 50)
                     {
-                        for (var dx = -1; dx <= 1; dx++)
-                        {
-                            if (Math.Abs(dr) + Math.Abs(dx) == 1)
-                            {
-                                var row = z.Row + dr;
-                                var x = z.X + dx * 0.9f;
-                                if (Adventure.Level.IsLawnRow(row) && !Adventure.Level.IsWaterRow(row) && x > 0.5f && !HasBackupDancerNear(row, x))
-                                {
-                                    SpawnAdventureZombie(ZombieKind.BackupDancer, row, x, z.Wave);
-                                }
-                            }
-                        }
+                        continue;
                     }
-
-                    z.AbilityTimer = 12f;
                 }
 
                 if (z.Kind == ZombieKind.Gargantuar && !z.ThrownImp && z.Health <= 1500 && z.X > 2.5f && !z.Hypnotized)
@@ -8925,6 +9075,13 @@ namespace PlantsVsZombies.Simulation
                     continue;
                 }
 
+                if (target != null && z.Kind == ZombieKind.Dancing && z.PresentationNativePhase == 40)
+                {
+                    // PC EatPlant shortens the moonwalk instead of biting before the first point animation.
+                    z.DancerState!.PhaseTicks = 1;
+                    continue;
+                }
+
                 if (!z.Headless && AdvanceAdventureNativeEating(z, target, dt))
                 {
                     continue;
@@ -8964,6 +9121,8 @@ namespace PlantsVsZombies.Simulation
                         if (target.Kind == PlantKind.HypnoShroom && !target.Asleep && z.Kind != ZombieKind.Gargantuar)
                         {
                             z.Hypnotized = true;
+                            AdventureDancerRules.DetachForMindControl(z, Zombies);
+                            RememberAdventureRewardPosition(z);
                             z.Submerged = false;
                             RemoveAdventurePlantAndStack(target);
                             continue;
@@ -8997,7 +9156,8 @@ namespace PlantsVsZombies.Simulation
                 else
                 {
                     z.BiteTimer = 0;
-                    var direction = z.Hypnotized || z.Kind == ZombieKind.Digger && z.AbilityPhase == 2 ? 1f : -1f;
+                    var direction = z.Hypnotized || z.PresentationNativePhase == 40
+                        || z.Kind == ZombieKind.Digger && z.AbilityPhase == 2 ? 1f : -1f;
                     var previousX = z.X;
                     z.X += direction * AdventurePresentationWalkingDistance(z, dt, z.Speed * dt * slow);
                     RecordAdventureZombieFootsteps(z, previousX);
@@ -11500,6 +11660,7 @@ namespace PlantsVsZombies.Simulation
             SpendAdventureSun(Cost(PlantKind.CherryBomb));
             _seedCooldownTicks[(int)PlantKind.CherryBomb] = DefinitionFor(PlantKind.CherryBomb).RechargeThresholdRaw + 1;
             PlaceAdventurePlant(PlantKind.CherryBomb, row, column);
+            RecordAdventurePlantingEffect(PlantKind.CherryBomb, row, column);
             return true;
         }
 
@@ -11741,11 +11902,11 @@ namespace PlantsVsZombies.Simulation
             }
             else if (d.Mechanic == ModeMechanic.Boss)
             {
-                cleared = Adventure.BossHealth <= 0f && Zombies.Count == 0 && Adventure._balls.Count == 0;
+                cleared = Adventure.BossHealth <= 0f && Zombies.TrueForAll(zombie => zombie.Hypnotized) && Adventure._balls.Count == 0;
             }
             else
             {
-                cleared = Adventure.CurrentWave >= Adventure.Waves.Count && Adventure._finalAmbush && Zombies.Count == 0;
+                cleared = Adventure.CurrentWave >= Adventure.Waves.Count && Adventure._finalAmbush && Zombies.TrueForAll(zombie => zombie.Hypnotized);
             }
 
             if (cleared)
@@ -11778,6 +11939,12 @@ namespace PlantsVsZombies.Simulation
             }
 
             var next = s.Definition.Endless || s.Stage < s.Definition.Stages;
+            // PC 0x41FAB0 preserves allies only while survival is waiting for another seed selection.
+            if (!s.Definition.Survival || !next)
+            {
+                Zombies.Clear();
+            }
+
             s.Phase = next ? ModePhase.StageCleared : ModePhase.Won;
             Adventure.Phase = AdventurePhase.Reward;
             State = MatchState.Won;
@@ -11903,6 +12070,7 @@ namespace PlantsVsZombies.Simulation
                     if (CheckAdventurePlanting(p.Kind, r, column, true) == AdventurePlantingFailure.None)
                     {
                         PlaceAdventurePlant(p.Kind, r, column);
+                        RecordAdventurePlantingEffect(p.Kind, r, column);
                         placed = true;
                     }
                 }
@@ -13654,7 +13822,7 @@ namespace PlantsVsZombies.Simulation
         {
             var nativeX = 40f + column * 80f - 25f;
             var whack = Adventure.Level.Mode == AdventureMode.WhackAZombie || ModeSession != null && ModeSession.Definition.Mechanic == ModeMechanic.Whack;
-            zombie.X = AdventureZombieNativeRules.GridX(nativeX, zombie.IsSmall ? .5f : 1f);
+            zombie.X = AdventureZombieNativeRules.GridX(nativeX, AdventureDancerRules.Scale(zombie));
             zombie.PresentationPreviousX = zombie.X;
             zombie.GraveRiseTicks = whack ? 50 : AdventureZombieRiseRules.DurationTicks;
             zombie.PresentationWhackSpeed = whack;

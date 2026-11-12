@@ -96,6 +96,11 @@ namespace PlantsVsZombies.Adventure
         /// <returns>The resulting pick speed.</returns>
         public static float PickSpeed(int kind, int phase, bool iZombie, float randomUnit)
         {
+            if (kind == 8 && phase == 40)
+            {
+                return .5f;
+            }
+
             if (phase == 59)
             {
                 return .3f;

@@ -172,12 +172,25 @@ namespace PlantsVsZombies.Game
                 : zombie.Kind == ZombieKind.ScreenDoor && zombie.ShieldHealth > 0 ? ZombieVariant.ScreenDoor : ZombieVariant.Normal;
             _plantHead = zombie.ModeHead >= 26 && zombie.ModeHead <= 31;
             _backwards = zombie.PresentationWalkingBackwards ?? (zombie.Hypnotized || zombie.Kind == ZombieKind.Digger && zombie.AbilityPhase == 2);
+            if (AdventureDancerRules.IsDancer(zombie))
+            {
+                // PC UpdateReanim 0x547FF0 mirrors only the moonwalk, then applies mind control.
+                _backwards = AdventureDancerRules.FacesRight(zombie);
+            }
+
             var viewport = new Rect(origin.x - 160, origin.y - 160, 500, 460);
             if (zombie.GraveRiseTicks > 0)
             {
                 var nativeY = origin.y + AdventureZombieRiseRules.Altitude(zombie.GraveRiseTicks)
                     - 120f * (1f - scale) + 8f;
                 viewport.yMax = Math.Min(viewport.yMax, AdventureZombieRiseRules.ClipBottom(nativeY, zombie.GraveRiseTicks));
+            }
+            else if (zombie.PresentationNativePhase == 50 && zombie.DancerState != null)
+            {
+                // PC 0x549C33/0x548D40 cancels rise altitude from the fixed ground clipping edge.
+                var nativeY = origin.y + AdventureDancerRules.RiseAltitude(zombie.DancerState.PhaseTicks)
+                    - 120f * (1f - scale) + 8f;
+                viewport.yMax = Math.Min(viewport.yMax, nativeY + 113f);
             }
 
             RequiredRenderer.DrawNativeZombieCombat(zombie, viewport, _drawZombie, surfaceKey);

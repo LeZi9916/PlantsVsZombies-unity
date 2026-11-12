@@ -26,6 +26,15 @@ namespace PlantsVsZombies.Adventure
         private static Dictionary<string, AdventureZombieGroundClip> Create()
         {
             var result = new Dictionary<string, AdventureZombieGroundClip>(StringComparer.OrdinalIgnoreCase);
+            // Literal local PC Zombie_disco.reanim clip spans and authored _ground samples.
+            result["Zombie_disco/anim_moonwalk"] = new AdventureZombieGroundClip(27, 24f, new float[] {
+                -9.8f, -9.8f, -9.8f, -13.3f, -16.7f, -20.1f, -23.6f, -27f, -30.4f,
+                -33.9f, -37.3f, -40.8f, -44.2f, -47.6f, -51.1f, -51.1f, -51.1f, -53.8f,
+                -56.6f, -59.3f, -62.1f, -64.8f, -67.6f, -70.4f, -73.1f, -75.9f, -78.6f
+            });
+            result["Zombie_disco/anim_point"] = new AdventureZombieGroundClip(9, 24f, null);
+            result["Zombie_disco/anim_armraise"] = new AdventureZombieGroundClip(22, 24f, null);
+            result["Zombie_backup/anim_armraise"] = new AdventureZombieGroundClip(22, 24f, null);
             result["Zombie/anim_swim"] = new AdventureZombieGroundClip(42, 12f, new float[] {
                 -9.8f,
                 -8.4f,

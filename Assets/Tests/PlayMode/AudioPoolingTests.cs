@@ -162,6 +162,30 @@ namespace PlantsVsZombies.Tests.PlayMode
             }
         }
 
+        /// <summary>Preserves PC Foley 100's single summoning vocal until the previous dancer sample ends.</summary>
+        [Test]
+        public void DancerSummoningFoleyUsesOneOriginalVoice()
+        {
+            var game = CreateFoleyFixture(_pool, out var host);
+            try
+            {
+                PlayFoley(game, 100, 100);
+                PlayFoley(game, 100, 120);
+                var sources = _owner.GetComponents<AudioSource>();
+                Assert.That(sources[1].clip, Is.SameAs(_clip));
+                Assert.That(sources[2].clip, Is.Null, "The original OneAtATime flag suppresses overlapping dance vocals.");
+                _pool.StopAll();
+                PlayFoley(game, 100, 140);
+                Assert.That(sources[1].clip, Is.SameAs(_clip), "A completed dance vocal releases its original category.");
+                Assert.That(sources[2].clip, Is.Null);
+            }
+            finally
+            {
+                ((Dictionary<string, AudioClip>)GameMemberReflection.GetField(game, "_presentationSounds")!).Clear();
+                UnityEngine.Object.Destroy(host);
+            }
+        }
+
         /// <summary>Preserves the original ten-update boundary for chewing and body-part Foley.</summary>
         /// <param name="foley">The category whose native admission window remains in effect.</param>
         [TestCase(5)]

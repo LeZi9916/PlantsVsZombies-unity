@@ -13,5 +13,8 @@ namespace PlantsVsZombies.Adventure
 
         /// <summary>Gets whether this is the Whack-a-Zombie rise particle.</summary>
         public bool Whack;
+
+        /// <summary>Gets whether this effect uses the original backup dancer emergence particles.</summary>
+        public bool Dancer;
     }
 }

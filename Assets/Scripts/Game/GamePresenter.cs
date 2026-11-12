@@ -1401,7 +1401,7 @@ namespace PlantsVsZombies.Game
                 zombie.ShieldHealth = AdventureZombieEquipmentRules.StartingShield(zombie.Kind);
                 zombie.PresentationMaxArmor = zombie.ArmorHealth;
                 zombie.PresentationMaxShield = zombie.ShieldHealth;
-                zombie.IsSmall = preview.Scale < 1f;
+                zombie.IsSmall = preview.Scale <= .5f;
                 string asset = AdventureAnimationCatalog.AdventureZombieAnimation(zombie.Kind), clip = preview.Animation;
                 if (!_owner.AnimationCatalog.AdventureClipExists(asset, clip))
                 {
@@ -1862,7 +1862,7 @@ namespace PlantsVsZombies.Game
                     {
                         if (effect.Row == row)
                         {
-                            RequiredAdventureParticles.Draw(_presentationKeys.Get("grave-zombie-rise-", effect.Id), effect.Whack ? "WhackAZombieRise" : "ZombieRise",
+                            RequiredAdventureParticles.Draw(_presentationKeys.Get("grave-zombie-rise-", effect.Id), effect.Dancer ? "DancerRise" : effect.Whack ? "WhackAZombieRise" : "ZombieRise",
                                 effect.Age + AdventureRenderRemainder, new Vector2(effect.X, effect.Y), effect.Id);
                         }
                     }
@@ -1928,6 +1928,7 @@ namespace PlantsVsZombies.Game
                     }
                 }
 
+                DrawAdventurePlantingEffects();
                 DrawAdventureExplosionOverlay();
                 foreach (global::PlantsVsZombies.Simulation.Sun sun in _owner.RequiredGame.Suns)
                 {
@@ -2230,7 +2231,7 @@ namespace PlantsVsZombies.Game
         /// <returns>The native source origin before the body's scaling pivot is applied.</returns>
         private Vector2 AdventureZombieSourceOrigin(Zombie zombie, float x)
         {
-            var size = zombie.IsSmall ? .5f : 1f;
+            var size = AdventureDancerRules.Scale(zombie);
             var pixelX = AdventureZombieNativeRules.ReanimationSourceX(x, size);
             var nativeX = AdventureZombieNativeRules.NativePositionX(x, size);
             // PC 0x547FF0 applies the body overlay eight pixels above mPosY.
@@ -2297,6 +2298,10 @@ namespace PlantsVsZombies.Game
             {
                 y -= AdventureZombieRiseRules.Altitude(zombie.GraveRiseTicks);
             }
+            else if (zombie.PresentationNativePhase == 50 && zombie.DancerState != null)
+            {
+                y -= AdventureDancerRules.RiseAltitude(zombie.DancerState.PhaseTicks);
+            }
 
             return new Vector2(pixelX, y);
         }
@@ -2307,7 +2312,7 @@ namespace PlantsVsZombies.Game
         /// <returns>The placement origin passed to the unchanged native reanimation tracks.</returns>
         private Vector2 AdventureZombieOrigin(Zombie zombie, float x)
         {
-            var scale = zombie.IsSmall ? .5f : 1f;
+            var scale = AdventureDancerRules.Scale(zombie);
             var origin = AdventureZombieSourceOrigin(zombie, x) + new Vector2(20f * (1f - scale), 120f * (1f - scale));
             if (zombie.Kind == ZombieKind.Football && scale < 1f)
             {
@@ -2725,7 +2730,7 @@ namespace PlantsVsZombies.Game
                 return;
             }
 
-            float size = zombie.IsSmall ? .5f : 1f, x = AdventureRenderX(zombie);
+            float size = AdventureDancerRules.Scale(zombie), x = AdventureRenderX(zombie);
             var origin = AdventureZombieOrigin(zombie, x);
             var inPool = zombie.PresentationInPool ?? (_owner.RequiredGame.Adventure.Level.IsWaterRow(zombie.Row) && x >= 0f && x < 9f);
             var shadowName = _owner.RequiredGame.Adventure.Level.IsNight ? "plantshadow2.png" : "plantshadow.png";
@@ -2746,7 +2751,8 @@ namespace PlantsVsZombies.Game
             var age = zombie.PresentationAnimationAge + (zombie.FrozenRemaining > 0 ? 0 : AdventureRenderRemainder * (zombie.ChillRemaining > 0 ? .5f : 1f));
             var rate = _owner.RequiredGame.AdventurePresentationZombieRate(zombie);
             DrawAdventureZombiePose(zombie, name, clip, origin, size, age, rate,
-                zombie.PresentationNewspaperGaspRemaining <= 0f && !string.Equals(clip, "anim_jump", StringComparison.Ordinal));
+                zombie.PresentationNewspaperGaspRemaining <= 0f && !string.Equals(clip, "anim_jump", StringComparison.Ordinal)
+                && !(AdventureDancerRules.IsDancer(zombie) && zombie.PresentationNativePhase >= 41 && zombie.PresentationNativePhase <= 43));
             if (zombie.PresentationNewspaperSurpriseAge >= 0f)
             {
                 // PC 0x54E050 attaches at mPosX-11,mPosY, independently of the body's +15,-8 overlay.
@@ -2813,7 +2819,7 @@ namespace PlantsVsZombies.Game
         /// <returns>The native shadow bounds before the shared viewport transform.</returns>
         internal static Rect AdventureZombieShadowBounds(Zombie zombie, float gridX, float floorY, Vector2 imageSize, bool inPool)
         {
-            var scale = zombie.IsSmall ? .5f : 1f;
+            var scale = AdventureDancerRules.Scale(zombie);
             var shadowScale = scale;
             var backwards = zombie.PresentationWalkingBackwards ?? (zombie.Hypnotized || zombie.Kind == ZombieKind.Digger && zombie.AbilityPhase == 2);
             var offsetX = backwards ? 11f : 23f;
@@ -2963,6 +2969,16 @@ namespace PlantsVsZombies.Game
             }
         }
 
+        /// <summary>Draws the original planting emitters above board actors at native render order 400000.</summary>
+        private void DrawAdventurePlantingEffects()
+        {
+            foreach (var effect in _owner.RequiredGame.Presentation.PlantingEffects)
+            {
+                RequiredAdventureParticles.Draw(_presentationKeys.Get("native-planting-", effect.Id), effect.Pool ? "PlantingPool" : "Planting",
+                    effect.Age + AdventureRenderRemainder, new Vector2(effect.X, effect.Y), effect.Seed);
+            }
+        }
+
         /// <summary>Performs draw adventure plant bite effects.</summary>
         /// <param name = "row">The row.</param>
         private void DrawAdventurePlantBiteEffects(int row)
@@ -2998,7 +3014,7 @@ namespace PlantsVsZombies.Game
 
                 string? name = AdventureAnimationCatalog.AdventureZombieAnimation(zombie.Kind), clip = corpse.Animation;
                 var origin = AdventureZombieOrigin(zombie, zombie.X);
-                float rate = corpse.Rate, size = zombie.IsSmall ? .5f : 1f;
+                float rate = corpse.Rate, size = AdventureDancerRules.Scale(zombie);
                 if (!_owner.AnimationCatalog.AdventureClipExists(name, clip))
                 {
                     clip = "anim_death";

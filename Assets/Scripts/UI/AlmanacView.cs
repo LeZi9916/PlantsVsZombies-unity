@@ -49,10 +49,10 @@ namespace PlantsVsZombies.UI
         private readonly List<string> _diagnostics = new List<string>();
         /// <summary>Stores read only diagnostics.</summary>
         private readonly ReadOnlyCollection<string> _readOnlyDiagnostics;
-        /// <summary>Stores unlocked plants.</summary>
-        private HashSet<int>? _unlockedPlants = new();
-        /// <summary>Stores unlocked zombies.</summary>
-        private HashSet<int>? _unlockedZombies = new();
+        /// <summary>Stores an explicit plant restriction, or null while every original entry is available.</summary>
+        private HashSet<int>? _unlockedPlants;
+        /// <summary>Stores an explicit zombie restriction, or null while every original entry is available.</summary>
+        private HashSet<int>? _unlockedZombies;
         /// <summary>Stores formatted description.</summary>
         private string? _formattedDescription;
         /// <summary>Stores description height,  scroll offset.</summary>
@@ -836,6 +836,12 @@ namespace PlantsVsZombies.UI
                     else if (!plants && id == 10)
                     {
                         drawn = _renderer.DrawNative(name, origin, scale, seconds, "anim_idle", DuckyTrackVisible);
+                    }
+                    else if (!plants && (id == 8 || id == 9) && !thumbnail)
+                    {
+                        // PC 0x40BF40 draws a real .8-scale preview zombie; 0x547FF0 retains its native body pivot.
+                        drawn = _renderer.DrawNativePlayback(name, origin + new Vector2(6f, 24f), scale * .8f,
+                            seconds, "anim_armraise", true, 12f);
                     }
                     else
                     {

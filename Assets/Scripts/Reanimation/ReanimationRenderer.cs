@@ -3101,7 +3101,12 @@ namespace PlantsVsZombies.Reanimation
             }
 
             _nativeAtlasLoaded = true;
-            var path = Path.Combine(_root, "properties", "Resources.xml");
+            var path = Path.Combine(_root, "properties", "resources.xml");
+            if (!File.Exists(path))
+            {
+                path = Path.Combine(_root, "properties", "Resources.xml");
+            }
+
             if (!File.Exists(path))
             {
                 return;

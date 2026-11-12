@@ -502,7 +502,9 @@ namespace PlantsVsZombies.Audio
                 return;
             }
 
-            if (!_soundVoices.CanPlay(evt.Foley, 8, replaceOldest: projectileImpact))
+            // PC Foley 100 is OneAtATime: simultaneous dance leaders share one summoning vocal.
+            var groupLimit = evt.Foley == 100 ? 1 : 8;
+            if (!_soundVoices.CanPlay(evt.Foley, groupLimit, replaceOldest: projectileImpact))
             {
                 return;
             }
@@ -518,7 +520,7 @@ namespace PlantsVsZombies.Audio
 
             // PC DSoundInstance::AdjustPitch 0x63E850, including native frequency limits.
             var frequency = Math.Max(100d, Math.Min(100000d, clip.frequency * Math.Pow(1.059463094359295d, semitones)));
-            if (_soundVoices.TryPlay(clip, _soundVolume, (float)(frequency / clip.frequency), evt.Foley, 8, replaceOldest: projectileImpact))
+            if (_soundVoices.TryPlay(clip, _soundVolume, (float)(frequency / clip.frequency), evt.Foley, groupLimit, replaceOldest: projectileImpact))
             {
                 _zombieFoleyLastTick[evt.Foley] = evt.Tick;
             }

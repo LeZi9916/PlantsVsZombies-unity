@@ -20,6 +20,8 @@ namespace PlantsVsZombies.Adventure
         public int IceLaunchSoundSerial, ChillOnsetSoundSerial;
         /// <summary>Stores ice shoot suppressions.</summary>
         internal int _iceShootSuppressions;
+        /// <summary>Retains original planting bursts above the board actors for their authored lifetime.</summary>
+        public readonly List<AdventurePlantingEffect> PlantingEffects = new List<AdventurePlantingEffect>();
         /// <summary>Stores plant bite effects.</summary>
         public readonly List<AdventurePlantBiteEffect> PlantBiteEffects = new List<AdventurePlantBiteEffect>();
         /// <summary>Stores potato mine rise sound serial.</summary>

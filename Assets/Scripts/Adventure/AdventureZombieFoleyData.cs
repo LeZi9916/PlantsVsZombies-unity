@@ -104,6 +104,10 @@ namespace PlantsVsZombies.Adventure
                 new AdventureZombieFoleyDefinition(-2.0f, new[] { "newspaper_rip" })
             },
             {
+                100,
+                new AdventureZombieFoleyDefinition(0.0f, new[] { "dancer" })
+            },
+            {
                 79,
                 new AdventureZombieFoleyDefinition(10.0f, new[] { "gravestone_rumble" })
             },

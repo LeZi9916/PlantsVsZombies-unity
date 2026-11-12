@@ -334,7 +334,15 @@ namespace PlantsVsZombies.Adventure
             }
 
             z.InitialPhase = nextFloat(.99f);
-            if (kind == 12)
+            if (kind == 8 || kind == 9)
+            {
+                // PC ZombieInitialize 0x53DD90 overrides the unavailable idle clip for both dancers.
+                z.Scale = c.IsLittleTrouble ? .5f : .8f;
+                z.Animation = "anim_armraise";
+                z.AnimationRate = 12f;
+                z.InitialPhase = 0f;
+            }
+            else if (kind == 12)
             {
                 z.Animation = "anim_drive";
                 z.AnimationRate = 12;

@@ -15,7 +15,7 @@ namespace PlantsVsZombies.Adventure
         /// <returns>The resulting can be auto targeted.</returns>
         public static bool CanBeAutoTargeted(Zombie z, PlantKind kind = PlantKind.Peashooter)
         {
-            if (z == null || z.Health <= 0 || z.GraveRiseTicks > 0 || z.PresentationNativePhase >= 1 && z.PresentationNativePhase <= 3)
+            if (z == null || z.Health <= 0 || z.GraveRiseTicks > 0 || z.PresentationNativePhase == 50 || z.PresentationNativePhase >= 1 && z.PresentationNativePhase <= 3)
             {
                 return false;
             }
@@ -35,7 +35,7 @@ namespace PlantsVsZombies.Adventure
         /// <returns>The body rectangle in original board pixels; visual scaling does not shrink it.</returns>
         public static NativeRect BodyRectangle(Zombie z)
         {
-            var x = (int)AdventureZombieNativeRules.NativePositionX(z.X, z.IsSmall ? .5f : 1f);
+            var x = (int)AdventureZombieNativeRules.NativePositionX(z.X, AdventureDancerRules.Scale(z));
             var backwards = z.PresentationWalkingBackwards ?? (z.Hypnotized || z.Kind == ZombieKind.Digger && z.AbilityPhase == 2);
             if (z.Kind == ZombieKind.Bobsled && (z.PresentationHasSled ?? !z.UsedAbility))
             {
@@ -51,7 +51,7 @@ namespace PlantsVsZombies.Adventure
         /// <returns>The body rectangle in original board pixels.</returns>
         public static NativeRect BodyRectangle(Zombie z, int y)
         {
-            var x = (int)AdventureZombieNativeRules.NativePositionX(z.X, z.IsSmall ? .5f : 1f);
+            var x = (int)AdventureZombieNativeRules.NativePositionX(z.X, AdventureDancerRules.Scale(z));
             var backwards = z.PresentationWalkingBackwards ?? (z.Hypnotized || z.Kind == ZombieKind.Digger && z.AbilityPhase == 2);
             if (z.Kind == ZombieKind.Bobsled && (z.PresentationHasSled ?? !z.UsedAbility))
             {

@@ -31,6 +31,8 @@ namespace PlantsVsZombies.Simulation
         public float Speed;
         /// <summary>Stores frozen remaining.</summary>
         public float FrozenRemaining;
+        /// <summary>Retains the original dancer phase counters and linked backup identifiers.</summary>
+        public global::PlantsVsZombies.Adventure.AdventureDancerState? DancerState;
         /// <summary>Stores ability timer.</summary>
         public float AbilityTimer;
         /// <summary>Stores airborne.</summary>
