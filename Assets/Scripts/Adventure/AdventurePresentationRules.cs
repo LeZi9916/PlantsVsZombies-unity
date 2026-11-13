@@ -1,4 +1,5 @@
 #nullable enable
+using System;
 using PlantsVsZombies.Simulation;
 
 namespace PlantsVsZombies.Adventure
@@ -6,6 +7,20 @@ namespace PlantsVsZombies.Adventure
     /// <summary>Defines adventure presentation rules.</summary>
     public static class AdventurePresentationRules
     {
+        /// <summary>Gets the original PC PlantDrawHeightOffset water displacement at 0x473490.</summary>
+        /// <param name="kind">The plant species, including the flying coffee exception.</param>
+        /// <param name="row">The native board row selecting the alternating water phase.</param>
+        /// <param name="column">The native board column selecting the quarter-pi phase offset.</param>
+        /// <param name="inPool">Whether the plant occupies an original pool square.</param>
+        /// <param name="ticks">The board's main update counter, independent of the pool-effect clock.</param>
+        /// <returns>The original two-pixel sinusoidal displacement, or zero outside water and for flying coffee.</returns>
+        internal static float WaterBobbingOffset(PlantKind kind, int row, int column, bool inPool, int ticks)
+        {
+            return inPool && kind != PlantKind.CoffeeBean
+                ? (float)Math.Sin(row * Math.PI + column * Math.PI * .25f + ticks * Math.PI * 2f / 200f) * 2f
+                : 0f;
+        }
+
         // PC 0x46D240, 0x472C70. Counts are native logic updates, not guessed reanim frames.
         /// <summary>Performs shooting rate.</summary>
         /// <param name = "kind">The kind.</param>

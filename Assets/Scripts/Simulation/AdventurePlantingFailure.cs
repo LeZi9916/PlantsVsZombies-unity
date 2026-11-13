@@ -44,6 +44,8 @@ namespace PlantsVsZombies.Simulation
         /// <summary>Identifies cannon footprint.</summary>
         CannonFootprint,
         /// <summary>Identifies imitater target.</summary>
-        ImitaterTarget
+        ImitaterTarget,
+        /// <summary>Identifies a Potato Mine rejected on a Lily Pad by the original ground-only rule.</summary>
+        PotatoMineOnLilyPad
     }
 }

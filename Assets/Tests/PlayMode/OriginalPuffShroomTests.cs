@@ -234,6 +234,66 @@ namespace PlantsVsZombies.Tests.PlayMode
             Assert.That(game.Peas.Count, Is.Zero, "Fume-shroom does not create a travelling projectile.");
         }
 
+        /// <summary>Checks the production Squash shows its original look, launch, moving jump, and retained flattened body.</summary>
+        /// <returns>Frames comparing each production attack stage with the original authored reanimation.</returns>
+        [UnityTest]
+        public IEnumerator SquashUsesOriginalLookLaunchFlightAndFlattenedArtwork()
+        {
+            var game = new GameSimulation(new GameRules { AdventureLevel = 19 }, 7529);
+            _owner._game = game;
+            Assert.That(game.ChooseDefaultAdventureSeeds(), Is.True);
+            game.ResetAdventureWaveSchedule(100000, false, false);
+            _owner.Textures._textures["plantshadow.png"] = null!;
+            _owner.Textures._textures["plantshadow2.png"] = null!;
+            var plant = (Plant)typeof(GameSimulation).GetMethod("PlaceAdventurePlant", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .Invoke(game, new object[] { PlantKind.Squash, 1, 4 })!;
+            game.Zombies.Add(new Zombie
+            {
+                Id = 1000, Kind = ZombieKind.Normal, Row = 1,
+                X = AdventureZombieNativeRules.GridX(390), Health = 270f, StartingHealth = 270f,
+                FrozenRemaining = 100f
+            });
+            game.Update(.01f);
+            game.Update(.2f);
+            Assert.That(plant.SquashPresentation!.Animation, Is.EqualTo("anim_lookright"));
+            yield return CompareOriginalSquashPose(plant);
+            game.Update(.6f);
+            game.Update(.21f);
+            Assert.That(plant.SquashPresentation.Animation, Is.EqualTo("anim_jumpup"));
+            yield return CompareOriginalSquashPose(plant);
+            game.Update(.24f);
+            game.Update(.3f);
+            Assert.That(plant.SquashPresentation.NativePhase, Is.EqualTo(5));
+            Assert.That(plant.SquashPresentation.NativeY, Is.EqualTo(68));
+            yield return CompareOriginalSquashPose(plant);
+            game.Update(.2f);
+            game.Update(.05f);
+            Assert.That(plant.SquashPresentation.Animation, Is.EqualTo("anim_jumpdown"));
+            Assert.That(plant.SquashPresentation.NativeY, Is.EqualTo(128));
+            yield return CompareOriginalSquashPose(plant);
+            game.Update(.15f);
+            Assert.That(plant.SquashPresentation.NativePhase, Is.EqualTo(7));
+            Assert.That(game.Plants, Has.Member(plant));
+            yield return CompareOriginalSquashPose(plant);
+        }
+
+        /// <summary>Compares one actual Squash body with its direct original animation at the native moving origin.</summary>
+        /// <param name="plant">The live Squash whose current native state is being rendered.</param>
+        /// <returns>Frames rendering actual production and unmodified original source artwork.</returns>
+        private IEnumerator CompareOriginalSquashPose(Plant plant)
+        {
+            var state = plant.SquashPresentation!;
+            _animations.ResetNativePlayback();
+            yield return Capture(() => typeof(GamePresenter).GetMethod("DrawAdventurePlant", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .Invoke(_presenter, new object[] { plant }));
+            var actual = _pixels.GetPixels32();
+            yield return Capture(() => Assert.That(_animations.DrawNativePlayback("Squash",
+                new Vector2(state.NativeX, state.NativeY), 1f, state.SampleSeconds(0f),
+                state.Animation, false, state.Rate), Is.True, _animations.LastError));
+            Assert.That(ChangedPixels(actual, _pixels.GetPixels32()), Is.LessThan(10),
+                "Squash must retain the original " + state.Animation + " artwork through native phase " + state.NativePhase + ".");
+        }
+
         /// <summary>Checks the production presenter displays each original Scaredy-shroom fear and recovery body.</summary>
         /// <returns>Frame boundaries for actual original artwork rendering and reference comparisons.</returns>
         [UnityTest]

@@ -57,6 +57,7 @@ namespace PlantsVsZombies.Game
         internal void Dispose()
         {
             _hammerParticles?.Clear();
+            _poolRenderer?.Dispose();
             _levelNameFont?.Dispose();
             _seedCostFont?.Dispose();
             CanvasUI.Dispose();
@@ -154,6 +155,7 @@ namespace PlantsVsZombies.Game
         /// <summary>Submits the scene and Canvas presentation once after simulation.</summary>
         internal void Present()
         {
+            _poolRenderer?.Hide();
             _presentationKeys.BeginFrame();
             ObjectSpriteRenderer.BeginSceneFrame();
             SpriteDrawState.Clip = GameViewport.ScreenRect;
@@ -1254,6 +1256,30 @@ namespace PlantsVsZombies.Game
             }
         }
 
+        /// <summary>Draws the original Squash landing dust or fourteen-frame water splash above its row's actors.</summary>
+        /// <param name="row">The native board row whose retained impact effects are being submitted.</param>
+        private void DrawAdventureSquashLandings(int row)
+        {
+            foreach (var landing in _owner.RequiredGame.Presentation._squashLandings)
+            {
+                if (landing.Row != row)
+                {
+                    continue;
+                }
+
+                var origin = new Vector2(landing.X, landing.Y);
+                var seconds = landing.Ticks * .01f + AdventureRenderRemainder;
+                if (landing.Water)
+                {
+                    _owner.RequiredAnimations.DrawNativePlayback("splash", origin, 1f, seconds, null, false, 18f);
+                }
+                else
+                {
+                    RequiredAdventureParticles.Draw(_presentationKeys.Get("squash-dust-", landing.Id), "Dust_Squash", seconds, origin, landing.Id);
+                }
+            }
+        }
+
         // Rendering.cs owner calls after DrawAdventureImpacts(row).
         /// <summary>Performs draw adventure explosion row.</summary>
         /// <param name = "row">The row.</param>
@@ -1758,9 +1784,44 @@ namespace PlantsVsZombies.Game
             return name;
         }
 
+        /// <summary>Retains the PC pool's three meshes and generated caustic texture across board frames.</summary>
+        private OriginalPoolRenderer? _poolRenderer;
+
+        /// <summary>Draws the original day or night water grids and the daytime PoolSparkly emitter.</summary>
+        private void DrawAdventurePool()
+        {
+            var night = _owner.RequiredGame.Adventure.Level.IsNight;
+            if (_poolRenderer == null)
+            {
+                var pool = _owner.Textures.Load("pool.jpg");
+                var dayBase = _owner.Textures.LoadAlphaGrid("pool_base.jpg", "pool_base_.png");
+                var nightBase = _owner.Textures.LoadAlphaGrid("pool_base_night.jpg", "pool_base_.png");
+                var dayShading = _owner.Textures.LoadAlphaGrid("pool_shading.jpg", "pool_shading_.jpg");
+                var nightShading = _owner.Textures.LoadAlphaGrid("pool_shading_night.jpg", "pool_shading_.jpg");
+                var causticSource = _owner.Textures.Load("pool_caustic_effect.jpg");
+                if (pool == null || dayBase == null || nightBase == null || dayShading == null || nightShading == null || causticSource == null)
+                {
+                    // PC 0x478EF2's software-rendering fallback uses this original static image and position.
+                    DrawImage(night ? "pool_night.jpg" : "pool.jpg", new Rect(34f, 278f, 720f, 159f));
+                    return;
+                }
+
+                _poolRenderer = new OriginalPoolRenderer(new Vector2(pool.width, pool.height), dayBase, nightBase, dayShading, nightShading, causticSource);
+            }
+
+            var ticks = _owner.RequiredGame.Adventure.PoolEffectTicks;
+            _poolRenderer.Draw(ticks, night);
+            if (!night)
+            {
+                // PC Board::Update 0x42145C creates effect PoolSparkly at (450,295), below lawn actors.
+                RequiredAdventureParticles.Draw("native-pool-sparkly", "PoolSparkly", ticks * .01f, new Vector2(450f, 295f), 0);
+            }
+        }
+
         /// <summary>Performs draw adventure board.</summary>
         private void DrawAdventureBoard()
         {
+            _poolRenderer?.Hide();
             BeginAdventurePresentation();
             var openingMatrix = CanvasUI.Matrix;
             if (_owner.Opening.AdventureIntroActive)
@@ -1796,7 +1857,7 @@ namespace PlantsVsZombies.Game
 
                 if (level.HasPool)
                 {
-                    DrawImage(level.IsNight ? "pool_night.jpg" : "pool.jpg", new Rect(30, 279, 720, 159));
+                    DrawAdventurePool();
                 }
 
                 if (!_owner.Opening.AdventureIntroActive && !_owner._choosingSeeds)
@@ -1869,7 +1930,8 @@ namespace PlantsVsZombies.Game
                     {
                         foreach (Plant plant in _owner.RequiredGame.Plants)
                         {
-                            if (plant.Row == row && (int)plant.Layer == layer)
+                            if (plant.Row == row && (int)plant.Layer == layer
+                                && !(plant.Kind == PlantKind.Squash && plant.SquashPresentation?.NativePhase >= 5))
                             {
                                 DrawAdventurePlant(plant);
                             }
@@ -1902,6 +1964,15 @@ namespace PlantsVsZombies.Game
                         }
                     }
 
+                    foreach (var plant in _owner.RequiredGame.Plants)
+                    {
+                        if (plant.Row == row && plant.Kind == PlantKind.Squash && plant.SquashPresentation?.NativePhase >= 5)
+                        {
+                            // PC UpdateSquash promotes the flying and flattened body to the original particle row layer.
+                            DrawAdventurePlant(plant);
+                        }
+                    }
+
                     foreach (var effect in _owner.RequiredGame.Presentation.ZombieRiseEffects)
                     {
                         if (effect.Row == row)
@@ -1916,6 +1987,7 @@ namespace PlantsVsZombies.Game
                     DrawAdventurePlantBiteEffects(row);
                     DrawAdventureImpacts(row);
                     DrawAdventureExplosionRow(row);
+                    DrawAdventureSquashLandings(row);
                     foreach (Pea pea in _owner.RequiredGame.Peas)
                     {
                         if (pea.Row != row)
@@ -2338,7 +2410,11 @@ namespace PlantsVsZombies.Game
                 y -= Mathf.Min(260f, zombie.DropRemaining * 120f);
             }
 
-            if (zombie.GraveRiseTicks > 0)
+            if (zombie.PoolState != null)
+            {
+                y -= AdventureZombiePoolRules.BodyAltitude(zombie);
+            }
+            else if (zombie.GraveRiseTicks > 0)
             {
                 y -= AdventureZombieRiseRules.Altitude(zombie.GraveRiseTicks);
             }
@@ -2504,6 +2580,8 @@ namespace PlantsVsZombies.Game
         {
             var id = (int)plant.Kind;
             var offset = id < 49 ? AlmanacPortraitLayout.PlantHeightOffset(id) : 0;
+            offset += AdventurePresentationRules.WaterBobbingOffset(plant.Kind, plant.Row, plant.Column,
+                _owner.RequiredGame.Adventure.Level.IsWaterRow(plant.Row), _owner.RequiredGame.Adventure._ticks);
             if (_owner.RequiredGame.Adventure.Level.HasRoof)
             {
                 offset -= 12f;
@@ -2607,7 +2685,24 @@ namespace PlantsVsZombies.Game
             var drawHeight = AdventurePlantHeight(plant);
             var level = _owner.RequiredGame.Adventure.Level;
             var shadowHeight = AdventurePlantShadowRules.DrawHeight(plant, _owner.RequiredGame.Plants, level.IsWaterRow(plant.Row), _owner.RequiredGame.Adventure._ticks);
+            var squash = plant.Kind == PlantKind.Squash ? plant.SquashPresentation : null;
+            if (plant.Kind == PlantKind.Squash)
+            {
+                drawHeight = shadowHeight;
+            }
+
+            if (squash != null && squash.NativePhase >= 5)
+            {
+                // PC DrawShadow keeps Squash's shadow at the original row baseline while its body rises.
+                x = squash.NativeX;
+            }
+
             DrawPlantShadow(plant, new Vector2(x, y), shadowHeight, level.IsNight);
+            if (squash != null && squash.NativePhase >= 5)
+            {
+                y = squash.NativeY;
+            }
+
             var origin = new Vector2(x + (1f - size) * 40f, y + drawHeight + (1f - size) * 80f);
             if (DrawAdventureCherryBomb(plant, origin, size))
             {
@@ -2623,6 +2718,13 @@ namespace PlantsVsZombies.Game
             var loop = true;
             var rate = plant.PresentationRate > 0 ? plant.PresentationRate : 12f;
             var age = plant.Age + AdventureRenderRemainder;
+            if (squash != null && squash.NativePhase != 0)
+            {
+                clip = squash.Animation;
+                rate = squash.Rate;
+                age = squash.SampleSeconds(AdventureRenderRemainder);
+                loop = false;
+            }
             var doom = plant.Kind == PlantKind.DoomShroom && !plant.Asleep ? plant.DoomShroomPresentation : null;
             if (doom != null)
             {
@@ -2759,7 +2861,8 @@ namespace PlantsVsZombies.Game
             _doomShroomState = doom;
             ActorRenderer.DrawPlant(plant, name, origin, size, heads == null ? age : plant.Age + AdventureRenderRemainder,
                 clip, loop, rate, heads, _presentationKeys.Get("plant-", plant.Id), new Rect(x - 80, y - 160, 300, 340),
-                doom != null ? 0 : scaredy != null && scaredy.NativePhase != 1 || plant.Kind == PlantKind.Threepeater || plant.Kind == PlantKind.Cattail ? 10 : 20, AdventureRenderRemainder,
+                squash != null && squash.NativePhase != 0 ? squash.BlendTicks
+                    : doom != null ? 0 : scaredy != null && scaredy.NativePhase != 1 || plant.Kind == PlantKind.Threepeater || plant.Kind == PlantKind.Cattail ? 10 : 20, AdventureRenderRemainder,
                 _presentationKeys.Get("producer-plant-", plant.Id), highlighted, doom == null ? null : _doomTrackOffset);
 
             if (plant.Kind == PlantKind.FumeShroom && plant.PresentationShotAge >= .35f && plant.PresentationShotAge < 1.35f)
@@ -2926,6 +3029,7 @@ namespace PlantsVsZombies.Game
             DrawAdventureZombiePose(zombie, name, clip, origin, size, age, rate,
                 zombie.PresentationNewspaperGaspRemaining <= 0f && !string.Equals(clip, "anim_jump", StringComparison.Ordinal)
                 && !AdventureDancerRules.HoldsPoint(zombie));
+            DrawAdventurePoolZombieEffects(zombie);
             if (spotlight)
             {
                 DrawAdventureDancerSpotlight(zombie, x, true);
@@ -2951,6 +3055,30 @@ namespace PlantsVsZombies.Game
                 {
                     _owner.RequiredAnimations.DrawResourceSprite("IMAGE_REANIM_CORNPULT_BUTTER_SPLAT", origin + (head + new Vector2(11, 21)) * size, size);
                 }
+            }
+        }
+
+        /// <summary>Draws the original independent pool splash above the actor, at the fixed native creation origin.</summary>
+        /// <param name="zombie">The actor whose water entrance, exit, or ambush created the splash.</param>
+        private void DrawAdventurePoolZombieEffects(Zombie zombie)
+        {
+            var state = zombie.PoolState;
+            if (state == null || state.SplashAge < 0f)
+            {
+                return;
+            }
+
+            var age = state.SplashAge + AdventureRenderRemainder;
+            if (_owner.RequiredAnimations.TryGetNativeDefinitionInfo("splash", out var splash) && age < splash.Count / splash.SourceRate)
+            {
+                _owner.RequiredAnimations.DrawNativePlayback("splash", new Vector2(state.SplashNativeX, state.SplashNativeY), .8f,
+                    age, null, false, splash.SourceRate);
+            }
+
+            if (_adventureParticles != null && age < .4f)
+            {
+                _adventureParticles.Draw(_presentationKeys.Get("pool-zombie-splash-", zombie.Id), "PlantingPool", age,
+                    new Vector2(state.SplashNativeX + 37f, state.SplashNativeY + 42f), zombie.Id);
             }
         }
 
@@ -3104,7 +3232,11 @@ namespace PlantsVsZombies.Game
             var surface = _presentationKeys.Get("native-zombie-combat-", zombie.Id);
             _adventurePresentationSurfaces.Add(surface);
             _adventurePresentationLiveSurfaces.Add(surface);
-            ActorRenderer.DrawZombie(zombie, name, clip, origin, size, age, rate, loop, _presentationKeys.Get("actor-", zombie.Id), surface);
+            var seaweed = zombie.PoolState != null && zombie.PoolState.SeaweedAge >= 0f;
+            ActorRenderer.DrawZombie(zombie, name, clip, origin, size, age, rate, loop, _presentationKeys.Get("actor-", zombie.Id), surface,
+                seaweed ? _adventureParticles : null, seaweed ? _presentationKeys.Get("pool-seaweed-head-", zombie.Id) : null,
+                seaweed ? _presentationKeys.Get("pool-seaweed-arm-", zombie.Id) : null,
+                seaweed ? _presentationKeys.Get("pool-seaweed-tube-", zombie.Id) : null, AdventureRenderRemainder);
             CanvasUI.Color = previous;
         }
 
@@ -3234,6 +3366,7 @@ namespace PlantsVsZombies.Game
                     try
                     {
                         DrawAdventureZombiePose(zombie, name, clip, origin, size, Mathf.Min(corpse.AnimationDuration, corpse.Age + AdventureRenderRemainder), rate, false);
+                        DrawAdventurePoolZombieEffects(zombie);
                     }
                     finally
                     {

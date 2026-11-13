@@ -225,7 +225,7 @@ namespace PlantsVsZombies.Tests.EditMode
             Assert.That(CountSound(game, 41), Is.EqualTo(1));
             Assert.That(CountSound(game, landingSound), Is.Zero);
             Assert.That(CountSound(game, 55), Is.Zero);
-            game.Update(.04f);
+            game.Update(1.84f);
             Assert.That(CountSound(game, landingSound), Is.Zero);
             game.Update(.01f);
             Assert.That(CountSound(game, landingSound), Is.EqualTo(1));

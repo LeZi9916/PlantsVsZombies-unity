@@ -2356,9 +2356,10 @@ namespace PlantsVsZombies.Simulation
                     var clip = zombie.PresentationBiteClipHeight > -100 ? zombie.PresentationBiteClipHeight : 0;
                     if (zombie.GraveRiseTicks > 0)
                     {
-                        var altitude = (int)AdventureZombieRiseRules.Altitude(zombie.GraveRiseTicks);
+                        var poolRise = zombie.PoolState != null && zombie.PresentationInPool == true;
+                        var altitude = (int)(poolRise ? AdventureZombiePoolRules.BodyAltitude(zombie) : AdventureZombieRiseRules.Altitude(zombie.GraveRiseTicks));
                         bodyY -= altitude;
-                        clip = -altitude + Math.Min(zombie.GraveRiseTicks, 40);
+                        clip = -altitude + (poolRise ? 0 : Math.Min(zombie.GraveRiseTicks, 40));
                     }
                     else if (zombie.PresentationNativePhase == 50 && zombie.DancerState != null)
                     {
@@ -2618,7 +2619,8 @@ namespace PlantsVsZombies.Simulation
         {
             foreach (var plant in Plants)
             {
-                if (plant.Row == row && plant.Column <= column && column < plant.Column + plant.ColumnSpan && plant.Layer == layer)
+                if (plant.Row == row && plant.Column <= column && column < plant.Column + plant.ColumnSpan && plant.Layer == layer
+                    && !(plant.Kind == PlantKind.Squash && plant.PresentationBiteNotOnGround))
                 {
                     return plant;
                 }
@@ -2660,9 +2662,28 @@ namespace PlantsVsZombies.Simulation
             }
 
             _seedCooldownTicks[(int)kind] = DefinitionFor(ResolveAdventureSeed(kind)).RechargeThresholdRaw + 1;
-            PlaceAdventurePlant(kind, row, column);
-            RecordAdventurePlantingEffect(kind, row, column);
+            PlaceAdventurePlantWithEffects(kind, row, column);
             planted = true;
+        }
+
+        /// <summary>Places a player-selected plant and records the native planting effects at the successful action boundary.</summary>
+        /// <param name="kind">The planted seed before any later Imitater transformation.</param>
+        /// <param name="row">The selected lawn row.</param>
+        /// <param name="column">The selected lawn column.</param>
+        private void PlaceAdventurePlantWithEffects(PlantKind kind, int row, int column)
+        {
+            var previous = Presentation._nativePlantingEffects;
+            Presentation._nativePlantingEffects = true;
+            try
+            {
+                PlaceAdventurePlant(kind, row, column);
+            }
+            finally
+            {
+                Presentation._nativePlantingEffects = previous;
+            }
+
+            RecordAdventurePlantingEffect(kind, row, column);
         }
 
         /// <summary>Creates the original PC planting burst only after a successful player placement.</summary>
@@ -2671,6 +2692,8 @@ namespace PlantsVsZombies.Simulation
         /// <param name="column">The planted board column.</param>
         private void RecordAdventurePlantingEffect(PlantKind kind, int row, int column)
         {
+            // PC Board::DoPlantingEffects 0x418AB0 chooses water by the square, even on an existing lily pad.
+            RequestAdventureZombieFoley(kind != PlantKind.CoffeeBean && Adventure.Level.IsWaterRow(row) ? 52 : 7);
             // PC Board::DoPlantingEffects 0x418AB0: coffee is flying and produces no soil or water burst.
             if (kind == PlantKind.CoffeeBean)
             {
@@ -2737,8 +2760,7 @@ namespace PlantsVsZombies.Simulation
             }
             else
             {
-                PlaceAdventurePlant(p.Kind, row, column);
-                RecordAdventurePlantingEffect(p.Kind, row, column);
+                PlaceAdventurePlantWithEffects(p.Kind, row, column);
             }
 
             RemoveAdventurePacket(p);
@@ -2866,12 +2888,13 @@ namespace PlantsVsZombies.Simulation
                 return AdventurePlantingFailure.Occupied;
             }
 
+            var support = AdventurePlantAt(row, column, PlantLayer.Support);
             if (l.IsWaterRow(row) && kind == PlantKind.PotatoMine)
             {
-                return AdventurePlantingFailure.NeedsWater;
+                return support != null && support.Kind == PlantKind.LilyPad
+                    ? AdventurePlantingFailure.PotatoMineOnLilyPad : AdventurePlantingFailure.NeedsLilyPad;
             }
 
-            var support = AdventurePlantAt(row, column, PlantLayer.Support);
             if (l.IsWaterRow(row) && !aquatic && !(kind == PlantKind.Pumpkin && main != null && main.Kind == PlantKind.Cattail) && (support == null || support.Kind != PlantKind.LilyPad))
             {
                 return AdventurePlantingFailure.NeedsLilyPad;
@@ -3038,7 +3061,8 @@ namespace PlantsVsZombies.Simulation
         {
             if (!IsAdventure || State != MatchState.Playing || Adventure.Phase != AdventurePhase.Playing
                 || !Adventure.Level.IsReplay && Adventure.Level.Number < 5 || Adventure.Level.Mode == AdventureMode.WhackAZombie
-                || plant == null || plant.Kind == PlantKind.GraveBuster || !Plants.Contains(plant))
+                || plant == null || plant.Kind == PlantKind.GraveBuster || !Plants.Contains(plant)
+                || plant.Kind == PlantKind.Squash && plant.PresentationBiteNotOnGround)
             {
                 return false;
             }
@@ -3146,6 +3170,12 @@ namespace PlantsVsZombies.Simulation
 
                     if (p.Asleep)
                     {
+                        continue;
+                    }
+
+                    if (p.Kind == PlantKind.Squash)
+                    {
+                        AdvanceAdventureSquash(p);
                         continue;
                     }
 
@@ -3271,21 +3301,6 @@ namespace PlantsVsZombies.Simulation
                             break;
                         case PlantKind.PotatoMine:
                             AdvanceAdventurePotatoMine(p);
-                            break;
-                        case PlantKind.Squash:
-                            var squash = FindAdventureTarget(p.Row, x - 1f, x + 1.3f, false);
-                            if (squash != null)
-                            {
-                                RequestAdventureZombieFoley(41);
-                                BlastAdventure(squash.X, p.Row, 0.5f, 0, 1800f);
-                                // PC UpdateSquash damages at counter 5 and lands at counter 0.
-                                Presentation._squashLandings.Add(new AdventureSquashLanding { Ticks = 5, Water = Adventure.Level.IsWaterRow(p.Row) });
-
-                                RemoveAdventurePlantAndStack(p);
-                                Presentation._nativeExplosionSuppressions++;
-                                Raise(GameEvent.Explosion);
-                            }
-
                             break;
                         case PlantKind.TangleKelp:
                             var kelp = FindAdventureTarget(p.Row, x - 0.5f, x + 0.7f, false, true, PlantKind.TangleKelp);
@@ -3797,9 +3812,10 @@ namespace PlantsVsZombies.Simulation
                 var clip = zombie.PresentationBiteClipHeight > -100 ? zombie.PresentationBiteClipHeight : 0;
                 if (zombie.GraveRiseTicks > 0)
                 {
-                    var altitude = (int)AdventureZombieRiseRules.Altitude(zombie.GraveRiseTicks);
+                    var poolRise = zombie.PoolState != null && zombie.PresentationInPool == true;
+                    var altitude = (int)(poolRise ? AdventureZombiePoolRules.BodyAltitude(zombie) : AdventureZombieRiseRules.Altitude(zombie.GraveRiseTicks));
                     top -= altitude;
-                    clip = -altitude + Math.Min(zombie.GraveRiseTicks, 40);
+                    clip = -altitude + (poolRise ? 0 : Math.Min(zombie.GraveRiseTicks, 40));
                 }
                 else if (zombie.PresentationNativePhase == 50 && zombie.DancerState != null)
                 {
@@ -4018,6 +4034,208 @@ namespace PlantsVsZombies.Simulation
             }
 
             Raise(GameEvent.ZombieDied);
+        }
+
+        /// <summary>Gets the original planted cell's native vertical coordinate, including the roof slope.</summary>
+        /// <param name="row">The original board row.</param>
+        /// <param name="column">The clamped original board column.</param>
+        /// <returns>The native GridToPixelY coordinate before plant height offsets.</returns>
+        private int AdventureSquashCellY(int row, int column)
+        {
+            return 80 + row * (Adventure.Level.HasPool || Adventure.Level.HasRoof ? 85 : 100)
+                + (Adventure.Level.HasRoof ? (int)(Math.Max(0, 5 - column) * 20 - 10) : 0);
+        }
+
+        /// <summary>Finds the closest original contact target while preferring the initially selected live identifier.</summary>
+        /// <param name="plant">The Squash whose original contact interval is tested.</param>
+        /// <param name="state">The retained original target and native body origin.</param>
+        /// <returns>The admitted native zombie, or null when no original target remains.</returns>
+        private Zombie? FindAdventureSquashTarget(Plant plant, AdventureSquashState state)
+        {
+            Zombie? best = null;
+            var bestGap = int.MaxValue;
+            var attack = AdventureSquashRules.AttackRectangle(state.NativeX);
+            foreach (var zombie in Zombies)
+            {
+                var body = AdventureZombieTargetingRules.BodyRectangle(zombie);
+                if (!CanTakeAdventureAshDamage(zombie, 13U)
+                    || !AdventureSquashRules.CanTarget(plant, zombie, body, state.NativeX, AdventureZombieFeedbackPhase(zombie), Adventure.Level.Mode == AdventureMode.Vasebreaker))
+                {
+                    continue;
+                }
+
+                if (zombie.Id == state.TargetZombieId)
+                {
+                    return zombie;
+                }
+
+                var gap = -AdventureSquashRules.Overlap(attack, body);
+                if (best == null || gap < bestGap)
+                {
+                    best = zombie;
+                    bestGap = gap;
+                }
+            }
+
+            return best;
+        }
+
+        /// <summary>Predicts the PC body center at the requested native lead time before subtracting half the plant width.</summary>
+        /// <param name="zombie">The original target whose current body and movement state are sampled.</param>
+        /// <param name="ticks">The native prediction horizon used by ZombieTargetLeadX.</param>
+        /// <returns>The integer native landing coordinate of the Squash's left edge.</returns>
+        private int AdventureSquashTargetX(Zombie zombie, int ticks)
+        {
+            var body = AdventureZombieTargetingRules.BodyRectangle(zombie);
+            var velocity = zombie.PresentationNativeVelocity;
+            if (zombie.ChillRemaining > 0f)
+            {
+                velocity *= .5f;
+            }
+
+            if (zombie.PresentationWalkingBackwards ?? (zombie.Hypnotized || zombie.Kind == ZombieKind.Digger && zombie.AbilityPhase == 2))
+            {
+                velocity = -velocity;
+            }
+
+            if (zombie.Eating || zombie.FrozenRemaining > 0f || zombie.PresentationButter > 0f
+                || AdventureDancerRules.IsDancer(zombie) && !AdventureDancerRules.CanWalk(zombie, Zombies))
+            {
+                velocity = 0f;
+            }
+
+            return (int)(body.X + body.Width / 2 - velocity * ticks) - 40;
+        }
+
+        /// <summary>Applies PC DoSquashDamage's narrow horizontal overlap and no-body-parts damage flags.</summary>
+        /// <param name="plant">The falling Squash reaching its original damage update.</param>
+        /// <param name="state">The moving native body position at impact.</param>
+        private void DamageAdventureSquashTargets(Plant plant, AdventureSquashState state)
+        {
+            var attack = AdventureSquashRules.AttackRectangle(state.NativeX);
+            foreach (var zombie in new PooledSnapshot<Zombie>(Zombies))
+            {
+                if (zombie.Kind != ZombieKind.Boss && zombie.Row != plant.Row || !CanTakeAdventureAshDamage(zombie, 13U))
+                {
+                    continue;
+                }
+
+                var body = AdventureZombieTargetingRules.BodyRectangle(zombie);
+                if (AdventureSquashRules.Overlap(attack, body) > (zombie.Kind == ZombieKind.Football ? -20 : 0))
+                {
+                    // PC 0x46EB68 calls TakeDamage(1800,18): shield piercing and no detached parts or ordinary corpse.
+                    ApplyAdventureZombieDamage(zombie, 1800f, true, 0x12U);
+                }
+            }
+        }
+
+        /// <summary>Advances PC UpdateSquash's exact look, prelaunch, flight, damage, landing, and flattening sequence.</summary>
+        /// <param name="plant">The live awake Squash being advanced by one native update.</param>
+        private void AdvanceAdventureSquash(Plant plant)
+        {
+            var state = plant.SquashPresentation;
+            if (state == null)
+            {
+                state = new AdventureSquashState
+                {
+                    NativeX = 40 + plant.Column * 80,
+                    NativeY = AdventureSquashCellY(plant.Row, plant.Column)
+                };
+                plant.SquashPresentation = state;
+            }
+
+            state.AdvanceClock();
+            switch (state.NativePhase)
+            {
+                case 0:
+                    var target = FindAdventureSquashTarget(plant, state);
+                    if (target != null)
+                    {
+                        state.TargetZombieId = target.Id;
+                        state.TargetX = AdventureSquashTargetX(target, 0);
+                        state.Enter(3, 80, state.TargetX < state.NativeX ? "anim_lookleft" : "anim_lookright", 24f, 10);
+                        RequestAdventureZombieFoley(41);
+                    }
+
+                    break;
+                case 3:
+                    if (state.Countdown == 0)
+                    {
+                        // Local PC 0x46EEAE uses forty-five updates; the mobile reference uses thirty.
+                        state.Enter(4, 45, "anim_jumpup", 24f, 20);
+                    }
+
+                    break;
+                case 4:
+                    if (state.Countdown == 0)
+                    {
+                        var redirected = FindAdventureSquashTarget(plant, state);
+                        if (redirected != null)
+                        {
+                            state.TargetX = AdventureSquashTargetX(redirected, 30);
+                        }
+
+                        state.Enter(5, 50);
+                    }
+
+                    break;
+                case 5:
+                case 6:
+                    var column = Math.Max(0, Math.Min(8, (int)Math.Floor((state.TargetX - 40f) / 80f)));
+                    var destinationY = AdventureSquashCellY(plant.Row, column) + 8;
+                    if (state.NativePhase == 5)
+                    {
+                        state.NativeX = AdventureSquashRules.RisingPosition(state.Countdown, 40 + plant.Column * 80, state.TargetX);
+                        state.NativeY = AdventureSquashRules.RisingPosition(state.Countdown, AdventureSquashCellY(plant.Row, plant.Column), destinationY - 120);
+                        if (state.Countdown == 0)
+                        {
+                            state.Enter(6, 10, "anim_jumpdown", 60f, 0);
+                        }
+                    }
+                    else
+                    {
+                        state.NativeY = destinationY - 120 + (10 - state.Countdown) * 12;
+                        if (state.Countdown == 5)
+                        {
+                            DamageAdventureSquashTargets(plant, state);
+                        }
+
+                        if (state.Countdown == 0)
+                        {
+                            var water = Adventure.Level.IsWaterRow(plant.Row);
+                            Presentation._squashLandings.Add(new AdventureSquashLanding
+                            {
+                                Id = ++Presentation._effectId, Row = plant.Row, Water = water,
+                                X = state.NativeX + (water ? -11f : 40f),
+                                Y = state.NativeY + (water ? 20f : Adventure.Level.HasRoof ? 69f : 80f)
+                            });
+                            if (water)
+                            {
+                                RequestAdventureZombieFoley(1);
+                                RequestAdventureZombieFoley(-4);
+                                RemoveAdventurePlantAndStack(plant);
+                            }
+                            else
+                            {
+                                state.Enter(7, 100);
+                                Presentation.ScreenShake.Start(1, 4);
+                                RequestAdventureZombieFoley(40);
+                            }
+                        }
+                    }
+
+                    break;
+                case 7:
+                    if (state.Countdown == 0)
+                    {
+                        RemoveAdventurePlantAndStack(plant);
+                    }
+
+                    break;
+            }
+
+            plant.PresentationBiteNativeState = state.NativePhase;
+            plant.PresentationBiteNotOnGround = state.NativePhase >= 5;
         }
 
         /// <summary>Starts and advances the original awake Doom-shroom special action once per native tick.</summary>
@@ -4448,20 +4666,10 @@ namespace PlantsVsZombies.Simulation
             for (var i = Presentation._squashLandings.Count - 1; i >= 0; i--)
             {
                 var landing = Presentation._squashLandings[i];
-                landing.Ticks--;
-                if (landing.Ticks == 0)
+                landing.Ticks++;
+                if (landing.Ticks >= (landing.Water ? 78 : 30))
                 {
                     Presentation._squashLandings.RemoveAt(i);
-                    if (landing.Water)
-                    {
-                        RequestAdventureZombieFoley(1);
-                        RequestAdventureZombieFoley(-4);
-                    }
-                    else
-                    {
-                        shake.Start(1, 4);
-                        RequestAdventureZombieFoley(40);
-                    }
                 }
                 else
                 {
@@ -4515,6 +4723,20 @@ namespace PlantsVsZombies.Simulation
             {
                 var corpse = Presentation.Corpses[i];
                 corpse.Age += dt;
+                var pool = corpse.RequiredZombie.PoolState;
+                if (pool != null && !Zombies.Contains(corpse.RequiredZombie))
+                {
+                    if (pool.SeaweedAge >= 0f)
+                    {
+                        pool.SeaweedAge += dt;
+                    }
+
+                    if (pool.SplashAge >= 0f)
+                    {
+                        pool.SplashAge += dt;
+                    }
+                }
+
                 AdvanceAdventureZombieCorpseSound(corpse);
                 corpse.RequiredZombie.PresentationFlash = Math.Max(0, corpse.RequiredZombie.PresentationFlash - dt);
                 corpse.RequiredZombie.PresentationArmorFlash = Math.Max(0, corpse.RequiredZombie.PresentationArmorFlash - dt);
@@ -4718,9 +4940,14 @@ namespace PlantsVsZombies.Simulation
                 age = Math.Max(0, ((plant.Kind == PlantKind.GatlingPea ? 100 : 50) - plant.UpgradeBurstTicks) * .01f);
             }
 
-            plant.PresentationShotAge = age;
-            var head = plant.Kind == PlantKind.Threepeater ? Math.Max(0, Math.Min(2, 1 - (shot.Row - plant.Row))) : plant.Kind == PlantKind.SplitPea && shot.Backward ? 1 : 0;
-            plant.PresentationHeadAge[head] = age;
+            if (plant.Kind != PlantKind.Repeater || !plant.Timing.HasValue)
+            {
+                // PC UpdateShooting can fire the first pea before UpdateShooter restarts the
+                // Repeater head on the same tick. Its native timing already owns that new clock.
+                plant.PresentationShotAge = age;
+                var head = plant.Kind == PlantKind.Threepeater ? Math.Max(0, Math.Min(2, 1 - (shot.Row - plant.Row))) : plant.Kind == PlantKind.SplitPea && shot.Backward ? 1 : 0;
+                plant.PresentationHeadAge[head] = age;
+            }
             RequestAdventureIceLaunch(plant, shot);
         }
 
@@ -5452,6 +5679,7 @@ namespace PlantsVsZombies.Simulation
         /// <summary>Advances the existing board artwork for one native reward-presentation tick.</summary>
         private void AdvanceAdventureRewardTick()
         {
+            AdvanceAdventurePoolEffect();
             Elapsed += .01f;
             AdventurePresentationTick(.01f);
             // Original Board::UpdateGameObjects keeps existing projectiles moving through the award sequence.
@@ -5954,12 +6182,57 @@ namespace PlantsVsZombies.Simulation
             return true;
         }
 
+        /// <summary>Accumulates the native water updates while the board waits for seed selection or preparation.</summary>
+        private double _idlePoolRemainder;
+
+        /// <summary>Advances the PC outer-board PoolEffect counter before gameplay objects update.</summary>
+        /// <param name="survivalRepick">Whether PC CutScene::IsSurvivalRepick (0x446350) suppresses the water update.</param>
+        internal void AdvanceAdventurePoolEffect(bool survivalRepick = false)
+        {
+            // PC Board::Update 0x421411..0x42143E: ice and survival repick stop the pool, not plant bobbing.
+            if (IsAdventure && Adventure.Level.HasPool && Adventure.IceTrapTicks == 0
+                && State != MatchState.Paused && State != MatchState.Lost && !survivalRepick)
+            {
+                Adventure.PoolEffectTicks++;
+            }
+        }
+
+        /// <summary>Advances only the original water clock while gameplay is held by a chooser or preparation UI.</summary>
+        /// <param name="seconds">The elapsed unpaused board presentation time.</param>
+        /// <param name="survivalRepick">Whether a survival stage is returning to seed selection.</param>
+        internal void AdvanceAdventurePoolPresentation(float seconds, bool survivalRepick = false)
+        {
+            if (!IsAdventure || State == MatchState.Paused || State == MatchState.Lost || seconds <= 0f
+                || float.IsNaN(seconds) || float.IsInfinity(seconds))
+            {
+                return;
+            }
+
+            _idlePoolRemainder += seconds;
+            while (_idlePoolRemainder + .0000001 >= SimulationStep)
+            {
+                _idlePoolRemainder -= SimulationStep;
+                AdvanceAdventurePoolEffect(survivalRepick);
+            }
+        }
+
+        /// <summary>Decrements PC Board::mIceTrapCounter after this tick's plants can reset it to 300.</summary>
+        private void FinishAdventureIceTrapTick()
+        {
+            // PC 0x4748CC sets 300 during UpdateGameObjects; 0x421042 then decrements it in that same tick.
+            if (Adventure.IceTrapTicks > 0)
+            {
+                Adventure.IceTrapTicks--;
+            }
+        }
+
         /// <summary>Performs advance adventure.</summary>
         /// <param name = "dt">The dt.</param>
         /// <param name = "handled">The handled.</param>
         private void AdvanceAdventure(float dt, ref bool handled)
         {
             handled = true;
+            AdvanceAdventurePoolEffect();
             if (Adventure.Phase != AdventurePhase.Playing || Adventure.Level.Number == 5 && Adventure.Tutorial == AdventureTutorial.Shovel)
             {
                 return;
@@ -6003,6 +6276,7 @@ namespace PlantsVsZombies.Simulation
             AdvanceAdventurePlants(dt);
             AdvanceAdventureProjectiles(dt);
             AdvanceAdventureZombies(dt);
+            FinishAdventureIceTrapTick();
             AdvanceAdventurePurchases(dt);
             if (State != MatchState.Playing)
             {
@@ -6258,11 +6532,10 @@ namespace PlantsVsZombies.Simulation
         private int ChooseAdventureZombieRow(ZombieKind kind)
         {
             var l = Adventure.Level;
-            var aquatic = kind == ZombieKind.Snorkel || kind == ZombieKind.DolphinRider;
             var choices = new List<int>();
             for (var r = 0; r < RowCount; r++)
             {
-                if (l.IsLawnRow(r) && (aquatic ? l.IsWaterRow(r) : !l.IsWaterRow(r) || Adventure.CurrentWave >= 5 && (kind == ZombieKind.Normal || kind == ZombieKind.Conehead || kind == ZombieKind.Buckethead || kind == ZombieKind.Flag || kind == ZombieKind.Balloon)))
+                if (l.IsLawnRow(r) && AdventureZombiePoolRules.CanSpawnInRow(kind, l.IsWaterRow(r), Adventure.CurrentWave))
                 {
                     if ((kind != ZombieKind.Gargantuar || r != 0) && (kind != ZombieKind.Dancing || l.HasPool || l.IsLawnRow(r - 1) && l.IsLawnRow(r + 1)))
                     {
@@ -8643,7 +8916,7 @@ namespace PlantsVsZombies.Simulation
             {
                 clip = "anim_swim";
             }
-            else if (z.Kind == ZombieKind.DuckyTube && Adventure.Level.IsWaterRow(z.Row))
+            else if (z.PresentationInPool == true && z.PoolState?.HasDuckyTube == true && z.PresentationNativeHeight == 0)
             {
                 clip = "anim_swim";
             }
@@ -9024,6 +9297,15 @@ namespace PlantsVsZombies.Simulation
             }
 
             InitializeAdventureZombieNative(z, x >= 9.5f && kind != ZombieKind.Bungee);
+            if (Adventure.Level.IsWaterRow(row) && (AdventureZombiePoolRules.UsesPlainBody(kind) || kind == ZombieKind.Balloon)
+                || kind == ZombieKind.DuckyTube)
+            {
+                // PC LoadPlainZombieReanim 0x53FE40 enables tube artwork by the row, retaining the original kind and armor.
+                z.PoolState = new AdventureZombiePoolState { HasDuckyTube = AdventureZombiePoolRules.UsesPlainBody(kind) };
+                z.PresentationInPool = false;
+                z.PresentationNativeHeight = 0;
+            }
+
             Zombies.Add(z);
             SpawnedZombies++;
             return z;
@@ -9067,6 +9349,19 @@ namespace PlantsVsZombies.Simulation
                 }
 
                 z.Age += dt;
+                if (z.PoolState != null)
+                {
+                    if (z.PoolState.SplashAge >= 0f)
+                    {
+                        z.PoolState.SplashAge += dt;
+                    }
+
+                    if (z.PoolState.SeaweedAge >= 0f)
+                    {
+                        z.PoolState.SeaweedAge += dt;
+                    }
+                }
+
                 if (z.Headless)
                 {
                     if (_random.Next(5) == 0)
@@ -9087,9 +9382,15 @@ namespace PlantsVsZombies.Simulation
                     if (z.FrozenRemaining <= 0f)
                     {
                         z.GraveRiseTicks--;
+                        if (z.PoolState != null && z.PresentationInPool == true)
+                        {
+                            z.PoolState.Altitude = AdventureZombiePoolRules.RiseAltitude(z.GraveRiseTicks, AdventureDancerRules.Scale(z));
+                        }
+
                         if (z.GraveRiseTicks == 0)
                         {
                             z.PresentationNativePhase = -1;
+                            UpdateAdventurePoolBodyRectangle(z);
                         }
                     }
                     else
@@ -9114,6 +9415,12 @@ namespace PlantsVsZombies.Simulation
 
                 var slow = (AdventureDancerRules.IsDancer(z)
                     ? AdventureDancerRules.GroupAffected(z, Zombies, true) : z.ChillRemaining > 0f) ? .5f : 1f;
+                AdvanceAdventureZombiePool(z);
+                if (z.FrozenRemaining > 0f)
+                {
+                    continue;
+                }
+
                 z.ChillRemaining = Math.Max(0, z.ChillRemaining - dt);
                 if (AdvanceAdventureGarlicBite(z, dt))
                 {
@@ -11956,8 +12263,7 @@ namespace PlantsVsZombies.Simulation
 
             SpendAdventureSun(Cost(PlantKind.CherryBomb));
             _seedCooldownTicks[(int)PlantKind.CherryBomb] = DefinitionFor(PlantKind.CherryBomb).RechargeThresholdRaw + 1;
-            PlaceAdventurePlant(PlantKind.CherryBomb, row, column);
-            RecordAdventurePlantingEffect(PlantKind.CherryBomb, row, column);
+            PlaceAdventurePlantWithEffects(PlantKind.CherryBomb, row, column);
             return true;
         }
 
@@ -11993,6 +12299,8 @@ namespace PlantsVsZombies.Simulation
 
             if (State != MatchState.Playing || ModeSession.Phase != ModePhase.Playing)
             {
+                var repick = ModeSession.Definition.Survival && ModeSession.Stage > 1 && ModeSession.Phase == ModePhase.ChoosingSeeds;
+                AdvanceAdventurePoolPresentation(dt, repick);
                 return;
             }
 
@@ -12012,6 +12320,7 @@ namespace PlantsVsZombies.Simulation
         /// <param name = "dt">The dt.</param>
         private void TickMode(float dt)
         {
+            AdvanceAdventurePoolEffect();
             var s = RequiredModeSession;
             var d = s.Definition;
             Elapsed += dt;
@@ -12126,6 +12435,7 @@ namespace PlantsVsZombies.Simulation
             AdvanceAdventurePlants(dt);
             AdvanceAdventureProjectiles(dt);
             AdvanceAdventureZombies(dt);
+            FinishAdventureIceTrapTick();
             if (State == MatchState.Lost)
             {
                 s.Phase = ModePhase.Lost;
@@ -12366,8 +12676,7 @@ namespace PlantsVsZombies.Simulation
                 {
                     if (CheckAdventurePlanting(p.Kind, r, column, true) == AdventurePlantingFailure.None)
                     {
-                        PlaceAdventurePlant(p.Kind, r, column);
-                        RecordAdventurePlantingEffect(p.Kind, r, column);
+                        PlaceAdventurePlantWithEffects(p.Kind, r, column);
                         placed = true;
                     }
                 }
@@ -13707,8 +14016,6 @@ namespace PlantsVsZombies.Simulation
         public Action<global::PlantsVsZombies.Waves.WaveScheduleEvent>? WaveScheduleEventRaised;
         /// <summary>Stores scheduled wave remainder.</summary>
         private double _scheduledWaveRemainder;
-        /// <summary>Stores scheduled ice trap ticks.</summary>
-        private int _scheduledIceTrapTicks;
         /// <summary>Stores scheduled final ambush enabled.</summary>
         private bool _scheduledFinalAmbushEnabled = true;
         /// <summary>Stores scheduled honor tutorials.</summary>
@@ -13719,7 +14026,12 @@ namespace PlantsVsZombies.Simulation
         /// <param name = "ticks">The ticks.</param>
         public void NotifyAdventureIceTrap(int ticks = 300)
         {
-            _scheduledIceTrapTicks = Math.Max(_scheduledIceTrapTicks, Math.Max(0, ticks));
+            if (!IsAdventure)
+            {
+                return;
+            }
+
+            Adventure.IceTrapTicks = Math.Max(Adventure.IceTrapTicks, Math.Max(0, ticks));
         }
 
         // Local EXE: 0x41FDD0 (100 Hz countdown), 0x41EF60 (health), 0x41F010 (200-tick final ambush).
@@ -13754,7 +14066,6 @@ namespace PlantsVsZombies.Simulation
                 AmbushComplete = !includeFinalAmbush || Adventure.Level.Mode == AdventureMode.Boss || Adventure.Level.Mode == AdventureMode.Vasebreaker
             };
             _scheduledWaveRemainder = 0;
-            _scheduledIceTrapTicks = 0;
             _firstTutorialPlantObserved = false;
             Adventure._finalAmbush = WaveSchedule.AmbushComplete;
             Adventure._warned = false;
@@ -13858,11 +14169,6 @@ namespace PlantsVsZombies.Simulation
             if (s.FinalWaveSoundTicks > 0 && --s.FinalWaveSoundTicks == 0)
             {
                 RaiseScheduledWaveEvent(global::PlantsVsZombies.Waves.WaveScheduleEventKind.FinalWaveSound, Math.Max(0, a.Waves.Count - 1));
-            }
-
-            if (_scheduledIceTrapTicks > 0)
-            {
-                _scheduledIceTrapTicks--;
             }
 
             if (s.AmbushTicks > 0 && --s.AmbushTicks == 0)
@@ -14058,7 +14364,7 @@ namespace PlantsVsZombies.Simulation
             var a = Adventure;
             var wave = Math.Max(0, a.Waves.Count - 1);
             // Ice-shroom freezes the native pool/roof ambush; no replacement timer or invented enemy is added.
-            var iced = _scheduledIceTrapTicks > 0;
+            var iced = Adventure.IceTrapTicks > 0;
             if (a.Level.HasPool && !iced)
             {
                 var n = a.Level.Number;
@@ -14077,7 +14383,7 @@ namespace PlantsVsZombies.Simulation
                     int pick = _random.Next(cells.Count), cell = cells[pick];
                     cells.RemoveAt(pick);
                     var z = SpawnAdventureZombie(PickScheduledAmbushZombie(false), cell % 10, cell / 10 + 0.5f, wave);
-                    z.DropRemaining = 0.5f;
+                    InitializeAdventurePoolZombie(z, cell / 10);
                     a.Notice(AdventureNoticeKind.PoolAmbush, (int)z.Kind, z.Row, cell / 10);
                 }
             }
@@ -14110,6 +14416,123 @@ namespace PlantsVsZombies.Simulation
                     a.Notice(AdventureNoticeKind.GraveRise, (int)z.Kind, grave.Row, grave.Column);
                 }
             }
+        }
+
+        /// <summary>Starts the original fifty-update pool ambush with its native swimming body and attached seaweed.</summary>
+        /// <param name="zombie">The selected normal, conehead, or buckethead zombie retaining its original armor.</param>
+        /// <param name="column">The selected pool cell.</param>
+        private void InitializeAdventurePoolZombie(Zombie zombie, int column)
+        {
+            var nativeX = 40f + column * 80f - 25f;
+            zombie.X = AdventureZombieNativeRules.GridX(nativeX, AdventureDancerRules.Scale(zombie));
+            zombie.PresentationPreviousX = zombie.X;
+            zombie.PoolState ??= new AdventureZombiePoolState { HasDuckyTube = AdventureZombiePoolRules.UsesPlainBody(zombie.Kind) };
+            zombie.PoolState.Altitude = AdventureZombiePoolRules.RiseAltitude(50, AdventureDancerRules.Scale(zombie));
+            zombie.PoolState.SeaweedAge = 0f;
+            zombie.PresentationInPool = true;
+            zombie.PresentationNativeHeight = 0;
+            zombie.GraveRiseTicks = 50;
+            zombie.PresentationNativePhase = 14;
+            zombie.DropRemaining = 0f;
+            zombie.Eating = false;
+            zombie.PresentationBiteBodyY = 0;
+            zombie.PresentationBiteClipHeight = -10000;
+            AdventurePresentationZombieAnimation(zombie);
+            RecordAdventurePoolSplash(zombie, false);
+        }
+
+        /// <summary>Advances the original plain water body's entrance or exit without changing its species.</summary>
+        /// <param name="zombie">The live zombie with an initialized pool body.</param>
+        private void AdvanceAdventureZombiePool(Zombie zombie)
+        {
+            var state = zombie.PoolState;
+            if (state == null || zombie.Airborne)
+            {
+                return;
+            }
+
+            var scale = AdventureDancerRules.Scale(zombie);
+            if (zombie.PresentationNativeHeight == 1)
+            {
+                state.Altitude = Math.Max(-40f * scale, state.Altitude - 1f);
+                if (state.Altitude <= -40f * scale)
+                {
+                    zombie.PresentationNativeHeight = 0;
+                    AdventurePresentationZombieAnimation(zombie);
+                }
+            }
+            else if (zombie.PresentationNativeHeight == 2)
+            {
+                state.Altitude = Math.Min(0f, state.Altitude + 1f);
+                if (state.Altitude >= 0f)
+                {
+                    zombie.PresentationNativeHeight = 0;
+                    zombie.PresentationInPool = false;
+                }
+            }
+            else
+            {
+                // PC PixelToGridX returns -1 left of x40 and clamps the right edge to column eight.
+                var nativeX = AdventureZombieNativeRules.NativePositionX(zombie.X, scale);
+                var waterSquare = Adventure.Level.IsWaterRow(zombie.Row) && (int)nativeX + 45 >= 40 && nativeX < 800f;
+                if (waterSquare && zombie.PresentationInPool != true)
+                {
+                    if (Adventure.IceTrapTicks > 0)
+                    {
+                        zombie.FrozenRemaining = Math.Max(zombie.FrozenRemaining, Adventure.IceTrapTicks * .01f);
+                        ApplyAdventureChill(zombie, true);
+                        return;
+                    }
+
+                    zombie.PresentationNativeHeight = 1;
+                    zombie.PresentationInPool = true;
+                    RecordAdventurePoolSplash(zombie, true);
+                }
+                else if (!waterSquare && zombie.PresentationInPool == true)
+                {
+                    zombie.PresentationNativeHeight = 2;
+                    AdventurePresentationZombieAnimation(zombie);
+                    RecordAdventurePoolSplash(zombie, false);
+                }
+            }
+
+            UpdateAdventurePoolBodyRectangle(zombie);
+        }
+
+        /// <summary>Updates the native submerged collision offsets after a pool altitude transition.</summary>
+        /// <param name="zombie">The actor whose original body rectangle follows the water altitude.</param>
+        private static void UpdateAdventurePoolBodyRectangle(Zombie zombie)
+        {
+            if (zombie.PoolState == null)
+            {
+                return;
+            }
+
+            if (zombie.PresentationInPool == true)
+            {
+                zombie.PresentationBiteBodyY = (int)-zombie.PoolState.Altitude;
+                zombie.PresentationBiteClipHeight = (int)(-zombie.PoolState.Altitude - 7f
+                    + 10f * (1f - AdventureDancerRules.Scale(zombie)) + (zombie.Eating ? 7f : 0f));
+            }
+            else
+            {
+                zombie.PresentationBiteBodyY = 0;
+                zombie.PresentationBiteClipHeight = -10000;
+            }
+        }
+
+        /// <summary>Records the original fixed splash origin and entry or emergence Foley for the actor's own render layer.</summary>
+        /// <param name="zombie">The actor crossing the water surface.</param>
+        /// <param name="entering">Whether the normal entrance uses pitched Foley 19 instead of Foley 52.</param>
+        private void RecordAdventurePoolSplash(Zombie zombie, bool entering)
+        {
+            var state = zombie.PoolState!;
+            var nativeX = (int)AdventureZombieNativeRules.NativePositionX(zombie.X, AdventureDancerRules.Scale(zombie));
+            var nativeY = (int)AdventureBiteNativeY(zombie, nativeX);
+            state.SplashAge = 0f;
+            state.SplashNativeX = nativeX + 23f;
+            state.SplashNativeY = nativeY + 78f;
+            RequestAdventureZombieFoley(entering ? 19 : 52);
         }
 
         /// <summary>Starts the original land grave ambush without treating the zombie as a falling actor.</summary>

@@ -1,6 +1,5 @@
 #nullable enable
 
-using System;
 using System.Collections.Generic;
 using PlantsVsZombies.Simulation;
 using UnityEngine;
@@ -54,9 +53,7 @@ namespace PlantsVsZombies.Adventure
         /// <returns>The PC height offset, without the mobile reference's additional roof displacement.</returns>
         internal static float DrawHeight(Plant plant, IReadOnlyList<Plant> plants, bool inPool, int ticks)
         {
-            var height = inPool && plant.Kind != PlantKind.CoffeeBean
-                ? (float)Math.Sin(plant.Row * Math.PI + plant.Column * Math.PI * .25f + ticks * Math.PI * 2f / 200f) * 2f
-                : 0f;
+            var height = AdventurePresentationRules.WaterBobbingOffset(plant.Kind, plant.Row, plant.Column, inPool, ticks);
             for (var index = 0; index < plants.Count; index++)
             {
                 var support = plants[index];

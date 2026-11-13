@@ -213,9 +213,10 @@ namespace PlantsVsZombies.Rendering
         /// <param name = "producerAdditive">The source-colored producer brightness.</param>
         /// <param name = "additive">The amount of white hit addition.</param>
         /// <param name = "addColor">The additional hit color.</param>
+        /// <param name="clipOverride">Optional destination-pixel clipping, also enabled for a local capture surface.</param>
         /// <exception cref = "ObjectDisposedException">This pool has already been disposed.</exception>
         /// <exception cref = "ArgumentOutOfRangeException">The blending mode is unsupported or the frame exceeds Unity's sorting-order range.</exception>
-        public void DrawQuad(Texture texture, float width, float height, Rect uv, Matrix4x4 matrix, Color color, int mode, float grayscale = 0f, float producerAdditive = 0f, float additive = 0f, Color addColor = default)
+        public void DrawQuad(Texture texture, float width, float height, Rect uv, Matrix4x4 matrix, Color color, int mode, float grayscale = 0f, float producerAdditive = 0f, float additive = 0f, Color addColor = default, Rect? clipOverride = null)
         {
             ThrowIfDisposed();
             if (mode < 0 || mode > 3 || _used >= short.MaxValue)
@@ -254,9 +255,9 @@ namespace PlantsVsZombies.Rendering
             properties.SetFloat(s_producerId, producerAdditive);
             properties.SetFloat(s_additiveId, additive);
             properties.SetColor(s_addColorId, addColor);
-            var clip = SpriteDrawState.Clip;
+            var clip = clipOverride ?? SpriteDrawState.Clip;
             properties.SetVector(s_clipRectId, new Vector4(clip.xMin, clip.yMin, clip.xMax, clip.yMax));
-            properties.SetFloat(s_clipEnabledId, _scenePool && IsFrameActive ? 1f : 0f);
+            properties.SetFloat(s_clipEnabledId, clipOverride.HasValue || _scenePool && IsFrameActive ? 1f : 0f);
             sprite.Renderer.SetPropertyBlock(properties);
         }
 

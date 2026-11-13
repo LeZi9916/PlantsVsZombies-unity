@@ -118,6 +118,119 @@ namespace PlantsVsZombies.Tests.PlayMode
             }
         }
 
+        /// <summary>Checks successful water and dry planting use the original recordings once without a generic one-shot.</summary>
+        /// <returns>Original audio decoding and production voice playback frame boundaries.</returns>
+        [UnityTest]
+        public IEnumerator PoolPlantingPlaysOriginalWaterSampleWithoutDryDuplicate()
+        {
+            var root = Environment.GetEnvironmentVariable("PVZ_BOARD_STRESS_ASSETS") ?? "";
+            if (!Directory.Exists(Path.Combine(root, "sounds")))
+            {
+                Assert.Ignore("Set PVZ_BOARD_STRESS_ASSETS to the read-only original runtime resource directory.");
+            }
+
+            var host = new GameObject("Inactive original planting sound fixture");
+            host.SetActive(false);
+            var owner = host.AddComponent<PvZGame>();
+            var audioHost = new GameObject("Original planting voices");
+            var source = audioHost.AddComponent<AudioSource>();
+            source.playOnAwake = false;
+            source.ignoreListenerPause = true;
+            if (UnityEngine.Object.FindObjectsByType<AudioListener>(FindObjectsSortMode.None).Length == 0)
+            {
+                audioHost.AddComponent<AudioListener>();
+            }
+
+            var effects = owner.Sounds;
+            var voices = new AudioVoicePool(audioHost, source, 8);
+            var previousPause = AudioListener.pause;
+            AudioListener.pause = false;
+            try
+            {
+                owner._root = root;
+                effects._audioSource = source;
+                effects._soundVolume = .7f;
+                effects._soundVoices = voices;
+                typeof(GameSoundEffects).GetField("_zombiePartAudioLoading", BindingFlags.Instance | BindingFlags.NonPublic)!
+                    .SetValue(effects, true);
+                yield return effects.LoadSounds();
+                yield return (IEnumerator)typeof(GameSoundEffects)
+                    .GetMethod("LoadAdventureZombiePartAudio", BindingFlags.Instance | BindingFlags.NonPublic)!
+                    .Invoke(effects, null)!;
+                var water = effects._presentationSounds["plant_water"];
+                var plant = effects._presentationSounds["plant"];
+                var plant2 = effects._presentationSounds["plant2"];
+                yield return AssertOriginalRecording(root, "plant_water", water);
+                yield return AssertOriginalRecording(root, "plant2", plant2);
+                Assert.That(AdventureZombieFoleyData.Definitions[52].PitchRange, Is.Zero);
+                Assert.That(AdventureZombieFoleyData.Definitions[52].Samples, Is.EqualTo(new[] { "plant_water" }));
+                Assert.That(AdventureZombieFoleyData.Definitions[7].PitchRange, Is.Zero);
+                Assert.That(AdventureZombieFoleyData.Definitions[7].Samples, Is.EqualTo(new[] { "plant", "plant2" }));
+
+                var game = new GameSimulation(new GameRules { AdventureLevel = 29 }, 7529);
+                owner._game = game;
+                Assert.That(game.ChooseDefaultAdventureSeeds(), Is.True);
+                game.EventRaised = effects.PlaySound;
+                game.Adventure._packets.Add(new AdventurePacket { Id = 1000, Kind = PlantKind.LilyPad });
+                Assert.That(game.TryUseAdventurePacket(1000, 2, 4), Is.True);
+                Assert.That(source.isPlaying, Is.False, "Water planting must suppress the legacy dry planting one-shot.");
+                effects.UpdateAdventureZombiePartAudio();
+                yield return null;
+                var playingWater = 0;
+                foreach (var voice in audioHost.GetComponents<AudioSource>())
+                {
+                    if (voice.clip == water && voice.isPlaying)
+                    {
+                        playingWater++;
+                        Assert.That(voice.pitch, Is.EqualTo(1f).Within(.00001f));
+                    }
+
+                    Assert.That((voice.clip == plant || voice.clip == plant2) && voice.isPlaying, Is.False);
+                }
+
+                Assert.That(playingWater, Is.EqualTo(1));
+                effects.UpdateAdventureZombiePartAudio();
+                foreach (var voice in audioHost.GetComponents<AudioSource>())
+                {
+                    voice.Stop();
+                }
+
+                game.Adventure._packets.Add(new AdventurePacket { Id = 1001, Kind = PlantKind.Peashooter });
+                Assert.That(game.TryUseAdventurePacket(1001, 1, 4), Is.True);
+                Assert.That(source.isPlaying, Is.False, "Dry planting must use one original Foley variation instead of duplicating the legacy event.");
+                effects.UpdateAdventureZombiePartAudio();
+                yield return null;
+                var playingDry = 0;
+                foreach (var voice in audioHost.GetComponents<AudioSource>())
+                {
+                    if ((voice.clip == plant || voice.clip == plant2) && voice.isPlaying)
+                    {
+                        playingDry++;
+                        Assert.That(voice.pitch, Is.EqualTo(1f).Within(.00001f));
+                    }
+                }
+
+                Assert.That(playingDry, Is.EqualTo(1));
+            }
+            finally
+            {
+                voices.Dispose();
+                var clips = new HashSet<AudioClip>(effects._sounds.Values);
+                clips.UnionWith(effects._presentationSounds.Values);
+                var awardClips = (Dictionary<string, AudioClip>)typeof(GameSoundEffects)
+                    .GetField("_awardSounds", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(effects)!;
+                clips.UnionWith(awardClips.Values);
+                foreach (var clip in clips)
+                {
+                    UnityEngine.Object.Destroy(clip);
+                }
+
+                AudioListener.pause = previousPause;
+                UnityEngine.Object.Destroy(audioHost);
+                UnityEngine.Object.Destroy(host);
+            }
+        }
+
         /// <summary>Checks the added plant entries against the selected PC executable's literal Foley table.</summary>
         private static void AssertNativeFoleyMappings()
         {
