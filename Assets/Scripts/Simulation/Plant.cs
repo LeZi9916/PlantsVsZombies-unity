@@ -6,6 +6,8 @@ namespace PlantsVsZombies.Simulation
     /// <summary>Defines plant.</summary>
     public sealed class Plant
     {
+        /// <summary>Gets the original kelp grab while the plant and its target remain on the board.</summary>
+        public AdventureTangleKelpState? TangleKelpPresentation { get; internal set; }
         /// <summary>Gets or sets the original Squash's target, moving body, and authored attack playback.</summary>
         public AdventureSquashState? SquashPresentation { get; internal set; }
         /// <summary>Gets or sets the original Scaredy-shroom fear and recovery body state.</summary>

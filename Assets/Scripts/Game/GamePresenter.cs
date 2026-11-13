@@ -3121,6 +3121,42 @@ namespace PlantsVsZombies.Game
                     _owner.RequiredAnimations.DrawResourceSprite("IMAGE_REANIM_CORNPULT_BUTTER_SPLAT", origin + (head + new Vector2(11, 21)) * size, size);
                 }
             }
+
+            DrawAdventureTangleKelpGrab(zombie, x);
+        }
+
+        /// <summary>Draws the original once-and-hold kelp attachment after its target's complete body.</summary>
+        /// <param name="zombie">The target retaining the original grab attachment and water altitude.</param>
+        /// <param name="x">The interpolated board coordinate shared with the zombie's body.</param>
+        private void DrawAdventureTangleKelpGrab(Zombie zombie, float x)
+        {
+            var grab = zombie.TangleKelpGrab;
+            if (grab == null)
+            {
+                return;
+            }
+
+            var scale = AdventureDancerRules.Scale(zombie);
+            var nativeX = AdventureZombieNativeRules.NativePositionX(x, scale);
+            var nativeY = AdventureFloorYAtPixel(zombie.Row, nativeX + 40f) - 30f;
+            var altitude = zombie.PoolState?.Altitude ?? zombie.PresentationAltitude;
+            var origin = new Vector2(nativeX + grab.OffsetX, nativeY - altitude + grab.OffsetY);
+            var previousClip = SpriteDrawState.Clip;
+            try
+            {
+                // PC Zombie::Draw 0x54A060 clips attachments at the same surface as the body.
+                var bottom = AdventureZombieMotionRules.ClipBottom(zombie, nativeY, scale);
+                var matrix = SpriteDrawState.Matrix;
+                var clip = previousClip;
+                clip.yMax = Math.Max(clip.yMin, Math.Min(clip.yMax, bottom * matrix.m11 + matrix.m13));
+                SpriteDrawState.Clip = clip;
+                _owner.RequiredAnimations.DrawNativePlayback("Tanglekelp", origin, 1f,
+                    grab.SampleSeconds(AdventureRenderRemainder), "anim_grab", false, 24f);
+            }
+            finally
+            {
+                SpriteDrawState.Clip = previousClip;
+            }
         }
 
         /// <summary>Draws the original independent pool splash above the actor, at the fixed native creation origin.</summary>

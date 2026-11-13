@@ -3498,12 +3498,13 @@ namespace PlantsVsZombies.Reanimation
                 return inherited;
             }
 
-            // PC SetupWaterTrack 0x552CC0 sets whitewater2's ignore-clip byte before emergence.
-            // RiseFromGrave toggles only the four exact names below, leaving whitewater2 untouched.
-            if (TrackIs(track, "Zombie_snorkle_whitewater") || TrackIs(track, "Zombie_snorkle_whitewater2")
-                || TrackIs(track, "Zombie_whitewater2") || _nativeCombatZombie.PresentationNativePhase != 14
-                && (TrackIs(track, "Zombie_duckytube") && _nativeCombatZombie.PresentationNativePhase != 1
-                    || TrackIs(track, "Zombie_whitewater") || TrackIs(track, "Zombie_outerarm_hand") || TrackIs(track, "Zombie_innerarm3")))
+            // PC 53FE40 exempts plain-body hands only; snorkel initialization exempts its two whitewater tracks.
+            // RiseFromGrave keeps whitewater2 exempt. ReanimReenableClipping restores every track for a kelp pull.
+            if (_nativeCombatZombie.PresentationNativeHeight != 3
+                && (TrackIs(track, "Zombie_snorkle_whitewater") || TrackIs(track, "Zombie_snorkle_whitewater2")
+                    || IsZombie(asset) && (TrackIs(track, "Zombie_whitewater2") || _nativeCombatZombie.PresentationNativePhase != 14
+                        && (TrackIs(track, "Zombie_duckytube") && _nativeCombatZombie.PresentationNativePhase != 1
+                            || TrackIs(track, "Zombie_whitewater") || TrackIs(track, "Zombie_outerarm_hand") || TrackIs(track, "Zombie_innerarm3")))))
             {
                 return inherited;
             }

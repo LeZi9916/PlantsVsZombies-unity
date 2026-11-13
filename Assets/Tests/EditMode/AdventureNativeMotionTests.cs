@@ -164,6 +164,43 @@ namespace PlantsVsZombies.Tests.EditMode
             Assert.That(game.AdventurePresentationZombieAnimation(zombie), Is.EqualTo("anim_swim"));
         }
 
+        /// <summary>Checks the first moving tick after a meal already samples reverse submergence.</summary>
+        /// <param name="phase">The surfacing or eating phase that loses its target.</param>
+        [TestCase(60)]
+        [TestCase(61)]
+        public void SnorkelStopsEatingIntoReverseDiveBeforeMoving(int phase)
+        {
+            var game = Board(21);
+            var zombie = Spawn(game, ZombieKind.Snorkel, 2, AdventureZombieNativeRules.GridX(460f));
+            zombie.PresentationNativePhase = phase;
+            zombie.Eating = true;
+            zombie.Submerged = false;
+            zombie.Age = .03f;
+            game.AdventurePresentationZombieAnimation(zombie);
+            zombie.PresentationAnimationAge = .2f;
+            var startX = zombie.X;
+
+            // PC StopEating clears the meal; UpdateZombieSnorkel then reverses uptoeat before movement.
+            Invoke(game, "AdvanceAdventureZombies", .01f);
+            Assert.That(zombie.Eating, Is.False);
+            Assert.That(zombie.PresentationNativePhase, Is.EqualTo(62));
+            Assert.That(game.AdventurePresentationZombieAnimation(zombie), Is.EqualTo("anim_uptoeat"));
+            Assert.That(zombie.PresentationAnimationAge, Is.Zero, "Reverse playback must begin at the authored final rise frame.");
+            Assert.That(AdventureZombieMotionRules.PlaybackSeconds(zombie, 0f), Is.EqualTo(.5f));
+            Assert.That(game.AdventurePresentationZombieRate(zombie), Is.EqualTo(24f));
+            Assert.That(zombie.X, Is.LessThan(startX), "PC permits movement while the original dive animation plays.");
+
+            Invoke(game, "AdvanceAdventureZombieClock", zombie, .25f);
+            Invoke(game, "AdvanceAdventureZombies", .01f);
+            Assert.That(zombie.PresentationNativePhase, Is.EqualTo(62));
+            Assert.That(AdventureZombieMotionRules.PlaybackSeconds(zombie, zombie.PresentationAnimationAge),
+                Is.EqualTo(.25f).Within(.00001f));
+            Invoke(game, "AdvanceAdventureZombieClock", zombie, .26f);
+            Invoke(game, "AdvanceAdventureZombies", .01f);
+            Assert.That(zombie.PresentationNativePhase, Is.EqualTo(59));
+            Assert.That(game.AdventurePresentationZombieAnimation(zombie), Is.EqualTo("anim_swim"));
+        }
+
         /// <summary>Checks water death retains the native snorkel pose and the death-only waterline clip.</summary>
         [Test]
         public void SnorkelDeathReplacesSwimmingPhaseAndRetainsAltitude()

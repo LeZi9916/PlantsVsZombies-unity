@@ -75,7 +75,19 @@ namespace PlantsVsZombies.Adventure
         /// <returns>The native clipping height, or the original off-screen sentinel.</returns>
         internal static float ClipHeight(Zombie zombie, float scale)
         {
-            // PC GetDrawPos 0x549740: whitewater tracks separately ignore this rectangle.
+            // PC GetDrawPos 0x549740: water riders retain species-specific clipping while kelp drags them.
+            if (zombie.Kind == ZombieKind.DolphinRider && (zombie.TangleKelpGrab != null || zombie.PresentationNativeHeight == 3))
+            {
+                var riding = zombie.PresentationNativePhase == 53 || zombie.PresentationNativePhase < 0 && !zombie.UsedAbility;
+                if (riding)
+                {
+                    return -zombie.PresentationAltitude - (zombie.PresentationNativeHeight == 3 ? 15f : 10f);
+                }
+
+                return zombie.PresentationNativeHeight == 3 ? 36f - zombie.PresentationAltitude : -10000f;
+            }
+
+            // Whitewater tracks separately ignore this rectangle until DragUnder restores their clipping.
             if (zombie.Kind == ZombieKind.Snorkel)
             {
                 if (zombie.PresentationNativePhase == 58)
@@ -100,7 +112,9 @@ namespace PlantsVsZombies.Adventure
         {
             var height = ClipHeight(zombie, scale);
             // PC DrawReanim 0x548D40: -78 top offset plus (120 - clipHeight + 71) height.
-            return height > -100f ? nativeY + 113f - zombie.PresentationAltitude - height : float.PositiveInfinity;
+            var imageOffsetY = zombie.Kind == ZombieKind.DolphinRider && zombie.PresentationNativeHeight == 3
+                && (zombie.PresentationNativePhase == 55 || zombie.PresentationNativePhase < 0 && zombie.UsedAbility) ? 50f : 0f;
+            return height > -100f ? nativeY + imageOffsetY + 113f - zombie.PresentationAltitude - height : float.PositiveInfinity;
         }
     }
 }

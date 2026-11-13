@@ -66,6 +66,20 @@ namespace PlantsVsZombies.Tests.PlayMode
                 Assert.That(pixels.GetPixels32(), Is.EqualTo(rise), "Down-from-eating must reverse the original uptoeat clip.");
                 Save(pixels, "snorkel-dive.png");
 
+                zombie.PresentationNativePhase = 61;
+                zombie.Eating = true;
+                owner._game.AdventurePresentationZombieAnimation(zombie);
+                foreach (var age in new[] { 0f, .3f, .6f, 1.1f })
+                {
+                    zombie.PresentationAnimationAge = age;
+                    Submit(animations, presenter, draw, zombie);
+                    AssertBodyClipped(animations, 338f);
+                    AssertSnorkelSourceOrder(animations);
+                }
+
+                Read(animations, target, pixels);
+                Save(pixels, "snorkel-eating-hands.png");
+                zombie.Eating = false;
                 zombie.PresentationNativePhase = 58;
                 zombie.PresentationInPool = false;
                 owner._game.AdventurePresentationZombieAnimation(zombie);
@@ -252,6 +266,41 @@ namespace PlantsVsZombies.Tests.PlayMode
             }
 
             Assert.That(bodyQuads, Is.GreaterThan(0));
+        }
+
+        /// <summary>Checks the original source ordering while the waterline independently clips the hands.</summary>
+        /// <param name="animations">The renderer that submitted the eating pose.</param>
+        private static void AssertSnorkelSourceOrder(ReanimationRenderer animations)
+        {
+            var names = new[]
+            {
+                "Zombie_snorkle_innerarm_hand", "Zombie_snorkle_innerarm_lower", "Zombie_snorkle_innerarm_upper",
+                "Zombie_snorkle_body1", "anim_head1", "anim_head_jaw", "anim_head_snorkle",
+                "Zombie_outerarm_hand", "Zombie_snorkle_outerarm_upper", "Zombie_outerarm_lower",
+                "Zombie_snorkle_whitewater2", "Zombie_snorkle_whitewater"
+            };
+            var pool = (ObjectSpriteRenderer)typeof(ReanimationRenderer)
+                .GetField("_objectRenderer", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(animations)!;
+            var previous = -1;
+            var checkedTracks = 0;
+            for (var index = 0; index < pool.SubmittedObjectCount; index++)
+            {
+                var node = pool.SubmittedSprites[index].GameObject;
+                if (node == null)
+                {
+                    continue;
+                }
+
+                var order = Array.IndexOf(names, node.name);
+                if (order >= 0)
+                {
+                    Assert.That(order, Is.GreaterThan(previous), "Snorkel tracks must retain the original reanimation's painter order.");
+                    previous = order;
+                    checkedTracks++;
+                }
+            }
+
+            Assert.That(checkedTracks, Is.GreaterThan(3));
         }
 
         /// <summary>Counts visible original artwork in an inclusive/exclusive band of logical screen rows.</summary>

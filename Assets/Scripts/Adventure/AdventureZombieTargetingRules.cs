@@ -27,7 +27,8 @@ namespace PlantsVsZombies.Adventure
                 return false;
             }
 
-            return !z.Headless || kind != PlantKind.PotatoMine && kind != PlantKind.Chomper && kind != PlantKind.TangleKelp;
+            return (!z.Headless && z.TangleKelpGrab == null && z.PresentationNativeHeight != 3)
+                || kind != PlantKind.PotatoMine && kind != PlantKind.Chomper && kind != PlantKind.TangleKelp;
         }
 
         /// <summary>Gets the native body rectangle used by plant targeting.</summary>

@@ -2193,6 +2193,12 @@ namespace PlantsVsZombies.Simulation
                 return true;
             }
 
+            if (plant.Kind == PlantKind.TangleKelp)
+            {
+                AdvanceAdventureTangleKelp(plant);
+                return true;
+            }
+
             if (plant.Kind == PlantKind.Chomper)
             {
                 return AdvanceAdventureChomper(plant);
@@ -3082,6 +3088,18 @@ namespace PlantsVsZombies.Simulation
         private void RemoveAdventurePlantAndStack(Plant p)
         {
             Plants.Remove(p);
+            if (p.Kind == PlantKind.TangleKelp && p.TangleKelpPresentation != null)
+            {
+                var target = FindAdventureKelpZombie(p.TangleKelpPresentation.TargetZombieId);
+                if (target != null)
+                {
+                    // PC Plant::Die also finishes a grabbed target when the plant is shoveled.
+                    target.TangleKelpGrab = null;
+                    target.PresentationDeath = AdventureZombieDeathPresentation.Eaten;
+                    KillAdventureZombie(target);
+                }
+            }
+
             if (p.Layer == PlantLayer.Support)
             {
                 Plants.RemoveAll(x => x.Row == p.Row && x.Column <= p.Column && p.Column < x.Column + x.ColumnSpan);
@@ -3123,6 +3141,93 @@ namespace PlantsVsZombies.Simulation
             }
 
             return false;
+        }
+
+        /// <summary>Advances PC UpdateTangleKelp (0x46E430), keeping the authored grab attached until death.</summary>
+        /// <param name="plant">The water plant whose native grab owns its attack timing.</param>
+        private void AdvanceAdventureTangleKelp(Plant plant)
+        {
+            var state = plant.TangleKelpPresentation;
+            if (state == null)
+            {
+                var x = plant.Column + .5f;
+                var target = FindAdventureTarget(plant.Row, x - .5f, x + .7f, false, true, PlantKind.TangleKelp);
+                if (target == null)
+                {
+                    return;
+                }
+
+                RequestAdventureZombieFoley(68);
+                SplashAdventureTangleKelpTarget(target);
+                state = new AdventureTangleKelpState
+                {
+                    TargetZombieId = target.Id,
+                    OffsetX = target.Kind == ZombieKind.Snorkel ? -43 : AdventureZombieFeedbackPhase(target) == 53 ? -20 : -13,
+                    OffsetY = target.Kind == ZombieKind.Snorkel ? 55 : AdventureZombieFeedbackPhase(target) == 53 ? 37 : 15
+                };
+                plant.TangleKelpPresentation = state;
+                target.TangleKelpGrab = state;
+                plant.PresentationBiteNativeState = 34;
+                return;
+            }
+
+            state.Countdown--;
+            plant.ActionTimer = state.Countdown * .01f;
+            if (state.Countdown == 50)
+            {
+                var target = FindAdventureKelpZombie(state.TargetZombieId);
+                if (target != null)
+                {
+                    target.PresentationNativeHeight = 3;
+                    StopAdventureNativeEating(target);
+                    SplashAdventureTangleKelpTarget(target);
+                }
+            }
+
+            if (state.Countdown == 20)
+            {
+                var x = 40f + plant.Column * 80f;
+                var y = 80f + plant.Row * 85f;
+                Presentation.ZombieSplashes.Add(new AdventureZombieSplash
+                {
+                    Id = ++Presentation._effectId, Row = plant.Row,
+                    X = x - 23f, Y = y + 7f, ParticleX = x + 31f, ParticleY = y + 64f,
+                    ScaleX = 1.3f, ScaleY = 1.3f
+                });
+                RequestAdventureZombieFoley(53);
+            }
+
+            if (state.Countdown <= 0)
+            {
+                RemoveAdventurePlantAndStack(plant);
+            }
+        }
+
+        /// <summary>Finds the surviving actor referenced by the original kelp grab.</summary>
+        /// <param name="id">The stable zombie identifier retained by the grabbing plant.</param>
+        /// <returns>The living board actor, or null after an earlier death or removal.</returns>
+        private Zombie? FindAdventureKelpZombie(int id)
+        {
+            foreach (var zombie in Zombies)
+            {
+                if (zombie.Id == id)
+                {
+                    return zombie;
+                }
+            }
+
+            return null;
+        }
+
+        /// <summary>Emits the original target's PoolSplash(false), including its swimming-snorkel offsets.</summary>
+        /// <param name="target">The grabbed zombie whose native position anchors the splash.</param>
+        private void SplashAdventureTangleKelpTarget(Zombie target)
+        {
+            var scale = AdventureDancerRules.Scale(target);
+            var swimming = AdventureZombieFeedbackPhase(target) == 59;
+            var altitude = target.PoolState?.Altitude ?? target.PresentationAltitude;
+            AddAdventureZombieSplash(target, (swimming ? -14f : 23f) * scale,
+                (swimming ? 70f : 78f) * (altitude == 0f ? scale : 1f), .8f, .8f, 52);
         }
 
         /// <summary>Performs advance adventure plants.</summary>
@@ -3301,19 +3406,6 @@ namespace PlantsVsZombies.Simulation
                             break;
                         case PlantKind.PotatoMine:
                             AdvanceAdventurePotatoMine(p);
-                            break;
-                        case PlantKind.TangleKelp:
-                            var kelp = FindAdventureTarget(p.Row, x - 0.5f, x + 0.7f, false, true, PlantKind.TangleKelp);
-                            if (kelp != null)
-                            {
-                                RequestAdventureZombieFoley(68);
-                                // PC UpdateTangleKelp 0x46E430 starts at 100 and splashes at counter 20.
-                                Presentation._plantSoundCues.Add(new AdventurePlantSoundCue { Ticks = 80, Foley = 53 });
-                                kelp.PresentationDeath = AdventureZombieDeathPresentation.Eaten;
-                                KillAdventureZombie(kelp);
-                                RemoveAdventurePlantAndStack(p);
-                            }
-
                             break;
                         case PlantKind.Spikeweed:
                             foreach (Zombie z in new PooledSnapshot<Zombie>(Zombies))
@@ -3693,7 +3785,8 @@ namespace PlantsVsZombies.Simulation
             Zombie? best = null;
             foreach (Zombie z in Zombies)
             {
-                if (!z.Hypnotized && AdventureZombieTargetingRules.CanBeAutoTargeted(z, sourceKind) && z.DropRemaining <= 0f && z.Kind != ZombieKind.Bungee && z.Row == row && z.X >= min && z.X <= max && (!z.Airborne || air) && (!z.Submerged || submerged))
+                if (!z.Hypnotized && (sourceKind != PlantKind.TangleKelp || z.PresentationInPool == true)
+                    && AdventureZombieTargetingRules.CanBeAutoTargeted(z, sourceKind) && z.DropRemaining <= 0f && z.Kind != ZombieKind.Bungee && z.Row == row && z.X >= min && z.X <= max && (!z.Airborne || air) && (!z.Submerged || submerged))
                 {
                     if (best == null || z.X < best.X)
                     {
@@ -8143,6 +8236,12 @@ namespace PlantsVsZombies.Simulation
         /// <returns>The resulting find adventure native plant target.</returns>
         private Plant? FindAdventureNativePlantTarget(Zombie z, global::PlantsVsZombies.Adventure.AdventureBiteAttack attack)
         {
+            if (z.TangleKelpGrab != null)
+            {
+                // PC FindPlantTarget and UpdateZombieDolphinRider reject a target already held by kelp.
+                return null;
+            }
+
             var box = AdventureZombieAttackRectangle(z);
             foreach (var p in Plants)
             {
@@ -8185,6 +8284,12 @@ namespace PlantsVsZombies.Simulation
         /// <returns>The resulting advance adventure native eating.</returns>
         private bool AdvanceAdventureNativeEating(Zombie z, Plant? target, float dt, bool zombieTarget = false)
         {
+            if (z.TangleKelpGrab != null)
+            {
+                // PC FindPlantTarget 0x54B392 rejects kelp targets without clearing the existing eating latch.
+                return z.Eating;
+            }
+
             if (z.Headless || !AdventureNativeChewer(z) || z.PresentationGarlicCounter >= 0)
             {
                 return false;
@@ -8259,6 +8364,12 @@ namespace PlantsVsZombies.Simulation
             if (z.Kind == ZombieKind.Snorkel)
             {
                 z.Submerged = z.PresentationInPool == true;
+                // The native UpdateZombieSnorkel sees StopEating before the next position update.
+                // Start the reverse pose now so this tick cannot move while still displaying anim_eat.
+                if (z.PresentationNativePhase == 60 || z.PresentationNativePhase == 61)
+                {
+                    SetAdventureZombieMotionPhase(z, 62);
+                }
             }
 
             var phase = AdventureZombieFeedbackPhase(z);
@@ -9606,7 +9717,12 @@ namespace PlantsVsZombies.Simulation
             }
 
             var scale = AdventureDancerRules.Scale(z);
-            if (z.PresentationNativeHeight == 7)
+            if (z.PresentationNativeHeight == 3)
+            {
+                // PC UpdateZombiePool 0x5451F9 lowers a dragged body by one pixel per update.
+                z.PresentationAltitude -= dt * 100f;
+            }
+            else if (z.PresentationNativeHeight == 7)
             {
                 z.PresentationAltitude = Math.Max(0f, z.PresentationAltitude - dt * 100f);
                 if (z.PresentationAltitude == 0f)
@@ -9937,7 +10053,7 @@ namespace PlantsVsZombies.Simulation
                         break;
                     }
                 }
-                if (opponent != null && (z.Hypnotized || opponent.Hypnotized) && !z.Headless)
+                if (opponent != null && (z.Hypnotized || opponent.Hypnotized) && !z.Headless && z.TangleKelpGrab == null)
                 {
                     if (AdvanceAdventureNativeEating(z, null, dt, true))
                     {
@@ -14787,7 +14903,11 @@ namespace PlantsVsZombies.Simulation
             }
 
             var scale = AdventureDancerRules.Scale(zombie);
-            if (zombie.PresentationNativeHeight == 1)
+            if (zombie.PresentationNativeHeight == 3)
+            {
+                state.Altitude -= 1f;
+            }
+            else if (zombie.PresentationNativeHeight == 1)
             {
                 state.Altitude = Math.Max(-40f * scale, state.Altitude - 1f);
                 if (state.Altitude <= -40f * scale)

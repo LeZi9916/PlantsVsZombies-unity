@@ -239,7 +239,7 @@ namespace PlantsVsZombies.Tests.EditMode
             var game = Fixture(29);
             var plant = Place(game, PlantKind.TangleKelp, 2);
             plant.ActionTimer = .01f;
-            Target(game, ZombieKind.Normal, 2, 4.5f);
+            Target(game, ZombieKind.Normal, 2, 4.5f).PresentationInPool = true;
             game.Presentation.ZombieSounds.Clear();
             game.Update(.01f);
             Assert.That(CountSound(game, 68), Is.EqualTo(1));
