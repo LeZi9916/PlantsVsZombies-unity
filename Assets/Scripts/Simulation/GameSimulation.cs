@@ -3328,7 +3328,8 @@ namespace PlantsVsZombies.Simulation
             var swimming = AdventureZombieFeedbackPhase(target) == 59;
             var altitude = target.PoolState?.Altitude ?? target.PresentationAltitude;
             AddAdventureZombieSplash(target, (swimming ? -14f : 23f) * scale,
-                (swimming ? 70f : 78f) * (altitude == 0f ? scale : 1f), .8f, .8f, 52);
+                (swimming ? 70f : 78f) * (altitude == 0f ? scale : 1f), .8f, .8f, 52,
+                target.Kind == ZombieKind.DolphinRider ? 65f : (float?)null);
         }
 
         /// <summary>Performs advance adventure plants.</summary>
@@ -4096,7 +4097,9 @@ namespace PlantsVsZombies.Simulation
                 Zombie? hit = null;
                 foreach (Zombie z in Zombies)
                 {
-                    if (allowDamage && p.PresentationCanImpact && z.GraveRiseTicks <= 0 && z.PresentationNativePhase != 50 && (!p.Homing || z.Id == p.TargetZombieId) && !z.Hypnotized && Math.Abs(z.Row - p.FlightRow) < 0.45f && !p.HitIds.Contains(z.Id) && (!z.Airborne || p.HitsAir) && (!z.Submerged || p.Lobbed) && (z.Kind == ZombieKind.Zomboni
+                    if (allowDamage && p.PresentationCanImpact && z.GraveRiseTicks <= 0 && z.PresentationNativePhase != 50
+                        && !(z.Kind == ZombieKind.DolphinRider && (z.PresentationNativePhase == 52 || z.PresentationNativePhase == 54))
+                        && (!p.Homing || z.Id == p.TargetZombieId) && !z.Hypnotized && Math.Abs(z.Row - p.FlightRow) < 0.45f && !p.HitIds.Contains(z.Id) && (!z.Airborne || p.HitsAir) && (!z.Submerged || p.Lobbed) && (z.Kind == ZombieKind.Zomboni
                         ? AdventureZomboniRules.ProjectileCollides(p, z)
                         : AdventurePuffShroomRules.IsShortRange(p.SourceKind) ? AdventurePuffShroomRules.Collides(p, z)
                         : z.X >= Math.Min(before, p.X) - 0.25f && z.X <= Math.Max(before, p.X) + 0.25f))
@@ -4130,7 +4133,9 @@ namespace PlantsVsZombies.Simulation
                     {
                         foreach (Zombie other in new PooledSnapshot<Zombie>(Zombies))
                         {
-                            if (other != hit && !other.Hypnotized && !other.Airborne && Math.Abs(other.Row - hit.Row) <= (p.Fire ? 0 : 1) && Math.Abs(other.X - hit.X) <= (p.Fire ? 0.5f : 1f))
+                            if (other != hit && !other.Hypnotized && !other.Airborne
+                                && !(other.Kind == ZombieKind.DolphinRider && (other.PresentationNativePhase == 52 || other.PresentationNativePhase == 54))
+                                && Math.Abs(other.Row - hit.Row) <= (p.Fire ? 0 : 1) && Math.Abs(other.X - hit.X) <= (p.Fire ? 0.5f : 1f))
                             {
                                 if (p.ChillSplash)
                                 {
@@ -4995,6 +5000,16 @@ namespace PlantsVsZombies.Simulation
             {
                 var corpse = Presentation.Corpses[i];
                 corpse.Age += dt;
+                if (corpse.RequiredZombie.Kind == ZombieKind.DolphinRider && corpse.RequiredZombie.PresentationNativeHeight == 7)
+                {
+                    // PC UpdateDeath 54F4A0 continues the original falling update after a Tall-nut collision.
+                    corpse.RequiredZombie.PresentationAltitude = Math.Max(0f, corpse.RequiredZombie.PresentationAltitude - 1f);
+                    if (corpse.RequiredZombie.PresentationAltitude == 0f)
+                    {
+                        corpse.RequiredZombie.PresentationNativeHeight = 0;
+                    }
+                }
+
                 var pool = corpse.RequiredZombie.PoolState;
                 if (pool != null && !Zombies.Contains(corpse.RequiredZombie))
                 {
@@ -5320,9 +5335,20 @@ namespace PlantsVsZombies.Simulation
                 return;
             }
 
+            if (zombie.Kind == ZombieKind.DolphinRider && zombie.PresentationNativePhase != 55)
+            {
+                // PC PlayDeathAnim 54F084 keeps a body reanimation only after the dolphin has been lost in water.
+                return;
+            }
+
             var rate = zombie.Kind == ZombieKind.Football ? 24f : zombie.Kind == ZombieKind.Gargantuar || zombie.Kind == ZombieKind.Snorkel || zombie.Kind == ZombieKind.Yeti ? 14f : zombie.Kind == ZombieKind.Digger || zombie.Kind == ZombieKind.Boss ? 18f : 24f + (float)_random.NextDouble() * 6f;
+            if (zombie.Kind == ZombieKind.DolphinRider && zombie.ChillRemaining > 0f)
+            {
+                // PC phase-one UpdateAnimSpeed applies the retained chill once; the dying chill counter no longer advances.
+                rate *= .5f;
+            }
             var roll = _random.Next(100);
-            var clip = zombie.PresentationInPool == true ? "anim_waterdeath" : roll == 99 && Adventure.Level.Number > 5 && zombie.ChillRemaining <= 0 && Zombies.Count <= 5 ? "anim_superlongdeath" : roll > 50 ? "anim_death2" : "anim_death";
+            var clip = zombie.Kind == ZombieKind.DolphinRider ? "anim_death" : zombie.PresentationInPool == true ? "anim_waterdeath" : roll == 99 && Adventure.Level.Number > 5 && zombie.ChillRemaining <= 0 && Zombies.Count <= 5 ? "anim_superlongdeath" : roll > 50 ? "anim_death2" : "anim_death";
             if (clip == "anim_superlongdeath")
             {
                 rate = 14f;
@@ -8675,6 +8701,12 @@ namespace PlantsVsZombies.Simulation
             // PC PlayDeathAnim replaces every live phase, stops eating, and retains the current pool altitude.
             corpse.RequiredZombie.PresentationNativePhase = 1;
             corpse.RequiredZombie.Eating = false;
+            if (corpse.RequiredZombie.Kind == ZombieKind.DolphinRider)
+            {
+                corpse.RequiredZombie.PresentationNativeVelocity = 0f;
+                corpse.RequiredZombie.Speed = 0f;
+                (corpse.RequiredZombie.DolphinState ??= new AdventureDolphinState()).AnimationBlendTicks = 20;
+            }
 
             int frames;
             var asset = AdventureZombiePresentationAsset(corpse.RequiredZombie);
@@ -8832,6 +8864,11 @@ namespace PlantsVsZombies.Simulation
                 z.PresentationNativePhase = 57;
                 z.Submerged = false;
             }
+            else if (z.Kind == ZombieKind.DolphinRider)
+            {
+                z.DolphinState = new AdventureDolphinState();
+                z.PresentationNativePhase = 51;
+            }
 
             // Explicit in-lawn spawns retain their pool placement; edge spawns enter through CheckForPool.
             z.PresentationPoolRow = Adventure.Level.IsWaterRow(z.Row);
@@ -8845,6 +8882,11 @@ namespace PlantsVsZombies.Simulation
                     z.PresentationNativePhase = 59;
                     z.Submerged = true;
                 }
+                else if (z.Kind == ZombieKind.DolphinRider)
+                {
+                    z.PresentationAltitude = 0f;
+                    z.PresentationNativePhase = 53;
+                }
             }
 
             if (AdventureDancerRules.IsDancer(z))
@@ -8852,7 +8894,12 @@ namespace PlantsVsZombies.Simulation
                 AdventureDancerRules.Initialize(z, z.Kind == ZombieKind.Dancing ? _random.Next(12) : 0);
             }
 
-            PickAdventureZombieNativeSpeed(z, AdventureZombieFeedbackPhase(z));
+            // PC riding retains the speed selected for the original walk carrying the dolphin.
+            PickAdventureZombieNativeSpeed(z, z.Kind == ZombieKind.DolphinRider ? 51 : AdventureZombieFeedbackPhase(z));
+            if (z.Kind == ZombieKind.DolphinRider)
+            {
+                z._presentationSpeedPhase = z.PresentationNativePhase;
+            }
             // These assignments occur after the initial PickRandomSpeed in PC Init.
             if (z.Kind == ZombieKind.Bobsled && !z.UsedAbility)
             {
@@ -8879,6 +8926,15 @@ namespace PlantsVsZombies.Simulation
 
             var phase = AdventureZombieFeedbackPhase(z);
             var kind = z.ModeHead >= 26 ? z.ModeHead : (int)z.Kind;
+            if (z.Kind == ZombieKind.DolphinRider && (phase == 52 || phase == 53 || phase == 54))
+            {
+                // PC 541C70 changes these clips without PickRandomSpeed; takeoff and landing set velocity explicitly.
+                z._presentationSpeedPhase = phase;
+                z._presentationSpeedKind = kind;
+                z.Speed = AdventureZombieNativeRules.GridSpeed(z.PresentationNativeVelocity);
+                return;
+            }
+
             if (z._presentationSpeedPhase != phase || z._presentationSpeedKind != kind)
             {
                 PickAdventureZombieNativeSpeed(z, phase);
@@ -8920,6 +8976,8 @@ namespace PlantsVsZombies.Simulation
                 Id = ++Presentation._effectId,
                 Seed = z.Id * 397 ^ Presentation._effectId,
                 NativeKind = kind,
+                NativePhase = z.Kind == ZombieKind.DolphinRider ? z.PresentationNativePhase : -1,
+                NativeAltitude = z.Kind == ZombieKind.DolphinRider ? z.PresentationAltitude : 0f,
                 ParticleId = particleId,
                 X = z.X,
                 Row = z.Row,
@@ -9091,7 +9149,12 @@ namespace PlantsVsZombies.Simulation
             z._presentationPreviousWalkCycle = z._presentationWalkLoops + (double)z._presentationWalkPhase;
             z._presentationTickSlow = (AdventureDancerRules.IsDancer(z)
                 ? AdventureDancerRules.GroupAffected(z, Zombies, true) : z.ChillRemaining > 0f) ? .5f : 1f;
-            if (z.FrozenRemaining > 0f || AdventureDancerRules.IsDancer(z) && z.PresentationButter > 0f)
+            if (z.Kind == ZombieKind.DolphinRider && (z.PresentationNativePhase == 52 || z.PresentationNativePhase == 54))
+            {
+                // PC UpdateAnimSpeed returns on the flat ground track before applying chill to these one-shots.
+                z._presentationTickSlow = 1f;
+            }
+            if (z.FrozenRemaining > 0f || (AdventureDancerRules.IsDancer(z) || z.Kind == ZombieKind.DolphinRider) && z.PresentationButter > 0f)
             {
                 return;
             }
@@ -9302,6 +9365,12 @@ namespace PlantsVsZombies.Simulation
 
             if (!string.Equals(z.PresentationAnimation, clip, StringComparison.Ordinal))
             {
+                if (z.Kind == ZombieKind.DolphinRider
+                    && (z.Eating || string.Equals(z.PresentationAnimation, "anim_eat", StringComparison.Ordinal)))
+                {
+                    (z.DolphinState ??= new AdventureDolphinState()).AnimationBlendTicks = 20;
+                }
+
                 if (AdventureDancerRules.IsDancer(z) && z.DancerState != null
                     && (z.Eating || string.Equals(z.PresentationAnimation, "anim_eat", StringComparison.Ordinal)))
                 {
@@ -9373,6 +9442,24 @@ namespace PlantsVsZombies.Simulation
                 }
             }
 
+            if (z.Kind == ZombieKind.DolphinRider)
+            {
+                if (z.PresentationNativePhase == 52)
+                {
+                    return 16f;
+                }
+
+                if (z.PresentationNativePhase == 53)
+                {
+                    return 12f;
+                }
+
+                if (z.PresentationNativePhase == 54)
+                {
+                    return 10f;
+                }
+            }
+
             if (z.Eating)
             {
                 return z.Kind == ZombieKind.PoleVaulter || z.Kind == ZombieKind.Balloon || z.Kind == ZombieKind.Imp || z.Kind == ZombieKind.Digger || z.Kind == ZombieKind.JackInTheBox || z.Kind == ZombieKind.Snorkel || z.Kind == ZombieKind.Yeti ? 20f : 36f;
@@ -9428,6 +9515,18 @@ namespace PlantsVsZombies.Simulation
                 || AdventureDancerRules.IsDancer(z) && !AdventureDancerRules.CanWalk(z, Zombies))
             {
                 return 0f;
+            }
+
+            if (z.Kind == ZombieKind.DolphinRider && z.PresentationNativePhase == 52)
+            {
+                // The authored entry ground is constant; do not replace its sixteen-fps animation clock with the source rate.
+                return 0f;
+            }
+
+            if (z.Kind == ZombieKind.DolphinRider && z.PresentationNativePhase == 54)
+            {
+                // PC 546730 takes the native velocity directly during a dolphin jump, even while chilled.
+                return z.Speed * dt;
             }
 
             var clip = AdventurePresentationZombieAnimation(z);
@@ -9609,6 +9708,8 @@ namespace PlantsVsZombies.Simulation
                 Id = ++Presentation._effectId,
                 Seed = z.Id * 397 ^ Presentation._effectId,
                 NativeKind = kind,
+                NativePhase = z.Kind == ZombieKind.DolphinRider ? z.PresentationNativePhase : -1,
+                NativeAltitude = z.Kind == ZombieKind.DolphinRider ? z.PresentationAltitude : 0f,
                 X = z.X,
                 Row = z.Row,
                 Scale = AdventureDancerRules.Scale(z),
@@ -9702,6 +9803,11 @@ namespace PlantsVsZombies.Simulation
             }
 
             Zombies.Add(z);
+            if (kind == ZombieKind.DolphinRider)
+            {
+                RequestAdventureZombieFoley(51);
+            }
+
             if (kind == ZombieKind.Zomboni)
             {
                 z.ZomboniState = new AdventureZomboniState();
@@ -9826,6 +9932,159 @@ namespace PlantsVsZombies.Simulation
             return true;
         }
 
+        /// <summary>Changes a dolphin clip while preserving the native velocity unless the original branch picks a new speed.</summary>
+        /// <param name="z">The dolphin rider changing its original phase.</param>
+        /// <param name="phase">The original phase identifier from fifty one through fifty six.</param>
+        private void SetAdventureDolphinPhase(Zombie z, int phase)
+        {
+            z.PresentationNativePhase = phase;
+            (z.DolphinState ??= new AdventureDolphinState()).AnimationBlendTicks = phase == 52 ? 20 : 0;
+            z.PresentationAnimation = string.Empty;
+            AdventurePresentationZombieAnimation(z);
+            if (phase == 51 || phase == 55 || phase == 56)
+            {
+                PickAdventureZombieNativeSpeed(z, phase);
+            }
+            else
+            {
+                z._presentationSpeedPhase = phase;
+                z._presentationSpeedKind = (int)z.Kind;
+                z.Speed = AdventureZombieNativeRules.GridSpeed(z.PresentationNativeVelocity);
+            }
+        }
+
+        /// <summary>Checks PC ShouldTriggerTimedEvent's inclusive previous and exclusive current one-shot interval.</summary>
+        /// <param name="z">The actor whose native animation was advanced this update.</param>
+        /// <param name="progress">The updated normalized one-shot animation time.</param>
+        /// <param name="marker">The original normalized event marker.</param>
+        /// <returns>Whether the original event falls in this update's animation interval.</returns>
+        private static bool AdventureDolphinTimedEvent(Zombie z, double progress, float marker)
+        {
+            return z._presentationPreviousWalkCycle <= marker && progress > marker;
+        }
+
+        /// <summary>Runs PC UpdateZombieDolphinRider's bank, entry, ride, jump, and dismounted swimming branches.</summary>
+        /// <param name="z">The actor whose original dolphin phase may be active.</param>
+        /// <param name="dt">The active fixed update interval in seconds.</param>
+        /// <returns>False because the common walking update still runs after the original dolphin action.</returns>
+        private bool AdvanceAdventureDolphin(Zombie z, float dt)
+        {
+            if (z.Kind != ZombieKind.DolphinRider)
+            {
+                return false;
+            }
+
+            var state = z.DolphinState ??= new AdventureDolphinState();
+            var phase = z.PresentationNativePhase;
+            if (phase == 54 && state.JumpTicks > 0)
+            {
+                state.JumpTicks--;
+            }
+
+            if (z.TangleKelpGrab != null || z.PresentationNativeHeight == 3)
+            {
+                // PC 541C70 returns before changing a kelp target's existing dolphin phase.
+                return false;
+            }
+
+            var backwards = z.PresentationWalkingBackwards ?? z.Hypnotized;
+            var nativeX = (int)AdventureZombieNativeRules.NativePositionX(z.X, AdventureDancerRules.Scale(z));
+            var progress = z._presentationWalkLoops + (double)z._presentationWalkPhase;
+            if (phase == 51 && !backwards && nativeX > 700 && nativeX <= 720)
+            {
+                SetAdventureDolphinPhase(z, 52);
+            }
+            else if (phase == 52)
+            {
+                if (AdventureDolphinTimedEvent(z, progress, .56f))
+                {
+                    AddAdventureZombieSplash(z, -83f, 73f, 1.2f, .8f, 53);
+                }
+
+                if (z._presentationWalkLoops > 0)
+                {
+                    z.X -= 70f / 80f;
+                    z.PresentationInPool = true;
+                    z.PresentationAltitude = 0f;
+                    SetAdventureDolphinPhase(z, 53);
+                }
+            }
+            else if (phase == 53)
+            {
+                if (nativeX <= 10)
+                {
+                    z.PresentationNativeHeight = 2;
+                    z.PresentationAltitude = -40f;
+                    SetAdventureDolphinPhase(z, 51);
+                    AddAdventureZombieSplash(z, 23f, 78f, .8f, .8f, 52, 65f);
+                }
+                else if (!z.Headless)
+                {
+                    var target = FindAdventureNativePlantTarget(z, AdventureBiteAttack.Vault);
+                    if (target != null)
+                    {
+                        RequestAdventureZombieFoley(50);
+                        RequestAdventureZombieFoley(52);
+                        state.JumpTicks = 120;
+                        z.Eating = false;
+                        z.PresentationNativeVelocity = .5f;
+                        SetAdventureDolphinPhase(z, 54);
+                    }
+                }
+            }
+            else if (phase == 54)
+            {
+                z.PresentationAltitude = Math.Max(0, Math.Min(120, 120 - state.JumpTicks)) / 12f;
+                var complete = false;
+                if (AdventureDolphinTimedEvent(z, progress, .3f))
+                {
+                    var barrier = FindAdventureNativePlantTarget(z, AdventureBiteAttack.Vault);
+                    if (barrier != null && barrier.Kind == PlantKind.TallNut)
+                    {
+                        RequestAdventureZombieFoley(48);
+                        Presentation.PlantBiteEffects.Add(new AdventurePlantBiteEffect
+                        {
+                            Id = ++Presentation._effectId, Row = z.Row, ParticleId = 29,
+                            NativeX = 40 + barrier.Column * 80 + 60,
+                            NativeY = 80 + barrier.Row * (Adventure.Level.HasPool || Adventure.Level.HasRoof ? 85 : 100) - 20,
+                            Seed = z.Id
+                        });
+                        z.X = AdventureZombieNativeRules.GridX(40 + barrier.Column * 80 + 25, AdventureDancerRules.Scale(z));
+                        z.PresentationAltitude = 30f;
+                        z.PresentationNativeHeight = 7;
+                        complete = true;
+                    }
+                }
+                else if (AdventureDolphinTimedEvent(z, progress, .49f))
+                {
+                    AddAdventureZombieSplash(z, -63f, 73f, 1.2f, .8f, 53);
+                    z.PresentationNativeVelocity = 0f;
+                    z.Speed = 0f;
+                }
+                else if (z._presentationWalkLoops > 0)
+                {
+                    z.X -= 94f / 80f;
+                    z.PresentationAltitude = 0f;
+                    complete = true;
+                }
+
+                if (complete)
+                {
+                    z.UsedAbility = true;
+                    SetAdventureDolphinPhase(z, 55);
+                }
+            }
+            else if (phase == 55 && (nativeX <= 10 && !backwards || nativeX > 680 && backwards))
+            {
+                z.PresentationNativeHeight = 2;
+                z.PresentationAltitude = -40f;
+                SetAdventureDolphinPhase(z, 56);
+                AddAdventureZombieSplash(z, 23f, 78f, .8f, .8f, 52, 65f);
+            }
+
+            return false;
+        }
+
         /// <summary>Runs the original snorkel walk, jump, swim, rise, eat, and reverse-dive phases.</summary>
         /// <param name="z">The zombie whose snorkel phase may be active.</param>
         /// <param name="dt">The fixed simulation interval in seconds.</param>
@@ -9929,11 +10188,11 @@ namespace PlantsVsZombies.Simulation
             if (z.PresentationNativeHeight == 3)
             {
                 // PC UpdateZombiePool 0x5451F9 lowers a dragged body by one pixel per update.
-                z.PresentationAltitude -= dt * 100f;
+                z.PresentationAltitude -= z.Kind == ZombieKind.DolphinRider ? 1f : dt * 100f;
             }
             else if (z.PresentationNativeHeight == 7)
             {
-                z.PresentationAltitude = Math.Max(0f, z.PresentationAltitude - dt * 100f);
+                z.PresentationAltitude = Math.Max(0f, z.PresentationAltitude - (z.Kind == ZombieKind.DolphinRider ? 1f : dt * 100f));
                 if (z.PresentationAltitude == 0f)
                 {
                     z.PresentationNativeHeight = 0;
@@ -9943,7 +10202,8 @@ namespace PlantsVsZombies.Simulation
             else if (z.PresentationNativeHeight == 1 || z.PresentationNativeHeight == 2)
             {
                 var entering = z.PresentationNativeHeight == 1;
-                z.PresentationAltitude += (entering ? -1f : z.Kind == ZombieKind.Snorkel ? 2f : 1f) * dt * 100f;
+                z.PresentationAltitude += z.Kind == ZombieKind.DolphinRider ? entering ? -1f : 1f
+                    : (entering ? -1f : z.Kind == ZombieKind.Snorkel ? 2f : 1f) * dt * 100f;
                 var destination = entering ? -40f * scale : 0f;
                 if (entering ? z.PresentationAltitude <= destination : z.PresentationAltitude >= destination)
                 {
@@ -9981,7 +10241,8 @@ namespace PlantsVsZombies.Simulation
         /// <param name="scaleX">The authored horizontal splash scale.</param>
         /// <param name="scaleY">The authored vertical splash scale.</param>
         /// <param name="foley">The original water Foley identifier.</param>
-        private void AddAdventureZombieSplash(Zombie z, float offsetX, float offsetY, float scaleX, float scaleY, int foley)
+        /// <param name="particleOffsetY">The optional original particle offset when PoolSplash uses a distinct vertical origin.</param>
+        private void AddAdventureZombieSplash(Zombie z, float offsetX, float offsetY, float scaleX, float scaleY, int foley, float? particleOffsetY = null)
         {
             var nativeX = (int)AdventureZombieNativeRules.NativePositionX(z.X, AdventureDancerRules.Scale(z));
             var nativeY = (int)AdventureBiteNativeY(z, nativeX);
@@ -9990,7 +10251,7 @@ namespace PlantsVsZombies.Simulation
                 Id = ++Presentation._effectId, Row = z.Row,
                 X = nativeX + offsetX,
                 Y = nativeY + offsetY,
-                ParticleX = nativeX + offsetX + 37f, ParticleY = nativeY + offsetY + 42f,
+                ParticleX = nativeX + offsetX + 37f, ParticleY = nativeY + (particleOffsetY ?? offsetY + 42f),
                 ScaleX = scaleX, ScaleY = scaleY
             });
             RequestAdventureZombieFoley(foley);
@@ -10129,6 +10390,11 @@ namespace PlantsVsZombies.Simulation
                     continue;
                 }
 
+                if (z.Kind == ZombieKind.DolphinRider && z.PresentationButter > 0f)
+                {
+                    continue;
+                }
+
                 var slow = (AdventureDancerRules.IsDancer(z)
                     ? AdventureDancerRules.GroupAffected(z, Zombies, true) : z.ChillRemaining > 0f) ? .5f : 1f;
                 AdvanceAdventureZombiePool(z, dt);
@@ -10154,7 +10420,7 @@ namespace PlantsVsZombies.Simulation
                     continue;
                 }
 
-                if (AdvanceAdventurePoleVault(z, dt) || AdvanceAdventureSnorkel(z, dt))
+                if (AdvanceAdventurePoleVault(z, dt) || AdvanceAdventureSnorkel(z, dt) || AdvanceAdventureDolphin(z, dt))
                 {
                     continue;
                 }
@@ -10328,7 +10594,7 @@ namespace PlantsVsZombies.Simulation
                 }
 
                 Plant? target = null;
-                var vault = z.Kind == ZombieKind.PoleVaulter || z.Kind == ZombieKind.DolphinRider || z.Kind == ZombieKind.Pogo;
+                var vault = z.Kind == ZombieKind.PoleVaulter || z.Kind == ZombieKind.Pogo;
                 var attack = vault && !z.UsedAbility ? AdventureBiteAttack.Vault : z.Kind == ZombieKind.Zomboni || z.Kind == ZombieKind.Catapult ? AdventureBiteAttack.DriveOver : AdventureBiteAttack.Chew;
                 if (!z.Airborne && !z.Hypnotized && !z.Headless)
                 {

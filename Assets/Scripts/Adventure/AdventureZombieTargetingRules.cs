@@ -20,6 +20,12 @@ namespace PlantsVsZombies.Adventure
                 return false;
             }
 
+            if (z.Kind == ZombieKind.DolphinRider && (z.PresentationNativePhase == 52 || z.PresentationNativePhase == 54))
+            {
+                // PC EffectedByDamage 54D810 admits only range bit 0x10 while entering water or vaulting.
+                return false;
+            }
+
             // PC EffectedByDamage 0x54D810 tests the left edge of GetZombieRect,
             // not the actor origin or the animation's visible pixels. Bobsled is exempt.
             if (z.Kind != ZombieKind.Bobsled && BodyRectangle(z).X > 800)

@@ -7,6 +7,10 @@ namespace PlantsVsZombies.Adventure
     {
         /// <summary>Stores id, seed, native kind.</summary>
         public int Id, Seed, NativeKind;
+        /// <summary>Stores the source dolphin's original phase before detachment, or minus one for other species.</summary>
+        public int NativePhase = -1;
+        /// <summary>Stores the source dolphin's native altitude before detachment.</summary>
+        public float NativeAltitude;
         /// <summary>Stores x, row, age, scale, animation age, rate.</summary>
         public float X, Row, Age, Scale, AnimationAge, Rate;
         /// <summary>Stores asset, animation, anchor, image.</summary>

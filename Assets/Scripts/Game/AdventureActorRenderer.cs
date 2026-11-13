@@ -201,7 +201,19 @@ namespace PlantsVsZombies.Game
             }
 
             var viewport = new Rect(origin.x - 160, origin.y - 160, 500, 460);
+            if (zombie.Kind == ZombieKind.DolphinRider && RequiredRenderer.TryGetNativeDefinitionInfo(name, out var dolphin))
+            {
+                // The authored jump extends left of the generic composition bounds. Bounds are a capture
+                // allocation limit, not PC DrawReanim's independent water rectangle or its ignore-clip tracks.
+                var left = _backwards ? 90f - dolphin.Bounds.xMax : dolphin.Bounds.xMin;
+                var right = _backwards ? 90f - dolphin.Bounds.xMin : dolphin.Bounds.xMax;
+                viewport.xMin = Math.Min(viewport.xMin, origin.x + left * scale);
+                viewport.xMax = Math.Max(viewport.xMax, origin.x + right * scale);
+                viewport.yMin = Math.Min(viewport.yMin, origin.y + dolphin.Bounds.yMin * scale);
+                viewport.yMax = Math.Max(viewport.yMax, origin.y + dolphin.Bounds.yMax * scale);
+            }
             float? bodyClipBottom = null;
+            Rect? bodyClipBounds = null;
             var pool = zombie.PoolState;
             if (pool != null && AdventureZombiePoolRules.UsesPlainBody(zombie.Kind)
                 && (zombie.PresentationNativePhase == 14 || zombie.PresentationInPool == true))
@@ -227,15 +239,25 @@ namespace PlantsVsZombies.Game
 
             if (pool == null)
             {
-                var nativeY = origin.y + zombie.PresentationAltitude - 120f * (1f - scale) + 8f;
+                var nativeY = origin.y + zombie.PresentationAltitude - 120f * (1f - scale) + 8f
+                    - AdventureZombieMotionRules.DolphinImageOffsetY(zombie);
                 var waterline = AdventureZombieMotionRules.ClipBottom(zombie, nativeY, scale);
                 if (!float.IsPositiveInfinity(waterline))
                 {
                     bodyClipBottom = waterline;
+                    if (zombie.Kind == ZombieKind.DolphinRider)
+                    {
+                        // PC DrawReanim 548D40 clips ordinary tracks at imageOffsetX-200, width520,
+                        // and imageOffsetY+bodyY-78. Water tracks retain their independent ignore-clip flag.
+                        var left = origin.x - 15f - 30f * (1f - scale) - 200f;
+                        var top = nativeY + AdventureZombieMotionRules.DolphinImageOffsetY(zombie)
+                            - zombie.PresentationAltitude - 78f;
+                        bodyClipBounds = Rect.MinMaxRect(left, top, left + 520f, waterline);
+                    }
                 }
             }
 
-            RequiredRenderer.DrawNativeZombieCombat(zombie, viewport, _drawZombie, surfaceKey, bodyClipBottom);
+            RequiredRenderer.DrawNativeZombieCombat(zombie, viewport, _drawZombie, surfaceKey, bodyClipBottom, bodyClipBounds);
         }
 
         /// <summary>Submits the configured plant without allocating callback captures.</summary>
@@ -311,11 +333,14 @@ namespace PlantsVsZombies.Game
                 && _zombie.PoolState == null && _zombie.PresentationInPool != true && !_zombie.PresentationPoolRow
                 ? RequiredRenderer.DrawZombiePlayback(_origin, _scale, _seconds, _variant, _clip, _loop, _rate, true, null, _key)
                 : RequiredRenderer.DrawNativePlayback(_name, _origin, _scale, _seconds, _clip, _loop, _rate, _zombieVisible, null, null,
-                    _backwards, _key, _clip == "anim_gasp" || _zombie.ZomboniState?.FlatTires == true ? 10 : _zombie.Kind == ZombieKind.Snorkel && _zombie.PresentationNativePhase != 58
-                        ? 0 : AdventureDancerRules.AnimationBlendTicks(_zombie), -1f, 90f,
+                    _backwards, _key, _zombie.Kind == ZombieKind.DolphinRider ? AdventureZombieMotionRules.DolphinBlendTicks(_zombie)
+                        : _clip == "anim_gasp" || _zombie.ZomboniState?.FlatTires == true ? 10
+                            : _zombie.Kind == ZombieKind.Snorkel && _zombie.PresentationNativePhase != 58
+                                ? 0 : AdventureDancerRules.AnimationBlendTicks(_zombie), -1f, 90f,
                     trackAttachment: _poolParticles != null && (_zombie.PoolState?.SeaweedAge >= 0f
                         || _zombie.ZomboniState?.FlatTires == true) ? _poolTrackAttachment : null,
-                    fullLastFrame: _zombie.Kind == ZombieKind.Snorkel && _zombie.PresentationNativePhase == 59);
+                    fullLastFrame: _zombie.Kind == ZombieKind.Snorkel && _zombie.PresentationNativePhase == 59
+                        || _zombie.Kind == ZombieKind.DolphinRider && _zombie.PresentationNativePhase == 53);
             if (_plantHead && !_zombie.Headless)
             {
                 RequiredRenderer.DrawNativePlantHeadAttachment(_origin, _scale, _clip, _seconds, _rate, _zombie.ModeHead, _zombie.PresentationPlantHeadAge, _backwards);

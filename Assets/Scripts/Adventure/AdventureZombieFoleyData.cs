@@ -35,6 +35,14 @@ namespace PlantsVsZombies.Adventure
                 new AdventureZombieFoleyDefinition(2f, new[] { "bonk" })
             },
             {
+                50,
+                new AdventureZombieFoleyDefinition(0f, new[] { "dolphin_before_jumping" })
+            },
+            {
+                51,
+                new AdventureZombieFoleyDefinition(0f, new[] { "dolphin_appears" })
+            },
+            {
                 52,
                 new AdventureZombieFoleyDefinition(0f, new[] { "plant_water" })
             },

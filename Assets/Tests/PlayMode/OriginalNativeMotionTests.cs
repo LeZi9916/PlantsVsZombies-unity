@@ -161,7 +161,7 @@ namespace PlantsVsZombies.Tests.PlayMode
             var play = typeof(GameSoundEffects).GetMethod("PlayAdventureZombieFoley", flags)!;
             try
             {
-                foreach (var foley in new[] { 74, 78, 48, 52, 53, 16, 22, 23, 46 })
+                foreach (var foley in new[] { 74, 78, 48, 52, 53, 16, 22, 23, 46, 50, 51 })
                 {
                     var clips = new List<AudioClip>();
                     foreach (var sample in AdventureZombieFoleyData.Definitions[foley].Samples)

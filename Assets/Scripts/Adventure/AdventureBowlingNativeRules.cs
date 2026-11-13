@@ -124,6 +124,9 @@ namespace PlantsVsZombies.Adventure
                     dx = 12;
                     w = 62;
                     break;
+                case 14:
+                    dx = phase == 55 || phase == 56 || phase == 1 ? 20 : 36;
+                    break;
                 case 12:
                 case 22:
                     dx = 0;

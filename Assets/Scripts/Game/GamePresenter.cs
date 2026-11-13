@@ -2508,6 +2508,8 @@ namespace PlantsVsZombies.Game
                 y -= Mathf.Min(260f, zombie.DropRemaining * 120f);
             }
 
+            pixelX += AdventureZombieMotionRules.DolphinImageOffsetX(zombie);
+            y += AdventureZombieMotionRules.DolphinImageOffsetY(zombie);
             y += zombie.PresentationVaultPositionY;
             if (zombie.PoolState != null)
             {
@@ -3081,7 +3083,12 @@ namespace PlantsVsZombies.Game
         private string? AdventureZombieClip(Zombie zombie, string name)
         {
             string clip;
-            if (zombie.Kind == ZombieKind.Newspaper && zombie.ShieldHealth <= 0)
+            var motion = zombie.Kind == ZombieKind.DolphinRider ? AdventureZombieMotionRules.Animation(zombie) : null;
+            if (motion != null)
+            {
+                clip = motion;
+            }
+            else if (zombie.Kind == ZombieKind.Newspaper && zombie.ShieldHealth <= 0)
             {
                 clip = zombie.Eating ? "anim_eat_nopaper" : "anim_walk_nopaper";
             }
@@ -3150,6 +3157,11 @@ namespace PlantsVsZombies.Game
         /// <returns>The resulting adventure zombie rate.</returns>
         private float AdventureZombieRate(Zombie zombie, string name, string? clip, float size)
         {
+            if (zombie.Kind == ZombieKind.DolphinRider)
+            {
+                return _owner.RequiredGame.AdventurePresentationZombieRate(zombie);
+            }
+
             if (zombie.Kind == ZombieKind.PoleVaulter && zombie.UsedAbility && zombie.AbilityTimer > 0)
             {
                 return 24f;
@@ -3198,7 +3210,11 @@ namespace PlantsVsZombies.Game
                 zombie.PresentationAnimationAge = 0;
             }
 
-            var age = zombie.PresentationAnimationAge + (zombie.FrozenRemaining > 0 ? 0 : AdventureRenderRemainder * (zombie.ChillRemaining > 0 ? .5f : 1f));
+            // PC UpdateAnimSpeed leaves dolphin's zero-ground-distance entrance and jump clocks unaffected by chill.
+            var dolphinJumpClock = zombie.Kind == ZombieKind.DolphinRider
+                && (zombie.PresentationNativePhase == 52 || zombie.PresentationNativePhase == 54);
+            var age = zombie.PresentationAnimationAge + (zombie.FrozenRemaining > 0 ? 0
+                : AdventureRenderRemainder * (zombie.ChillRemaining > 0 && !dolphinJumpClock ? .5f : 1f));
             var rate = _owner.RequiredGame.AdventurePresentationZombieRate(zombie);
             age = AdventureZombieMotionRules.PlaybackSeconds(zombie, age);
             var spotlight = AdventureDancerRules.HasSpotlight(zombie) && _owner.RequiredGame.State != MatchState.Lost;
@@ -3499,6 +3515,8 @@ namespace PlantsVsZombies.Game
                     IsSmall = arm.Scale < 1f,
                     UsedAbility = arm.Animation != "anim_pogo" && arm.Animation != "anim_run" && arm.Animation != "anim_walkdolphin"
                 };
+                pose.PresentationNativePhase = pose.Kind == ZombieKind.DolphinRider ? arm.NativePhase : -1;
+                pose.PresentationAltitude = pose.Kind == ZombieKind.DolphinRider ? arm.NativeAltitude : 0f;
                 _owner.RequiredAnimations.DrawNativeZombieArmDrop(_adventureParticles, arm, AdventureZombieOrigin(pose, arm.X), AdventureRenderRemainder);
             }
         }
@@ -3521,6 +3539,8 @@ namespace PlantsVsZombies.Game
                 pose.X = part.X;
                 pose.IsSmall = part.Scale < 1f;
                 pose.UsedAbility = part.Animation != "anim_pogo" && part.Animation != "anim_run" && part.Animation != "anim_walkdolphin";
+                pose.PresentationNativePhase = pose.Kind == ZombieKind.DolphinRider ? part.NativePhase : -1;
+                pose.PresentationAltitude = pose.Kind == ZombieKind.DolphinRider ? part.NativeAltitude : 0f;
                 _owner.RequiredAnimations.DrawNativeZombiePartDrop(_adventureParticles, part, AdventureZombieOrigin(pose, part.X), AdventureRenderRemainder);
             }
         }

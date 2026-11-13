@@ -702,7 +702,7 @@ namespace PlantsVsZombies.Reanimation
 
                             SpriteMatrix = sprite;
                             var alpha = originalColor.a * Math.Max(0f, Math.Min(1f, frame.Alpha));
-                            SpriteDrawState.Color = _nativeCombatZombie == null ? new Color(originalColor.r, originalColor.g, originalColor.b, alpha) : NativeZombieTrackColor(group, alpha);
+                            SpriteDrawState.Color = _nativeCombatZombie == null ? new Color(originalColor.r, originalColor.g, originalColor.b, alpha) : NativeZombieTrackColor(asset, track.Name, group, alpha);
                             var image = imageOverride != null && TrackIs(track.Name, overrideTrack) ? imageOverride : from.Texture;
                             var nativeImage = NativeZombieImage(asset, track.Name, image);
                             DrawTexturePart(nativeImage, nativeImage == image ? from.Texture.Width : nativeImage.Width, nativeImage == image ? from.Texture.Height : nativeImage.Height);
@@ -1914,7 +1914,7 @@ namespace PlantsVsZombies.Reanimation
 
                     SpriteMatrix = sprite;
                     var alpha = tint.a * Math.Max(0f, Math.Min(1f, frame.Alpha));
-                    SpriteDrawState.Color = _nativeCombatZombie == null ? new Color(tint.r, tint.g, tint.b, alpha) : NativeZombieTrackColor(group, alpha);
+                    SpriteDrawState.Color = _nativeCombatZombie == null ? new Color(tint.r, tint.g, tint.b, alpha) : NativeZombieTrackColor(asset, track.Name, group, alpha);
                     var image = imageOverride != null && TrackIs(track.Name, overrideTrack) ? imageOverride : from.Texture;
                     var nativeImage = NativeZombieImage(asset, track.Name, image);
                     var substituted = imageOverride != null && TrackIs(track.Name, overrideTrack);
@@ -3433,6 +3433,8 @@ namespace PlantsVsZombies.Reanimation
         private bool _nativeSpriteAdditive;
         /// <summary>Stores the original pool body's board-space waterline, independently of ignored-clip tracks.</summary>
         private float? _nativeCombatBodyClipBottom;
+        /// <summary>The original species-specific body rectangle, separate from capture allocation and ignored water tracks.</summary>
+        private Rect? _nativeCombatBodyClipBounds;
         /// <summary>Stores native resource image override.</summary>
         private string? _nativeResourceImageOverride;
         // PC 0x548D40..0x54942E. A single original sprite pass plus its textured ADD pass.
@@ -3443,8 +3445,9 @@ namespace PlantsVsZombies.Reanimation
         /// <param name = "draw">The draw.</param>
         /// <param name="surfaceKey">The cached full surface identity used when combat feedback requires capture.</param>
         /// <param name="bodyClipBottom">Optional native pool waterline; the original ignored-clip tracks retain their full bounds.</param>
+        /// <param name="bodyClipBounds">Optional original body rectangle whose horizontal and top edges also apply to ordinary tracks.</param>
         /// <returns>The resulting draw native zombie combat.</returns>
-        public bool DrawNativeZombieCombat(Zombie zombie, Rect viewport, Func<bool> draw, string? surfaceKey = null, float? bodyClipBottom = null)
+        public bool DrawNativeZombieCombat(Zombie zombie, Rect viewport, Func<bool> draw, string? surfaceKey = null, float? bodyClipBottom = null, Rect? bodyClipBounds = null)
         {
             using var objectScope = BeginObjectScope();
             if (zombie == null || draw == null)
@@ -3456,6 +3459,7 @@ namespace PlantsVsZombies.Reanimation
             var previousBody = _nativeCombatBody;
             var previousShield = _nativeCombatShieldType;
             var previousBodyClip = _nativeCombatBodyClipBottom;
+            var previousBodyBounds = _nativeCombatBodyClipBounds;
             Color previousTint = _nativeCombatTint, previousAdd = _nativeTrackAdditive, color = SpriteDrawState.Color;
             try
             {
@@ -3463,6 +3467,7 @@ namespace PlantsVsZombies.Reanimation
                 _nativeCombatBody = GameSimulation.AdventureZombiePresentationAsset(zombie);
                 _nativeCombatShieldType = AdventureZombieFeedbackRules.ShieldType(zombie);
                 _nativeCombatBodyClipBottom = bodyClipBottom;
+                _nativeCombatBodyClipBounds = bodyClipBounds;
                 _nativeCombatTint = color;
                 SpriteDrawState.Color = Color.white;
                 if (CanDrawZombieDirect(color, viewport))
@@ -3478,6 +3483,7 @@ namespace PlantsVsZombies.Reanimation
                 _nativeCombatBody = previousBody;
                 _nativeCombatShieldType = previousShield;
                 _nativeCombatBodyClipBottom = previousBodyClip;
+                _nativeCombatBodyClipBounds = previousBodyBounds;
                 _nativeCombatTint = previousTint;
                 _nativeTrackAdditive = previousAdd;
                 SpriteDrawState.Color = color;
@@ -3498,10 +3504,11 @@ namespace PlantsVsZombies.Reanimation
                 return inherited;
             }
 
-            // PC 53FE40 exempts plain-body hands only; snorkel initialization exempts its two whitewater tracks.
+            // PC 53FE40 exempts plain-body hands; swimmer initialization exempts its authored water tracks.
             // RiseFromGrave keeps whitewater2 exempt. ReanimReenableClipping restores every track for a kelp pull.
             if (_nativeCombatZombie.PresentationNativeHeight != 3
                 && (TrackIs(track, "Zombie_snorkle_whitewater") || TrackIs(track, "Zombie_snorkle_whitewater2")
+                    || TrackIs(track, "Zombie_dolphinrider_whitewater") || TrackIs(track, "Zombie_dolphinrider_dolphininwater")
                     || IsZombie(asset) && (TrackIs(track, "Zombie_whitewater2") || _nativeCombatZombie.PresentationNativePhase != 14
                         && (TrackIs(track, "Zombie_duckytube") && _nativeCombatZombie.PresentationNativePhase != 1
                             || TrackIs(track, "Zombie_whitewater") || TrackIs(track, "Zombie_outerarm_hand") || TrackIs(track, "Zombie_innerarm3")))))
@@ -3510,6 +3517,16 @@ namespace PlantsVsZombies.Reanimation
             }
 
             var clip = _renderingNativeSurface ? _nativeCaptureClip : SpriteDrawState.Clip;
+            if (_nativeCombatBodyClipBounds.HasValue)
+            {
+                var bounds = _nativeCombatBodyClipBounds.Value;
+                var left = Math.Max(clip.xMin, boardTransform.m00 * bounds.xMin + boardTransform.m03);
+                var top = Math.Max(clip.yMin, boardTransform.m11 * bounds.yMin + boardTransform.m13);
+                var right = Math.Max(left, Math.Min(clip.xMax, boardTransform.m00 * bounds.xMax + boardTransform.m03));
+                var edge = Math.Max(top, Math.Min(clip.yMax, boardTransform.m11 * bounds.yMax + boardTransform.m13));
+                return Rect.MinMaxRect(left, top, right, edge);
+            }
+
             var bottom = boardTransform.m11 * _nativeCombatBodyClipBottom.Value + boardTransform.m13;
             var height = Math.Max(0f, Math.Min(clip.yMax, bottom) - clip.yMin);
             return new Rect(clip.x, clip.y, clip.width, height);
@@ -3643,6 +3660,27 @@ namespace PlantsVsZombies.Reanimation
 
             EnsureNativeAtlas();
             return LoadTexture(replacement);
+        }
+
+        /// <summary>Preserves the dolphin's original water-track color overrides independently of its body feedback.</summary>
+        /// <param name="asset">The source definition supplying this track.</param>
+        /// <param name="track">The original source track name.</param>
+        /// <param name="group">The native body or shield render group.</param>
+        /// <param name="alpha">The source track's current alpha.</param>
+        /// <returns>The original track tint, including the caller's inherited color and opacity.</returns>
+        private Color NativeZombieTrackColor(Reanimation asset, string track, int group, float alpha)
+        {
+            // PC SetupWaterTrack 552CC0 sets IgnoreColorOverride and IgnoreExtraAdditiveColor as well as IgnoreClipRect.
+            // DragUnder restores only clipping; these two color exclusions remain active for both original water tracks.
+            if (_nativeCombatZombie?.Kind == ZombieKind.DolphinRider
+                && AdventureZombieFeedbackRules.Same(asset.Name, _nativeCombatBody)
+                && (TrackIs(track, "Zombie_dolphinrider_whitewater") || TrackIs(track, "Zombie_dolphinrider_dolphininwater")))
+            {
+                _nativeTrackAdditive = Color.clear;
+                return new Color(_nativeCombatTint.r, _nativeCombatTint.g, _nativeCombatTint.b, alpha * _nativeCombatTint.a);
+            }
+
+            return NativeZombieTrackColor(group, alpha);
         }
 
         /// <summary>Performs native zombie track color.</summary>

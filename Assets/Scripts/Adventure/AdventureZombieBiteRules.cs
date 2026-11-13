@@ -25,12 +25,12 @@ namespace PlantsVsZombies.Adventure
                 return new NativeRect(bowling ? -229 : -29, 0, bowling ? 270 : 70, 115);
             }
 
-            if (kind == 14 && (phase == 52 || phase == 53))
+            if (kind == 14 && phase == 53)
             {
                 return new NativeRect(-29, 0, 70, 115);
             }
 
-            if (kind == 14 && phase == 55)
+            if (kind == 14 && (phase == 55 || phase == 56))
             {
                 return new NativeRect(30, 0, 30, 115);
             }

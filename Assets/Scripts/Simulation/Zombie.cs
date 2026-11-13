@@ -5,6 +5,8 @@ namespace PlantsVsZombies.Simulation
     /// <summary>Defines zombie.</summary>
     public sealed class Zombie
     {
+        /// <summary>Retains the original dolphin jump counter independently of animation playback.</summary>
+        public global::PlantsVsZombies.Adventure.AdventureDolphinState? DolphinState;
         /// <summary>Retains the original ice vehicle's smoke and punctured-tire death state.</summary>
         public global::PlantsVsZombies.Adventure.AdventureZomboniState? ZomboniState;
         /// <summary>Retains the original kelp attachment selected by a living Tangle Kelp.</summary>
