@@ -1,0 +1,9 @@
+{
+    "name": "PlantsVsZombies.Tests.EditorRendering",
+    "rootNamespace": "PlantsVsZombies.Tests.EditorRendering",
+    "references": ["PlantsVsZombies.Runtime", "PlantsVsZombies.Editor"],
+    "includePlatforms": ["Editor"],
+    "autoReferenced": false,
+    "defineConstraints": ["UNITY_INCLUDE_TESTS"],
+    "optionalUnityReferences": ["TestAssemblies"]
+}

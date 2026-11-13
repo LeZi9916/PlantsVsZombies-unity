@@ -561,6 +561,145 @@ namespace PlantsVsZombies.Tests.PlayMode
             Assert.That(_renderer.LastError, Is.Null);
         }
 
+        /// <summary>Refreshes a frozen actor capture after its original source-track child is hidden.</summary>
+        [Test]
+        public void HiddenHierarchySpriteInvalidatesFrozenActorCapture()
+        {
+            var hierarchy = _renderer.Hierarchy;
+            hierarchy.BeginFrame(this);
+            Transform actor;
+            Func<bool> draw = () => _renderer.DrawNativePlayback("KernelPult", new Vector2(4f, 4f), 1f, .1f,
+                "anim_idle", true, 12f);
+            BeginFrame();
+            using (hierarchy.BeginActor("Plants", 1, "KernelPult"))
+            {
+                actor = SpriteHierarchy.CurrentSprite!;
+                Assert.That(_renderer.DrawNativeClipped("hierarchy-freeze", new Rect(0f, 0f, 128f, 64f), draw, true), Is.True);
+            }
+
+            _renderer.EndObjectFrame();
+            Capture();
+            AssertColor(Pixel(5, 5), Color.red);
+            actor.Find("body").gameObject.SetActive(false);
+            hierarchy.BeginFrame(this);
+            BeginFrame();
+            using (hierarchy.BeginActor("Plants", 1, "KernelPult"))
+            {
+                Assert.That(SpriteHierarchy.CurrentSprite, Is.SameAs(actor));
+                Assert.That(_renderer.DrawNativeClipped("hierarchy-freeze", new Rect(0f, 0f, 128f, 64f), draw, true), Is.True);
+            }
+
+            _renderer.EndObjectFrame();
+            Capture();
+            Assert.That(Pixel(5, 5).a, Is.LessThan(.02f));
+            AssertColor(Pixel(15, 5), Color.yellow);
+            Assert.That(actor.Find("body").gameObject.activeSelf, Is.False);
+        }
+
+        /// <summary>Preserves overlapping source alpha when imitation and producer brightness avoid actor capture.</summary>
+        [Test]
+        public void DirectProducerAndImitationFeedbackMatchesCapturedSourceTracks()
+        {
+            var source = new Texture2D(1, 1, TextureFormat.RGBA32, false);
+            source.SetPixel(0, 0, new Color(.2f, .55f, .1f, .5f));
+            source.Apply();
+            try
+            {
+                var viewport = new Rect(0f, 0f, 128f, 64f);
+                var visual = new AdventureProducerGlowVisual(true, 30, 120);
+                Func<bool> draw = () =>
+                {
+                    var drawn = _renderer.DrawNativeImage(source, new Rect(4f, 4f, 24f, 24f), new Rect(0f, 0f, 1f, 1f));
+                    drawn |= _renderer.DrawNativeImage(source, new Rect(16f, 4f, 24f, 24f), new Rect(0f, 0f, 1f, 1f));
+                    return drawn;
+                };
+                BeginFrame();
+                Assert.That(_renderer.DrawProducerGlow("direct-feedback", viewport, draw, visual, true), Is.True);
+                _renderer.EndObjectFrame();
+                Assert.That(_renderer.NativeSurfaceCount, Is.Zero, "Source-track feedback must not allocate an actor surface.");
+                Capture();
+                var direct = _pixels.GetPixels32();
+                BeginFrame();
+                Assert.That(_renderer.DrawNativeClipped("feedback-reference", viewport, draw,
+                    grayscale: true, producerAdditive: visual.SourceAdditive), Is.True);
+                _renderer.EndObjectFrame();
+                Capture();
+                var captured = _pixels.GetPixels32();
+                for (var index = 0; index < direct.Length; index++)
+                {
+                    Assert.That(Math.Abs(direct[index].r - captured[index].r), Is.LessThanOrEqualTo(3));
+                    Assert.That(Math.Abs(direct[index].g - captured[index].g), Is.LessThanOrEqualTo(3));
+                    Assert.That(Math.Abs(direct[index].b - captured[index].b), Is.LessThanOrEqualTo(3));
+                    Assert.That(Math.Abs(direct[index].a - captured[index].a), Is.LessThanOrEqualTo(3));
+                }
+            }
+            finally
+            {
+                UnityEngine.Object.Destroy(source);
+            }
+        }
+
+        /// <summary>Retains a user-hidden source node while native track filtering temporarily omits that source.</summary>
+        [Test]
+        public void HiddenSourceNodeSurvivesNativeTrackFilteringAndReappearance()
+        {
+            var hierarchy = _renderer.Hierarchy;
+            GameObject? body = null;
+            Func<string, bool> omitBody = track => !string.Equals(track, "body", StringComparison.Ordinal);
+            for (var phase = 0; phase < 3; phase++)
+            {
+                hierarchy.BeginFrame(this);
+                BeginFrame();
+                using (hierarchy.BeginActor("Plants", 1, "KernelPult"))
+                {
+                    var actor = SpriteHierarchy.CurrentSpriteObject!;
+                    Assert.That(_renderer.DrawNativePlayback("KernelPult", new Vector2(4f, 4f), 1f, .1f,
+                        "anim_idle", true, 12f, phase == 1 ? omitBody : null), Is.True);
+                    var node = actor.transform.Find("body").gameObject;
+                    if (phase == 0)
+                    {
+                        body = node;
+                        node.SetActive(false);
+                    }
+
+                    Assert.That(node, Is.SameAs(body));
+                    Assert.That(node.activeSelf, Is.False);
+                }
+
+                _renderer.EndObjectFrame();
+                hierarchy.EndFrame();
+            }
+
+            Capture();
+            AssertColor(Pixel(5, 5), Color.black);
+            AssertColor(Pixel(15, 5), Color.yellow);
+        }
+
+        /// <summary>Restores imitation and producer state across an inner capture and the enclosing direct feedback scope.</summary>
+        [Test]
+        public void NestedCaptureRestoresManagedImitationAndProducerEffects()
+        {
+            var visual = new AdventureProducerGlowVisual(true, 30, 60);
+            Func<bool> inner = () => _renderer.DrawResourceSprite("IMAGE_REANIM_green", new Vector2(32f, 4f), 1f);
+            Func<bool> outer = () =>
+            {
+                var drawn = _renderer.DrawResourceSprite("IMAGE_REANIM_blue", new Vector2(4f, 4f), 1f);
+                drawn |= _renderer.DrawNativeClipped("nested-effect-state", new Rect(28f, 0f, 16f, 16f), inner);
+                drawn |= _renderer.DrawResourceSprite("IMAGE_REANIM_blue", new Vector2(60f, 4f), 1f);
+                return drawn;
+            };
+            BeginFrame();
+            Assert.That(_renderer.DrawProducerGlow("outer-effect-state", new Rect(0f, 0f, 128f, 64f), outer, visual, true), Is.True);
+            Assert.That(_renderer.DrawResourceSprite("IMAGE_REANIM_red", new Vector2(92f, 4f), 1f), Is.True);
+            _renderer.EndObjectFrame();
+            Capture();
+            var gray = .114f * (1f + visual.SourceAdditive);
+            AssertColor(Pixel(5, 5), new Color(gray, gray, gray));
+            AssertColor(Pixel(61, 5), Pixel(5, 5));
+            AssertColor(Pixel(33, 5), Color.green);
+            AssertColor(Pixel(93, 5), Color.red);
+        }
+
         /// <summary>Protects the real input and simulation update traversal after startup without loading audio or disk-backed progress.</summary>
         [Test]
         public void WarmGameUpdateWithoutLoadedAudioDoesNotAllocateManagedMemory()
@@ -647,7 +786,7 @@ namespace PlantsVsZombies.Tests.PlayMode
                 owner._game = new GameSimulation(new GameRules { AdventureLevel = 8 }, randomSeed: 12345);
                 owner._root = _root;
                 owner._deck.Clear();
-                owner.Textures._textures.Add("SeedBank.png", bank);
+                SpriteSourceTestUtilities.SetImage(owner.Textures, "SeedBank.png", bank);
                 owner._animations = _renderer;
                 owner._currentView = PvZGame.ScreenView.Board;
                 owner._smokeMode = true;
@@ -693,6 +832,7 @@ namespace PlantsVsZombies.Tests.PlayMode
                 if (owner != null)
                 {
                     owner.Textures._textures.Clear();
+                    owner.Textures.ReleaseAll();
                 }
 
                 presenter?.Dispose();

@@ -12,6 +12,22 @@ git submodule update --init --recursive
 
 唯一启用的游戏场景是 `Assets/Scenes/Lawn.unity`。原版运行素材放在 `Assets/StreamingAssets` 的 `images`、`reanim`、`sounds`、`particles` 和 `properties` 子目录；资源解析同时兼容历史的 `StreamingAssets/PvZ` 布局。原版素材及个人存档不属于本次代码重构的提交内容。
 
+## 原版运行资源
+
+完整发布原版美术、动画、粒子、字体和音频到当前 `Assets/StreamingAssets` 布局：
+
+```sh
+python3 -B Tools/PrepareRuntimeAssets.py \
+  --source /Volumes/OCZ-ARC100/pvz-origin/extracted_assets \
+  --reference Assets/OriginalPvZ \
+  --destination Assets/StreamingAssets \
+  --report .unity-runs/assets-import/import-report.json --apply
+```
+
+工具先校验全部 PAK 清单及独立原始资源副本，再补齐运行资源和转换后的 PNG、字体及 WAV；相同内容和仅换行不同的文本不重写，已有有效 GUID 保留。真实内容冲突需按工具报告逐项指定 `--replace-existing`，原文件会备份到忽略的报告目录。`--verify-only` 完全只读。完整规则和回归命令见 `Tools/Tests/RuntimeAssetImportTests/README.md`。
+
+原始 MO3/AU 和 151 份 Flash 美术源一并保留；Unity 音频使用已转换的 OGG/WAV，动态音乐仍使用现有分轨。菜单 **PlantsVsZombies > Verify Imported Runtime Assets** 可验证 Unity 图片、音频、字体引用及 metadata，结果位于 `.unity-runs/assets-import`。原始素材、导入报告和个人运行数据不自动提交。
+
 ## 代码组织
 
 | 目录 | 职责 |
@@ -35,7 +51,11 @@ git submodule update --init --recursive
 
 项目使用自定义的轻量渲染管线 **PvZRenderPipeline**（`Assets/Scripts/Rendering/Pipeline`），不依赖 URP 或任何渲染管线包，只提供游戏需要的无光照 2D 绘制：按深度排序的相机、清屏与视口、不透明/透明两个绘制阶段、渲染到 RenderTexture 的 render request、uGUI 与 Editor 视图。`Assets/Settings/PvZRenderPipeline.asset` 由菜单 **PlantsVsZombies > Configure Render Pipeline** 生成，Graphics 与所有 Quality 等级引用它，且所有 Quality 等级关闭 MSAA。结构、支持范围及扩展方式见该目录的 `README.md`。
 
-棋盘图像与动画四边形提交到复用的 `GameObject + MeshFilter + MeshRenderer` 对象，由启用的场景相机直接显示。对象池复用网格、顶点缓冲及材质属性，资源随渲染器 `Dispose` 释放。第 31 层 `PvZ Rendering` 专供游戏渲染相机使用。
+棋盘图像与动画部件通过逻辑图片句柄提交，按原绘制顺序合并到复用的动态网格；相邻、同图集页与同混合状态的命令共用一个 MeshRenderer。Canvas、水面及其他绘制插层保留合批边界。颜色、灰度和命中反馈使用顶点数据，部件不再分别设置 MaterialPropertyBlock。第 31 层 `PvZ Rendering` 专供游戏渲染相机使用。
+
+进入 Play Mode 和构建 Player 前会增量生成四档无损图集（256、512、1024、2048）；也可使用 **PlantsVsZombies > Generate Rendering Atlases**。运行时先根据 `SystemInfo.maxTextureSize` 和默认 16 MiB 单页预算选档，再按需加载页面；缺页或尺寸错配会降档，超大原图通过带采样保护边的切片保留像素精度。生成物位于忽略的 `Assets/Generated/PvZRendering`，不要提交。原始素材和既有 `.meta` 不变，首次生成需要额外磁盘空间。正式资源路径同时打包动画、粒子与原始文本；外部素材目录及合成测试保留散图兼容路径。
+
+Hierarchy 的 `PvZ Actors/Plants` 和 `PvZ Actors/Zombies` 下按实体 ID 管理部件、头部、旗帜和阴影。节点开关控制显隐，动画继续负责姿态；选中 sprite 可在只读 Inspector 查看源资源和完整变换，实际 Renderer 由批次池管理。透明网格会保守剔除空白区域并保留双线性边缘，符合条件的命中、灰度及生产亮度反馈直接绘制，局部合成仍保留原混合语义。
 
 界面图像、文字、输入框、滑块与弹窗由 Canvas 组件显示，`GamePresenter` 提交每帧表现，`PvZGame` 只保留生命周期、跨界面共享状态与每帧执行顺序；音效与音乐（`Audio`）、输入路由与菜单（`Game`）、冒险开场/关卡/奖励（`Adventure`）、独立模式（`Modes`）、商店/花园/智慧树/Dave（`Progression`）、存档工具（`Profiles`）、纹理缓存（`Rendering`）和棋盘布局（`BoardUI`）分别由 `PvZGame` 按需创建的协作类负责。架构测试限制 `PvZGame.cs` 不超过 700 行。输入在帧更新时独立采样，使用与相机、Canvas 相同的 800×600 逻辑视口换算；宽屏留边不参与棋盘点击。运行时不再依赖 `OnGUI`、`GUI` 绘制或 `Event.current`。
 

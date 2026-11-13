@@ -10,6 +10,7 @@ using System.Xml;
 using NUnit.Framework;
 using PlantsVsZombies.Adventure;
 using PlantsVsZombies.Game;
+using PlantsVsZombies.Inputs;
 using PlantsVsZombies.Reanimation;
 using PlantsVsZombies.Rendering;
 using PlantsVsZombies.Simulation;
@@ -64,7 +65,7 @@ namespace PlantsVsZombies.Tests.PlayMode
             _owner._game = new GameSimulation(new GameRules { AdventureLevel = 29 }, 7529);
             Assert.That(_owner._game.ChooseDefaultAdventureSeeds(), Is.True);
             _owner._game.ResetAdventureWaveSchedule(100000, false, false);
-            _owner.Textures._textures["plantshadow.png"] = null!;
+            SpriteSourceTestUtilities.SetImage(_owner.Textures, "plantshadow.png", null!);
             _presenter = new GamePresenter(_owner);
             _definition = new XmlDocument { XmlResolver = null };
             _definition.LoadXml("<root>" + File.ReadAllText(Path.Combine(root, "reanim", "Zombie.reanim")) + "</root>");
@@ -88,15 +89,7 @@ namespace PlantsVsZombies.Tests.PlayMode
                 ObjectSpriteRenderer.SceneCamera.targetTexture = _previousTarget;
                 _presenter.Dispose();
                 _animations.Dispose();
-                foreach (var texture in _owner.Textures._textures.Values)
-                {
-                    if (texture != null)
-                    {
-                        UnityEngine.Object.Destroy(texture);
-                    }
-                }
-
-                _owner.Textures._textures.Clear();
+                _owner.Textures.ReleaseAll();
                 _target.Release();
                 UnityEngine.Object.Destroy(_target);
                 UnityEngine.Object.Destroy(_pixels);
@@ -132,7 +125,7 @@ namespace PlantsVsZombies.Tests.PlayMode
             }
         }
 
-        /// <summary>Checks eating, small bodies, and chilled capture retain clipped legs and unclipped original tube and hand artwork.</summary>
+        /// <summary>Checks eating, small bodies, and direct chilled feedback retain clipped legs and unclipped tube and hand artwork.</summary>
         /// <returns>Actual color captures and independent neutral silhouette references.</returns>
         [UnityTest]
         public IEnumerator EatingSmallAndChilledSwimmersKeepPerTrackWaterClipping()
@@ -149,7 +142,7 @@ namespace PlantsVsZombies.Tests.PlayMode
                 var actual = _pixels.GetPixels32();
                 if (sample.Chilled)
                 {
-                    Assert.That(_animations.NativeSurfaceCount, Is.GreaterThan(0), "This case must exercise actual combat capture clipping.");
+                    Assert.That(_animations.NativeSurfaceCount, Is.Zero, "Chilled source tracks must preserve water clipping without an actor capture.");
                 }
 
                 Save("pool-swimmer-eat-" + sample.Eating + "-small-" + sample.Small + "-cold-" + sample.Chilled + ".png");
@@ -216,8 +209,9 @@ namespace PlantsVsZombies.Tests.PlayMode
             zombie.X += .4f;
             zombie.PresentationPreviousX = zombie.X;
             yield return Capture(() => Draw(zombie));
-            var seaweed = FindSprites(Load("IMAGE_ZOMBIE_SEAWEED"));
-            Assert.That(seaweed, Has.Count.EqualTo(3), "PC RiseFromGrave attaches three independent original seaweed particles.");
+            // Anchor placement is defined before waterline clipping; a fully hidden source has no GPU command.
+            var seaweed = FindUnclippedSpritePoses(Load("IMAGE_ZOMBIE_SEAWEED"));
+            Assert.That(seaweed, Has.Count.EqualTo(3), "PC RiseFromGrave creates three independently anchored original seaweed particles before clipping.");
             var head = zombie.Kind == ZombieKind.Conehead ? "anim_cone" : zombie.Kind == ZombieKind.Buckethead ? "anim_bucket" : "anim_head1";
             var tracks = new[] { head, "Zombie_outerarm_upper", "Zombie_duckytube" };
             var offsets = new[] { new Vector2(head == "anim_head1" ? 30f : 37f, 20f), new Vector2(5f, 5f), new Vector2(77f, 20f) };
@@ -231,8 +225,9 @@ namespace PlantsVsZombies.Tests.PlayMode
                 {
                     if (!used[index])
                     {
-                        var center = (seaweed[index].Vertices[0] + seaweed[index].Vertices[2]) * .5f;
-                        var logical = new Vector2((center.x - _offset.x) / _scale, (-center.y - _offset.y) / _scale);
+                        var pose = seaweed[index];
+                        var center = pose.Matrix.MultiplyPoint3x4(new Vector3(pose.Size.x * .5f, pose.Size.y * .5f, 0f));
+                        var logical = new Vector2((center.x - _offset.x) / _scale, (center.y - _offset.y) / _scale);
                         var distance = Vector2.Distance(logical, expected);
                         if (distance < nearest)
                         {
@@ -258,7 +253,7 @@ namespace PlantsVsZombies.Tests.PlayMode
             Assert.That(Vector2.Distance(opposite, reference.Vertices[2]), Is.LessThan(.02f), "The splash remains at its birth position when the zombie body moves.");
         }
 
-        /// <summary>Checks an independent original Peashooter-head attachment inherits the parent pool waterline in scene and chilled captures.</summary>
+        /// <summary>Checks an independent original Peashooter-head attachment inherits the parent pool waterline in scene and direct chilled feedback.</summary>
         /// <returns>Original body and head captures at fully underground and partially emerged pool phases.</returns>
         [UnityTest]
         public IEnumerator PlantHeadAttachmentKeepsParentWaterlineInSceneAndCapture()
@@ -283,7 +278,7 @@ namespace PlantsVsZombies.Tests.PlayMode
                     var actual = _pixels.GetPixels32();
                     if (chilled)
                     {
-                        Assert.That(_animations.NativeSurfaceCount, Is.GreaterThan(0));
+                        Assert.That(_animations.NativeSurfaceCount, Is.Zero, "Attached chilled artwork must preserve the parent waterline without an actor capture.");
                     }
 
                     Save("pool-plant-head-rise-" + remaining + "-cold-" + chilled + ".png");
@@ -403,6 +398,26 @@ namespace PlantsVsZombies.Tests.PlayMode
                 50f + zombie.Row * 85f - 8f + 120f * (1f - size) - altitude);
         }
 
+        /// <summary>Reads source poses before CPU visibility clipping from only this fixture's logical actor hierarchy.</summary>
+        /// <param name="image">The original image identifying the attachment source.</param>
+        /// <returns>The full affine pose and logical dimensions of every matching source draw.</returns>
+        private List<(Matrix4x4 Matrix, Vector2 Size)> FindUnclippedSpritePoses(SpriteImage image)
+        {
+            var flags = BindingFlags.Instance | BindingFlags.NonPublic;
+            var root = (GameObject?)typeof(SpriteHierarchy).GetField("_root", flags)!.GetValue(_animations.Hierarchy);
+            Assert.That(root, Is.Not.Null, "Production actor drawing must retain its logical inspection root.");
+            var result = new List<(Matrix4x4, Vector2)>();
+            foreach (var node in root!.GetComponentsInChildren<SpriteHierarchySprite>(true))
+            {
+                if (node.HasPose && string.Equals(node.SourceIdentity, image.SourceIdentity, StringComparison.OrdinalIgnoreCase))
+                {
+                    result.Add((node.DestinationTransform, node.LogicalSize));
+                }
+            }
+
+            return result;
+        }
+
         /// <summary>Samples the original XML's affine track transform independently for the seaweed attachment oracle.</summary>
         /// <param name="zombie">The source actor supplying authored clip time and rate.</param>
         /// <param name="name">The original attachment track name.</param>
@@ -472,6 +487,7 @@ namespace PlantsVsZombies.Tests.PlayMode
         private IEnumerator Capture(Action draw)
         {
             ObjectSpriteRenderer.BeginSceneFrame();
+            SpriteDrawState.Clip = GameViewport.ScreenRect;
             CanvasUI.BeginFrame();
             CanvasUI.Matrix = Matrix4x4.TRS(new Vector3(_offset.x, _offset.y, 0f), Quaternion.identity, new Vector3(_scale, _scale, 1f));
             CanvasUI.Color = Color.white;
@@ -507,23 +523,23 @@ namespace PlantsVsZombies.Tests.PlayMode
         /// <summary>Loads an already indexed original image through the production texture cache.</summary>
         /// <param name="image">The exact original image identifier.</param>
         /// <returns>The production-decoded original texture.</returns>
-        private Texture2D Load(string image)
+        private SpriteImage Load(string image)
         {
-            return (Texture2D)Invoke(_animations, "LoadTexture", image)!;
+            return (SpriteImage)Invoke(_animations, "LoadTexture", image)!;
         }
 
         /// <summary>Finds live scene quads using an exact original texture after the last completed presentation.</summary>
         /// <param name="texture">The original source texture.</param>
         /// <returns>The ordered actual mesh objects using that image.</returns>
-        private List<ObjectSprite> FindSprites(Texture2D texture)
+        private List<ObjectSprite> FindSprites(SpriteImage texture)
         {
             var flags = BindingFlags.Instance | BindingFlags.NonPublic;
             var pool = (ObjectSpriteRenderer)typeof(ReanimationRenderer).GetField("_objectRenderer", flags)!.GetValue(_animations)!;
-            var sprites = (List<ObjectSprite>)typeof(ObjectSpriteRenderer).GetField("_sprites", flags)!.GetValue(pool)!;
+            var sprites = pool.SubmittedSprites;
             var result = new List<ObjectSprite>();
             for (var index = 0; index < pool.SubmittedObjectCount; index++)
             {
-                if (ReferenceEquals(sprites[index].Properties.GetTexture(Shader.PropertyToID("_MainTex")), texture))
+                if (ReferenceEquals(sprites[index].SourceImage, texture))
                 {
                     result.Add(sprites[index]);
                 }

@@ -1,5 +1,6 @@
 #nullable enable
 using PlantsVsZombies.Profiles;
+using PlantsVsZombies.Rendering;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -47,8 +48,10 @@ namespace PlantsVsZombies.UI
         private static readonly Rect s_nameField = new Rect(266, 251, 267, 38);
         /// <summary>Stores profiles.</summary>
         private readonly ProfileCatalog _profiles;
+        /// <summary>The shared logical-image acquisition retained by this dialog.</summary>
+        private SpriteAssetProvider? _assets;
         /// <summary>Stores images.</summary>
-        private readonly Dictionary<string, Texture2D> _images = new Dictionary<string, Texture2D>();
+        private readonly Dictionary<string, SpriteImage> _images = new Dictionary<string, SpriteImage>();
         /// <summary>Stores font.</summary>
         private Font? _font;
         /// <summary>Stores label style.</summary>
@@ -94,7 +97,6 @@ namespace PlantsVsZombies.UI
             }
 
             this._profiles = profiles;
-            var directory = Path.Combine(Path.GetFullPath(resourceRoot), "images");
             string[] names =
             {
                 "dialog_topleft.png",
@@ -117,9 +119,10 @@ namespace PlantsVsZombies.UI
             };
             try
             {
-                foreach (string name in names)
+                _assets = SpriteAssetProvider.ForRoot(resourceRoot);
+                foreach (var name in names)
                 {
-                    _images.Add(name, LoadTexture(Path.Combine(directory, name)));
+                    _images.Add(name, _assets.LoadImage(name));
                 }
             }
             catch
@@ -342,11 +345,8 @@ namespace PlantsVsZombies.UI
 
             _disposed = true;
             IsOpen = false;
-            foreach (Texture2D image in _images.Values)
-            {
-                Release(image);
-            }
-
+            _assets?.Dispose();
+            _assets = null;
             _images.Clear();
             Release(_font);
             _font = null;
@@ -796,10 +796,9 @@ namespace PlantsVsZombies.UI
         /// <summary>Performs ui texture.</summary>
         /// <param name = "name">The name.</param>
         /// <returns>The resulting ui texture.</returns>
-        private Texture2D? UiTexture(string name)
+        private SpriteImage? UiTexture(string name)
         {
-            Texture2D result;
-            return _images.TryGetValue(name, out result) ? result : null;
+            return _images.TryGetValue(name, out var result) ? result : null;
         }
 
         /// <summary>Performs draw panel.</summary>
@@ -886,33 +885,6 @@ namespace PlantsVsZombies.UI
             _fieldStyle.richText = false;
             _fieldStyle.alignment = TextAnchor.MiddleLeft;
             _fieldStyle.padding = new RectOffset(8, 8, 7, 7);
-        }
-
-        /// <summary>Performs load texture.</summary>
-        /// <param name = "path">The path.</param>
-        /// <returns>The resulting load texture.</returns>
-        /// <exception cref = "InvalidDataException">The operation cannot satisfy its preconditions.</exception>
-        private static Texture2D LoadTexture(string path)
-        {
-            var bytes = File.ReadAllBytes(path);
-            var image = new Texture2D(2, 2, TextureFormat.RGBA32, false);
-            try
-            {
-                if (!ImageConversion.LoadImage(image, bytes, false))
-                {
-                    throw new InvalidDataException("Cannot decode image: " + path);
-                }
-
-                image.hideFlags = HideFlags.HideAndDontSave;
-                image.filterMode = FilterMode.Bilinear;
-                image.wrapMode = TextureWrapMode.Clamp;
-                return image;
-            }
-            catch
-            {
-                Release(image);
-                throw;
-            }
         }
 
         /// <summary>Performs release.</summary>

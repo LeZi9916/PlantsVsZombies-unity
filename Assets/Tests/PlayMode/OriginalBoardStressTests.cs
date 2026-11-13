@@ -128,15 +128,7 @@ namespace PlantsVsZombies.Tests.PlayMode
                 presenter.Dispose();
                 animations.Dispose();
                 options.Dispose();
-                foreach (var texture in owner.Textures._textures.Values)
-                {
-                    if (texture != null)
-                    {
-                        UnityEngine.Object.Destroy(texture);
-                    }
-                }
-
-                owner.Textures._textures.Clear();
+                owner.Textures.ReleaseAll();
                 UnityEngine.Object.Destroy(pixels);
                 target.Release();
                 UnityEngine.Object.Destroy(target);
@@ -216,7 +208,7 @@ namespace PlantsVsZombies.Tests.PlayMode
                 {
                     owner._game = new GameSimulation(new GameRules { AdventureLevel = item.Level }, 7529);
                     Assert.That(owner._game.ChooseDefaultAdventureSeeds(), Is.True);
-                    var scale = item.Small ? .5f : 1f;
+                    var scale = item.Small ? .5f : item.Kind == ZombieKind.Dancing ? .8f : 1f;
                     var zombie = new Zombie
                     {
                         Id = 1,
@@ -242,15 +234,15 @@ namespace PlantsVsZombies.Tests.PlayMode
                     animations.DrawNativeImage(white, new Rect(0, 0, Screen.width, Screen.height), new Rect(0, 0, 1, 1));
                     drawZombie.Invoke(presenter, new object[] { zombie });
                     animations.EndObjectFrame();
-                    var image = owner.Textures.RequiredLoad(item.Level == 12 ? "plantshadow2.png" : "plantshadow.png");
-                    Assert.That(image.width, Is.EqualTo(86));
-                    Assert.That(image.height, Is.EqualTo(36));
+                    var image = owner.Textures.RequiredLoadImage(item.Level == 12 ? "plantshadow2.png" : "plantshadow.png");
+                    Assert.That(image.Width, Is.EqualTo(86));
+                    Assert.That(image.Height, Is.EqualTo(36));
                     var pool = (ObjectSpriteRenderer)typeof(ReanimationRenderer).GetField("_objectRenderer", flags)!.GetValue(animations)!;
-                    var sprites = (List<ObjectSprite>)typeof(ObjectSpriteRenderer).GetField("_sprites", flags)!.GetValue(pool)!;
+                    var sprites = pool.SubmittedSprites;
                     ObjectSprite? shadow = null;
                     for (var index = 0; index < pool.SubmittedObjectCount; index++)
                     {
-                        if (ReferenceEquals(sprites[index].Properties.GetTexture(Shader.PropertyToID("_MainTex")), image))
+                        if (ReferenceEquals(sprites[index].SourceImage, image))
                         {
                             shadow = sprites[index];
                             break;
@@ -282,15 +274,7 @@ namespace PlantsVsZombies.Tests.PlayMode
             {
                 presenter.Dispose();
                 animations.Dispose();
-                foreach (var texture in owner.Textures._textures.Values)
-                {
-                    if (texture != null)
-                    {
-                        UnityEngine.Object.Destroy(texture);
-                    }
-                }
-
-                owner.Textures._textures.Clear();
+                owner.Textures.ReleaseAll();
                 UnityEngine.Object.Destroy(white);
                 UnityEngine.Object.Destroy(pixels);
                 target.Release();
@@ -439,15 +423,7 @@ namespace PlantsVsZombies.Tests.PlayMode
                 presenter.Dispose();
                 options.Dispose();
                 animations.Dispose();
-                foreach (var texture in owner.Textures._textures.Values)
-                {
-                    if (texture != null)
-                    {
-                        UnityEngine.Object.Destroy(texture);
-                    }
-                }
-
-                owner.Textures._textures.Clear();
+                owner.Textures.ReleaseAll();
                 owner._modeTitleBitmap?.Dispose();
                 owner.WaveNotices._bundledWaveAnimations?.Dispose();
                 UnityEngine.Object.Destroy(font);

@@ -40,7 +40,7 @@ namespace PlantsVsZombies.Tests.PlayMode
             {
                 owner._root = root;
                 owner._animations = animations;
-                owner.Textures._textures["plantshadow.png"] = null!;
+                SpriteSourceTestUtilities.SetImage(owner.Textures, "plantshadow.png", null!);
                 var game = new GameSimulation(new GameRules { AdventureLevel = 8 }, 7529);
                 owner._game = game;
                 Assert.That(game.ChooseDefaultAdventureSeeds(), Is.True);
@@ -108,15 +108,7 @@ namespace PlantsVsZombies.Tests.PlayMode
             {
                 presenter.Dispose();
                 animations.Dispose();
-                foreach (var texture in owner.Textures._textures.Values)
-                {
-                    if (texture != null)
-                    {
-                        UnityEngine.Object.Destroy(texture);
-                    }
-                }
-
-                owner.Textures._textures.Clear();
+                owner.Textures.ReleaseAll();
                 UnityEngine.Object.Destroy(host);
             }
         }
@@ -141,15 +133,15 @@ namespace PlantsVsZombies.Tests.PlayMode
         /// <summary>Copies the real submitted texture identities and mesh corners for an independent pose comparison.</summary>
         /// <param name="animations">The renderer that submitted the original plant frame.</param>
         /// <returns>The original frame's ordered image quads and their actual transformed vertices.</returns>
-        private static List<(Texture? Texture, Vector3[] Vertices)> Snapshot(ReanimationRenderer animations)
+        private static List<(SpriteImage? Texture, Vector3[] Vertices)> Snapshot(ReanimationRenderer animations)
         {
             var flags = BindingFlags.Instance | BindingFlags.NonPublic;
             var pool = (ObjectSpriteRenderer)typeof(ReanimationRenderer).GetField("_objectRenderer", flags)!.GetValue(animations)!;
-            var sprites = (List<ObjectSprite>)typeof(ObjectSpriteRenderer).GetField("_sprites", flags)!.GetValue(pool)!;
-            var result = new List<(Texture? Texture, Vector3[] Vertices)>();
+            var sprites = pool.SubmittedSprites;
+            var result = new List<(SpriteImage? Texture, Vector3[] Vertices)>();
             for (var index = 0; index < pool.SubmittedObjectCount; index++)
             {
-                result.Add((sprites[index].Properties.GetTexture(Shader.PropertyToID("_MainTex")), (Vector3[])sprites[index].Vertices.Clone()));
+                result.Add((sprites[index].SourceImage, (Vector3[])sprites[index].Vertices.Clone()));
             }
 
             return result;

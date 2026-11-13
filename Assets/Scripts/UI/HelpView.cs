@@ -1,8 +1,8 @@
 #nullable enable
 using PlantsVsZombies.Inputs;
+using PlantsVsZombies.Rendering;
 using System;
 using System.IO;
-using System.Text;
 using UnityEngine;
 
 namespace PlantsVsZombies.UI
@@ -23,24 +23,29 @@ namespace PlantsVsZombies.UI
         private static readonly Rect s_canvas = new Rect(0f, 0f, 800f, 600f);
         /// <summary>Stores return bounds.</summary>
         private static readonly Rect s_returnBounds = new Rect(324f, 500f, 156f, 42f);
+        /// <summary>The shared logical-image acquisition retained for this help visit.</summary>
+        private SpriteAssetProvider? _assets;
+        /// <summary>Gets the provider after successful view construction.</summary>
+        /// <exception cref="InvalidOperationException">The image provider is unavailable.</exception>
+        private SpriteAssetProvider RequiredAssets => _assets ?? throw new InvalidOperationException("The help image provider is unavailable.");
         /// <summary>Stores lawn.</summary>
-        private Texture2D? _lawn;
+        private SpriteImage? _lawn;
         /// <summary>Stores paper.</summary>
-        private Texture2D? _paper;
+        private SpriteImage? _paper;
 
         /// <summary>Gets the paper, which must already exist wherever it is used.</summary>
         /// <exception cref="System.InvalidOperationException">The member is not available.</exception>
-        private Texture2D RequiredPaper => _paper ?? throw new System.InvalidOperationException("The member '_paper' is not available.");
+        private SpriteImage RequiredPaper => _paper ?? throw new System.InvalidOperationException("The member '_paper' is not available.");
         /// <summary>Stores writing.</summary>
-        private Texture2D? _writing;
+        private SpriteImage? _writing;
 
         /// <summary>Gets the writing, which must already exist wherever it is used.</summary>
         /// <exception cref="System.InvalidOperationException">The member is not available.</exception>
-        private Texture2D RequiredWriting => _writing ?? throw new System.InvalidOperationException("The member '_writing' is not available.");
+        private SpriteImage RequiredWriting => _writing ?? throw new System.InvalidOperationException("The member '_writing' is not available.");
         /// <summary>Stores button.</summary>
-        private Texture2D? _button;
+        private SpriteImage? _button;
         /// <summary>Stores button glow.</summary>
-        private Texture2D? _buttonGlow;
+        private SpriteImage? _buttonGlow;
         /// <summary>Stores return label.</summary>
         private readonly string _returnLabel;
         /// <summary>Stores font.</summary>
@@ -97,16 +102,15 @@ namespace PlantsVsZombies.UI
                 throw new ArgumentException("A resource root is required.", nameof(resourceRoot));
             }
 
-            var root = Path.GetFullPath(resourceRoot);
-            var images = Path.Combine(root, "images");
             try
             {
-                _returnLabel = ReadReturnLabel(Path.Combine(root, "properties", "LawnStrings.txt"));
-                _lawn = LoadTexture(images, "background1.jpg");
-                _paper = LoadMaskedTexture(images, "ZombieNote.jpg", "ZombieNote_.png");
-                _writing = LoadMaskedTexture(images, "ZombieNoteHelpBlack.png", "ZombieNoteHelp.png");
-                _button = LoadTexture(images, "SeedChooser_Button.png");
-                _buttonGlow = LoadTexture(images, "SeedChooser_Button_Glow.png");
+                _assets = SpriteAssetProvider.ForRoot(resourceRoot);
+                _returnLabel = ReadReturnLabel();
+                _lawn = RequiredAssets.LoadImage("background1.jpg");
+                _paper = RequiredAssets.LoadAlphaGrid("ZombieNote.jpg", "ZombieNote_.png");
+                _writing = RequiredAssets.LoadAlphaGrid("ZombieNoteHelpBlack.png", "ZombieNoteHelp.png");
+                _button = RequiredAssets.LoadImage("SeedChooser_Button.png");
+                _buttonGlow = RequiredAssets.LoadImage("SeedChooser_Button_Glow.png");
             }
             catch
             {
@@ -146,8 +150,8 @@ namespace PlantsVsZombies.UI
             {
                 CanvasUI.Color = Color.white;
                 Image(new Rect(-700f, -300f, 2800f, 1200f), _lawn);
-                Image(new Rect(80f, 80f, RequiredPaper.width, RequiredPaper.height), _paper);
-                Image(new Rect(131f, 132f, RequiredWriting.width, RequiredWriting.height), _writing);
+                Image(new Rect(80f, 80f, RequiredPaper.Width, RequiredPaper.Height), _paper);
+                Image(new Rect(131f, 132f, RequiredWriting.Width, RequiredWriting.Height), _writing);
                 var offset = IsReturnPressed ? 1f : 0f;
                 var buttonRect = new Rect(s_returnBounds.x + offset, s_returnBounds.y + offset, s_returnBounds.width, s_returnBounds.height);
                 Image(buttonRect, _button);
@@ -246,11 +250,8 @@ namespace PlantsVsZombies.UI
             IsOpen = false;
             _hovered = false;
             _captured = false;
-            Release(_lawn);
-            Release(_paper);
-            Release(_writing);
-            Release(_button);
-            Release(_buttonGlow);
+            _assets?.Dispose();
+            _assets = null;
             Release(_font);
             _lawn = _paper = _writing = _button = _buttonGlow = null;
             _font = null;
@@ -289,18 +290,22 @@ namespace PlantsVsZombies.UI
         /// <summary>Performs image.</summary>
         /// <param name = "bounds">The bounds.</param>
         /// <param name = "texture">The texture.</param>
-        private static void Image(Rect bounds, Texture2D? texture)
+        private static void Image(Rect bounds, SpriteImage? texture)
         {
             CanvasUI.DrawTexture(bounds, texture, ScaleMode.StretchToFill, true);
         }
 
         /// <summary>Performs read return label.</summary>
-        /// <param name = "path">The path.</param>
-        /// <returns>The resulting read return label.</returns>
+        /// <returns>The original main-menu return label.</returns>
         /// <exception cref = "InvalidDataException">The operation cannot satisfy its preconditions.</exception>
-        private static string ReadReturnLabel(string path)
+        private string ReadReturnLabel()
         {
-            var lines = File.ReadAllLines(path, Encoding.UTF8);
+            if (!RequiredAssets.TryReadText("properties/LawnStrings.txt", out var text))
+            {
+                throw new FileNotFoundException("The original properties/LawnStrings.txt is required.");
+            }
+
+            var lines = text.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
             var found = false;
             foreach (string line in lines)
             {
@@ -326,83 +331,7 @@ namespace PlantsVsZombies.UI
                 }
             }
 
-            throw new InvalidDataException("Missing [MAIN_MENU_BUTTON] in " + path);
-        }
-
-        /// <summary>Performs load masked texture.</summary>
-        /// <param name = "images">The images.</param>
-        /// <param name = "colorName">The color name.</param>
-        /// <param name = "maskName">The mask name.</param>
-        /// <returns>The resulting load masked texture.</returns>
-        /// <exception cref = "InvalidDataException">The operation cannot satisfy its preconditions.</exception>
-        private static Texture2D LoadMaskedTexture(string images, string colorName, string maskName)
-        {
-            Texture2D? color = null;
-            Texture2D? mask = null;
-            Texture2D? result = null;
-            try
-            {
-                color = LoadTexture(images, colorName);
-                mask = LoadTexture(images, maskName);
-                if (color.width != mask.width || color.height != mask.height)
-                {
-                    throw new InvalidDataException("Image and alpha mask dimensions differ: " + colorName);
-                }
-
-                var colors = color.GetPixels32();
-                var alphas = mask.GetPixels32();
-                for (var i = 0; i < colors.Length; i++)
-                {
-                    colors[i].a = alphas[i].r;
-                }
-
-                result = new Texture2D(color.width, color.height, TextureFormat.RGBA32, false);
-                result.name = colorName + "_masked";
-                result.hideFlags = HideFlags.HideAndDontSave;
-                result.filterMode = FilterMode.Bilinear;
-                result.wrapMode = TextureWrapMode.Clamp;
-                result.SetPixels32(colors);
-                result.Apply(false, false);
-                var completed = result;
-                result = null;
-                return completed;
-            }
-            finally
-            {
-                Release(result);
-                Release(color);
-                Release(mask);
-            }
-        }
-
-        /// <summary>Performs load texture.</summary>
-        /// <param name = "images">The images.</param>
-        /// <param name = "name">The name.</param>
-        /// <returns>The resulting load texture.</returns>
-        /// <exception cref = "InvalidDataException">The operation cannot satisfy its preconditions.</exception>
-        private static Texture2D LoadTexture(string images, string name)
-        {
-            var path = Path.Combine(images, name);
-            var bytes = File.ReadAllBytes(path);
-            var texture = new Texture2D(2, 2, TextureFormat.RGBA32, false);
-            try
-            {
-                if (!ImageConversion.LoadImage(texture, bytes, false))
-                {
-                    throw new InvalidDataException("Unable to decode image: " + path);
-                }
-
-                texture.name = name;
-                texture.hideFlags = HideFlags.HideAndDontSave;
-                texture.filterMode = FilterMode.Bilinear;
-                texture.wrapMode = TextureWrapMode.Clamp;
-                return texture;
-            }
-            catch
-            {
-                Release(texture);
-                throw;
-            }
+            throw new InvalidDataException("Missing [MAIN_MENU_BUTTON] in properties/LawnStrings.txt");
         }
 
         /// <summary>Performs release.</summary>

@@ -35,21 +35,32 @@ namespace PlantsVsZombies.Waves
         /// <exception cref = "FormatException">The operation cannot satisfy its preconditions.</exception>
         public static AdventureWaveTextAnimation Load(string path)
         {
+            return Parse(File.ReadAllText(path), path);
+        }
+
+        /// <summary>Parses original locator-track text from baked resources or a bundled compatibility definition.</summary>
+        /// <param name="text">The unchanged original TextFadeOn XML fragment.</param>
+        /// <param name="identity">The original resource identity included in malformed-data diagnostics.</param>
+        /// <returns>The original enter and leave animation sampler.</returns>
+        /// <exception cref="FormatException">The text is missing a required original track or pose.</exception>
+        /// <exception cref="XmlException">The original XML fragment is malformed.</exception>
+        internal static AdventureWaveTextAnimation Parse(string text, string identity)
+        {
             var doc = new XmlDocument
             {
                 XmlResolver = null
             };
-            using (var input = new StringReader("<reanim>" + File.ReadAllText(path) + "</reanim>"))
+            using (var input = new StringReader("<reanim>" + text + "</reanim>"))
             {
                 doc.Load(input);
             }
 
             var poses = new List<AdventureWaveTextPose>();
             int enter = 0, enterLength = 0, leave = 0, leaveLength = 0;
-            var root = doc.DocumentElement ?? throw new FormatException("The wave text animation has no root element: " + path);
-            foreach (XmlNode track in root.SelectNodes("track") ?? throw new FormatException("The wave text animation has no track list: " + path))
+            var root = doc.DocumentElement ?? throw new FormatException("The wave text animation has no root element: " + identity);
+            foreach (XmlNode track in root.SelectNodes("track") ?? throw new FormatException("The wave text animation has no track list: " + identity))
             {
-                var name = (track.SelectSingleNode("name") ?? throw new FormatException("A wave text track has no name: " + path)).InnerText;
+                var name = (track.SelectSingleNode("name") ?? throw new FormatException("A wave text track has no name: " + identity)).InnerText;
                 var index = 0;
                 float f = 0;
                 var pose = new AdventureWaveTextPose
@@ -58,7 +69,7 @@ namespace PlantsVsZombies.Waves
                     ScaleY = 1,
                     Alpha = 1
                 };
-                foreach (XmlNode frame in track.SelectNodes("t") ?? throw new FormatException("A wave text track has no frame list: " + path))
+                foreach (XmlNode frame in track.SelectNodes("t") ?? throw new FormatException("A wave text track has no frame list: " + identity))
                 {
                     foreach (XmlNode field in frame.ChildNodes)
                     {

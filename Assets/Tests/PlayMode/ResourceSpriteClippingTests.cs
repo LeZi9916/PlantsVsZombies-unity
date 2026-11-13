@@ -155,8 +155,7 @@ namespace PlantsVsZombies.Tests.PlayMode
             _renderer.EndObjectFrame();
             Assert.That(SpriteDrawState.Matrix, Is.EqualTo(shifted));
             AssertQuad(new Rect(20f, 30f, 400f, 300f), new Rect(0f, 0f, 1f, 1f));
-            var sprites = (List<ObjectSprite>)typeof(ObjectSpriteRenderer)
-                .GetField("_sprites", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(Pool())!;
+            var sprites = Pool().SubmittedSprites;
             Assert.That(sprites[0].Colors[0].r, Is.EqualTo(.5f).Within(.0001f));
             Assert.That(sprites[0].Colors[0].g, Is.EqualTo(1f).Within(.0001f));
             Assert.That(sprites[0].Colors[0].b, Is.EqualTo(1f).Within(.0001f));
@@ -223,8 +222,7 @@ namespace PlantsVsZombies.Tests.PlayMode
         {
             var pool = Pool();
             Assert.That(pool.SubmittedObjectCount, Is.EqualTo(1));
-            var sprites = (List<ObjectSprite>)typeof(ObjectSpriteRenderer)
-                .GetField("_sprites", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(pool)!;
+            var sprites = pool.SubmittedSprites;
             var sprite = sprites[0];
             var expectedPositions = new[]
             {

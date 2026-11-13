@@ -38,6 +38,47 @@ cameras with an in-place insertion sort, and builds renderer lists from value ty
 Culling cannot be skipped, because renderer lists need `CullingResults`. Orthographic
 frustum culling of the pooled quads is cheap.
 
+## Ordered sprite batching and atlases
+
+`ObjectSpriteRenderer` retains source commands for diagnostics, but only creates a
+mesh renderer for each contiguous compatible run. Texture pages and hardware blend
+state select shared materials. Per-sprite color, grayscale, producer brightness,
+and textured hit values travel in vertex streams. Painter-order gaps preserve
+Canvas, pool-water, and other sprite-pool insertions. Each mesh stays within the
+16-bit index limit. CPU polygon clipping removes invisible geometry before upload.
+`PvZSpriteBatch` is separate from the legacy `PvZCombatSprite` used by pool water.
+
+`SpriteImage` preserves original image dimensions, identity, and source UVs while
+`SpriteAssetProvider` resolves lossless atlas tiles. The Editor baker generates
+256/512/1024/2048 layouts before ordinary Play Mode and all Player builds. The
+provider selects a complete layout before loading any page, bounded by the device's
+maximum texture dimension and a 16 MiB RGBA32 page budget. Oversized source images
+are tiled without rescaling; padding uses neighboring source texels at internal
+seams. Alpha geometry keeps faint pixels and a one-pixel bilinear filtering halo.
+
+Recoverable missing or incorrectly imported pages select a smaller complete layout.
+Old pages remain alive through frame retirement, and idle pages are unloaded. GPU
+out-of-memory and driver/process failures are not treated as recoverable resource
+errors. The hardware dimension limit is not a promise of available memory.
+
+The ignored generated directory contains the catalog, page PNGs, and original
+animation/particle/properties text. Production roots (including Android URI roots)
+use packaged Resources. External directories use one shared loose-image cache.
+Static image consumers avoid retaining source GPU textures alongside their baked
+atlas copies. The existing dynamic pool renderer still uses its separate readable
+input cache; its platform file access requires target-device validation.
+
+The inspectable actor hierarchy owns visibility and source-pose metadata, not a
+renderer per track. Stable model IDs survive clip changes and death presentation.
+`LastFrameStatistics` reports source counts, actual batch counts, uploaded geometry,
+culled commands, geometric coverage, and material/order/capacity split reasons.
+`RenderingBenchmarkTests` is opt-in through `PVZ_BOARD_STRESS_ASSETS` and
+`PVZ_RENDER_BENCHMARK_OUTPUT`; `PVZ_RENDER_USE_BAKED=1` selects the production catalog
+in the isolated project. It records three fixed feedback states, three rounds of
+300 frames after warmup, screenshots, and main-target geometry coverage heatmaps.
+Heatmaps count geometric coverage before texture alpha; they are not hardware
+fragment counters. Editor GPU timing does not replace target-Player profiling.
+
 ## Not supported
 
 Lighting, shadows, post-processing, Volumes, HDR, MSAA, depth and opaque textures,
@@ -58,3 +99,38 @@ URP `UniversalForward`) do not draw.
 3. If the draw needs a new stage, such as a full-screen effect, add it in
    `PvZRenderPipeline.RenderCamera` with the reused command buffer. Do not create
    per-frame objects. Then add a pixel test to `Assets/Tests/PlayMode/PvZRenderPipelineTests.cs`.
+
+## Verified reference workload
+
+Unity 6000.3.17f1 on macOS, 2026-11-13: fixed seed 7529, 30 plants,
+50 visible normal zombies, 800x600 target, 60 warmup frames and three rounds
+of 300 measured frames per state. The original HEAD snapshot and optimized
+snapshot use the same original resources and unchanged simulation clock.
+
+| State | Draw calls before / after | Presentation CPU mean before / after | CPU p95 before / after |
+| --- | --- | --- | --- |
+| Neutral | 1570 / 8 | 3.159 / 3.199 ms | 3.515 / 3.550 ms |
+| Hit flash | 2520 / 8 | 14.632 / 3.255 ms | 15.164 / 3.585 ms |
+| Chilled | 2520 / 8 | 14.595 / 3.251 ms | 15.028 / 3.569 ms |
+
+The main target's mean geometric coverage changes from 3.098 to 2.744 in
+neutral presentation, and from 18.180 to 2.744 in feedback presentation.
+Feedback eliminates 50 native captures and 1,083,500 offscreen geometric
+pixel samples per representative frame. These are geometry proxies, not
+hardware fragment invocation counts. Different decks, scenes, blend modes,
+and device layout sizes have different batch counts.
+
+The reference uses three resident atlas pages (40 MiB of RGBA32 page data).
+The engine's total texture counter, including Editor textures and fonts,
+increases from about 31.2 to 67.0 MiB compared with the loose-source snapshot.
+Pages remain nonreadable and are retired when unused. This memory tradeoff
+must be included when profiling low-memory devices. Only 28/900 measured
+frames returned nonzero GPU timestamps; GPU-frame-time acceptance and other
+target devices remain unverified.
+
+Ignored evidence lives under `.unity-runs/render-before/metrics-final` and
+`.unity-runs/render-after/final`: JSON counters, frame images, main-target
+heatmaps, per-size offscreen heatmaps, and texture inventories. Whole-frame
+RGBA comparison has maximum channel differences of 2/255, 3/255, and 7/255
+for neutral, hit, and chilled states; the original graphics tolerances are
+unchanged. Run with `PVZ_RENDER_PROFILE=1` to enable the optional CPU markers.

@@ -183,13 +183,26 @@ namespace PlantsVsZombies.UI
         /// <param name="alphaBlend">Whether the original call requested alpha blending.</param>
         public static void DrawTexture(Rect destination, Texture? texture, ScaleMode scaleMode = ScaleMode.StretchToFill, bool alphaBlend = true)
         {
+            if (texture != null)
+            {
+                DrawTexture(destination, SpriteImage.FromTexture(texture), scaleMode, alphaBlend);
+            }
+        }
+
+        /// <summary>Displays a logical image without loading a separate source texture.</summary>
+        /// <param name="destination">The destination before the current Canvas transform.</param>
+        /// <param name="texture">The image retaining its original logical dimensions.</param>
+        /// <param name="scaleMode">The aspect-ratio placement rule.</param>
+        /// <param name="alphaBlend">The original alpha-blending request.</param>
+        public static void DrawTexture(Rect destination, SpriteImage? texture, ScaleMode scaleMode = ScaleMode.StretchToFill, bool alphaBlend = true)
+        {
             if (texture == null || destination.width <= 0f || destination.height <= 0f)
             {
                 return;
             }
 
             var uv = new Rect(0f, 0f, 1f, 1f);
-            var textureAspect = texture.width / (float)texture.height;
+            var textureAspect = texture.Width / (float)texture.Height;
             var destinationAspect = destination.width / destination.height;
             if (scaleMode == ScaleMode.ScaleToFit)
             {
@@ -230,11 +243,48 @@ namespace PlantsVsZombies.UI
         /// <param name="alphaBlend">Whether the source call requested alpha blending.</param>
         public static void DrawTextureWithTexCoords(Rect destination, Texture texture, Rect uv, bool alphaBlend = true)
         {
-            if (!IsFrameActive || texture == null || destination.width <= 0f || destination.height <= 0f)
+            if (texture != null)
+            {
+                DrawTextureWithTexCoords(destination, SpriteImage.FromTexture(texture), uv, alphaBlend);
+            }
+        }
+
+        /// <summary>Displays the intersecting atlas pieces of a logical source rectangle.</summary>
+        /// <param name="destination">The destination before the current Canvas transform.</param>
+        /// <param name="texture">The source image and atlas mapping.</param>
+        /// <param name="uv">The requested bottom-left normalized source rectangle.</param>
+        /// <param name="alphaBlend">The original alpha-blending request.</param>
+        public static void DrawTextureWithTexCoords(Rect destination, SpriteImage texture, Rect uv, bool alphaBlend = true)
+        {
+            if (!IsFrameActive || texture == null || destination.width <= 0f || destination.height <= 0f || uv.width == 0f || uv.height == 0f || Color.a <= 0f)
             {
                 return;
             }
 
+            var count = texture.GetRegionCount(uv);
+            for (var index = 0; index < count; index++)
+            {
+                if (!texture.TryGetRegion(uv, index, out var region))
+                {
+                    continue;
+                }
+
+                var source = region.SourceUv;
+                var piece = new Rect(
+                    destination.x + (source.xMin - uv.xMin) / uv.width * destination.width,
+                    destination.y + (uv.yMax - source.yMax) / uv.height * destination.height,
+                    source.width / uv.width * destination.width,
+                    source.height / uv.height * destination.height);
+                DrawTextureRegion(piece, region.Texture, region.TextureUv);
+            }
+        }
+
+        /// <summary>Publishes one atlas piece using the existing native Canvas batching path.</summary>
+        /// <param name="destination">The destination piece in logical screen coordinates.</param>
+        /// <param name="texture">The selected atlas page or external texture.</param>
+        /// <param name="uv">The page sampling rectangle.</param>
+        private static void DrawTextureRegion(Rect destination, Texture texture, Rect uv)
+        {
             var layer = NextLayer();
             if (s_imageCount == s_images.Count)
             {

@@ -45,15 +45,14 @@ namespace PlantsVsZombies.Tests.PlayMode
             }
 
             var flags = BindingFlags.Instance | BindingFlags.NonPublic;
-            var textures = (Dictionary<string, Texture2D>)typeof(ReanimationRenderer).GetField("_texturesById", flags)!.GetValue(renderer)!;
+            var textures = (Dictionary<string, SpriteImage>)typeof(ReanimationRenderer).GetField("_texturesById", flags)!.GetValue(renderer)!;
             var pool = (ObjectSpriteRenderer)typeof(ReanimationRenderer).GetField("_objectRenderer", flags)!.GetValue(renderer)!;
-            var sprites = (List<ObjectSprite>)typeof(ObjectSpriteRenderer).GetField("_sprites", flags)!.GetValue(pool)!;
-            var textureId = Shader.PropertyToID("_MainTex");
+            var sprites = pool.SubmittedSprites;
             var handIndex = -1;
             var hammerIndex = -1;
             for (var index = 0; index < pool.SubmittedObjectCount; index++)
             {
-                var texture = sprites[index].Properties.GetTexture(textureId);
+                var texture = sprites[index].SourceImage;
                 if (texture == textures["IMAGE_REANIM_CRAZYDAVE_HANDINGHAND"])
                 {
                     handIndex = index;
@@ -85,8 +84,7 @@ namespace PlantsVsZombies.Tests.PlayMode
             yield return null;
             using var renderer = new ReanimationRenderer(root);
             var flags = BindingFlags.Instance | BindingFlags.NonPublic;
-            var textures = (Dictionary<string, Texture2D>)typeof(ReanimationRenderer).GetField("_texturesById", flags)!.GetValue(renderer)!;
-            var textureId = Shader.PropertyToID("_MainTex");
+            var textures = (Dictionary<string, SpriteImage>)typeof(ReanimationRenderer).GetField("_texturesById", flags)!.GetValue(renderer)!;
             var firstX = 0f;
             for (var frame = 0; frame < 2; frame++)
             {
@@ -107,12 +105,12 @@ namespace PlantsVsZombies.Tests.PlayMode
                 }
 
                 var pool = (ObjectSpriteRenderer)typeof(ReanimationRenderer).GetField("_objectRenderer", flags)!.GetValue(renderer)!;
-                var sprites = (List<ObjectSprite>)typeof(ObjectSpriteRenderer).GetField("_sprites", flags)!.GetValue(pool)!;
+                var sprites = pool.SubmittedSprites;
                 var handIndex = -1;
                 var wallnutIndex = -1;
                 for (var index = 0; index < pool.SubmittedObjectCount; index++)
                 {
-                    var texture = sprites[index].Properties.GetTexture(textureId);
+                    var texture = sprites[index].SourceImage;
                     if (texture == textures["IMAGE_REANIM_CRAZYDAVE_HANDINGHAND"])
                     {
                         handIndex = index;
@@ -169,15 +167,14 @@ namespace PlantsVsZombies.Tests.PlayMode
             }
 
             var flags = BindingFlags.Instance | BindingFlags.NonPublic;
-            var textures = (Dictionary<string, Texture2D>)typeof(ReanimationRenderer).GetField("_texturesById", flags)!.GetValue(renderer)!;
+            var textures = (Dictionary<string, SpriteImage>)typeof(ReanimationRenderer).GetField("_texturesById", flags)!.GetValue(renderer)!;
             var pool = (ObjectSpriteRenderer)typeof(ReanimationRenderer).GetField("_objectRenderer", flags)!.GetValue(renderer)!;
-            var sprites = (List<ObjectSprite>)typeof(ObjectSpriteRenderer).GetField("_sprites", flags)!.GetValue(pool)!;
-            var textureId = Shader.PropertyToID("_MainTex");
+            var sprites = pool.SubmittedSprites;
             var handIndex = -1;
             var bagIndex = -1;
             for (var index = 0; index < pool.SubmittedObjectCount; index++)
             {
-                var texture = sprites[index].Properties.GetTexture(textureId);
+                var texture = sprites[index].SourceImage;
                 if (texture == textures["IMAGE_REANIM_CRAZYDAVE_HANDINGHAND"])
                 {
                     handIndex = index;
@@ -225,14 +222,13 @@ namespace PlantsVsZombies.Tests.PlayMode
             }
 
             var flags = BindingFlags.Instance | BindingFlags.NonPublic;
-            var textures = (Dictionary<string, Texture2D>)typeof(ReanimationRenderer).GetField("_texturesById", flags)!.GetValue(renderer)!;
+            var textures = (Dictionary<string, SpriteImage>)typeof(ReanimationRenderer).GetField("_texturesById", flags)!.GetValue(renderer)!;
             var pool = (ObjectSpriteRenderer)typeof(ReanimationRenderer).GetField("_objectRenderer", flags)!.GetValue(renderer)!;
-            var sprites = (List<ObjectSprite>)typeof(ObjectSpriteRenderer).GetField("_sprites", flags)!.GetValue(pool)!;
-            var textureId = Shader.PropertyToID("_MainTex");
+            var sprites = pool.SubmittedSprites;
             var treeFoodIndex = -1;
             for (var index = 0; index < pool.SubmittedObjectCount; index++)
             {
-                if (sprites[index].Properties.GetTexture(textureId) == textures["IMAGE_REANIM_TREEFOOD"])
+                if (sprites[index].SourceImage == textures["IMAGE_REANIM_TREEFOOD"])
                 {
                     treeFoodIndex = index;
                 }
@@ -274,13 +270,13 @@ namespace PlantsVsZombies.Tests.PlayMode
             }
 
             var flags = BindingFlags.Instance | BindingFlags.NonPublic;
-            var textures = (Dictionary<string, Texture2D>)typeof(ReanimationRenderer).GetField("_texturesById", flags)!.GetValue(renderer)!;
+            var textures = (Dictionary<string, SpriteImage>)typeof(ReanimationRenderer).GetField("_texturesById", flags)!.GetValue(renderer)!;
             var pool = (ObjectSpriteRenderer)typeof(ReanimationRenderer).GetField("_objectRenderer", flags)!.GetValue(renderer)!;
-            var sprites = (List<ObjectSprite>)typeof(ObjectSpriteRenderer).GetField("_sprites", flags)!.GetValue(pool)!;
-            var actual = new HashSet<Texture>();
+            var sprites = pool.SubmittedSprites;
+            var actual = new HashSet<SpriteImage?>();
             for (var index = 0; index < pool.SubmittedObjectCount; index++)
             {
-                actual.Add(sprites[index].Properties.GetTexture(Shader.PropertyToID("_MainTex")));
+                actual.Add(sprites[index].SourceImage);
             }
 
             Assert.That(actual, Does.Contain(textures["IMAGE_REANIM_CRAZYDAVE_MOUTH5"]));
@@ -290,7 +286,7 @@ namespace PlantsVsZombies.Tests.PlayMode
             var eyeSprites = 0;
             for (var index = 0; index < pool.SubmittedObjectCount; index++)
             {
-                if (sprites[index].Properties.GetTexture(Shader.PropertyToID("_MainTex")) == textures["IMAGE_REANIM_CRAZYDAVE_EYE"])
+                if (sprites[index].SourceImage == textures["IMAGE_REANIM_CRAZYDAVE_EYE"])
                 {
                     eyeSprites++;
                 }

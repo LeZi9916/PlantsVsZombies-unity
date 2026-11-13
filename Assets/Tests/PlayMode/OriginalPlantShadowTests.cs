@@ -59,9 +59,9 @@ namespace PlantsVsZombies.Tests.PlayMode
                 {
                     owner._game = new GameSimulation(new GameRules { AdventureLevel = level }, 7529);
                     Assert.That(owner._game.ChooseDefaultAdventureSeeds(), Is.True);
-                    var shadow = owner.Textures.RequiredLoad(level == 12 ? "plantshadow2.png" : "plantshadow.png");
-                    var otherShadow = owner.Textures.RequiredLoad(level == 12 ? "plantshadow.png" : "plantshadow2.png");
-                    Assert.That(new Vector2(shadow.width, shadow.height), Is.EqualTo(new Vector2(86f, 36f)));
+                    var shadow = owner.Textures.RequiredLoadImage(level == 12 ? "plantshadow2.png" : "plantshadow.png");
+                    var otherShadow = owner.Textures.RequiredLoadImage(level == 12 ? "plantshadow.png" : "plantshadow2.png");
+                    Assert.That(new Vector2(shadow.Width, shadow.Height), Is.EqualTo(new Vector2(86f, 36f)));
                     for (var id = 0; id < 50; id++)
                     {
                         foreach (var small in new[] { false, true })
@@ -102,7 +102,7 @@ namespace PlantsVsZombies.Tests.PlayMode
                             draw.Invoke(presenter, new object[] { plant });
                             animations.EndObjectFrame();
                             var pool = (ObjectSpriteRenderer)typeof(ReanimationRenderer).GetField("_objectRenderer", flags)!.GetValue(animations)!;
-                            var sprites = (List<ObjectSprite>)typeof(ObjectSpriteRenderer).GetField("_sprites", flags)!.GetValue(pool)!;
+                            var sprites = pool.SubmittedSprites;
                             var submitted = FindShadow(pool, sprites, shadow);
                             Assert.That(FindShadow(pool, sprites, otherShadow), Is.Null, "Wrong terrain shadow: " + plant.Kind);
                             if (excluded.Contains(id))
@@ -123,15 +123,7 @@ namespace PlantsVsZombies.Tests.PlayMode
             {
                 presenter.Dispose();
                 animations.Dispose();
-                foreach (var texture in owner.Textures._textures.Values)
-                {
-                    if (texture != null)
-                    {
-                        UnityEngine.Object.Destroy(texture);
-                    }
-                }
-
-                owner.Textures._textures.Clear();
+                owner.Textures.ReleaseAll();
                 UnityEngine.Object.Destroy(host);
             }
         }
@@ -165,11 +157,11 @@ namespace PlantsVsZombies.Tests.PlayMode
         /// <param name="sprites">The reusable sprite list owned by that renderer.</param>
         /// <param name="image">The original day or night image being sought.</param>
         /// <returns>The matching shadow sprite, or null if the species has none.</returns>
-        private static ObjectSprite? FindShadow(ObjectSpriteRenderer pool, List<ObjectSprite> sprites, Texture2D image)
+        private static ObjectSprite? FindShadow(ObjectSpriteRenderer pool, IReadOnlyList<ObjectSprite> sprites, SpriteImage image)
         {
             for (var index = 0; index < pool.SubmittedObjectCount; index++)
             {
-                if (ReferenceEquals(sprites[index].Properties.GetTexture(Shader.PropertyToID("_MainTex")), image))
+                if (ReferenceEquals(sprites[index].SourceImage, image))
                 {
                     return sprites[index];
                 }

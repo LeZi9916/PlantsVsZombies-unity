@@ -1,4 +1,5 @@
 #nullable enable
+using PlantsVsZombies.Rendering;
 using PlantsVsZombies.Modes;
 using PlantsVsZombies.VerifiedData;
 using System;
@@ -21,7 +22,7 @@ namespace PlantsVsZombies.UI
             "解谜模式"
         };
         /// <summary>Stores texture.</summary>
-        private readonly Func<string, Texture2D?> _texture;
+        private readonly Func<string, SpriteImage?> _texture;
         /// <summary>Stores font.</summary>
         private readonly Font _font;
         /// <summary>Stores strings.</summary>
@@ -49,14 +50,27 @@ namespace PlantsVsZombies.UI
         /// <param name = "root">The root.</param>
         /// <param name = "textureLoader">The texture loader.</param>
         /// <param name = "displayFont">The display font.</param>
+        /// <summary>Creates a mode view from a legacy externally owned texture lookup.</summary>
+        /// <param name="root">The original resource directory.</param>
+        /// <param name="textureLoader">The externally owned texture lookup.</param>
+        /// <param name="displayFont">The fallback display font.</param>
         public ModeSelectionView(string root, Func<string, Texture2D?> textureLoader, Font displayFont)
+            : this(root, (Func<string, SpriteImage?>)(name =>
+            {
+                var texture = textureLoader(name);
+                return texture == null ? null : SpriteImage.FromTexture(texture);
+            }), displayFont)
+        {
+        }
+
+        public ModeSelectionView(string root, Func<string, SpriteImage?> textureLoader, Font displayFont)
         {
             _texture = textureLoader ?? throw new ArgumentNullException(nameof(textureLoader));
             _font = displayFont;
-            var path = Path.Combine(root, "properties", "LawnStrings.txt");
-            if (File.Exists(path))
+            using var assets = SpriteAssetProvider.ForRoot(root);
+            if (assets.TryReadText("properties/LawnStrings.txt", out var text))
             {
-                ReadStrings(File.ReadAllLines(path, Encoding.UTF8));
+                ReadStrings(text.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None));
             }
         }
 

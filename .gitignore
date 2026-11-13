@@ -34,6 +34,11 @@
 **/Assets/OriginalPvZ/
 **/Assets/OriginalPvZ.meta
 
+# Reproducible rendering atlas pages, catalogs, packaged texts, and their Unity metadata.
+**/Assets/Generated/PvZRendering/
+**/Assets/Generated/PvZRendering.meta
+**/Assets/Generated.meta
+
 # 逆向导出、对照数据、数据库与本地工作目录
 **/Assets/**/Evidence/
 **/Assets/**/Evidence.meta

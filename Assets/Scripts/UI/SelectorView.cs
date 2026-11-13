@@ -1,4 +1,5 @@
 #nullable enable
+using PlantsVsZombies.Rendering;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -90,10 +91,10 @@ namespace PlantsVsZombies.UI
             new Area(SelectorAction.Puzzle, new Rect(410, 257, 281, 121), new Vector2(412, 257), new Vector2(691, 312), new Vector2(678, 378), new Vector2(413, 317)),
             new Area(SelectorAction.MiniGames, new Rect(406, 173, 313, 130), new Vector2(410, 175), new Vector2(718, 224), new Vector2(702, 303), new Vector2(413, 250))
         };
-        /// <summary>Stores root.</summary>
-        private readonly string _root;
+        /// <summary>The shared atlas or external-source provider retained for this view.</summary>
+        private readonly SpriteAssetProvider _assets;
         /// <summary>Stores textures.</summary>
-        private readonly Dictionary<string, Texture2D?> _textures = new Dictionary<string, Texture2D?>(StringComparer.Ordinal);
+        private readonly Dictionary<(string Path, bool RequiresMask), SpriteImage?> _textures = new Dictionary<(string, bool), SpriteImage?>();
         /// <summary>Stores locked.</summary>
         private readonly HashSet<SelectorAction> _locked = new HashSet<SelectorAction>();
         /// <summary>Stores disposed.</summary>
@@ -106,7 +107,7 @@ namespace PlantsVsZombies.UI
                 throw new ArgumentException("A resource root is required.", nameof(resourceRoot));
             }
 
-            _root = Path.GetFullPath(resourceRoot);
+            _assets = SpriteAssetProvider.ForRoot(resourceRoot);
         }
 
         /// <summary>The host sets this from HitTest after converting the pointer to logical coordinates.</summary>
@@ -270,103 +271,31 @@ namespace PlantsVsZombies.UI
         /// <returns>The resulting get texture.</returns>
         /// <exception cref = "FileNotFoundException">The operation cannot satisfy its preconditions.</exception>
         /// <exception cref = "InvalidDataException">The operation cannot satisfy its preconditions.</exception>
-        private Texture2D? GetTexture(string relativePath, bool requiresMask)
+        private SpriteImage? GetTexture(string relativePath, bool requiresMask)
         {
-            Texture2D? texture;
-            if (_textures.TryGetValue(relativePath, out texture))
+            var key = (relativePath, requiresMask);
+            if (_textures.TryGetValue(key, out var texture))
             {
                 return texture;
             }
 
             texture = null;
-            Texture2D? mask = null;
             try
             {
-                var basePath = Path.Combine(_root, relativePath.Replace('/', Path.DirectorySeparatorChar));
-                var hasPng = File.Exists(basePath + ".png");
-                var path = basePath + (hasPng ? ".png" : ".jpg");
-                if (!File.Exists(path))
+                if (!_assets.TryLoadImage(relativePath + ".png", out texture))
                 {
-                    throw new FileNotFoundException("Image not found", path);
+                    texture = requiresMask
+                        ? _assets.LoadAlphaGrid(relativePath + ".jpg", relativePath + "_.png")
+                        : _assets.LoadImage(relativePath + ".jpg");
                 }
-
-                texture = new Texture2D(2, 2, TextureFormat.RGBA32, false);
-                texture.hideFlags = HideFlags.HideAndDontSave;
-                if (!ImageConversion.LoadImage(texture, File.ReadAllBytes(path), false))
-                {
-                    throw new InvalidDataException("Could not decode " + path);
-                }
-
-                if (!hasPng && requiresMask)
-                {
-                    var maskPath = basePath + "_.png";
-                    if (!File.Exists(maskPath))
-                    {
-                        throw new FileNotFoundException("Alpha mask not found", maskPath);
-                    }
-
-                    mask = new Texture2D(2, 2, TextureFormat.RGBA32, false);
-                    mask.hideFlags = HideFlags.HideAndDontSave;
-                    if (!ImageConversion.LoadImage(mask, File.ReadAllBytes(maskPath), false))
-                    {
-                        throw new InvalidDataException("Could not decode " + maskPath);
-                    }
-
-                    if (texture.width != mask.width || texture.height != mask.height)
-                    {
-                        throw new InvalidDataException("Alpha mask dimensions do not match " + path);
-                    }
-
-                    var pixels = texture.GetPixels32();
-                    var alpha = mask.GetPixels32();
-                    for (var i = 0; i < pixels.Length; i++)
-                    {
-                        pixels[i].a = alpha[i].r;
-                    }
-
-                    var combined = new Texture2D(texture.width, texture.height, TextureFormat.RGBA32, false);
-                    combined.hideFlags = HideFlags.HideAndDontSave;
-                    combined.SetPixels32(pixels);
-                    DestroyTexture(texture);
-                    texture = combined;
-                }
-
-                texture.filterMode = FilterMode.Bilinear;
-                texture.wrapMode = TextureWrapMode.Clamp;
-                texture.Apply(false, true);
             }
-            catch (Exception exception)
+            catch (Exception error) when (error is IOException || error is UnauthorizedAccessException || error is InvalidOperationException)
             {
-                DestroyTexture(texture);
-                texture = null;
-                Debug.LogWarning("SelectorView: " + relativePath + ": " + exception.Message);
-            }
-            finally
-            {
-                DestroyTexture(mask);
+                Debug.LogWarning(nameof(SelectorView) + ": " + relativePath + ": " + error.Message);
             }
 
-            _textures.Add(relativePath, texture);
+            _textures.Add(key, texture);
             return texture;
-        }
-
-        /// <summary>Performs destroy texture.</summary>
-        /// <param name = "texture">The texture.</param>
-        private static void DestroyTexture(Texture2D? texture)
-        {
-            if (texture == null)
-            {
-                return;
-            }
-
-            if (Application.isPlaying)
-            {
-                UnityEngine.Object.Destroy(texture);
-            }
-            else
-            {
-                UnityEngine.Object.DestroyImmediate(texture);
-            }
         }
 
         /// <summary>Performs throw if disposed.</summary>
@@ -388,11 +317,7 @@ namespace PlantsVsZombies.UI
             }
 
             _disposed = true;
-            foreach (Texture2D? texture in _textures.Values)
-            {
-                DestroyTexture(texture);
-            }
-
+            _assets.Dispose();
             _textures.Clear();
             _locked.Clear();
         }

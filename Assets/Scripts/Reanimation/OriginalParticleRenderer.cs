@@ -557,7 +557,12 @@ namespace PlantsVsZombies.Reanimation
             }
 
             var path = Path.Combine(_root, "particles", name + ".xml");
-            if (!File.Exists(path))
+            var contents = string.Empty;
+            var sharedSource = _renderer != null && string.Equals(SpriteAssetProvider.NormalizeRoot(_root), _renderer.ResourceRoot, StringComparison.OrdinalIgnoreCase);
+            var exists = sharedSource
+                ? _renderer!.TryReadResource("particles/" + name + ".xml", out contents)
+                : File.Exists(path);
+            if (!exists)
             {
                 _definitions[name] = null;
                 LastError = "Original particle definition missing: " + name;
@@ -568,7 +573,11 @@ namespace PlantsVsZombies.Reanimation
             {
                 XmlResolver = null
             };
-            xml.LoadXml("<Particles>" + File.ReadAllText(path) + "</Particles>");
+            if (!sharedSource)
+            {
+                contents = File.ReadAllText(path);
+            }
+            xml.LoadXml("<Particles>" + contents + "</Particles>");
             result = new List<EmitterDefinition>();
             foreach (XmlNode node in xml.SelectNodes("/Particles/Emitter"))
             {

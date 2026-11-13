@@ -77,12 +77,7 @@ namespace PlantsVsZombies.Tests.PlayMode
             if (_host != null)
             {
                 ObjectSpriteRenderer.SceneCamera.targetTexture = _previousTarget;
-                foreach (var texture in _owner.Textures._textures.Values)
-                {
-                    UnityEngine.Object.Destroy(texture);
-                }
-
-                _owner.Textures._textures.Clear();
+                _owner.Textures.ReleaseAll();
                 _presenter.Dispose();
                 _animations.Dispose();
                 _target.Release();
@@ -173,7 +168,7 @@ namespace PlantsVsZombies.Tests.PlayMode
             Assert.That(game.Peas.Count, Is.Zero, "Original shooting frames must be visible before projectile creation.");
 
             // Suppress the shared ground shadow so this comparison isolates the original body animation.
-            _owner.Textures._textures["plantshadow2.png"] = null!;
+            SpriteSourceTestUtilities.SetImage(_owner.Textures, "plantshadow2.png", null!);
             var draw = typeof(GamePresenter).GetMethod("DrawAdventurePlant", BindingFlags.Instance | BindingFlags.NonPublic)!;
             yield return Capture(() => draw.Invoke(_presenter, new object[] { plant }));
             var actual = _pixels.GetPixels32();
@@ -219,7 +214,7 @@ namespace PlantsVsZombies.Tests.PlayMode
             Assert.That(zombie.Health, Is.EqualTo(270f));
             Assert.That(game.Peas.Count, Is.Zero);
 
-            _owner.Textures._textures["plantshadow2.png"] = null!;
+            SpriteSourceTestUtilities.SetImage(_owner.Textures, "plantshadow2.png", null!);
             var draw = typeof(GamePresenter).GetMethod("DrawAdventurePlant", BindingFlags.Instance | BindingFlags.NonPublic)!;
             yield return Capture(() => draw.Invoke(_presenter, new object[] { plant }));
             var actual = _pixels.GetPixels32();
@@ -243,8 +238,8 @@ namespace PlantsVsZombies.Tests.PlayMode
             _owner._game = game;
             Assert.That(game.ChooseDefaultAdventureSeeds(), Is.True);
             game.ResetAdventureWaveSchedule(100000, false, false);
-            _owner.Textures._textures["plantshadow.png"] = null!;
-            _owner.Textures._textures["plantshadow2.png"] = null!;
+            SpriteSourceTestUtilities.SetImage(_owner.Textures, "plantshadow.png", null!);
+            SpriteSourceTestUtilities.SetImage(_owner.Textures, "plantshadow2.png", null!);
             var plant = (Plant)typeof(GameSimulation).GetMethod("PlaceAdventurePlant", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(game, new object[] { PlantKind.Squash, 1, 4 })!;
             game.Zombies.Add(new Zombie
@@ -302,8 +297,8 @@ namespace PlantsVsZombies.Tests.PlayMode
             var game = new GameSimulation(new GameRules { AdventureLevel = 11 }, 7529);
             _owner._game = game;
             Assert.That(game.ChooseDefaultAdventureSeeds(), Is.True);
-            _owner.Textures._textures["plantshadow.png"] = null!;
-            _owner.Textures._textures["plantshadow2.png"] = null!;
+            SpriteSourceTestUtilities.SetImage(_owner.Textures, "plantshadow.png", null!);
+            SpriteSourceTestUtilities.SetImage(_owner.Textures, "plantshadow2.png", null!);
             var state = new AdventureScaredyShroomState();
             var plant = new Plant
             {
@@ -395,11 +390,11 @@ namespace PlantsVsZombies.Tests.PlayMode
             yield return Capture(draw);
             var withShadow = _pixels.GetPixels32();
             Save(screenshot);
-            Assert.That(_owner.Textures._textures.TryGetValue(shadowName, out var shadow), Is.True, "Production must use the terrain's original shadow image.");
+            Assert.That(SpriteSourceTestUtilities.TryGetImage(_owner.Textures, shadowName, out var shadow), Is.True, "Production must use the terrain's original shadow image.");
             Assert.That(shadow, Is.Not.Null);
-            _owner.Textures._textures[shadowName] = null!;
+            SpriteSourceTestUtilities.SetLogicalImage(_owner.Textures, shadowName, null);
             yield return Capture(draw);
-            _owner.Textures._textures[shadowName] = shadow;
+            SpriteSourceTestUtilities.SetLogicalImage(_owner.Textures, shadowName, shadow);
             var withoutShadow = _pixels.GetPixels32();
             var expected = new Rect(138.5f, 136f, 43f, 18f);
             var tolerance = new Rect(expected.x - 2f, expected.y - 2f, expected.width + 4f, expected.height + 4f);

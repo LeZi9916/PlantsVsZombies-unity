@@ -170,7 +170,11 @@ namespace PlantsVsZombies.Game
             _originalWarmupTasks = images.Count + tracks.Length;
             foreach (string image in images)
             {
-                _owner.Textures.Load(image);
+                var source = _owner.Textures.LoadImage(image);
+                if (source != null)
+                {
+                    source.GetRegionCount(new Rect(0f, 0f, 1f, 1f));
+                }
                 _originalWarmupCompleted++;
                 yield return null;
             }

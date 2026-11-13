@@ -1,5 +1,6 @@
 #nullable enable
 using PlantsVsZombies.Inputs;
+using PlantsVsZombies.Rendering;
 using PlantsVsZombies.UI.BitmapFonts;
 using System;
 using System.Collections.Generic;
@@ -74,35 +75,38 @@ namespace PlantsVsZombies.UI
         }
 
         /// <summary>Stores background.</summary>
-        private Texture2D _background;
+        private SpriteImage _background;
         /// <summary>Stores slider slot.</summary>
-        private Texture2D _sliderSlot;
+        private SpriteImage _sliderSlot;
         /// <summary>Stores slider knob.</summary>
-        private Texture2D _sliderKnob;
+        private SpriteImage _sliderKnob;
         /// <summary>Stores unchecked box.</summary>
-        private Texture2D _uncheckedBox;
+        private SpriteImage _uncheckedBox;
         /// <summary>Stores checked box.</summary>
-        private Texture2D _checkedBox;
+        private SpriteImage _checkedBox;
         /// <summary>Stores return normal.</summary>
-        private Texture2D _returnNormal;
+        private SpriteImage _returnNormal;
         /// <summary>Stores return highlighted.</summary>
-        private Texture2D _returnHighlighted;
+        private SpriteImage _returnHighlighted;
         /// <summary>Stores button left.</summary>
-        private Texture2D _buttonLeft;
+        private SpriteImage _buttonLeft;
         /// <summary>Stores button middle.</summary>
-        private Texture2D _buttonMiddle;
+        private SpriteImage _buttonMiddle;
         /// <summary>Stores button right.</summary>
-        private Texture2D _buttonRight;
+        private SpriteImage _buttonRight;
         /// <summary>Stores button down left.</summary>
-        private Texture2D? _buttonDownLeft;
+        private SpriteImage? _buttonDownLeft;
         /// <summary>Stores button down middle.</summary>
-        private Texture2D? _buttonDownMiddle;
+        private SpriteImage? _buttonDownMiddle;
         /// <summary>Stores button down right.</summary>
-        private Texture2D? _buttonDownRight;
+        private SpriteImage? _buttonDownRight;
         /// <summary>Stores dialog parts.</summary>
-        private Texture2D[]? _dialogParts;
-        /// <summary>Stores image directory.</summary>
-        private readonly string _imageDirectory;
+        private SpriteImage?[]? _dialogParts;
+        /// <summary>The shared logical-image acquisition retained by this view.</summary>
+        private SpriteAssetProvider? _assets;
+        /// <summary>Gets the acquired image provider after successful construction.</summary>
+        /// <exception cref="InvalidOperationException">The image provider is unavailable.</exception>
+        private SpriteAssetProvider RequiredAssets => _assets ?? throw new InvalidOperationException("The options image provider is unavailable.");
         /// <summary>Stores menu font.</summary>
         private CanvasBitmapFont? _menuFont;
         /// <summary>Stores menu hover font.</summary>
@@ -162,25 +166,27 @@ namespace PlantsVsZombies.UI
                 throw new ArgumentException("A resource root containing images is required.", "resourceRoot");
             }
 
-            var images = Path.Combine(resourceRoot, "images");
-            _imageDirectory = images;
             try
             {
-                _background = LoadMaskedBackground(images);
-                _sliderSlot = LoadTexture(images, "options_sliderslot.png");
-                _sliderKnob = LoadTexture(images, "options_sliderknob2.png");
-                _uncheckedBox = LoadTexture(images, "options_checkbox0.png");
-                _checkedBox = LoadTexture(images, "options_checkbox1.png");
-                _returnNormal = LoadTexture(images, "options_backtogamebutton0.png");
-                _returnHighlighted = LoadTexture(images, "options_backtogamebutton2.png");
-                _buttonLeft = LoadTexture(images, "button_left.png");
-                _buttonMiddle = LoadTexture(images, "button_middle.png");
-                _buttonRight = LoadTexture(images, "button_right.png");
-                if (File.Exists(Path.Combine(images, "button_down_left.png")) && File.Exists(Path.Combine(images, "button_down_middle.png")) && File.Exists(Path.Combine(images, "button_down_right.png")))
+                _assets = SpriteAssetProvider.ForRoot(resourceRoot);
+                _background = RequiredAssets.LoadAlphaGrid("options_menuback.jpg", "options_menuback_.png");
+                _sliderSlot = LoadTexture("options_sliderslot.png");
+                _sliderKnob = LoadTexture("options_sliderknob2.png");
+                _uncheckedBox = LoadTexture("options_checkbox0.png");
+                _checkedBox = LoadTexture("options_checkbox1.png");
+                _returnNormal = LoadTexture("options_backtogamebutton0.png");
+                _returnHighlighted = LoadTexture("options_backtogamebutton2.png");
+                _buttonLeft = LoadTexture("button_left.png");
+                _buttonMiddle = LoadTexture("button_middle.png");
+                _buttonRight = LoadTexture("button_right.png");
+                var downLeft = TryLoadTexture("button_down_left.png");
+                var downMiddle = TryLoadTexture("button_down_middle.png");
+                var downRight = TryLoadTexture("button_down_right.png");
+                if (downLeft != null && downMiddle != null && downRight != null)
                 {
-                    _buttonDownLeft = LoadTexture(images, "button_down_left.png");
-                    _buttonDownMiddle = LoadTexture(images, "button_down_middle.png");
-                    _buttonDownRight = LoadTexture(images, "button_down_right.png");
+                    _buttonDownLeft = downLeft;
+                    _buttonDownMiddle = downMiddle;
+                    _buttonDownRight = downRight;
                 }
             }
             catch
@@ -446,26 +452,9 @@ namespace PlantsVsZombies.UI
             _disposed = true;
             IsOpen = false;
             _capture = PointerCapture.None;
-            Release(_background);
-            Release(_sliderSlot);
-            Release(_sliderKnob);
-            Release(_uncheckedBox);
-            Release(_checkedBox);
-            Release(_returnNormal);
-            Release(_returnHighlighted);
-            Release(_buttonLeft);
-            Release(_buttonMiddle);
-            Release(_buttonRight);
-            Release(_buttonDownLeft);
-            Release(_buttonDownMiddle);
-            Release(_buttonDownRight);
-            if (_dialogParts != null)
-            {
-                foreach (Texture2D part in _dialogParts)
-                {
-                    Release(part);
-                }
-            }
+            _assets?.Dispose();
+            _assets = null;
+            _dialogParts = null;
 
             if (_menuFont != null)
             {
@@ -577,14 +566,14 @@ namespace PlantsVsZombies.UI
             var left = pressed && _buttonDownLeft != null ? _buttonDownLeft : _buttonLeft;
             var middle = pressed && _buttonDownMiddle != null ? _buttonDownMiddle : _buttonMiddle;
             var right = pressed && _buttonDownRight != null ? _buttonDownRight : _buttonRight;
-            Image(new Rect(x, rect.y, left.width, left.height), left, Color.white);
-            var count = Mathf.RoundToInt((rect.width - left.width - right.width) / middle.width);
+            Image(new Rect(x, rect.y, left.Width, left.Height), left, Color.white);
+            var count = Mathf.RoundToInt((rect.width - left.Width - right.Width) / middle.Width);
             for (var i = 0; i < count; i++)
             {
-                Image(new Rect(x + left.width + i * middle.width, rect.y, middle.width, middle.height), middle, Color.white);
+                Image(new Rect(x + left.Width + i * middle.Width, rect.y, middle.Width, middle.Height), middle, Color.white);
             }
 
-            Image(new Rect(x + left.width + count * middle.width, rect.y, right.width, right.height), right, Color.white);
+            Image(new Rect(x + left.Width + count * middle.Width, rect.y, right.Width, right.Height), right, Color.white);
             var bitmap = hovered ? _menuHoverFont : _menuFont;
             var height = bitmap != null ? bitmap.Data.LineHeight : 18;
             var baseline = rect.y + (pressed ? 1f : 0f) + (int)((rect.height - height / 6 - 1f + height) / 2f) - 4f;
@@ -741,17 +730,12 @@ namespace PlantsVsZombies.UI
                 "dialog_centermiddle.png",
                 "dialog_centerright.png"
             };
-            _dialogParts = new Texture2D[names.Length];
+            _dialogParts = new SpriteImage?[names.Length];
             for (var i = 0; i < names.Length; i++)
             {
-                if (!File.Exists(Path.Combine(_imageDirectory, names[i])))
-                {
-                    continue;
-                }
-
                 try
                 {
-                    _dialogParts[i] = LoadTexture(_imageDirectory, names[i]);
+                    _dialogParts[i] = TryLoadTexture(names[i]);
                 }
                 catch (Exception error)
                 {
@@ -763,7 +747,7 @@ namespace PlantsVsZombies.UI
         /// <summary>Performs restart dialog texture.</summary>
         /// <param name = "name">The name.</param>
         /// <returns>The resulting restart dialog texture.</returns>
-        private Texture2D? RestartDialogTexture(string name)
+        private SpriteImage? RestartDialogTexture(string name)
         {
             string[] names =
             {
@@ -812,7 +796,7 @@ namespace PlantsVsZombies.UI
         /// <param name = "rect">The rect.</param>
         /// <param name = "texture">The texture.</param>
         /// <param name = "color">The color.</param>
-        private static void Image(Rect rect, Texture2D texture, Color color)
+        private static void Image(Rect rect, SpriteImage texture, Color color)
         {
             var old = CanvasUI.Color;
             CanvasUI.Color = color;
@@ -875,79 +859,21 @@ namespace PlantsVsZombies.UI
             }
         }
 
-        /// <summary>Performs load masked background.</summary>
-        /// <param name = "images">The images.</param>
-        /// <returns>The resulting load masked background.</returns>
-        /// <exception cref = "InvalidDataException">The operation cannot satisfy its preconditions.</exception>
-        private static Texture2D LoadMaskedBackground(string images)
+        /// <summary>Loads a logical source image from the shared atlas provider.</summary>
+        /// <param name="name">The original images filename.</param>
+        /// <returns>The retained image handle with its original logical dimensions.</returns>
+        /// <exception cref="FileNotFoundException">The original artwork is unavailable.</exception>
+        private SpriteImage LoadTexture(string name)
         {
-            var color = LoadTexture(images, "options_menuback.jpg");
-            Texture2D? mask = null;
-            Texture2D? result = null;
-            try
-            {
-                mask = LoadTexture(images, "options_menuback_.png");
-                if (color.width != mask.width || color.height != mask.height)
-                {
-                    throw new InvalidDataException("The options background and alpha mask have different dimensions.");
-                }
-
-                var pixels = color.GetPixels32();
-                var alpha = mask.GetPixels32();
-                for (var i = 0; i < pixels.Length; i++)
-                {
-                    pixels[i].a = alpha[i].r;
-                }
-
-                result = new Texture2D(color.width, color.height, TextureFormat.RGBA32, false);
-                result.name = "options_menuback_rgba";
-                result.hideFlags = HideFlags.HideAndDontSave;
-                result.filterMode = FilterMode.Bilinear;
-                result.wrapMode = TextureWrapMode.Clamp;
-                result.SetPixels32(pixels);
-                result.Apply(false, false);
-                return result;
-            }
-            catch
-            {
-                Release(result);
-                throw;
-            }
-            finally
-            {
-                Release(color);
-                Release(mask);
-            }
+            return RequiredAssets.LoadImage(name);
         }
 
-        /// <summary>Performs load texture.</summary>
-        /// <param name = "images">The images.</param>
-        /// <param name = "name">The name.</param>
-        /// <returns>The resulting load texture.</returns>
-        /// <exception cref = "InvalidDataException">The operation cannot satisfy its preconditions.</exception>
-        private static Texture2D LoadTexture(string images, string name)
+        /// <summary>Looks up optional original dialog artwork without requiring loose filesystem files.</summary>
+        /// <param name="name">The original optional image filename.</param>
+        /// <returns>The retained image, or null when the original artwork is absent.</returns>
+        private SpriteImage? TryLoadTexture(string name)
         {
-            var path = Path.Combine(images, name);
-            var bytes = File.ReadAllBytes(path);
-            var texture = new Texture2D(2, 2, TextureFormat.RGBA32, false);
-            try
-            {
-                if (!texture.LoadImage(bytes))
-                {
-                    throw new InvalidDataException("Unable to decode image: " + path);
-                }
-
-                texture.name = name;
-                texture.hideFlags = HideFlags.HideAndDontSave;
-                texture.filterMode = FilterMode.Bilinear;
-                texture.wrapMode = TextureWrapMode.Clamp;
-                return texture;
-            }
-            catch
-            {
-                Release(texture);
-                throw;
-            }
+            return RequiredAssets.TryLoadImage(name, out var image) ? image : null;
         }
 
         /// <summary>Performs clamp volume.</summary>

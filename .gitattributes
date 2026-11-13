@@ -1,0 +1,11 @@
+# Keep C# working files consistent with .editorconfig while storing normalized text.
+*.cs text eol=crlf
+
+# Preserve existing CRLF Git blobs without creating unrelated normalization changes.
+Assets/Scripts/Adventure/AdventureZombieMotionRules.cs -text whitespace=cr-at-eol
+Assets/Scripts/Adventure/AdventureZombieSplash.cs -text whitespace=cr-at-eol
+Assets/Tests/EditMode/AdventureNativeMotionTests.cs -text whitespace=cr-at-eol
+Assets/Tests/PlayMode/OriginalNativeMotionTests.cs -text whitespace=cr-at-eol
+
+# Preserve archived runtime resources byte-for-byte, including original line endings.
+Assets/StreamingAssets/** -text -whitespace

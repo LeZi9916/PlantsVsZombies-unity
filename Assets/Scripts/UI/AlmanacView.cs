@@ -1,6 +1,7 @@
 #nullable enable
 using PlantsVsZombies.Inputs;
 using PlantsVsZombies.Reanimation;
+using PlantsVsZombies.Rendering;
 using PlantsVsZombies.VerifiedData;
 using System;
 using System.Collections.Generic;
@@ -33,14 +34,17 @@ namespace PlantsVsZombies.UI
         private static readonly Rect s_closeButton = new Rect(676, 567, 89, 26);
         /// <summary>Stores dark text.</summary>
         private static readonly Color s_darkText = new Color(40f / 255f, 50f / 255f, 90f / 255f, 1f);
-        /// <summary>Stores root.</summary>
-        private readonly string _root;
+        /// <summary>The shared logical-image and original-text provider retained by this view.</summary>
+        private SpriteAssetProvider? _assets;
+        /// <summary>Gets the provider after successful view construction.</summary>
+        /// <exception cref="InvalidOperationException">The provider is unavailable.</exception>
+        private SpriteAssetProvider RequiredAssets => _assets ?? throw new InvalidOperationException("The almanac asset provider is unavailable.");
         /// <summary>Stores renderer.</summary>
         private readonly ReanimationRenderer _renderer;
         /// <summary>Stores strings.</summary>
         private readonly Dictionary<string, string> _strings;
         /// <summary>Stores textures.</summary>
-        private readonly Dictionary<string, Texture2D?> _textures = new Dictionary<string, Texture2D?>(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, SpriteImage?> _textures = new Dictionary<string, SpriteImage?>(StringComparer.OrdinalIgnoreCase);
         /// <summary>Stores failed animations.</summary>
         private readonly HashSet<string> _failedAnimations = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         /// <summary>Stores diagnostic set.</summary>
@@ -163,17 +167,24 @@ namespace PlantsVsZombies.UI
                 throw new ArgumentNullException(nameof(reanimationRenderer));
             }
 
-            _root = Path.GetFullPath(resourceRoot);
             _renderer = reanimationRenderer;
-            var path = Path.Combine(_root, "properties", "LawnStrings.txt");
-            if (!File.Exists(path))
+            try
             {
-                throw new FileNotFoundException("The original LawnStrings.txt is required.", path);
-            }
+                _assets = SpriteAssetProvider.ForRoot(resourceRoot);
+                if (!RequiredAssets.TryReadText("properties/LawnStrings.txt", out var text))
+                {
+                    throw new FileNotFoundException("The original properties/LawnStrings.txt is required.");
+                }
 
-            _strings = ReadStrings(path);
-            _readOnlyDiagnostics = _diagnostics.AsReadOnly();
-            Open();
+                _strings = ReadStrings(text);
+                _readOnlyDiagnostics = _diagnostics.AsReadOnly();
+                Open();
+            }
+            catch
+            {
+                Dispose();
+                throw;
+            }
         }
 
         /// <summary>Reopens the home page. Previously supplied unlock sets are retained.</summary>
@@ -1014,16 +1025,16 @@ namespace PlantsVsZombies.UI
         }
 
         /// <summary>Performs read strings.</summary>
-        /// <param name = "path">The path.</param>
-        /// <returns>The resulting read strings.</returns>
-        private static Dictionary<string, string> ReadStrings(string path)
+        /// <param name="text">The unchanged original LawnStrings text from its resource provider.</param>
+        /// <returns>The case-insensitive mapping from original string keys to their text.</returns>
+        private static Dictionary<string, string> ReadStrings(string text)
         {
             var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             string? key = null;
             var value = new StringBuilder();
-            using (var reader = new StreamReader(path, Encoding.UTF8, true))
+            using (var reader = new StringReader(text))
             {
-                string line;
+                string? line;
                 while ((line = reader.ReadLine()) != null)
                 {
                     var trimmed = line.Trim();
@@ -1082,44 +1093,26 @@ namespace PlantsVsZombies.UI
         /// <summary>Performs texture.</summary>
         /// <param name = "name">The name.</param>
         /// <returns>The resulting texture.</returns>
-        private Texture2D? Texture(string name)
+        private SpriteImage? Texture(string name)
         {
-            Texture2D? texture;
-            if (_textures.TryGetValue(name, out texture))
+            if (_textures.TryGetValue(name, out var texture))
             {
                 return texture;
             }
 
-            var path = Path.Combine(_root, "images", name);
             texture = null;
             try
             {
-                if (File.Exists(path))
-                {
-                    var data = File.ReadAllBytes(path);
-                    texture = new Texture2D(2, 2, TextureFormat.RGBA32, false);
-                    if (!ImageConversion.LoadImage(texture, data, true))
-                    {
-                        Destroy(texture);
-                        texture = null;
-                    }
-                    else
-                    {
-                        texture.filterMode = FilterMode.Bilinear;
-                        texture.wrapMode = TextureWrapMode.Clamp;
-                    }
-                }
+                RequiredAssets.TryLoadImage(name, out texture);
             }
-            catch (Exception error)when (error is IOException || error is UnauthorizedAccessException)
+            catch (Exception error) when (error is IOException || error is UnauthorizedAccessException || error is InvalidOperationException)
             {
-                Destroy(texture);
-                texture = null;
-                Report("Could not read " + path + ": " + error.Message);
+                Report("Could not read images/" + name + ": " + error.Message);
             }
 
             if (texture == null)
             {
-                Report("Missing or invalid image: " + path);
+                Report("Missing or invalid image: images/" + name);
             }
 
             _textures[name] = texture;
@@ -1247,11 +1240,8 @@ namespace PlantsVsZombies.UI
                 return;
             }
 
-            foreach (Texture2D? texture in _textures.Values)
-            {
-                Destroy(texture);
-            }
-
+            _assets?.Dispose();
+            _assets = null;
             _textures.Clear();
             Destroy(_font);
             _disposed = true;

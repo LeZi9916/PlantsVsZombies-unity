@@ -27,7 +27,7 @@ namespace PlantsVsZombies.Reanimation
             /// <summary>Stores x, y, kx, ky, scale x, scale y, alpha, visibility.</summary>
             public float X, Y, Kx, Ky, ScaleX, ScaleY, Alpha, Visibility;
             /// <summary>Stores texture.</summary>
-            public Texture2D? Texture;
+            public SpriteImage? Texture;
         }
 
         /// <summary>Defines frame sample.</summary>
@@ -131,14 +131,12 @@ namespace PlantsVsZombies.Reanimation
         private readonly string _root;
         /// <summary>Stores animation paths.</summary>
         private readonly Dictionary<string, string> _animationPaths = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        /// <summary>Stores reanim image paths.</summary>
-        private readonly Dictionary<string, string> _reanimImagePaths = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        /// <summary>Stores image paths.</summary>
-        private readonly Dictionary<string, string> _imagePaths = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        /// <summary>Stores textures.</summary>
-        private readonly Dictionary<string, Texture2D> _textures = new Dictionary<string, Texture2D>(StringComparer.OrdinalIgnoreCase);
+        /// <summary>Shares logical images and generated resource text with the session.</summary>
+        private SpriteAssetProvider? _assets;
+        /// <summary>Gets the lazily acquired resource provider.</summary>
+        private SpriteAssetProvider Assets => _assets ??= SpriteAssetProvider.ForRoot(_root);
         /// <summary>Resolves repeated original image identifiers without allocating prefix substrings.</summary>
-        private readonly Dictionary<string, Texture2D> _texturesById = new Dictionary<string, Texture2D>(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, SpriteImage> _texturesById = new Dictionary<string, SpriteImage>(StringComparer.OrdinalIgnoreCase);
         /// <summary>Stores animations.</summary>
         private readonly Dictionary<string, Reanimation> _animations = new Dictionary<string, Reanimation>(StringComparer.OrdinalIgnoreCase);
         /// <summary>Defines native surface.</summary>
@@ -228,6 +226,10 @@ namespace PlantsVsZombies.Reanimation
 
         /// <summary>Stores native portrait material.</summary>
         private Material? _nativePortraitMaterial;
+        /// <summary>The managed imitation filter inherited by synchronous source-track and nested capture draws.</summary>
+        private float _nativeGrayscale;
+        /// <summary>The managed source-colored brightness inherited by synchronous source-track and nested capture draws.</summary>
+        private float _nativeProducerAdditive;
 
         /// <summary>Gets the native portrait material, which must already exist wherever it is used.</summary>
         /// <exception cref="System.InvalidOperationException">The member is not available.</exception>
@@ -297,6 +299,23 @@ namespace PlantsVsZombies.Reanimation
             return GetObjectRenderer().BeginFrame();
         }
 
+        /// <summary>Gets the stable inspection nodes shared by direct draws and local captures.</summary>
+        internal SpriteHierarchy Hierarchy { get; } = new SpriteHierarchy();
+        /// <summary>The visibility revision represented by currently frozen captures.</summary>
+        private int _hierarchyVisibilityRevision;
+
+        /// <summary>Gets the unchanged source root used to identify shared animation and particle providers.</summary>
+        internal string ResourceRoot => _root;
+
+        /// <summary>Reads original resource text from the selected baked or loose source.</summary>
+        /// <param name="path">The original relative resource path.</param>
+        /// <param name="text">Receives the original text when present.</param>
+        /// <returns>Whether the original text resource exists.</returns>
+        internal bool TryReadResource(string path, out string text)
+        {
+            return Assets.TryReadText(path, out text);
+        }
+
         /// <summary>The reason the most recent Draw or TryGetAnimationInfo call failed.</summary>
         public string? LastError { get; private set; }
 
@@ -310,7 +329,7 @@ namespace PlantsVsZombies.Reanimation
                 throw new ArgumentException("A resource root is required.", nameof(resourceRoot));
             }
 
-            _root = Path.GetFullPath(resourceRoot);
+            _root = SpriteAssetProvider.NormalizeRoot(resourceRoot);
         }
 
         /// <summary>Draws a looping animation inside a screen-space rectangle, preserving aspect ratio.</summary>
@@ -387,7 +406,7 @@ namespace PlantsVsZombies.Reanimation
                 return Fail("Image track not found: " + trackName + " in " + name);
             }
 
-            Texture2D replacement;
+            SpriteImage replacement;
             try
             {
                 replacement = LoadTexture(imageId);
@@ -446,7 +465,7 @@ namespace PlantsVsZombies.Reanimation
         /// <param name = "imageOverride">The image override.</param>
         /// <param name = "nativePlacement">The native placement.</param>
         /// <returns>The resulting draw attached plant core.</returns>
-        private bool DrawAttachedPlantCore(string? name, Rect destination, float bodySeconds, float headSeconds, string headAnimation, bool headLoop, float bodyFramesPerSecond, float headFramesPerSecond, string bodyAnimation, string attachmentTrack, string? overrideTrack, Texture2D? imageOverride, Matrix4x4? nativePlacement = null)
+        private bool DrawAttachedPlantCore(string? name, Rect destination, float bodySeconds, float headSeconds, string headAnimation, bool headLoop, float bodyFramesPerSecond, float headFramesPerSecond, string bodyAnimation, string attachmentTrack, string? overrideTrack, SpriteImage? imageOverride, Matrix4x4? nativePlacement = null)
         {
             LastError = null;
             if (!IsValidDestination(destination) || !IsFinite(bodySeconds) || !IsFinite(headSeconds) || !IsFinite(bodyFramesPerSecond) || !IsFinite(headFramesPerSecond) || bodyFramesPerSecond < 0f || headFramesPerSecond < 0f)
@@ -481,6 +500,7 @@ namespace PlantsVsZombies.Reanimation
             try
             {
                 drawn = DrawClipPose(asset, body, bodySeconds, bodyFps, true, originalMatrix * layout, originalColor, overrideTrack, imageOverride);
+                using var hierarchyAttachment = Hierarchy.BeginAttachment(1);
                 drawn |= DrawClipPose(asset, head, headSeconds, headFps, headLoop, originalMatrix * layout * attachment, originalColor, overrideTrack, imageOverride);
             }
             finally
@@ -516,8 +536,9 @@ namespace PlantsVsZombies.Reanimation
         /// <param name="trackOffset">Optional native pixel offsets applied to individual animation tracks.</param>
         /// <param name="trackAttachment">Optional original attachments receiving the track, native pose, outer transform, and opacity.</param>
         /// <returns>The resulting draw internal.</returns>
-        private bool DrawInternal(string? name, Rect destination, float seconds, string? animation, bool loop, ZombieVariant variant, bool equipmentIntact, Func<string, bool>? trackVisible, string? overrideTrack = null, Texture2D? imageOverride = null, Matrix4x4? nativePlacement = null, bool cachedFlag = false, NativePoseBlend? blend = null, string? crazyDaveHeldItem = null, float crazyDaveHeldItemAge = 0f, Func<string, Vector2>? trackOffset = null, Action<string, Matrix4x4, Matrix4x4, float>? trackAttachment = null)
+        private bool DrawInternal(string? name, Rect destination, float seconds, string? animation, bool loop, ZombieVariant variant, bool equipmentIntact, Func<string, bool>? trackVisible, string? overrideTrack = null, SpriteImage? imageOverride = null, Matrix4x4? nativePlacement = null, bool cachedFlag = false, NativePoseBlend? blend = null, string? crazyDaveHeldItem = null, float crazyDaveHeldItemAge = 0f, Func<string, Vector2>? trackOffset = null, Action<string, Matrix4x4, Matrix4x4, float>? trackAttachment = null)
         {
+            using var profile = SpriteRenderingProfiler.Measure(SpriteRenderingProfiler.Animation);
             LastError = null;
             if (!IsFinite(seconds) || !IsFinite(destination.x) || !IsFinite(destination.y) || !IsFinite(destination.width) || !IsFinite(destination.height) || destination.width <= 0f || destination.height <= 0f)
             {
@@ -625,6 +646,7 @@ namespace PlantsVsZombies.Reanimation
                         throw new System.InvalidOperationException("The value 'flagClip' is not available.");
                     }
 
+                    using var hierarchyAttachment = Hierarchy.BeginAttachment(10);
                     drawn |= DrawAttachment(flag, flagClip, 0f, originalMatrix * layout, originalColor, 1f);
                 }
 
@@ -633,8 +655,9 @@ namespace PlantsVsZombies.Reanimation
                 var groupCount = _nativeCombatZombie == null || _nativeCombatShieldType == 0 ? 1 : 3;
                 for (var group = 0; group < groupCount; group++)
                 {
-                    foreach (Track track in asset.Tracks)
+                    for (var trackIndex = 0; trackIndex < asset.Tracks.Count; trackIndex++)
                     {
+                        var track = asset.Tracks[trackIndex];
                         if (_nativeCombatZombie != null && NativeZombieGroup(asset, track.Name) != group)
                         {
                             continue;
@@ -659,6 +682,8 @@ namespace PlantsVsZombies.Reanimation
                             continue;
                         }
 
+                        using var hierarchySprite = Hierarchy.BeginSprite(asset, trackIndex, track.Name);
+
                         var part = PartMatrix(frame);
                         if (trackOffset != null)
                         {
@@ -680,7 +705,7 @@ namespace PlantsVsZombies.Reanimation
                             SpriteDrawState.Color = _nativeCombatZombie == null ? new Color(originalColor.r, originalColor.g, originalColor.b, alpha) : NativeZombieTrackColor(group, alpha);
                             var image = imageOverride != null && TrackIs(track.Name, overrideTrack) ? imageOverride : from.Texture;
                             var nativeImage = NativeZombieImage(asset, track.Name, image);
-                            DrawTexturePart(nativeImage, nativeImage == image ? from.Texture.width : nativeImage.width, nativeImage == image ? from.Texture.height : nativeImage.height);
+                            DrawTexturePart(nativeImage, nativeImage == image ? from.Texture.Width : nativeImage.Width, nativeImage == image ? from.Texture.Height : nativeImage.Height);
                             drawn = true;
                         }
 
@@ -696,6 +721,7 @@ namespace PlantsVsZombies.Reanimation
                             // PC Zombie::Initialize (0x53DD90) attaches the flag to Zombie_flaghand.
                             // Reanimation::DrawRenderGroup draws that attachment immediately after its hand track.
                             var attachment = originalMatrix * layout * part * flagBaseInverse;
+                            using var hierarchyAttachment = Hierarchy.BeginAttachment(10);
                             if (combatFlag)
                             {
                                 var tint = new Color(originalColor.r, originalColor.g, originalColor.b, originalColor.a * frame.Alpha);
@@ -717,6 +743,7 @@ namespace PlantsVsZombies.Reanimation
                                 : heldTreeFood || heldFertilizer ? Matrix4x4.Translate(new Vector3(102f, 412f, 0f))
                                 : Matrix4x4.Translate(new Vector3(100f, 393f, 0f)) * Matrix4x4.Scale(new Vector3(1.2f, 1.2f, 1f));
                             var placement = originalMatrix * layout * part * heldItemBaseInverse * offset;
+                            using var hierarchyAttachment = Hierarchy.BeginAttachment(11);
                             if (heldItemClip == null)
                             {
                                 throw new System.InvalidOperationException("The value 'heldItemClip' is not available.");
@@ -725,7 +752,7 @@ namespace PlantsVsZombies.Reanimation
                             var itemSeconds = heldHammer
                                 ? (heldItemClip.Count - 1f) / heldItem.Fps
                                 : heldTreeFood || heldFertilizer || heldMoneyBag ? 0f : NativeSeconds(heldItemClip, crazyDaveHeldItemAge, 12f, heldItem.Fps, true);
-                            if (!heldMoneyBag || _imagePaths.ContainsKey("MONEYBAG"))
+                            if (!heldMoneyBag || Assets.ContainsImage("IMAGE_MONEYBAG"))
                             {
                                 var replacement = heldMoneyBag ? LoadTexture("IMAGE_MONEYBAG") : null;
                                 drawn |= DrawClipPose(heldItem, heldItemClip, itemSeconds, heldItem.Fps, false, placement, originalColor, heldMoneyBag ? "bag" : null, replacement);
@@ -912,6 +939,21 @@ namespace PlantsVsZombies.Reanimation
                 return Fail("A native surface cache key was reused with a different viewport size.");
             }
 
+            if (freeze)
+            {
+                Hierarchy.RefreshVisibility();
+            }
+
+            if (_hierarchyVisibilityRevision != Hierarchy.VisibilityRevision)
+            {
+                foreach (var cachedSurface in _nativeSurfaces.Values)
+                {
+                    cachedSurface.Ready = false;
+                }
+
+                _hierarchyVisibilityRevision = Hierarchy.VisibilityRevision;
+            }
+
             if (!freeze || !surface.Ready)
             {
                 var matrix = SpriteDrawState.Matrix;
@@ -920,8 +962,8 @@ namespace PlantsVsZombies.Reanimation
                 var previousSurfaceMatrix = _nativeSurfaceMatrix;
                 var previousCaptureClip = _nativeCaptureClip;
                 var previousAdditive = _nativeSurfaceAdditive;
-                var previousGrayscale = _nativePortraitMaterial.GetFloat("_Grayscale");
-                var previousProducer = _nativePortraitMaterial.GetFloat("_ProducerAdditive");
+                var previousGrayscale = _nativeGrayscale;
+                var previousProducer = _nativeProducerAdditive;
                 var previousRenderer = _nativeObjectRenderer;
                 var captureRenderer = GetNativeCaptureRenderer();
                 captureRenderer.BeginBatch();
@@ -933,8 +975,10 @@ namespace PlantsVsZombies.Reanimation
                     _nativeCaptureClip = new Rect(0f, 0f, width, height);
                     _renderingNativeSurface = true;
                     _nativeObjectRenderer = captureRenderer;
-                    _nativePortraitMaterial.SetFloat("_Grayscale", grayscale ? 1f : 0f);
-                    _nativePortraitMaterial.SetFloat("_ProducerAdditive", producerAdditive);
+                    _nativeGrayscale = grayscale ? 1f : 0f;
+                    _nativeProducerAdditive = producerAdditive;
+                    _nativePortraitMaterial.SetFloat("_Grayscale", _nativeGrayscale);
+                    _nativePortraitMaterial.SetFloat("_ProducerAdditive", _nativeProducerAdditive);
                     _nativeSurfaceAdditive = Math.Max(0f, additive);
                     surface.Ready = draw();
                     captureRenderer.RenderTo(surface.Texture);
@@ -947,8 +991,10 @@ namespace PlantsVsZombies.Reanimation
                     _nativeCaptureClip = previousCaptureClip;
                     _nativeSurfaceAdditive = previousAdditive;
                     _nativeObjectRenderer = previousRenderer;
-                    _nativePortraitMaterial.SetFloat("_Grayscale", previousGrayscale);
-                    _nativePortraitMaterial.SetFloat("_ProducerAdditive", previousProducer);
+                    _nativeGrayscale = previousGrayscale;
+                    _nativeProducerAdditive = previousProducer;
+                    _nativePortraitMaterial.SetFloat("_Grayscale", _nativeGrayscale);
+                    _nativePortraitMaterial.SetFloat("_ProducerAdditive", _nativeProducerAdditive);
                     SpriteDrawState.Matrix = matrix;
                     SpriteDrawState.Color = color;
                 }
@@ -976,7 +1022,17 @@ namespace PlantsVsZombies.Reanimation
         /// <param name = "destination">The destination.</param>
         /// <param name = "source">The source.</param>
         /// <returns>The resulting draw native image.</returns>
+        /// <summary>Draws an externally owned texture through the shared image submission path.</summary>
+        /// <param name="image">The external texture or captured surface.</param>
+        /// <param name="destination">The logical destination rectangle.</param>
+        /// <param name="source">The normalized source texture rectangle.</param>
+        /// <returns>Whether the source was submitted.</returns>
         public bool DrawNativeImage(Texture image, Rect destination, Rect source)
+        {
+            return image != null && DrawNativeImage(SpriteImage.FromTexture(image), destination, source);
+        }
+
+        public bool DrawNativeImage(SpriteImage image, Rect destination, Rect source)
         {
             using var objectScope = BeginObjectScope();
             if (_disposed)
@@ -1007,7 +1063,7 @@ namespace PlantsVsZombies.Reanimation
         /// <param name = "width">The width.</param>
         /// <param name = "height">The height.</param>
         /// <param name = "source">The source.</param>
-        private void DrawTexturePart(Texture texture, float width, float height, Rect? source = null)
+        private void DrawTexturePart(SpriteImage texture, float width, float height, Rect? source = null)
         {
             if (!CanSubmitObjectFrame || !EnsureNativeSpriteMaterial())
             {
@@ -1022,11 +1078,7 @@ namespace PlantsVsZombies.Reanimation
                 return;
             }
 
-            DrawNativeSpritePass(texture, width, height, uv, 0, matrix);
-            if (_nativeCombatZombie != null ? _nativeTrackAdditive.r > 0f || _nativeTrackAdditive.g > 0f || _nativeTrackAdditive.b > 0f : _nativeSurfaceAdditive > 0f)
-            {
-                DrawNativeSpritePass(texture, width, height, uv, 1, matrix);
-            }
+            DrawNativeSpritePass(texture, width, height, uv, 0, matrix, true);
         }
 
         /// <summary>Original almanac boss head, with the separate driver and foreground layering.</summary>
@@ -1354,8 +1406,9 @@ namespace PlantsVsZombies.Reanimation
             var next = clip.Start + ((relativeFrame + 1) % clip.Count);
             var fraction = (float)(timeInFrames - relativeFrame);
             var drawn = false;
-            foreach (Track track in asset.Tracks)
+            for (var trackIndex = 0; trackIndex < asset.Tracks.Count; trackIndex++)
             {
+                var track = asset.Tracks[trackIndex];
                 var from = GetFrame(track, current);
                 if (from.Visibility < 0f || from.Texture == null)
                 {
@@ -1368,6 +1421,8 @@ namespace PlantsVsZombies.Reanimation
                     continue;
                 }
 
+                using var hierarchySprite = Hierarchy.BeginSprite(asset, trackIndex, track.Name);
+
                 var sprite = parent * PartMatrix(frame);
                 if (!HasDrawableArea(sprite))
                 {
@@ -1376,7 +1431,7 @@ namespace PlantsVsZombies.Reanimation
 
                 SpriteMatrix = sprite;
                 SpriteDrawState.Color = new Color(originalColor.r, originalColor.g, originalColor.b, originalColor.a * Math.Max(0f, Math.Min(1f, parentAlpha * frame.Alpha)));
-                DrawTexturePart(from.Texture, from.Texture.width, from.Texture.height);
+                DrawTexturePart(from.Texture, from.Texture.Width, from.Texture.Height);
                 drawn = true;
             }
 
@@ -1518,22 +1573,8 @@ namespace PlantsVsZombies.Reanimation
                 return;
             }
 
-            foreach (Texture2D texture in _textures.Values)
-            {
-                if (texture == null)
-                {
-                    continue;
-                }
-
-                if (Application.isPlaying)
-                {
-                    UnityEngine.Object.Destroy(texture);
-                }
-                else
-                {
-                    UnityEngine.Object.DestroyImmediate(texture);
-                }
-            }
+            _assets?.Dispose();
+            _assets = null;
 
             foreach (NativeSurface surface in _nativeSurfaces.Values)
             {
@@ -1567,7 +1608,7 @@ namespace PlantsVsZombies.Reanimation
             }
 
             _objectRenderer?.Dispose();
-            _textures.Clear();
+            Hierarchy.Dispose();
             _texturesById.Clear();
             _animations.Clear();
             _nativePoseBlends.Clear();
@@ -1825,8 +1866,9 @@ namespace PlantsVsZombies.Reanimation
         /// <param name = "trackVisible">The track visible.</param>
         /// <param name = "blend">The blend.</param>
         /// <returns>The resulting draw clip pose.</returns>
-        private bool DrawClipPose(Reanimation asset, Clip? clip, float seconds, float fps, bool loop, Matrix4x4 parent, Color tint, string? overrideTrack = null, Texture2D? imageOverride = null, Func<string, bool>? trackVisible = null, NativePoseBlend? blend = null)
+        private bool DrawClipPose(Reanimation asset, Clip? clip, float seconds, float fps, bool loop, Matrix4x4 parent, Color tint, string? overrideTrack = null, SpriteImage? imageOverride = null, Func<string, bool>? trackVisible = null, NativePoseBlend? blend = null)
         {
+            using var profile = SpriteRenderingProfiler.Measure(SpriteRenderingProfiler.Animation);
             if (clip == null)
             {
                 throw new System.ArgumentNullException(nameof(clip));
@@ -1837,8 +1879,9 @@ namespace PlantsVsZombies.Reanimation
             var groupCount = _nativeCombatZombie == null || _nativeCombatShieldType == 0 ? 1 : 3;
             for (var group = 0; group < groupCount; group++)
             {
-                foreach (Track track in asset.Tracks)
+                for (var trackIndex = 0; trackIndex < asset.Tracks.Count; trackIndex++)
                 {
+                    var track = asset.Tracks[trackIndex];
                     if (_nativeCombatZombie != null && NativeZombieGroup(asset, track.Name) != group)
                     {
                         continue;
@@ -1861,6 +1904,8 @@ namespace PlantsVsZombies.Reanimation
                         continue;
                     }
 
+                    using var hierarchySprite = Hierarchy.BeginSprite(asset, trackIndex, track.Name);
+
                     var sprite = NativeZombieTrackMatrix(parent * PartMatrix(frame), group);
                     if (!HasDrawableArea(sprite))
                     {
@@ -1873,7 +1918,7 @@ namespace PlantsVsZombies.Reanimation
                     var image = imageOverride != null && TrackIs(track.Name, overrideTrack) ? imageOverride : from.Texture;
                     var nativeImage = NativeZombieImage(asset, track.Name, image);
                     var substituted = imageOverride != null && TrackIs(track.Name, overrideTrack);
-                    DrawTexturePart(nativeImage, nativeImage == image && !substituted ? from.Texture.width : nativeImage.width, nativeImage == image && !substituted ? from.Texture.height : nativeImage.height);
+                    DrawTexturePart(nativeImage, nativeImage == image && !substituted ? from.Texture.Width : nativeImage.Width, nativeImage == image && !substituted ? from.Texture.Height : nativeImage.Height);
                     drawn = true;
                 }
             }
@@ -1921,61 +1966,15 @@ namespace PlantsVsZombies.Reanimation
                 return;
             }
 
-            var reanimDirectory = Path.Combine(_root, "reanim");
-            if (!Directory.Exists(reanimDirectory))
+            foreach (var path in Assets.EnumerateTextPaths("reanim"))
             {
-                throw new DirectoryNotFoundException("Missing reanim directory: " + reanimDirectory);
-            }
-
-            foreach (string path in Directory.EnumerateFiles(reanimDirectory))
-            {
-                var extension = Path.GetExtension(path);
-                var key = Path.GetFileNameWithoutExtension(path);
-                if (string.Equals(extension, ".reanim", StringComparison.OrdinalIgnoreCase))
+                if (string.Equals(Path.GetExtension(path), ".reanim", StringComparison.OrdinalIgnoreCase))
                 {
-                    _animationPaths[key] = path;
-                }
-                else if (IsImage(extension))
-                {
-                    AddImagePath(_reanimImagePaths, key, path, extension);
-                }
-            }
-
-            var imageDirectory = Path.Combine(_root, "images");
-            if (Directory.Exists(imageDirectory))
-            {
-                foreach (string path in Directory.EnumerateFiles(imageDirectory))
-                {
-                    var extension = Path.GetExtension(path);
-                    if (IsImage(extension))
-                    {
-                        AddImagePath(_imagePaths, Path.GetFileNameWithoutExtension(path), path, extension);
-                    }
+                    _animationPaths[Path.GetFileNameWithoutExtension(path)] = path;
                 }
             }
 
             _indexed = true;
-        }
-
-        /// <summary>Performs is image.</summary>
-        /// <param name = "extension">The extension.</param>
-        /// <returns>The resulting is image.</returns>
-        private static bool IsImage(string extension)
-        {
-            return string.Equals(extension, ".png", StringComparison.OrdinalIgnoreCase) || string.Equals(extension, ".jpg", StringComparison.OrdinalIgnoreCase) || string.Equals(extension, ".jpeg", StringComparison.OrdinalIgnoreCase);
-        }
-
-        /// <summary>Performs add image path.</summary>
-        /// <param name = "paths">The paths.</param>
-        /// <param name = "key">The key.</param>
-        /// <param name = "path">The path.</param>
-        /// <param name = "extension">The extension.</param>
-        private static void AddImagePath(Dictionary<string, string> paths, string key, string path, string extension)
-        {
-            if (!paths.ContainsKey(key) || string.Equals(extension, ".png", StringComparison.OrdinalIgnoreCase))
-            {
-                paths[key] = path;
-            }
         }
 
         /// <summary>Performs load reanimation.</summary>
@@ -1986,7 +1985,10 @@ namespace PlantsVsZombies.Reanimation
         private Reanimation LoadReanimation(string path, string name)
         {
             // The original files are XML fragments with sibling fps and track nodes.
-            var contents = File.ReadAllText(path);
+            if (!Assets.TryReadText(path, out var contents))
+            {
+                throw new FileNotFoundException("Missing reanimation: " + path);
+            }
             var settings = new XmlReaderSettings
             {
                 DtdProcessing = DtdProcessing.Prohibit,
@@ -2106,94 +2108,15 @@ namespace PlantsVsZombies.Reanimation
         /// <returns>The resulting load texture.</returns>
         /// <exception cref = "FileNotFoundException">The operation cannot satisfy its preconditions.</exception>
         /// <exception cref = "FormatException">The operation cannot satisfy its preconditions.</exception>
-        private Texture2D LoadTexture(string imageId)
+        private SpriteImage LoadTexture(string imageId)
         {
-            if (_texturesById.TryGetValue(imageId, out var texture))
+            if (!_texturesById.TryGetValue(imageId, out var image))
             {
-                return texture;
+                image = Assets.LoadImage(imageId);
+                _texturesById.Add(imageId, image);
             }
 
-            const string reanimPrefix = "IMAGE_REANIM_";
-            const string imagePrefix = "IMAGE_";
-            var isReanim = imageId.StartsWith(reanimPrefix, StringComparison.OrdinalIgnoreCase);
-            var key = isReanim ? imageId.Substring(reanimPrefix.Length) : (imageId.StartsWith(imagePrefix, StringComparison.OrdinalIgnoreCase) ? imageId.Substring(imagePrefix.Length) : imageId);
-            string path;
-            var paths = isReanim ? _reanimImagePaths : _imagePaths;
-            if (!paths.TryGetValue(key, out path))
-            {
-                throw new FileNotFoundException("Image " + imageId + " was not found under " + (isReanim ? "reanim" : "images") + ".");
-            }
-
-            if (_textures.TryGetValue(path, out texture))
-            {
-                _texturesById.Add(imageId, texture);
-                return texture;
-            }
-
-            var bytes = File.ReadAllBytes(path);
-            texture = new Texture2D(2, 2, TextureFormat.RGBA32, false);
-            var maskPath = Path.Combine(Path.GetDirectoryName(path), Path.GetFileNameWithoutExtension(path) + "_.png");
-            var masked = string.Equals(Path.GetExtension(path), ".jpg", StringComparison.OrdinalIgnoreCase) && File.Exists(maskPath);
-            if (!ImageConversion.LoadImage(texture, bytes, !masked))
-            {
-                DestroyTexture(texture);
-                throw new FormatException("Could not decode image: " + path);
-            }
-
-            if (masked)
-            {
-                var mask = new Texture2D(2, 2, TextureFormat.RGBA32, false);
-                try
-                {
-                    if (!ImageConversion.LoadImage(mask, File.ReadAllBytes(maskPath), false) || mask.width != texture.width || mask.height != texture.height)
-                    {
-                        throw new FormatException("Reanimation alpha mask dimensions do not match: " + maskPath);
-                    }
-
-                    Color32[] colors = texture.GetPixels32(), alpha = mask.GetPixels32();
-                    for (var index = 0; index < colors.Length; index++)
-                    {
-                        colors[index].a = alpha[index].r;
-                    }
-
-                    // LoadImage changes a JPG texture to RGB24. A separate RGBA32
-                    // texture is necessary; writing alpha into RGB24 silently loses it.
-                    var merged = new Texture2D(texture.width, texture.height, TextureFormat.RGBA32, false);
-                    merged.SetPixels32(colors);
-                    merged.Apply(false, true);
-                    DestroyTexture(texture);
-                    texture = merged;
-                }
-                catch
-                {
-                    DestroyTexture(texture);
-                    throw;
-                }
-                finally
-                {
-                    DestroyTexture(mask);
-                }
-            }
-
-            texture.filterMode = FilterMode.Bilinear;
-            texture.wrapMode = TextureWrapMode.Clamp;
-            _textures.Add(path, texture);
-            _texturesById.Add(imageId, texture);
-            return texture;
-        }
-
-        /// <summary>Performs destroy texture.</summary>
-        /// <param name = "texture">The texture.</param>
-        private static void DestroyTexture(Texture2D texture)
-        {
-            if (Application.isPlaying)
-            {
-                UnityEngine.Object.Destroy(texture);
-            }
-            else
-            {
-                UnityEngine.Object.DestroyImmediate(texture);
-            }
+            return image;
         }
 
         /// <summary>Performs parse number.</summary>
@@ -2345,9 +2268,9 @@ namespace PlantsVsZombies.Reanimation
         /// <param name = "minY">The min y.</param>
         /// <param name = "maxX">The max x.</param>
         /// <param name = "maxY">The max y.</param>
-        private static void IncludeTextureBounds(Matrix4x4 m, Texture2D texture, ref float minX, ref float minY, ref float maxX, ref float maxY)
+        private static void IncludeTextureBounds(Matrix4x4 m, SpriteImage texture, ref float minX, ref float minY, ref float maxX, ref float maxY)
         {
-            float width = texture.width, height = texture.height;
+            float width = texture.Width, height = texture.Height;
             IncludePoint(m.m03, m.m13, ref minX, ref minY, ref maxX, ref maxY);
             IncludePoint(m.m03 + m.m00 * width, m.m13 + m.m10 * width, ref minX, ref minY, ref maxX, ref maxY);
             IncludePoint(m.m03 + m.m01 * height, m.m13 + m.m11 * height, ref minX, ref minY, ref maxX, ref maxY);
@@ -2741,9 +2664,10 @@ namespace PlantsVsZombies.Reanimation
             {
                 var bodySample = NativeSeconds(body, bodySeconds, bodyRate, asset.Fps, true);
                 drawn = DrawClipPose(asset, body, bodySample, asset.Fps, false, layout, tint, null, null, visible);
-                var headIndex = 0;
-                foreach (HeadPlayback playback in heads)
+                for (var headIndex = 0; headIndex < heads.Length; headIndex++)
                 {
+                    var playback = heads[headIndex];
+                    using var hierarchyAttachment = Hierarchy.BeginAttachment(headIndex + 1);
                     Clip? head;
                     Reanimation? ignored;
                     Track? anchor;
@@ -2757,7 +2681,7 @@ namespace PlantsVsZombies.Reanimation
                     var time = SampleFrame(body, bodySample, asset.Fps, false);
                     var attach = PartMatrix(Interpolate(GetFrame(anchor, time.Current), GetFrame(anchor, time.Next), time.Fraction)) * inverseBase;
                     var sample = NativeSeconds(head, playback.Seconds, playback.Rate, asset.Fps, playback.Loop);
-                    drawn |= DrawClipPose(asset, head, sample, asset.Fps, false, layout * attach, tint, null, null, visible, PrepareNativeBlend(GetHeadInstanceKey(instanceKey, headIndex++), playback.Animation, playback.Seconds, blendTicks));
+                    drawn |= DrawClipPose(asset, head, sample, asset.Fps, false, layout * attach, tint, null, null, visible, PrepareNativeBlend(GetHeadInstanceKey(instanceKey, headIndex), playback.Animation, playback.Seconds, blendTicks));
                 }
             }
             finally
@@ -2988,6 +2912,7 @@ namespace PlantsVsZombies.Reanimation
                 // Reapply its original parent track's waterline in the current scene or capture coordinates.
                 _nativeSpriteClip = NativePoolTrackClip(parent, anchor, previous, previousClip);
                 var placement = previous * CombatPlacement(origin, scale, facingLeft, 60) * PartMatrix(pose) * inverse * offset;
+                using var hierarchyAttachment = Hierarchy.BeginAttachment(12);
                 return DrawClipPose(child, head, NativeSeconds(head, headSeconds, 15f, child.Fps, true), child.Fps, false, placement, color);
             }
             finally
@@ -3068,7 +2993,7 @@ namespace PlantsVsZombies.Reanimation
 
             EnsureIndex();
             EnsureNativeAtlas();
-            Texture2D texture;
+            SpriteImage texture;
             Vector2Int atlas;
             if (resource == null)
             {
@@ -3104,7 +3029,7 @@ namespace PlantsVsZombies.Reanimation
                 return false;
             }
 
-            float width = (float)texture.width / columns, height = (float)texture.height / rows;
+            float width = (float)texture.Width / columns, height = (float)texture.Height / rows;
             var previous = SpriteMatrix;
             var previousAdditive = _nativeSpriteAdditive;
             _nativeSpriteAdditive = additive;
@@ -3151,13 +3076,7 @@ namespace PlantsVsZombies.Reanimation
             }
 
             _nativeAtlasLoaded = true;
-            var path = Path.Combine(_root, "properties", "resources.xml");
-            if (!File.Exists(path))
-            {
-                path = Path.Combine(_root, "properties", "Resources.xml");
-            }
-
-            if (!File.Exists(path))
+            if (!Assets.TryReadText("properties/resources.xml", out var resources))
             {
                 return;
             }
@@ -3166,7 +3085,7 @@ namespace PlantsVsZombies.Reanimation
             {
                 XmlResolver = null
             };
-            document.Load(path);
+            document.LoadXml(resources);
             foreach (XmlNode group in document.SelectNodes("/ResourceManifest/Resources"))
             {
                 var prefix = "IMAGE_";
@@ -3200,18 +3119,7 @@ namespace PlantsVsZombies.Reanimation
 
                     var id = prefix + node.Attributes["id"].Value;
                     _nativeAtlas[id] = new Vector2Int(columns, rows);
-                    if (node.Attributes["path"] == null)
-                    {
-                        continue;
-                    }
 
-                    var fileKey = Path.GetFileName(node.Attributes["path"].Value.Replace('\\', '/'));
-                    string imagePath;
-                    var paths = id.StartsWith("IMAGE_REANIM_", StringComparison.OrdinalIgnoreCase) ? _reanimImagePaths : _imagePaths;
-                    if (paths.TryGetValue(fileKey, out imagePath))
-                    {
-                        paths[id.Substring(id.StartsWith("IMAGE_REANIM_", StringComparison.OrdinalIgnoreCase) ? 13 : 6)] = imagePath;
-                    }
                 }
             }
         }
@@ -3481,6 +3389,27 @@ namespace PlantsVsZombies.Reanimation
                 return draw();
             }
 
+            if (CanDrawZombieDirect(SpriteDrawState.Color, viewport))
+            {
+                var previousGrayscale = _nativeGrayscale;
+                var previousProducer = _nativeProducerAdditive;
+                try
+                {
+                    _nativeGrayscale = imitated ? 1f : 0f;
+                    _nativeProducerAdditive = visual.Enabled ? visual.SourceAdditive : 0f;
+                    RequiredNativePortraitMaterial.SetFloat("_Grayscale", _nativeGrayscale);
+                    RequiredNativePortraitMaterial.SetFloat("_ProducerAdditive", _nativeProducerAdditive);
+                    return DrawDirectClipped(viewport, draw);
+                }
+                finally
+                {
+                    _nativeGrayscale = previousGrayscale;
+                    _nativeProducerAdditive = previousProducer;
+                    RequiredNativePortraitMaterial.SetFloat("_Grayscale", _nativeGrayscale);
+                    RequiredNativePortraitMaterial.SetFloat("_ProducerAdditive", _nativeProducerAdditive);
+                }
+            }
+
             return DrawNativeClipped(surfaceKey ?? "producer-" + instanceKey, viewport, draw, grayscale: imitated, producerAdditive: visual.Enabled ? visual.SourceAdditive : 0f);
         }
 
@@ -3536,23 +3465,9 @@ namespace PlantsVsZombies.Reanimation
                 _nativeCombatBodyClipBottom = bodyClipBottom;
                 _nativeCombatTint = color;
                 SpriteDrawState.Color = Color.white;
-                if (CanDrawZombieDirect(zombie, color, viewport))
+                if (CanDrawZombieDirect(color, viewport))
                 {
-                    var previousClip = SpriteDrawState.Clip;
-                    var matrix = SpriteDrawState.Matrix;
-                    var left = Math.Max(previousClip.xMin, viewport.xMin * matrix.m00 + matrix.m03);
-                    var top = Math.Max(previousClip.yMin, viewport.yMin * matrix.m11 + matrix.m13);
-                    var right = Math.Min(previousClip.xMax, viewport.xMax * matrix.m00 + matrix.m03);
-                    var bottom = Math.Min(previousClip.yMax, viewport.yMax * matrix.m11 + matrix.m13);
-                    SpriteDrawState.Clip = new Rect(left, top, Math.Max(0f, right - left), Math.Max(0f, bottom - top));
-                    try
-                    {
-                        return draw();
-                    }
-                    finally
-                    {
-                        SpriteDrawState.Clip = previousClip;
-                    }
+                    return DrawDirectClipped(viewport, draw);
                 }
 
                 return DrawNativeClipped(surfaceKey ?? "native-zombie-combat-" + zombie.Id, viewport, draw);
@@ -3630,20 +3545,38 @@ namespace PlantsVsZombies.Reanimation
             }
         }
 
-        /// <summary>Identifies neutral combat poses that can retain their source alpha directly in scene quads.</summary>
-        /// <param name="zombie">The actor whose feedback and shield state would require local composition.</param>
+        /// <summary>Draws source tracks using the same target-pixel bounds as a local composition surface.</summary>
+        /// <param name="viewport">The native actor bounds before the outer board transform.</param>
+        /// <param name="draw">The synchronous source-track callback.</param>
+        /// <returns>Whether the callback submitted any original artwork.</returns>
+        private bool DrawDirectClipped(Rect viewport, Func<bool> draw)
+        {
+            var previousClip = SpriteDrawState.Clip;
+            var matrix = SpriteDrawState.Matrix;
+            var left = Math.Max(previousClip.xMin, viewport.xMin * matrix.m00 + matrix.m03);
+            var top = Math.Max(previousClip.yMin, viewport.yMin * matrix.m11 + matrix.m13);
+            var right = Math.Min(previousClip.xMax, viewport.xMax * matrix.m00 + matrix.m03);
+            var bottom = Math.Min(previousClip.yMax, viewport.yMax * matrix.m11 + matrix.m13);
+            SpriteDrawState.Clip = new Rect(left, top, Math.Max(0f, right - left), Math.Max(0f, bottom - top));
+            try
+            {
+                return draw();
+            }
+            finally
+            {
+                SpriteDrawState.Clip = previousClip;
+            }
+        }
+
+        /// <summary>Identifies source-track effects that can retain alpha directly without a local capture.</summary>
         /// <param name="tint">The caller's final actor tint and opacity.</param>
         /// <param name="viewport">The local clipping bounds normally supplied by the capture surface.</param>
-        /// <returns>True when a simple screen clip preserves the neutral pose without an offscreen camera.</returns>
-        private bool CanDrawZombieDirect(Zombie zombie, Color tint, Rect viewport)
+        /// <returns>True when source-track shader operations and a screen clip preserve the original pose.</returns>
+        private bool CanDrawZombieDirect(Color tint, Rect viewport)
         {
             var matrix = SpriteDrawState.Matrix;
             return !_renderingNativeSurface && IsValidDestination(viewport) && tint.Equals(Color.white)
-                && matrix.m00 > 0f && matrix.m11 > 0f && matrix.m01 == 0f && matrix.m10 == 0f
-                && _nativeCombatShieldType == 0 && !zombie.Hypnotized && zombie.ChillRemaining <= 0f && zombie.FrozenRemaining <= 0f
-                && zombie.PresentationFlash <= 0f && zombie.PresentationArmorFlash <= 0f && zombie.PresentationShieldRecoil <= 0f
-                && !(zombie.PresentationHasSled ?? (zombie.Kind == ZombieKind.Bobsled && !zombie.UsedAbility))
-                && !(zombie.PresentationNativeHeight == 10 && zombie.Health < 100f);
+                && matrix.m00 > 0f && matrix.m11 > 0f && matrix.m01 == 0f && matrix.m10 == 0f;
         }
 
         /// <summary>Performs native zombie group.</summary>
@@ -3675,7 +3608,7 @@ namespace PlantsVsZombies.Reanimation
         /// <param name = "track">The track.</param>
         /// <param name = "original">The original.</param>
         /// <returns>The resulting native zombie image.</returns>
-        private Texture2D NativeZombieImage(Reanimation asset, string track, Texture2D original)
+        private SpriteImage NativeZombieImage(Reanimation asset, string track, SpriteImage original)
         {
             if (_nativeCombatZombie == null)
             {
@@ -3920,6 +3853,7 @@ namespace PlantsVsZombies.Reanimation
             var color = SpriteDrawState.Color;
             try
             {
+                using var hierarchyAttachment = Hierarchy.BeginAttachment(10);
                 return DrawClipPose(child, flag, NativeSeconds(flag, flagSeconds, 15f, child.Fps, true), child.Fps, false,
                     previous * CombatPlacement(origin, scale, backwards, 90f) * PartMatrix(pose) * inverse, color);
             }
@@ -3937,7 +3871,8 @@ namespace PlantsVsZombies.Reanimation
         /// <param name = "uv">The uv.</param>
         /// <param name = "pass">The pass.</param>
         /// <param name = "matrix">The matrix.</param>
-        private void DrawNativeSpritePass(Texture texture, float width, float height, Rect uv, int pass, Matrix4x4 matrix)
+        /// <param name="combineHit">Whether normal alpha and source-textured hit addition share one draw.</param>
+        private void DrawNativeSpritePass(SpriteImage texture, float width, float height, Rect uv, int pass, Matrix4x4 matrix, bool combineHit = false)
         {
             var renderer = _renderingNativeSurface ? _nativeObjectRenderer : GetObjectRenderer();
             if (renderer == null)
@@ -3945,7 +3880,7 @@ namespace PlantsVsZombies.Reanimation
                 throw new System.InvalidOperationException("The value 'renderer' is not available.");
             }
 
-            renderer.DrawQuad(texture, width, height, uv, matrix, SpriteDrawState.Color, pass, _renderingNativeSurface ? RequiredNativePortraitMaterial.GetFloat("_Grayscale") : 0f, RequiredNativePortraitMaterial.GetFloat("_ProducerAdditive"), _nativeCombatZombie == null ? _nativeSurfaceAdditive : 0f, _nativeCombatZombie == null ? Color.clear : _nativeTrackAdditive, _nativeSpriteClip);
+            renderer.DrawQuad(texture, width, height, uv, matrix, SpriteDrawState.Color, pass, _nativeGrayscale, _nativeProducerAdditive, _nativeCombatZombie == null ? _nativeSurfaceAdditive : 0f, _nativeCombatZombie == null ? Color.clear : _nativeTrackAdditive, _nativeSpriteClip, combineHit);
         }
 
         /// <summary>Performs draw native surface composite.</summary>
@@ -3959,7 +3894,7 @@ namespace PlantsVsZombies.Reanimation
                 return;
             }
 
-            DrawNativeSpritePass(texture, viewport.width, viewport.height, source ?? new Rect(0, 0, 1, 1), 3, SpriteMatrix * NativeMatrix(new Vector2(viewport.x, viewport.y), 1f));
+            DrawNativeSpritePass(SpriteImage.FromTexture(texture), viewport.width, viewport.height, source ?? new Rect(0, 0, 1, 1), 3, SpriteMatrix * NativeMatrix(new Vector2(viewport.x, viewport.y), 1f));
         }
 
         /// <summary>Performs ensure native sprite material.</summary>

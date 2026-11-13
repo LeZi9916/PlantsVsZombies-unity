@@ -97,6 +97,98 @@ namespace PlantsVsZombies.Tests.PlayMode
             AssertColor(Pixel(45, 55), Color.red);
         }
 
+        /// <summary>Preserves the legacy horizontal, vertical, and double-axis reversed-UV texture API.</summary>
+        /// <returns>Canvas presentation frames for every signed source rectangle.</returns>
+        [UnityTest]
+        public IEnumerator ExternalTextureCoordinatesPreserveBothMirrorAxes()
+        {
+            var source = new Texture2D(2, 2, TextureFormat.RGBA32, false)
+            {
+                filterMode = FilterMode.Point,
+                wrapMode = TextureWrapMode.Clamp
+            };
+            source.SetPixels(new[] { Color.red, Color.green, Color.blue, Color.yellow });
+            source.Apply();
+            try
+            {
+                foreach (var flipX in new[] { false, true })
+                {
+                    foreach (var flipY in new[] { false, true })
+                    {
+                        yield return AssertCanvasMirror(SpriteImage.FromTexture(source), flipX, flipY);
+                    }
+                }
+
+                yield return AssertCanvasClamp(SpriteImage.FromTexture(source), false);
+                yield return AssertCanvasClamp(SpriteImage.FromTexture(source), true);
+            }
+            finally
+            {
+                Object.Destroy(source);
+            }
+        }
+
+        /// <summary>Preserves reversed UVs when a cropped logical source is split between independent atlas pages.</summary>
+        /// <returns>Canvas presentation frames for every mirrored two-page crop.</returns>
+        [UnityTest]
+        public IEnumerator TiledAtlasCoordinatesPreserveMirroredCropsAcrossPages()
+        {
+            var left = new Texture2D(1, 2, TextureFormat.RGBA32, false) { filterMode = FilterMode.Point };
+            var right = new Texture2D(1, 2, TextureFormat.RGBA32, false) { filterMode = FilterMode.Point };
+            left.SetPixels(new[] { Color.red, Color.blue });
+            right.SetPixels(new[] { Color.green, Color.yellow });
+            left.Apply();
+            right.Apply();
+            var catalog = new SpriteAtlasCatalog
+            {
+                Layouts = new[]
+                {
+                    new SpriteAtlasLayout
+                    {
+                        MaximumPageSize = 256,
+                        Pages = new[] { "left", "right" },
+                        Images = new[]
+                        {
+                            new SpriteAtlasImage
+                            {
+                                SourceIdentity = "images/mirror.png",
+                                Width = 2,
+                                Height = 2,
+                                VisiblePixels = new[] { new Rect(0f, 0f, 2f, 2f) },
+                                Tiles = new[]
+                                {
+                                    new SpriteAtlasTile { Page = 0, SourcePixels = new Rect(0f, 0f, 1f, 2f),
+                                        TextureUv = new Rect(0f, 0f, 1f, 1f), PageWidth = 1, PageHeight = 2 },
+                                    new SpriteAtlasTile { Page = 1, SourcePixels = new Rect(1f, 0f, 1f, 2f),
+                                        TextureUv = new Rect(0f, 0f, 1f, 1f), PageWidth = 1, PageHeight = 2 }
+                                }
+                            }
+                        }
+                    }
+                }
+            };
+            using var provider = new SpriteAssetProvider(catalog, 256, path => path == "left" ? left : right, _ => { });
+            try
+            {
+                var image = provider.LoadImage("images/mirror.png");
+                foreach (var flipX in new[] { false, true })
+                {
+                    foreach (var flipY in new[] { false, true })
+                    {
+                        yield return AssertCanvasMirror(image, flipX, flipY);
+                    }
+                }
+
+                yield return AssertCanvasClamp(image, false);
+                yield return AssertCanvasClamp(image, true);
+            }
+            finally
+            {
+                Object.Destroy(left);
+                Object.Destroy(right);
+            }
+        }
+
         /// <summary>Preserves overlapping source alpha and local clipping when neutral actors skip capture cameras.</summary>
         /// <returns>Frame boundaries publishing the direct and captured versions of the same synthetic pose.</returns>
         [UnityTest]
@@ -353,6 +445,67 @@ namespace PlantsVsZombies.Tests.PlayMode
         {
             return System.Array.Find(Resources.FindObjectsOfTypeAll<InputField>(),
                 item => item != null && item.gameObject.activeInHierarchy && item.transform.root.name == "PvZ Canvas UI");
+        }
+
+        /// <summary>Checks the four original source quadrants after signed source-to-destination mapping.</summary>
+        /// <param name="image">The external or tiled logical source image.</param>
+        /// <param name="flipX">Whether its horizontal source axis is reversed.</param>
+        /// <param name="flipY">Whether its vertical source axis is reversed.</param>
+        /// <returns>Frames allowing the retained Canvas to publish and render the crop.</returns>
+        private IEnumerator AssertCanvasMirror(SpriteImage image, bool flipX, bool flipY)
+        {
+            ObjectSpriteRenderer.BeginSceneFrame();
+            CanvasUI.BeginFrame();
+            CanvasUI.Color = Color.white;
+            var source = new Rect(flipX ? .75f : .25f, flipY ? .75f : .25f, flipX ? -.5f : .5f, flipY ? -.5f : .5f);
+            CanvasUI.DrawTextureWithTexCoords(new Rect(20f, 20f, 80f, 80f), image, source);
+            CanvasUI.EndFrame();
+            yield return null;
+            yield return null;
+            ReadPixels();
+            var colors = new[] { Color.red, Color.green, Color.blue, Color.yellow };
+            for (var row = 0; row < 2; row++)
+            {
+                for (var column = 0; column < 2; column++)
+                {
+                    var sourceX = flipX ? 1 - column : column;
+                    var sourceY = flipY ? row : 1 - row;
+                    AssertColor(Pixel(40 + column * 40, 40 + row * 40), colors[sourceY * 2 + sourceX]);
+                }
+            }
+        }
+
+        /// <summary>Checks interior, edge, and corner zones preserve Clamp sampling outside the original image bounds.</summary>
+        /// <param name="image">The external or tiled image whose edge pixels must extend.</param>
+        /// <param name="reverse">Whether both requested UV axes are reversed.</param>
+        /// <returns>Frames allowing the complete retained Canvas geometry to render.</returns>
+        private IEnumerator AssertCanvasClamp(SpriteImage image, bool reverse)
+        {
+            ObjectSpriteRenderer.BeginSceneFrame();
+            CanvasUI.BeginFrame();
+            CanvasUI.Color = Color.white;
+            var source = reverse ? new Rect(1.5f, 1.5f, -2f, -2f) : new Rect(-.5f, -.5f, 2f, 2f);
+            CanvasUI.DrawTextureWithTexCoords(new Rect(20f, 20f, 80f, 80f), image, source);
+            CanvasUI.EndFrame();
+            yield return null;
+            yield return null;
+            ReadPixels();
+            var colors = new[] { Color.red, Color.green, Color.blue, Color.yellow };
+            for (var row = 0; row < 4; row++)
+            {
+                for (var column = 0; column < 4; column++)
+                {
+                    var sourceX = column < 2 ? 0 : 1;
+                    var sourceY = row < 2 ? 1 : 0;
+                    if (reverse)
+                    {
+                        sourceX = 1 - sourceX;
+                        sourceY = 1 - sourceY;
+                    }
+
+                    AssertColor(Pixel(30 + column * 20, 30 + row * 20), colors[sourceY * 2 + sourceX]);
+                }
+            }
         }
 
         /// <summary>Reads the direct camera target while preserving any caller's active render target.</summary>

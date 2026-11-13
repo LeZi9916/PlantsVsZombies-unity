@@ -59,7 +59,7 @@ namespace PlantsVsZombies.Tests.PlayMode
             _animations = new ReanimationRenderer(root);
             _owner._animations = _animations;
             _owner._game = Fixture();
-            _owner.Textures._textures["plantshadow2.png"] = null!;
+            SpriteSourceTestUtilities.SetImage(_owner.Textures, "plantshadow2.png", null!);
             _presenter = new GamePresenter(_owner);
             _target = new RenderTexture(Screen.width, Screen.height, 24, RenderTextureFormat.ARGB32);
             _target.Create();
@@ -81,7 +81,7 @@ namespace PlantsVsZombies.Tests.PlayMode
                 ObjectSpriteRenderer.SceneCamera.targetTexture = _previousTarget;
                 _presenter.Dispose();
                 _animations.Dispose();
-                _owner.Textures._textures.Clear();
+                _owner.Textures.ReleaseAll();
                 _target.Release();
                 UnityEngine.Object.Destroy(_target);
                 UnityEngine.Object.Destroy(_pixels);

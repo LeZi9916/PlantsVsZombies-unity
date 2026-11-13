@@ -60,7 +60,6 @@ namespace PlantsVsZombies.Tests.PlayMode
                 File.WriteAllBytes(Path.Combine(images, name), optionImage);
             }
 
-            _owner._optionsView = new OptionsView(_root);
             _owner._currentView = PvZGame.ScreenView.Board;
             _owner._game = new GameSimulation(new GameRules { AdventureLevel = 8, AdventurePacketSlots = 10 }, 9151);
             var seeds = new[] { PlantKind.Peashooter, PlantKind.Sunflower, PlantKind.CherryBomb, PlantKind.Wallnut };
@@ -70,10 +69,10 @@ namespace PlantsVsZombies.Tests.PlayMode
             _owner._deck.Clear();
             _owner._deck.AddRange(seeds);
             _owner._pendingSeeds = new AdventureSeedChooserState(seeds);
-            _owner.Textures._textures.Add("SeedBank.png", Texture(446, 87, Color.red));
-            _owner.Textures._textures.Add("SeedPacketSilhouette.png", Texture(50, 70, Color.green));
-            _owner.Textures._textures.Add("seeds.png", Texture(450, 70, Color.blue));
-            _owner.Textures._textures.Add("packet_plants.png", Texture(650, 70, Color.clear));
+            SpriteSourceTestUtilities.SetImage(_owner.Textures, "SeedBank.png", Texture(446, 87, Color.red));
+            SpriteSourceTestUtilities.SetImage(_owner.Textures, "SeedPacketSilhouette.png", Texture(50, 70, Color.green));
+            SpriteSourceTestUtilities.SetImage(_owner.Textures, "seeds.png", Texture(450, 70, Color.blue));
+            SpriteSourceTestUtilities.SetImage(_owner.Textures, "packet_plants.png", Texture(650, 70, Color.clear));
             File.WriteAllBytes(Path.Combine(_root, "reanim", "marker.png"), Texture(8, 8, Color.blue).EncodeToPNG());
             var marker = "<fps>12</fps><track><name>anim_idle</name><t><f>0</f></t><t/></track>"
                 + "<track><name>body</name><t><i>IMAGE_REANIM_marker</i><f>0</f></t><t/></track>";
@@ -81,6 +80,8 @@ namespace PlantsVsZombies.Tests.PlayMode
             File.WriteAllText(Path.Combine(_root, "reanim", "Pot.reanim"), marker);
             File.WriteAllText(Path.Combine(_root, "reanim", "CoffeeBean.reanim"), marker);
             File.WriteAllText(Path.Combine(_root, "reanim", "GraveBuster.reanim"), marker);
+            // Finish creating the source tree before any view acquires its immutable shared image index.
+            _owner._optionsView = new OptionsView(_root);
             _renderer = new ReanimationRenderer(_root);
             _owner._animations = _renderer;
             _presenter = new GamePresenter(_owner);
@@ -97,6 +98,7 @@ namespace PlantsVsZombies.Tests.PlayMode
         {
             ObjectSpriteRenderer.SceneCamera.targetTexture = null;
             _owner.Textures._textures.Clear();
+            _owner.Textures.ReleaseAll();
             _presenter.Dispose();
             _renderer.Dispose();
             _owner.RequiredOptionsView.Dispose();
@@ -219,8 +221,8 @@ namespace PlantsVsZombies.Tests.PlayMode
         [UnityTest]
         public IEnumerator ConveyorIntroductionsUseTheMovingConveyorWithoutSeedSlots()
         {
-            _owner.Textures._textures.Add("ConveyorBelt_backdrop.png", Texture(516, 87, Color.green));
-            _owner.Textures._textures.Add("ConveyorBelt.png", Texture(512, 84, Color.yellow));
+            SpriteSourceTestUtilities.SetImage(_owner.Textures, "ConveyorBelt_backdrop.png", Texture(516, 87, Color.green));
+            SpriteSourceTestUtilities.SetImage(_owner.Textures, "ConveyorBelt.png", Texture(512, 84, Color.yellow));
             foreach (var number in new[] { 5, 10, 20, 25, 30, 40, 45, 50 })
             {
                 _owner._game = new GameSimulation(new GameRules { AdventureLevel = number }, 9151);
@@ -274,8 +276,8 @@ namespace PlantsVsZombies.Tests.PlayMode
         [UnityTest]
         public IEnumerator ConveyorHandoffKeepsNativeArtworkPacketAndInputCoordinates()
         {
-            _owner.Textures._textures.Add("ConveyorBelt_backdrop.png", Texture(516, 87, Color.green));
-            _owner.Textures._textures.Add("ConveyorBelt.png", Texture(512, 84, Color.yellow));
+            SpriteSourceTestUtilities.SetImage(_owner.Textures, "ConveyorBelt_backdrop.png", Texture(516, 87, Color.green));
+            SpriteSourceTestUtilities.SetImage(_owner.Textures, "ConveyorBelt.png", Texture(512, 84, Color.yellow));
             var flags = BindingFlags.Instance | BindingFlags.NonPublic;
             var opening = typeof(GamePresenter).GetMethod("DrawAdventureOpeningInterface", flags)!;
             var playing = typeof(GamePresenter).GetMethod("DrawAdventureSeedBankContents", flags)!;
@@ -359,8 +361,8 @@ namespace PlantsVsZombies.Tests.PlayMode
         [UnityTest]
         public IEnumerator ShovelBankUsesNativeOffsetAndStaysBehindLawnActors()
         {
-            _owner.Textures._textures.Add("ShovelBank.png", Texture(70, 72, Color.red));
-            _owner.Textures._textures.Add("Shovel.png", Texture(20, 60, Color.green));
+            SpriteSourceTestUtilities.SetImage(_owner.Textures, "ShovelBank.png", Texture(70, 72, Color.red));
+            SpriteSourceTestUtilities.SetImage(_owner.Textures, "Shovel.png", Texture(20, 60, Color.green));
             yield return Render(() =>
             {
                 typeof(GamePresenter).GetMethod("DrawAdventureBoard", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(_presenter, null);
@@ -567,9 +569,9 @@ namespace PlantsVsZombies.Tests.PlayMode
         public IEnumerator ProgressMeterHeadCoversTheLevelProgressLettering()
         {
             _owner.RequiredGame.Presentation.ProgressMeter.SetBossHealth(100, 200);
-            _owner.Textures._textures.Add("FlagMeter.png", Texture(158, 54, Color.red));
-            _owner.Textures._textures.Add("FlagMeterParts.png", Texture(75, 25, Color.green));
-            _owner.Textures._textures.Add("FlagMeterLevelProgress.png", Texture(86, 11, Color.blue));
+            SpriteSourceTestUtilities.SetImage(_owner.Textures, "FlagMeter.png", Texture(158, 54, Color.red));
+            SpriteSourceTestUtilities.SetImage(_owner.Textures, "FlagMeterParts.png", Texture(75, 25, Color.green));
+            SpriteSourceTestUtilities.SetImage(_owner.Textures, "FlagMeterLevelProgress.png", Texture(86, 11, Color.blue));
             ObjectSpriteRenderer.BeginSceneFrame();
             SpriteDrawState.Clip = GameViewport.ScreenRect;
             CanvasUI.BeginFrame();
@@ -641,7 +643,7 @@ namespace PlantsVsZombies.Tests.PlayMode
             _textures.Add(texture);
             Assert.That(texture.LoadImage(File.ReadAllBytes(Path.Combine(root, "images", name))), Is.True, name);
             texture.wrapMode = TextureWrapMode.Clamp;
-            _owner.Textures._textures[name] = texture;
+            SpriteSourceTestUtilities.SetImage(_owner.Textures, name, texture);
             return texture;
         }
 

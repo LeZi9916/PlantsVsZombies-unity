@@ -117,3 +117,41 @@ native waterline and original splash artwork, and decodes/plays the vault and
 water Foley. Run only those filters for changes to these paths. The motion
 constants follow PC `541850`, `5421A0`, `54B5F0`, `548D40`, `549740`, `4752E0`,
 and `47CCB0`; the mobile-derived reference source has different pool thresholds.
+
+## Atlas, batching, and original resource validation
+
+`SpriteAtlasProviderTests`, `SpriteHierarchyTests`, `UiSpriteImageTests`, and
+`SpriteAtlasBakerTests` cover device limits, lossless tiling, layout fallback,
+page retirement, bounded zero-allocation region caching, hierarchy visibility,
+and offline source generation. The EditorRendering test assembly references
+both the existing Runtime and Editor assemblies; their friend declarations
+are maintained alongside those assemblies.
+
+`ObjectSpriteRendererTests`, `CanvasPresentationTests`,
+`BakedSpriteGraphicsTests`, `ImportedSpriteAtlasGraphicsTests`, and
+`RenderingCoverageCaptureTests` exercise real GPU batching, original clip
+semantics at pixel centers, reversed sources, scaled scene targets, imported
+2K page completeness, UI interleaving, and native capture isolation. Atlas
+images are compared to the unchanged original files, not to generated
+expectations. Opt-in original-artwork tests use `PVZ_BOARD_STRESS_ASSETS`.
+
+The final isolated macOS run using Unity 6000.3.17f1 passes 282 PlayMode tests
+with two opt-in tests skipped, and 448 EditMode tests. Both skipped PlayMode
+cases (the benchmark and original Dave voice) also pass in separate configured
+runs, giving 284 unique passing PlayMode cases. Two pre-existing
+`SquashShakesFiveTicksAfterDamageOnlyOnLand` cases also fail on the unchanged
+HEAD baseline; they are simulation fixture failures, not graphics validation.
+The rendering benchmark is run separately with its output environment variable.
+A GPU timing source that provides too few samples is explicitly marked unavailable.
+
+The source import tool has 14 standard-library regression cases:
+
+```sh
+python3 -B -m unittest discover -s Tools/Tests/RuntimeAssetImportTests -p 'test_*.py' -v
+```
+
+Imported PNG/JPEG, audio companions, font page references, and metadata can
+be checked through `PlantsVsZombies.Editor.RuntimeAssetVerification.Verify`
+in the exact Editor. Generated atlases and original archive trees are excluded
+from the default isolated test snapshot; explicit imported-page tests generate
+small independent source fixtures instead.

@@ -74,10 +74,10 @@ namespace PlantsVsZombies.Tests.PlayMode
                 };
                 owner._game.Zombies.Add(zombie);
                 Submit(animations, presenter, draw, zombie);
-                var question = (Texture2D)load.Invoke(animations, new object[] { "IMAGE_REANIM_ZOMBIE_QUESTIONMARK" })!;
-                var angryHead = (Texture2D)load.Invoke(animations, new object[] { "IMAGE_REANIM_ZOMBIE_PAPER_MADHEAD" })!;
+                var question = (SpriteImage)load.Invoke(animations, new object[] { "IMAGE_REANIM_ZOMBIE_QUESTIONMARK" })!;
+                var angryHead = (SpriteImage)load.Invoke(animations, new object[] { "IMAGE_REANIM_ZOMBIE_PAPER_MADHEAD" })!;
                 var pool = (ObjectSpriteRenderer)typeof(ReanimationRenderer).GetField("_objectRenderer", flags)!.GetValue(animations)!;
-                var sprites = (List<ObjectSprite>)typeof(ObjectSpriteRenderer).GetField("_sprites", flags)!.GetValue(pool)!;
+                var sprites = pool.SubmittedSprites;
                 var questionSprite = Find(pool, sprites, question);
                 Assert.That(questionSprite, Is.Not.Null, "The gasp must display the original attached question-mark artwork.");
                 // PC PlayOnce samples (frameCount-1)*normalizedTime, not seconds*fps directly.
@@ -107,15 +107,7 @@ namespace PlantsVsZombies.Tests.PlayMode
             {
                 presenter.Dispose();
                 animations.Dispose();
-                foreach (var texture in owner.Textures._textures.Values)
-                {
-                    if (texture != null)
-                    {
-                        UnityEngine.Object.Destroy(texture);
-                    }
-                }
-
-                owner.Textures._textures.Clear();
+                owner.Textures.ReleaseAll();
                 target.Release();
                 UnityEngine.Object.Destroy(target);
                 UnityEngine.Object.Destroy(pixels);
@@ -162,7 +154,7 @@ namespace PlantsVsZombies.Tests.PlayMode
                     Assert.That(owner._game.Presentation.ZombiePartDrops, Has.Count.EqualTo(1), kind.ToString());
                     var drop = owner._game.Presentation.ZombiePartDrops[0];
                     Assert.That(drop.ParticleId, Is.EqualTo(AdventureZombieEquipmentRules.ShieldParticle(zombie)));
-                    var image = (Texture2D)load.Invoke(animations, new object[] { AdventureZombieEquipmentRules.ShieldImage(zombie, 2)! })!;
+                    var image = (SpriteImage)load.Invoke(animations, new object[] { AdventureZombieEquipmentRules.ShieldImage(zombie, 2)! })!;
                     var previousPosition = Vector3.zero;
                     foreach (var age in new[] { .01f, .2f, .32f })
                     {
@@ -175,7 +167,7 @@ namespace PlantsVsZombies.Tests.PlayMode
                         end.Invoke(presenter, null);
                         animations.EndObjectFrame();
                         var pool = (ObjectSpriteRenderer)typeof(ReanimationRenderer).GetField("_objectRenderer", flags)!.GetValue(animations)!;
-                        var sprites = (List<ObjectSprite>)typeof(ObjectSpriteRenderer).GetField("_sprites", flags)!.GetValue(pool)!;
+                        var sprites = pool.SubmittedSprites;
                         var sprite = Find(pool, sprites, image);
                         Assert.That(sprite, Is.Not.Null, kind + " must submit its original detached shield image at " + age);
                         var position = sprite!.Vertices[0];
@@ -202,15 +194,7 @@ namespace PlantsVsZombies.Tests.PlayMode
             {
                 presenter.Dispose();
                 animations.Dispose();
-                foreach (var texture in owner.Textures._textures.Values)
-                {
-                    if (texture != null)
-                    {
-                        UnityEngine.Object.Destroy(texture);
-                    }
-                }
-
-                owner.Textures._textures.Clear();
+                owner.Textures.ReleaseAll();
                 target.Release();
                 UnityEngine.Object.Destroy(target);
                 UnityEngine.Object.Destroy(pixels);
@@ -270,11 +254,11 @@ namespace PlantsVsZombies.Tests.PlayMode
         /// <param name="sprites">The pool's retained quad storage.</param>
         /// <param name="texture">The exact original decoded texture.</param>
         /// <returns>The matching live quad, or null when none was submitted.</returns>
-        private static ObjectSprite? Find(ObjectSpriteRenderer pool, List<ObjectSprite> sprites, Texture2D texture)
+        private static ObjectSprite? Find(ObjectSpriteRenderer pool, IReadOnlyList<ObjectSprite> sprites, SpriteImage texture)
         {
             for (var index = 0; index < pool.SubmittedObjectCount; index++)
             {
-                if (ReferenceEquals(sprites[index].Properties.GetTexture(Shader.PropertyToID("_MainTex")), texture))
+                if (ReferenceEquals(sprites[index].SourceImage, texture))
                 {
                     return sprites[index];
                 }

@@ -1,5 +1,6 @@
 #nullable enable
 using PlantsVsZombies.UI.BitmapFonts;
+using PlantsVsZombies.Rendering;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -41,31 +42,32 @@ namespace PlantsVsZombies.UI
         /// <param name = "rect">The rect.</param>
         /// <param name = "tallBottom">The tall bottom.</param>
         /// <param name = "header">The header.</param>
-        public static void DialogFrame(Func<string, Texture2D?> texture, Rect rect, bool tallBottom = true, bool header = true)
+        /// <typeparam name="TImage">The host logical image or legacy texture type.</typeparam>
+        public static void DialogFrame<TImage>(Func<string, TImage?> texture, Rect rect, bool tallBottom = true, bool header = true) where TImage : class
         {
-            Texture2D? tl = texture("dialog_topleft.png"), tr = texture("dialog_topright.png"),
-                bl = texture(tallBottom ? "dialog_bigbottomleft.png" : "dialog_bottomleft.png"),
-                br = texture(tallBottom ? "dialog_bigbottomright.png" : "dialog_bottomright.png");
+            SpriteImage? tl = ResolveImage(texture, "dialog_topleft.png"), tr = ResolveImage(texture, "dialog_topright.png"),
+                bl = ResolveImage(texture, tallBottom ? "dialog_bigbottomleft.png" : "dialog_bottomleft.png"),
+                br = ResolveImage(texture, tallBottom ? "dialog_bigbottomright.png" : "dialog_bottomright.png");
             if (tl == null || tr == null || bl == null || br == null)
             {
                 return;
             }
 
-            var centerWidth = Math.Max(0, rect.width - tl.width - tr.width);
-            var middleHeight = Math.Max(0, rect.height - tr.height - bl.height);
-            Image(tl, new Rect(rect.x, rect.y, tl.width, tl.height));
-            Tile(texture("dialog_topmiddle.png"), new Rect(rect.x + tl.width, rect.y, centerWidth, tl.height));
-            Image(tr, new Rect(rect.xMax - tr.width, rect.y, tr.width, tr.height));
-            Tile(texture("dialog_centerleft.png"), new Rect(rect.x, rect.y + tr.height, tl.width, middleHeight));
-            Tile(texture("dialog_centermiddle.png"), new Rect(rect.x + tl.width, rect.y + tr.height, centerWidth, middleHeight));
-            Tile(texture("dialog_centerright.png"), new Rect(rect.xMax - tr.width, rect.y + tr.height, tr.width, middleHeight));
-            Image(bl, new Rect(rect.x, rect.yMax - bl.height, bl.width, bl.height));
-            Tile(texture(tallBottom ? "dialog_bigbottommiddle.png" : "dialog_bottommiddle.png"), new Rect(rect.x + bl.width, rect.yMax - bl.height, Math.Max(0, rect.width - bl.width - br.width), bl.height));
-            Image(br, new Rect(rect.xMax - br.width, rect.yMax - br.height, br.width, br.height));
-            var cap = header ? texture("dialog_header.png") : null;
+            var centerWidth = Math.Max(0, rect.width - tl.Width - tr.Width);
+            var middleHeight = Math.Max(0, rect.height - tr.Height - bl.Height);
+            Image(tl, new Rect(rect.x, rect.y, tl.Width, tl.Height));
+            Tile(ResolveImage(texture, "dialog_topmiddle.png"), new Rect(rect.x + tl.Width, rect.y, centerWidth, tl.Height));
+            Image(tr, new Rect(rect.xMax - tr.Width, rect.y, tr.Width, tr.Height));
+            Tile(ResolveImage(texture, "dialog_centerleft.png"), new Rect(rect.x, rect.y + tr.Height, tl.Width, middleHeight));
+            Tile(ResolveImage(texture, "dialog_centermiddle.png"), new Rect(rect.x + tl.Width, rect.y + tr.Height, centerWidth, middleHeight));
+            Tile(ResolveImage(texture, "dialog_centerright.png"), new Rect(rect.xMax - tr.Width, rect.y + tr.Height, tr.Width, middleHeight));
+            Image(bl, new Rect(rect.x, rect.yMax - bl.Height, bl.Width, bl.Height));
+            Tile(ResolveImage(texture, tallBottom ? "dialog_bigbottommiddle.png" : "dialog_bottommiddle.png"), new Rect(rect.x + bl.Width, rect.yMax - bl.Height, Math.Max(0, rect.width - bl.Width - br.Width), bl.Height));
+            Image(br, new Rect(rect.xMax - br.Width, rect.yMax - br.Height, br.Width, br.Height));
+            var cap = header ? ResolveImage(texture, "dialog_header.png") : null;
             if (cap != null)
             {
-                Image(cap, new Rect(rect.center.x - cap.width / 2f, rect.y - 8, cap.width, cap.height));
+                Image(cap, new Rect(rect.center.x - cap.Width / 2f, rect.y - 8, cap.Width, cap.Height));
             }
         }
 
@@ -78,12 +80,13 @@ namespace PlantsVsZombies.UI
         /// <param name = "pressed">The pressed.</param>
         /// <param name = "enabled">The enabled.</param>
         /// <returns>The resulting stone button.</returns>
-        public static Vector2 StoneButton(Func<string, Texture2D?> texture, Rect rect, bool hovered = false, bool pressed = false, bool enabled = true)
+        /// <typeparam name="TImage">The host logical image or legacy texture type.</typeparam>
+        public static Vector2 StoneButton<TImage>(Func<string, TImage?> texture, Rect rect, bool hovered = false, bool pressed = false, bool enabled = true) where TImage : class
         {
             pressed &= enabled;
-            Texture2D? left = texture(pressed ? "button_down_left.png" : "button_left.png"),
-                middle = texture(pressed ? "button_down_middle.png" : "button_middle.png"),
-                right = texture(pressed ? "button_down_right.png" : "button_right.png");
+            SpriteImage? left = ResolveImage(texture, pressed ? "button_down_left.png" : "button_left.png"),
+                middle = ResolveImage(texture, pressed ? "button_down_middle.png" : "button_middle.png"),
+                right = ResolveImage(texture, pressed ? "button_down_right.png" : "button_right.png");
             if (left == null || middle == null || right == null)
             {
                 return Vector2.zero;
@@ -98,9 +101,9 @@ namespace PlantsVsZombies.UI
                 }
 
                 var x = rect.x + (pressed ? 1 : 0);
-                Image(left, new Rect(x, rect.y, left.width, left.height));
-                Tile(middle, new Rect(x + left.width, rect.y, Math.Max(0, rect.width - left.width - right.width), middle.height));
-                Image(right, new Rect(x + rect.width - right.width, rect.y, right.width, right.height));
+                Image(left, new Rect(x, rect.y, left.Width, left.Height));
+                Tile(middle, new Rect(x + left.Width, rect.y, Math.Max(0, rect.width - left.Width - right.Width), middle.Height));
+                Image(right, new Rect(x + rect.width - right.Width, rect.y, right.Width, right.Height));
             }
             finally
             {
@@ -119,13 +122,14 @@ namespace PlantsVsZombies.UI
         /// <param name = "hovered">The hovered.</param>
         /// <param name = "pressed">The pressed.</param>
         /// <param name = "enabled">The enabled.</param>
-        public static void ImageButton(Func<string, Texture2D?> texture, Rect rect, string normal, string? hover = null, string? down = null, bool hovered = false, bool pressed = false, bool enabled = true)
+        /// <typeparam name="TImage">The host logical image or legacy texture type.</typeparam>
+        public static void ImageButton<TImage>(Func<string, TImage?> texture, Rect rect, string normal, string? hover = null, string? down = null, bool hovered = false, bool pressed = false, bool enabled = true) where TImage : class
         {
             var name = enabled && pressed && down != null ? down : enabled && hovered && hover != null ? hover : normal;
-            var image = texture(name);
+            var image = ResolveImage(texture, name);
             if (image == null && name != normal)
             {
-                image = texture(normal);
+                image = ResolveImage(texture, normal);
             }
 
             var old = CanvasUI.Color;
@@ -148,15 +152,16 @@ namespace PlantsVsZombies.UI
         /// <summary>Performs edit box.</summary>
         /// <param name = "texture">The texture.</param>
         /// <param name = "field">The field.</param>
-        public static void EditBox(Func<string, Texture2D?> texture, Rect field)
+        /// <typeparam name="TImage">The host logical image or legacy texture type.</typeparam>
+        public static void EditBox<TImage>(Func<string, TImage?> texture, Rect field) where TImage : class
         {
-            var image = texture("editbox.png");
+            var image = ResolveImage(texture, "editbox.png");
             if (image == null)
             {
                 return;
             }
 
-            NineSlice(image, new Rect(field.x - 5, field.y - 6, field.width + 10, field.height + 12), image.width / 3, image.height / 3);
+            NineSlice(image, new Rect(field.x - 5, field.y - 6, field.width + 10, field.height + 12), image.Width / 3, image.Height / 3);
         }
 
         /// <summary>Performs transparent text field.</summary>
@@ -347,10 +352,18 @@ namespace PlantsVsZombies.UI
             return layout;
         }
 
+        /// <summary>Displays legacy texture artwork using the shared logical image path.</summary>
+        /// <param name="texture">The externally owned source texture.</param>
+        /// <param name="destination">The destination in logical screen coordinates.</param>
+        public static void Image(Texture2D? texture, Rect destination)
+        {
+            Image(texture != null ? SpriteImage.FromTexture(texture) : null!, destination);
+        }
+
         /// <summary>Performs image.</summary>
         /// <param name = "texture">The texture.</param>
         /// <param name = "destination">The destination.</param>
-        public static void Image(Texture2D? texture, Rect destination)
+        public static void Image(SpriteImage? texture, Rect destination)
         {
             if (texture != null && destination.width > 0 && destination.height > 0)
             {
@@ -358,24 +371,42 @@ namespace PlantsVsZombies.UI
             }
         }
 
+        /// <summary>Displays legacy texture artwork using the shared logical image path.</summary>
+        /// <param name="texture">The externally owned source texture.</param>
+        /// <param name="destination">The destination in logical screen coordinates.</param>
+        public static void Tile(Texture2D? texture, Rect destination)
+        {
+            Tile(texture != null ? SpriteImage.FromTexture(texture) : null!, destination);
+        }
+
         /// <summary>Performs tile.</summary>
         /// <param name = "texture">The texture.</param>
         /// <param name = "destination">The destination.</param>
-        public static void Tile(Texture2D? texture, Rect destination)
+        public static void Tile(SpriteImage? texture, Rect destination)
         {
             if (texture == null || destination.width <= 0 || destination.height <= 0)
             {
                 return;
             }
 
-            for (var y = destination.y; y < destination.yMax; y += texture.height)
+            for (var y = destination.y; y < destination.yMax; y += texture.Height)
             {
-                for (var x = destination.x; x < destination.xMax; x += texture.width)
+                for (var x = destination.x; x < destination.xMax; x += texture.Width)
                 {
-                    float w = Math.Min(texture.width, destination.xMax - x), h = Math.Min(texture.height, destination.yMax - y);
-                    CanvasUI.DrawTextureWithTexCoords(new Rect(x, y, w, h), texture, new Rect(0, 1 - h / texture.height, w / texture.width, h / texture.height), true);
+                    float w = Math.Min(texture.Width, destination.xMax - x), h = Math.Min(texture.Height, destination.yMax - y);
+                    CanvasUI.DrawTextureWithTexCoords(new Rect(x, y, w, h), texture, new Rect(0, 1 - h / texture.Height, w / texture.Width, h / texture.Height), true);
                 }
             }
+        }
+
+        /// <summary>Displays legacy texture artwork using the shared logical image path.</summary>
+        /// <param name="image">The externally owned source texture.</param>
+        /// <param name="rect">The destination rectangle.</param>
+        /// <param name="borderX">The retained horizontal border.</param>
+        /// <param name="borderY">The retained vertical border.</param>
+        public static void NineSlice(Texture2D image, Rect rect, int borderX, int borderY)
+        {
+            NineSlice(image != null ? SpriteImage.FromTexture(image) : null!, rect, borderX, borderY);
         }
 
         /// <summary>Performs nine slice.</summary>
@@ -383,9 +414,9 @@ namespace PlantsVsZombies.UI
         /// <param name = "rect">The rect.</param>
         /// <param name = "borderX">The border x.</param>
         /// <param name = "borderY">The border y.</param>
-        public static void NineSlice(Texture2D image, Rect rect, int borderX, int borderY)
+        public static void NineSlice(SpriteImage image, Rect rect, int borderX, int borderY)
         {
-            float imageWidth = image.width, imageHeight = image.height;
+            float imageWidth = image.Width, imageHeight = image.Height;
             float bx = Math.Min(borderX, rect.width / 2), by = Math.Min(borderY, rect.height / 2);
             for (var row = 0; row < 3; row++)
             {
@@ -420,6 +451,22 @@ namespace PlantsVsZombies.UI
                 2 => origin + length - border,
                 _ => origin + length
             };
+        }
+
+        /// <summary>Resolves either a logical image or a legacy texture without allocating a delegate adapter.</summary>
+        /// <typeparam name="TImage">The host lookup result type.</typeparam>
+        /// <param name="lookup">The host image cache.</param>
+        /// <param name="name">The original resource filename.</param>
+        /// <returns>The logical image, or null when the host has no matching artwork.</returns>
+        private static SpriteImage? ResolveImage<TImage>(Func<string, TImage?> lookup, string name) where TImage : class
+        {
+            var value = lookup(name);
+            if (value is SpriteImage image)
+            {
+                return image;
+            }
+
+            return value is Texture texture ? SpriteImage.FromTexture(texture) : null;
         }
 
         /// <summary>Performs release fonts.</summary>

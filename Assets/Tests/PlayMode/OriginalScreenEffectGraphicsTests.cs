@@ -241,15 +241,14 @@ namespace PlantsVsZombies.Tests.PlayMode
         {
             var textures = (IDictionary)typeof(ReanimationRenderer)
                 .GetField("_texturesById", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(_renderer)!;
-            var texture = (Texture)textures[resource]!;
+            var texture = (SpriteImage)textures[resource]!;
             var pool = (ObjectSpriteRenderer)typeof(ReanimationRenderer)
                 .GetField("_objectRenderer", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(_renderer)!;
-            var sprites = (IList)typeof(ObjectSpriteRenderer)
-                .GetField("_sprites", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(pool)!;
+            var sprites = pool.SubmittedSprites;
             for (var index = 0; index < pool.SubmittedObjectCount; index++)
             {
                 var sprite = (ObjectSprite)sprites[index]!;
-                if (sprite.Properties.GetTexture(Shader.PropertyToID("_MainTex")) != texture)
+                if (sprite.SourceImage != texture)
                 {
                     continue;
                 }
@@ -340,15 +339,7 @@ namespace PlantsVsZombies.Tests.PlayMode
             {
                 presenter.Dispose();
                 options.Dispose();
-                foreach (var texture in owner.Textures._textures.Values)
-                {
-                    if (texture != null)
-                    {
-                        UnityEngine.Object.Destroy(texture);
-                    }
-                }
-
-                owner.Textures._textures.Clear();
+                owner.Textures.ReleaseAll();
                 UnityEngine.Object.Destroy(host);
             }
         }
@@ -485,15 +476,7 @@ namespace PlantsVsZombies.Tests.PlayMode
         private static void DestroyBoardPresenter(GamePresenter presenter, GameObject host, PvZGame owner)
         {
             presenter.Dispose();
-            foreach (var texture in owner.Textures._textures.Values)
-            {
-                if (texture != null)
-                {
-                    UnityEngine.Object.Destroy(texture);
-                }
-            }
-
-            owner.Textures._textures.Clear();
+            owner.Textures.ReleaseAll();
             UnityEngine.Object.Destroy(host);
         }
 

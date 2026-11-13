@@ -43,7 +43,7 @@ namespace PlantsVsZombies.Tests.PlayMode
                 owner._animations = animations;
                 owner._game = new GameSimulation(new GameRules { AdventureLevel = 11 }, 7529);
                 Assert.That(owner._game.ChooseDefaultAdventureSeeds(), Is.True);
-                owner.Textures._textures["plantshadow2.png"] = null!;
+                SpriteSourceTestUtilities.SetImage(owner.Textures, "plantshadow2.png", null!);
                 var flags = BindingFlags.Instance | BindingFlags.NonPublic;
                 var living = typeof(GamePresenter).GetMethod("DrawAdventureZombie", flags)!;
                 var dead = typeof(GamePresenter).GetMethod("DrawAdventureCorpses", flags)!;
@@ -53,9 +53,9 @@ namespace PlantsVsZombies.Tests.PlayMode
                 Assert.That(death.Count, Is.EqualTo(137));
                 var textures = new[]
                 {
-                    (Texture2D)load.Invoke(animations, new object[] { "IMAGE_REANIM_ZOMBIE_INNERLEG_LOWER" })!,
-                    (Texture2D)load.Invoke(animations, new object[] { "IMAGE_REANIM_ZOMBIE_INNERLEG_FOOT" })!,
-                    (Texture2D)load.Invoke(animations, new object[] { "IMAGE_REANIM_ZOMBIE_OUTERLEG_FOOT" })!
+                    (SpriteImage)load.Invoke(animations, new object[] { "IMAGE_REANIM_ZOMBIE_INNERLEG_LOWER" })!,
+                    (SpriteImage)load.Invoke(animations, new object[] { "IMAGE_REANIM_ZOMBIE_INNERLEG_FOOT" })!,
+                    (SpriteImage)load.Invoke(animations, new object[] { "IMAGE_REANIM_ZOMBIE_OUTERLEG_FOOT" })!
                 };
                 var zombie = new Zombie
                 {
@@ -87,7 +87,7 @@ namespace PlantsVsZombies.Tests.PlayMode
                     {
                         dead.Invoke(presenter, new object[] { zombie.Row });
                         var pool = (ObjectSpriteRenderer)typeof(ReanimationRenderer).GetField("_objectRenderer", flags)!.GetValue(animations)!;
-                        var sprites = (List<ObjectSprite>)typeof(ObjectSpriteRenderer).GetField("_sprites", flags)!.GetValue(pool)!;
+                        var sprites = pool.SubmittedSprites;
                         ReadDirections(pool, sprites, textures, actual);
 
                         // Original superlongdeath starts at -358.4/-357.2 degrees on both inner-leg axes,
@@ -112,15 +112,7 @@ namespace PlantsVsZombies.Tests.PlayMode
             {
                 presenter.Dispose();
                 animations.Dispose();
-                foreach (var texture in owner.Textures._textures.Values)
-                {
-                    if (texture != null)
-                    {
-                        UnityEngine.Object.Destroy(texture);
-                    }
-                }
-
-                owner.Textures._textures.Clear();
+                owner.Textures.ReleaseAll();
                 UnityEngine.Object.Destroy(host);
             }
         }
@@ -130,21 +122,21 @@ namespace PlantsVsZombies.Tests.PlayMode
         /// <param name="sprites">The production renderer's retained mesh objects.</param>
         /// <param name="textures">The three exact original limb textures.</param>
         /// <param name="directions">The five normalized mesh axes receiving the trajectory sample.</param>
-        private static void ReadDirections(ObjectSpriteRenderer pool, List<ObjectSprite> sprites, Texture2D[] textures, Vector2[] directions)
+        private static void ReadDirections(ObjectSpriteRenderer pool, IReadOnlyList<ObjectSprite> sprites, SpriteImage[] textures, Vector2[] directions)
         {
             for (var limb = 0; limb < textures.Length; limb++)
             {
                 ObjectSprite? match = null;
                 for (var index = pool.SubmittedObjectCount - 1; index >= 0; index--)
                 {
-                    if (ReferenceEquals(sprites[index].Properties.GetTexture(Shader.PropertyToID("_MainTex")), textures[limb]))
+                    if (ReferenceEquals(sprites[index].SourceImage, textures[limb]))
                     {
                         match = sprites[index];
                         break;
                     }
                 }
 
-                Assert.That(match, Is.Not.Null, "The original death must submit its leg texture " + textures[limb].name + ".");
+                Assert.That(match, Is.Not.Null, "The original death must submit its leg texture " + textures[limb].SourceIdentity + ".");
                 var vertices = match!.Vertices;
                 if (limb < 2)
                 {

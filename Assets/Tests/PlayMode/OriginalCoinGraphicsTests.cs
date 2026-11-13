@@ -79,8 +79,8 @@ namespace PlantsVsZombies.Tests.PlayMode
                         }
 
                         var pool = (ObjectSpriteRenderer)typeof(ReanimationRenderer).GetField("_objectRenderer", flags)!.GetValue(animations)!;
-                        var textures = (Dictionary<string, Texture2D>)typeof(ReanimationRenderer).GetField("_texturesById", flags)!.GetValue(animations)!;
-                        var artwork = new HashSet<Texture>();
+                        var textures = (Dictionary<string, SpriteImage>)typeof(ReanimationRenderer).GetField("_texturesById", flags)!.GetValue(animations)!;
+                        var artwork = new HashSet<SpriteImage>();
                         foreach (var entry in textures)
                         {
                             if (entry.Key.StartsWith("IMAGE_REANIM_COIN", StringComparison.Ordinal)
@@ -91,7 +91,16 @@ namespace PlantsVsZombies.Tests.PlayMode
                         }
 
                         var actual = Snapshot(pool, artwork);
-                        Assert.That(actual.Count, Is.GreaterThan(0), "The real board presenter must submit original money artwork.");
+                        var submittedSources = new List<string>();
+                        for (var index = 0; index < pool.SubmittedObjectCount; index++)
+                        {
+                            submittedSources.Add(pool.SubmittedSprites[index].SourceImage?.SourceIdentity ?? "(missing source)");
+                        }
+
+                        Assert.That(actual.Count, Is.GreaterThan(0), "The real board presenter must submit original money artwork. "
+                            + kind + " frame " + frame + "; loaded=" + string.Join(",", textures.Keys)
+                            + "; submitted=" + string.Join(",", submittedSources) + "; clip=" + SpriteDrawState.Clip
+                            + "; culled=" + pool.LastFrameStatistics.CulledSpriteCount + "; error=" + animations.LastError);
                         BeginFrame(animations);
                         try
                         {
@@ -109,13 +118,13 @@ namespace PlantsVsZombies.Tests.PlayMode
                                 // PC 0x43CEE0 draws static full dollar faces, never the rotating coin reanimation.
                                 var gold = kind == AdventureCoinKind.Gold;
                                 var face = textures[gold ? "IMAGE_REANIM_COIN_GOLD_DOLLAR" : "IMAGE_REANIM_COIN_SILVER_DOLLAR"];
-                                Assert.That(face.width, Is.EqualTo(gold ? 45 : 43));
-                                Assert.That(face.height, Is.EqualTo(gold ? 45 : 40));
+                                Assert.That(face.Width, Is.EqualTo(gold ? 45 : 43));
+                                Assert.That(face.Height, Is.EqualTo(gold ? 45 : 40));
                                 var glow = textures["IMAGE_REANIM_COINGLOW"];
-                                Assert.That(glow.width, Is.EqualTo(80));
-                                Assert.That(glow.height, Is.EqualTo(80));
+                                Assert.That(glow.Width, Is.EqualTo(80));
+                                Assert.That(glow.Height, Is.EqualTo(80));
                                 DrawCentered(animations, glow, new Vector2(x + 26f, y + 28f), scale);
-                                DrawCentered(animations, face, new Vector2(x + 8f + face.width * .5f, y + 10f + face.height * .5f), scale);
+                                DrawCentered(animations, face, new Vector2(x + 8f + face.Width * .5f, y + 10f + face.Height * .5f), scale);
                             }
                         }
                         finally
@@ -142,12 +151,7 @@ namespace PlantsVsZombies.Tests.PlayMode
             {
                 presenter.Dispose();
                 animations.Dispose();
-                foreach (var texture in owner.Textures._textures.Values)
-                {
-                    UnityEngine.Object.Destroy(texture);
-                }
-
-                owner.Textures._textures.Clear();
+                owner.Textures.ReleaseAll();
                 UnityEngine.Object.Destroy(host);
             }
         }
@@ -157,6 +161,8 @@ namespace PlantsVsZombies.Tests.PlayMode
         private static void BeginFrame(ReanimationRenderer animations)
         {
             ObjectSpriteRenderer.BeginSceneFrame();
+            // This fixture compares unscaled native geometry rather than the physical camera viewport.
+            SpriteDrawState.Clip = new Rect(0f, 0f, 800f, 600f);
             CanvasUI.BeginFrame();
             CanvasUI.Matrix = Matrix4x4.identity;
             CanvasUI.Color = Color.white;
@@ -168,25 +174,25 @@ namespace PlantsVsZombies.Tests.PlayMode
         /// <param name="texture">The original currency face or glow.</param>
         /// <param name="center">The original unscaled center in board pixels.</param>
         /// <param name="scale">The native current collection scale.</param>
-        private static void DrawCentered(ReanimationRenderer animations, Texture texture, Vector2 center, float scale)
+        private static void DrawCentered(ReanimationRenderer animations, SpriteImage texture, Vector2 center, float scale)
         {
-            animations.DrawNativeImage(texture, new Rect(center.x - texture.width * .5f * scale,
-                center.y - texture.height * .5f * scale, texture.width * scale, texture.height * scale), new Rect(0f, 0f, 1f, 1f));
+            animations.DrawNativeImage(texture, new Rect(center.x - texture.Width * .5f * scale,
+                center.y - texture.Height * .5f * scale, texture.Width * scale, texture.Height * scale), new Rect(0f, 0f, 1f, 1f));
         }
 
         /// <summary>Copies submitted original money geometry before the reusable scene pool is overwritten.</summary>
         /// <param name="pool">The actual scene pool used by the production renderer.</param>
         /// <param name="artwork">The original currency textures whose quads are selected.</param>
         /// <returns>Independent texture, vertex, and opacity snapshots in production submission order.</returns>
-        private static List<(Texture Texture, Vector3[] Vertices, Color[] Colors)> Snapshot(ObjectSpriteRenderer pool, HashSet<Texture> artwork)
+        private static List<(SpriteImage Texture, Vector3[] Vertices, Color[] Colors)> Snapshot(ObjectSpriteRenderer pool, HashSet<SpriteImage> artwork)
         {
-            var sprites = (List<ObjectSprite>)typeof(ObjectSpriteRenderer).GetField("_sprites", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(pool)!;
-            var result = new List<(Texture, Vector3[], Color[])>();
+            var sprites = pool.SubmittedSprites;
+            var result = new List<(SpriteImage, Vector3[], Color[])>();
             for (var index = 0; index < pool.SubmittedObjectCount; index++)
             {
                 var sprite = sprites[index];
-                var texture = sprite.Properties.GetTexture(Shader.PropertyToID("_MainTex"));
-                if (artwork.Contains(texture))
+                var texture = sprite.SourceImage;
+                if (texture != null && artwork.Contains(texture))
                 {
                     result.Add((texture, (Vector3[])sprite.Vertices.Clone(), (Color[])sprite.Colors.Clone()));
                 }

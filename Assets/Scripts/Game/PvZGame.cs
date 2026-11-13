@@ -317,7 +317,7 @@ namespace PlantsVsZombies.Game
             Dave.Initialize(voiceSource, soundVolume);
             Music.Initialize(musicSource, musicVolume);
             _font = Font.CreateDynamicFontFromOSFont(new[] { "Microsoft YaHei", "Arial" }, 16);
-            _modeView = new ModeSelectionView(_root, Textures.Load, _font);
+            _modeView = new ModeSelectionView(_root, Textures.LoadImage, _font);
             IndependentModes.InitializeModes();
             IndependentModes.ExternalChallengeRequested = id =>
             {

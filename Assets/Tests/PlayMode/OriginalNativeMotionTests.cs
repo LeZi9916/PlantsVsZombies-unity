@@ -111,15 +111,7 @@ namespace PlantsVsZombies.Tests.PlayMode
                 target.Release();
                 UnityEngine.Object.Destroy(target);
                 UnityEngine.Object.Destroy(pixels);
-                foreach (var texture in owner.Textures._textures.Values)
-                {
-                    if (texture != null)
-                    {
-                        UnityEngine.Object.Destroy(texture);
-                    }
-                }
-
-                owner.Textures._textures.Clear();
+                owner.Textures.ReleaseAll();
                 UnityEngine.Object.Destroy(host);
             }
         }
@@ -242,20 +234,20 @@ namespace PlantsVsZombies.Tests.PlayMode
             var whitewater2 = load.Invoke(animations, new object[] { "IMAGE_REANIM_ZOMBIE_SNORKLE_WHITEWATER2" });
             var whitewater3 = load.Invoke(animations, new object[] { "IMAGE_REANIM_ZOMBIE_SNORKLE_WHITEWATER3" });
             var pool = (ObjectSpriteRenderer)typeof(ReanimationRenderer).GetField("_objectRenderer", flags)!.GetValue(animations)!;
-            var sprites = (List<ObjectSprite>)typeof(ObjectSpriteRenderer).GetField("_sprites", flags)!.GetValue(pool)!;
+            var sprites = pool.SubmittedSprites;
             var bodyQuads = 0;
             for (var index = 0; index < pool.SubmittedObjectCount; index++)
             {
                 var sprite = sprites[index];
-                var texture = sprite.Properties.GetTexture(Shader.PropertyToID("_MainTex"));
-                if (texture == Texture2D.whiteTexture || ReferenceEquals(texture, whitewater1) || ReferenceEquals(texture, whitewater2) || ReferenceEquals(texture, whitewater3))
+                var texture = sprite.SourceImage;
+                if (texture?.SourceTexture == Texture2D.whiteTexture || ReferenceEquals(texture, whitewater1) || ReferenceEquals(texture, whitewater2) || ReferenceEquals(texture, whitewater3))
                 {
                     continue;
                 }
 
                 bodyQuads++;
-                Assert.That(sprite.Properties.GetFloat(Shader.PropertyToID("_ClipEnabled")), Is.EqualTo(1f));
-                Assert.That(sprite.Properties.GetVector(Shader.PropertyToID("_ClipRect")).w,
+                Assert.That(sprite.ClipEnabled, Is.True);
+                Assert.That(sprite.Clip.yMax,
                     Is.LessThanOrEqualTo(bottom + .01f), "Native death body artwork must stop at the original waterline.");
             }
 

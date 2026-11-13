@@ -87,7 +87,6 @@ namespace PlantsVsZombies.Tests.PlayMode
                 presenter.Dispose();
                 animations.Dispose();
                 owner.Textures.ReleaseAll();
-                owner.Textures._textures.Clear();
                 target.Release();
                 UnityEngine.Object.Destroy(target);
                 UnityEngine.Object.Destroy(pixels);

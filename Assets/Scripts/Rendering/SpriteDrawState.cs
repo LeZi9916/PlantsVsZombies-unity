@@ -25,7 +25,9 @@ namespace PlantsVsZombies.Rendering
         /// <summary>Resets painter order and inherited drawing state before presenting a complete frame.</summary>
         public static void BeginFrame()
         {
+            SpriteRenderingProfiler.BeginFrame();
             FrameVersion++;
+            SpriteAssetProvider.OnSceneFrameStarted();
             s_order = 0;
             Matrix = Matrix4x4.identity;
             Color = Color.white;

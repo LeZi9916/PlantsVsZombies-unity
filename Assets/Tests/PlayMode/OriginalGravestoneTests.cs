@@ -78,12 +78,7 @@ namespace PlantsVsZombies.Tests.PlayMode
             if (_host != null)
             {
                 ObjectSpriteRenderer.SceneCamera.targetTexture = _previousTarget;
-                foreach (var texture in _owner.Textures._textures.Values)
-                {
-                    UnityEngine.Object.Destroy(texture);
-                }
-
-                _owner.Textures._textures.Clear();
+                _owner.Textures.ReleaseAll();
                 _presenter.Dispose();
                 _animations.Dispose();
                 _target.Release();
@@ -147,7 +142,7 @@ namespace PlantsVsZombies.Tests.PlayMode
         [UnityTest]
         public IEnumerator ZombieRisesFromGraveWithNativeClipping()
         {
-            _owner.Textures._textures["plantshadow2.png"] = null!;
+            SpriteSourceTestUtilities.SetImage(_owner.Textures, "plantshadow2.png", null!);
             var zombie = new Zombie
             {
                 Id = 711,
@@ -239,18 +234,17 @@ namespace PlantsVsZombies.Tests.PlayMode
             var flags = BindingFlags.Instance | BindingFlags.NonPublic;
             var drawBoard = typeof(GamePresenter).GetMethod("DrawAdventureBoard", flags)!;
             yield return Capture(() => drawBoard.Invoke(_presenter, null));
-            var textures = (Dictionary<string, Texture2D>)typeof(ReanimationRenderer).GetField("_texturesById", flags)!.GetValue(_animations)!;
+            var textures = (Dictionary<string, SpriteImage>)typeof(ReanimationRenderer).GetField("_texturesById", flags)!.GetValue(_animations)!;
             var pool = (ObjectSpriteRenderer)typeof(ReanimationRenderer).GetField("_objectRenderer", flags)!.GetValue(_animations)!;
-            var sprites = (List<ObjectSprite>)typeof(ObjectSpriteRenderer).GetField("_sprites", flags)!.GetValue(pool)!;
+            var sprites = pool.SubmittedSprites;
             Assert.That(textures.ContainsKey("IMAGE_DIRTSMALL"), Is.True);
             Assert.That(textures.ContainsKey("IMAGE_DIRTBIG"), Is.True);
             Assert.That(textures.ContainsKey("IMAGE_ZOMBIEARM"), Is.False,
                 "The original ZombieRise arm emitter belongs to ordinary grave ambushes, not Whack-a-Zombie.");
             Assert.That(pool.SubmittedObjectCount, Is.GreaterThan(0));
-            var textureId = Shader.PropertyToID("_MainTex");
             for (var index = 0; index < pool.SubmittedObjectCount; index++)
             {
-                var texture = sprites[index].Properties.GetTexture(textureId);
+                var texture = sprites[index].SourceImage;
                 Assert.That(texture == textures["IMAGE_DIRTSMALL"] || texture == textures["IMAGE_DIRTBIG"], Is.True,
                     "The isolated original Whack rise effect must submit only its two native dirt images.");
             }
@@ -285,11 +279,11 @@ namespace PlantsVsZombies.Tests.PlayMode
             });
             var particles = (OriginalParticleRenderer)typeof(GamePresenter).GetField("_hammerParticles", flags)!.GetValue(_presenter)!;
             Assert.That(particles.LastError, Is.Null.Or.Empty);
-            var textures = (Dictionary<string, Texture2D>)typeof(ReanimationRenderer).GetField("_texturesById", flags)!.GetValue(_animations)!;
+            var textures = (Dictionary<string, SpriteImage>)typeof(ReanimationRenderer).GetField("_texturesById", flags)!.GetValue(_animations)!;
             var pool = (ObjectSpriteRenderer)typeof(ReanimationRenderer).GetField("_objectRenderer", flags)!.GetValue(_animations)!;
-            var sprites = (List<ObjectSprite>)typeof(ObjectSpriteRenderer).GetField("_sprites", flags)!.GetValue(pool)!;
+            var sprites = pool.SubmittedSprites;
             Assert.That(pool.SubmittedObjectCount, Is.EqualTo(1));
-            Assert.That(sprites[0].Properties.GetTexture(Shader.PropertyToID("_MainTex")), Is.EqualTo(textures["IMAGE_POW"]));
+            Assert.That(sprites[0].SourceImage, Is.EqualTo(textures["IMAGE_POW"]));
             Assert.That(DifferentPixels(empty, _pixels.GetPixels32()), Is.GreaterThan(20),
                 "The original Pow must contribute visible hammer impact pixels.");
         }

@@ -44,7 +44,6 @@ namespace PlantsVsZombies.Tests.PlayMode
                 typeof(GamePresenter).GetField("_renderingBoardObjects", flags)!.SetValue(presenter, true);
                 var draw = typeof(GamePresenter).GetMethod("DrawAdventurePlant", flags)!;
                 var rendererField = typeof(ReanimationRenderer).GetField("_objectRenderer", flags)!;
-                var spritesField = typeof(ObjectSpriteRenderer).GetField("_sprites", flags)!;
                 var cases = new[]
                 {
                     PlantKind.LilyPad, PlantKind.Peashooter, PlantKind.Sunflower, PlantKind.Wallnut,
@@ -54,8 +53,8 @@ namespace PlantsVsZombies.Tests.PlayMode
                 {
                     owner._game = new GameSimulation(new GameRules { AdventureLevel = level }, 7529);
                     Assert.That(owner._game.ChooseDefaultAdventureSeeds(), Is.True);
-                    var dayShadow = owner.Textures.RequiredLoad("plantshadow.png");
-                    var nightShadow = owner.Textures.RequiredLoad("plantshadow2.png");
+                    var dayShadow = owner.Textures.RequiredLoadImage("plantshadow.png");
+                    var nightShadow = owner.Textures.RequiredLoadImage("plantshadow2.png");
                     foreach (var row in new[] { 1, 2, 3 })
                     {
                         foreach (var column in new[] { 0, 1 })
@@ -91,12 +90,12 @@ namespace PlantsVsZombies.Tests.PlayMode
                                     draw.Invoke(presenter, new object[] { plant });
                                     animations.EndObjectFrame();
                                     var renderer = (ObjectSpriteRenderer)rendererField.GetValue(animations)!;
-                                    var sprites = (List<ObjectSprite>)spritesField.GetValue(renderer)!;
+                                    var sprites = renderer.SubmittedSprites;
                                     var body = new List<Vector3[]>();
                                     for (var index = 0; index < renderer.SubmittedObjectCount; index++)
                                     {
                                         var sprite = sprites[index];
-                                        var image = sprite.Properties.GetTexture(Shader.PropertyToID("_MainTex"));
+                                        var image = sprite.SourceImage;
                                         if (!ReferenceEquals(image, dayShadow) && !ReferenceEquals(image, nightShadow))
                                         {
                                             body.Add((Vector3[])sprite.Vertices.Clone());
@@ -135,15 +134,7 @@ namespace PlantsVsZombies.Tests.PlayMode
             {
                 presenter.Dispose();
                 animations.Dispose();
-                foreach (var texture in owner.Textures._textures.Values)
-                {
-                    if (texture != null)
-                    {
-                        UnityEngine.Object.Destroy(texture);
-                    }
-                }
-
-                owner.Textures._textures.Clear();
+                owner.Textures.ReleaseAll();
                 UnityEngine.Object.Destroy(host);
             }
         }

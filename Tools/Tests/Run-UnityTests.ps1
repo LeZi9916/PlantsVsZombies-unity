@@ -28,6 +28,10 @@ if (-not (Test-Path -LiteralPath $Unity -PathType Leaf)) {
 }
 
 $installedVersion = (Get-Item -LiteralPath $Unity).VersionInfo.ProductVersion
+if ([string]::IsNullOrWhiteSpace($installedVersion)) {
+    $reportedVersion = & $Unity -version 2>&1
+    $installedVersion = [regex]::Match(($reportedVersion -join "`n"), '\b6000\.3\.17f1\b').Value
+}
 if (-not $installedVersion.StartsWith($requiredVersion + '_', [StringComparison]::Ordinal) -and $installedVersion -ne $requiredVersion) {
     throw "Expected Unity $requiredVersion; selected editor reports $installedVersion."
 }
@@ -57,7 +61,7 @@ foreach ($directory in @('Packages', 'ProjectSettings')) {
 }
 
 foreach ($asset in Get-ChildItem -LiteralPath (Join-Path $repository 'Assets') -Force) {
-    if ($asset.Name -in @('StreamingAssets', 'StreamingAssets.meta', 'OriginalPvZ', 'OriginalPvZ.meta')) {
+    if ($asset.Name -in @('StreamingAssets', 'StreamingAssets.meta', 'OriginalPvZ', 'OriginalPvZ.meta', 'Generated', 'Generated.meta')) {
         continue
     }
     Copy-Item -LiteralPath $asset.FullName -Destination $projectAssets -Recurse

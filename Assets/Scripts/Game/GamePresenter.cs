@@ -34,7 +34,7 @@ namespace PlantsVsZombies.Game
             _owner = owner;
             _drawConveyorPackets = DrawAdventureConveyorPacketContents;
             _drawCardImage = DrawCardImage;
-            _textureLookup = owner.Textures.Load;
+            _textureLookup = owner.Textures.LoadImage;
             _drawPacketMask = DrawAdventurePacketMask;
             _doomTrackOffset = DoomShroomTrackOffset;
         }
@@ -130,13 +130,13 @@ namespace PlantsVsZombies.Game
         /// <summary>The immediately consumed packet rectangle for cooldown composition.</summary>
         private Rect _maskCard;
         /// <summary>Reuses the host texture lookup passed to original interface widgets.</summary>
-        private readonly Func<string, Texture2D?> _textureLookup;
+        private readonly Func<string, SpriteImage?> _textureLookup;
         /// <summary>Reuses the native edit field's transparent appearance.</summary>
         private GUIStyle? _textFieldStyle;
         /// <summary>Reuses the callback used to grayscale an imitated packet image.</summary>
         private readonly Func<bool> _drawCardImage;
         /// <summary>The immediately consumed imitated packet image.</summary>
-        private Texture _cardAtlas = null!;
+        private SpriteImage _cardAtlas = null!;
         /// <summary>The immediately consumed packet destination and atlas coordinates.</summary>
         private Rect _cardDestination, _cardSource;
         /// <summary>The last displayed board and wave used to refresh the status caption.</summary>
@@ -157,6 +157,7 @@ namespace PlantsVsZombies.Game
         {
             _poolRenderer?.Hide();
             _presentationKeys.BeginFrame();
+            BeginHierarchyFrame();
             ObjectSpriteRenderer.BeginSceneFrame();
             SpriteDrawState.Clip = GameViewport.ScreenRect;
             CanvasUI.BeginFrame();
@@ -236,7 +237,60 @@ namespace PlantsVsZombies.Game
             finally
             {
                 _owner.RequiredAnimations.EndObjectFrame();
+                _owner.RequiredAnimations.Hierarchy.EndFrame();
                 CanvasUI.EndFrame();
+            }
+        }
+
+        /// <summary>The species labels formatted once instead of boxing zombie kinds during every presentation.</summary>
+        private static readonly Dictionary<ZombieKind, string> s_zombieHierarchyNames = CreateZombieHierarchyNames();
+
+        /// <summary>Caches the readable enum names used by logical zombie roots.</summary>
+        /// <returns>The species-to-label lookup shared by all presenters.</returns>
+        private static Dictionary<ZombieKind, string> CreateZombieHierarchyNames()
+        {
+            var names = new Dictionary<ZombieKind, string>();
+            foreach (var kind in (ZombieKind[])Enum.GetValues(typeof(ZombieKind)))
+            {
+                names.Add(kind, kind.ToString());
+            }
+
+            return names;
+        }
+
+        /// <summary>Gets the readable cached species label for a zombie inspection root.</summary>
+        /// <param name="kind">The simulation species retained by the actor or its corpse.</param>
+        /// <returns>The cached enum label, or a generic label for an unknown external kind.</returns>
+        private static string ZombieHierarchyName(ZombieKind kind)
+        {
+            return s_zombieHierarchyNames.TryGetValue(kind, out var name) ? name : "Zombie";
+        }
+
+        /// <summary>Retains inspectable actors while their live or corpse models belong to the current match.</summary>
+        private void BeginHierarchyFrame()
+        {
+            var hierarchy = _owner.RequiredAnimations.Hierarchy;
+            hierarchy.BeginFrame((object?)_owner._game ?? _owner);
+            var game = _owner._game;
+            if (game == null)
+            {
+                return;
+            }
+
+            foreach (var plant in game.Plants)
+            {
+                hierarchy.MarkAlive("Plants", plant.Id, AdventurePlantAnimation(plant.Kind));
+            }
+
+            foreach (var zombie in game.Zombies)
+            {
+                hierarchy.MarkAlive("Zombies", zombie.Id, ZombieHierarchyName(zombie.Kind));
+            }
+
+            foreach (var corpse in game.Presentation.Corpses)
+            {
+                var zombie = corpse.RequiredZombie;
+                hierarchy.MarkAlive("Zombies", zombie.Id, ZombieHierarchyName(zombie.Kind));
             }
         }
 
@@ -494,6 +548,7 @@ namespace PlantsVsZombies.Game
                         continue;
                     }
 
+                    using var hierarchyActor = _owner.RequiredAnimations.Hierarchy.BeginActor("Plants", plant.Id, AdventurePlantAnimation(plant.Kind));
                     var x = BoardLayout.GridX + plant.Column * BoardLayout.CellWidth;
                     var y = BoardLayout.GridY + row * BoardLayout.CellHeight;
                     DrawPlantShadow(plant, new Vector2(x, y), AdventurePlantShadowRules.DrawHeight(plant, _owner.RequiredGame.Plants, false, 0), false);
@@ -546,9 +601,13 @@ namespace PlantsVsZombies.Game
                         continue;
                     }
 
+                    using var hierarchyActor = _owner.RequiredAnimations.Hierarchy.BeginActor("Zombies", zombie.Id, ZombieHierarchyName(zombie.Kind));
                     var x = BoardLayout.GridX + zombie.X * BoardLayout.CellWidth;
                     var y = BoardLayout.GridY + row * BoardLayout.CellHeight;
-                    DrawImage("plantshadow.png", new Rect(x - 38, y + 76, 76, 22));
+                    using (_owner.RequiredAnimations.Hierarchy.BeginNamedSprite("Shadow"))
+                    {
+                        DrawImage("plantshadow.png", new Rect(x - 38, y + 76, 76, 22));
+                    }
                     var previous = CanvasUI.Color;
                     if (zombie.ChillRemaining > 0f)
                     {
@@ -625,11 +684,11 @@ namespace PlantsVsZombies.Game
             DrawImage("SeedBank.png", new Rect(0, 0, 446, 87));
             if (_owner.RequiredGame.IsExperimentalLevelOne)
             {
-                var bank = _owner.Textures.Load("SeedBank.png");
+                var bank = _owner.Textures.LoadImage("SeedBank.png");
                 var cap = FirstAdventureBoardUi.SeedBankEndCap(0, 0);
                 if (bank != null)
                 {
-                    CanvasUI.DrawTextureWithTexCoords(new Rect(cap.Destination.X, cap.Destination.Y, cap.Destination.Width, cap.Destination.Height), bank, new Rect((float)cap.Source.X / bank.width, 0f, (float)cap.Source.Width / bank.width, 1f));
+                    CanvasUI.DrawTextureWithTexCoords(new Rect(cap.Destination.X, cap.Destination.Y, cap.Destination.Width, cap.Destination.Height), bank, new Rect((float)cap.Source.X / bank.Width, 0f, (float)cap.Source.Width / bank.Width, 1f));
                 }
 
                 if (!DrawBitmap(_owner._sunCounterBitmap, FirstAdventureBoardUi.DisplayedSun(_owner.RequiredGame.SunAmount).ToString(), 38f, 78f, 76f, Color.black, true, true))
@@ -642,7 +701,7 @@ namespace PlantsVsZombies.Game
                 Label(new Rect(10, 59, 55, 22), NumberLabel(_owner.RequiredGame.SunAmount), 18, _owner.AdventureBoard.SunMoneyWarningRed ? Color.red : Color.black, TextAnchor.MiddleCenter, true);
             }
 
-            var packets = _owner.Textures.Load("seeds.png");
+            var packets = _owner.Textures.LoadImage("seeds.png");
             for (var i = 0; i < _owner._deck.Count; i++)
             {
                 var card = _owner.Layout.SeedRect(i);
@@ -680,7 +739,7 @@ namespace PlantsVsZombies.Game
             Fill(new Rect(704, 6, 90, 34), new Color(0.28f, 0.18f, 0.09f, 0.9f));
             Label(new Rect(704, 6, 90, 34), _owner.RequiredGame.State == MatchState.Paused ? "继续" : "菜单", 17, Color.white, TextAnchor.MiddleCenter, true);
             var progress = _owner.RequiredGame.IsExperimentalLevelOne ? _owner.RequiredGame.LevelOneWaveProgress : _owner.RequiredGame.Rules.ZombieCount == 0 ? 0 : (float)_owner.RequiredGame.SpawnedZombies / _owner.RequiredGame.Rules.ZombieCount;
-            var meter = _owner.Textures.Load("FlagMeter.png");
+            var meter = _owner.Textures.LoadImage("FlagMeter.png");
             if (meter != null)
             {
                 var meterRect = new Rect(632, 570, 158, 27);
@@ -692,7 +751,7 @@ namespace PlantsVsZombies.Game
                     CanvasUI.DrawTextureWithTexCoords(new Rect(meterRect.x + start, meterRect.y, fillWidth, meterRect.height), meter, new Rect(start / 158f, 0, fillWidth / 158f, 0.5f));
                 }
 
-                var parts = _owner.Textures.Load("FlagMeterParts.png");
+                var parts = _owner.Textures.LoadImage("FlagMeterParts.png");
                 if (parts != null)
                 {
                     CanvasUI.DrawTextureWithTexCoords(new Rect(meterRect.x + 138f - 120f * progress, meterRect.y - 3, 25, 25), parts, new Rect(0, 0, 1f / 3f, 1));
@@ -879,7 +938,7 @@ namespace PlantsVsZombies.Game
         /// <param name = "rect">The rect.</param>
         private void DrawImage(string name, Rect rect)
         {
-            var texture = _owner.Textures.Load(name);
+            var texture = _owner.Textures.LoadImage(name);
             if (texture != null)
             {
                 DrawTextureWithSource(rect, texture, new Rect(0, 0, 1, 1));
@@ -890,7 +949,16 @@ namespace PlantsVsZombies.Game
         /// <param name = "destination">The destination in logical interface coordinates.</param>
         /// <param name = "texture">The texture to display.</param>
         /// <param name = "source">The normalized texture coordinates.</param>
+        /// <summary>Submits an external texture through the logical image path.</summary>
+        /// <param name="destination">The destination in logical interface coordinates.</param>
+        /// <param name="texture">The external texture or captured surface.</param>
+        /// <param name="source">The normalized source rectangle.</param>
         private void DrawTextureWithSource(Rect destination, Texture texture, Rect source)
+        {
+            DrawTextureWithSource(destination, SpriteImage.FromTexture(texture), source);
+        }
+
+        private void DrawTextureWithSource(Rect destination, SpriteImage texture, Rect source)
         {
             if (_renderingBoardObjects)
             {
@@ -980,13 +1048,13 @@ namespace PlantsVsZombies.Game
         /// <param name = "count">The count.</param>
         private void DrawAdventureSeedBankBackground(Vector2 origin, int count)
         {
-            var image = _owner.Textures.Load("SeedBank.png");
+            var image = _owner.Textures.LoadImage("SeedBank.png");
             if (image == null)
             {
                 return;
             }
 
-            CanvasUI.DrawTexture(new Rect(origin.x, origin.y, image.width, image.height), image);
+            CanvasUI.DrawTexture(new Rect(origin.x, origin.y, image.Width, image.Height), image);
             var extra = AdventureSeedSlotLayout.BackgroundExtra(count);
             if (extra <= 0)
             {
@@ -994,27 +1062,27 @@ namespace PlantsVsZombies.Game
             }
 
             // PC 0x49F100 copies the original right-hand strip; it does not stretch the panel.
-            CanvasUI.DrawTextureWithTexCoords(new Rect(origin.x + image.width - 12, origin.y, extra + 12, image.height), image, new Rect((image.width - extra - 12f) / image.width, 0, (extra + 12f) / image.width, 1));
+            CanvasUI.DrawTextureWithTexCoords(new Rect(origin.x + image.Width - 12, origin.y, extra + 12, image.Height), image, new Rect((image.Width - extra - 12f) / image.Width, 0, (extra + 12f) / image.Width, 1));
         }
 
         /// <summary>Performs draw adventure conveyor background.</summary>
         private void DrawAdventureConveyorBackground()
         {
             var origin = _owner.Layout.AdventureConveyorOrigin;
-            var backdrop = _owner.Textures.Load("ConveyorBelt_backdrop.png");
+            var backdrop = _owner.Textures.LoadImage("ConveyorBelt_backdrop.png");
             if (backdrop != null)
             {
-                CanvasUI.DrawTexture(new Rect(origin.x + 83f, origin.y, backdrop.width, backdrop.height), backdrop);
+                CanvasUI.DrawTexture(new Rect(origin.x + 83f, origin.y, backdrop.Width, backdrop.Height), backdrop);
             }
 
-            var belt = _owner.Textures.Load("ConveyorBelt.png");
+            var belt = _owner.Textures.LoadImage("ConveyorBelt.png");
             if (belt == null)
             {
                 return;
             }
 
             var row = _owner.RequiredGame.Adventure.ConveyorTicks / 4 % 6;
-            CanvasUI.DrawTextureWithTexCoords(new Rect(origin.x + 90f, origin.y + 63f, belt.width, belt.height / 6f), belt, new Rect(0, 1f - (row + 1) / 6f, 1, 1f / 6f));
+            CanvasUI.DrawTextureWithTexCoords(new Rect(origin.x + 90f, origin.y + 63f, belt.Width, belt.Height / 6f), belt, new Rect(0, 1f - (row + 1) / 6f, 1, 1f / 6f));
         }
 
         /// <summary>Performs draw adventure conveyor packets.</summary>
@@ -1142,11 +1210,11 @@ namespace PlantsVsZombies.Game
                 return;
             }
 
-            var image = _owner.Textures.Load("Shovel.png");
+            var image = _owner.Textures.LoadImage("Shovel.png");
             if (image != null)
             {
                 // PC 0x444100 and 0x4441A0: cursor(mouse-25,-35), shovel(+10,-30).
-                DrawImage("Shovel.png", new Rect(_owner.AdventureBoard._adventurePointer.x - 15f, _owner.AdventureBoard._adventurePointer.y - 65f, image.width, image.height));
+                DrawImage("Shovel.png", new Rect(_owner.AdventureBoard._adventurePointer.x - 15f, _owner.AdventureBoard._adventurePointer.y - 65f, image.Width, image.Height));
             }
         }
 
@@ -1178,11 +1246,11 @@ namespace PlantsVsZombies.Game
             DrawImage("ShovelBank.png", rect);
             if (!_owner._shovel)
             {
-                var image = _owner.Textures.Load("Shovel.png");
+                var image = _owner.Textures.LoadImage("Shovel.png");
                 if (image != null)
                 {
                     // PC Board::DrawShovel 0x424548/0x42454C offsets the tool by (-7,-3).
-                    DrawImage("Shovel.png", new Rect(rect.x - 7f, rect.y - 3f, image.width, image.height));
+                    DrawImage("Shovel.png", new Rect(rect.x - 7f, rect.y - 3f, image.Width, image.Height));
                 }
             }
         }
@@ -1421,13 +1489,13 @@ namespace PlantsVsZombies.Game
                     continue;
                 }
 
-                var image = _owner.Textures.Load(blit.Resource + (blit.Resource.StartsWith("background", StringComparison.Ordinal) ? ".jpg" : ".png"));
+                var image = _owner.Textures.LoadImage(blit.Resource + (blit.Resource.StartsWith("background", StringComparison.Ordinal) ? ".jpg" : ".png"));
                 if (image == null)
                 {
                     continue;
                 }
 
-                CanvasUI.DrawTextureWithTexCoords(new Rect(blit.X, blit.Y, blit.Width, blit.Height), image, new Rect(blit.SourceX / (float)image.width, 1f - (blit.SourceY + blit.Height) / (float)image.height, blit.Width / (float)image.width, blit.Height / (float)image.height));
+                CanvasUI.DrawTextureWithTexCoords(new Rect(blit.X, blit.Y, blit.Width, blit.Height), image, new Rect(blit.SourceX / (float)image.Width, 1f - (blit.SourceY + blit.Height) / (float)image.Height, blit.Width / (float)image.Width, blit.Height / (float)image.Height));
             }
         }
 
@@ -1719,7 +1787,7 @@ namespace PlantsVsZombies.Game
         /// <param name="card">The packet's logical rectangle.</param>
         private void DrawSimpleChooserCard(PlantKind kind, Rect card)
         {
-            var packets = _owner.Textures.Load("seeds.png");
+            var packets = _owner.Textures.LoadImage("seeds.png");
             if (packets != null)
             {
                 CanvasUI.DrawTextureWithTexCoords(card, packets, new Rect(0, 0, 1f / 9f, 1));
@@ -1946,7 +2014,7 @@ namespace PlantsVsZombies.Game
                             continue;
                         }
 
-                        var image = _owner.Textures.Load("Scary_Pot.png");
+                        var image = _owner.Textures.LoadImage("Scary_Pot.png");
                         if (image != null)
                         {
                             DrawTextureWithSource(new Rect(BoardLayout.AdventureGridX + vase.Column * BoardLayout.CellWidth, _owner.Layout.AdventureCellY(row, vase.Column) - 6, 80, 101), image, new Rect(vase.ShowsPlant ? 1f / 3f : 0, 0, 1f / 3f, 0.5f));
@@ -2073,10 +2141,10 @@ namespace PlantsVsZombies.Game
                     if (coin.Kind == AdventureCoinKind.PlantGift || coin.Kind == AdventureCoinKind.Chocolate || coin.Kind == AdventureCoinKind.MinigameUnlock || coin.Kind == AdventureCoinKind.PuzzleUnlock)
                     {
                         var image = coin.Kind == AdventureCoinKind.Chocolate ? "chocolate.png" : "Present.png";
-                        var gift = _owner.Textures.Load(image);
+                        var gift = _owner.Textures.LoadImage(image);
                         if (gift != null)
                         {
-                            DrawImage(image, new Rect(coinRect.center.x - gift.width * .5f, coinRect.center.y - gift.height * .5f, gift.width, gift.height));
+                            DrawImage(image, new Rect(coinRect.center.x - gift.Width * .5f, coinRect.center.y - gift.Height * .5f, gift.Width, gift.Height));
                         }
 
                         continue;
@@ -2126,7 +2194,7 @@ namespace PlantsVsZombies.Game
                         {
                             if (!_owner.RequiredGame.IsAdventureCellVisible(row, col))
                             {
-                                var fog = _owner.Textures.Load("fog.png");
+                                var fog = _owner.Textures.LoadImage("fog.png");
                                 if (fog != null)
                                 {
                                     DrawTextureWithSource(new Rect(BoardLayout.AdventureGridX + col * BoardLayout.CellWidth - 55, _owner.Layout.AdventureCellY(row, col) - 35, 190, 170), fog, new Rect((col % 8) / 8f, 0, 1f / 8f, 1));
@@ -2163,36 +2231,10 @@ namespace PlantsVsZombies.Game
         /// <param name = "destination">The destination.</param>
         private void DrawAdventureFileImage(string relative, Rect destination)
         {
-            Texture2D? texture;
-            if (!_owner.Textures._textures.TryGetValue(relative, out texture))
+            var image = _owner.Textures.LoadImage(relative);
+            if (image != null)
             {
-                var file = Path.Combine(_owner._root, relative.Replace('/', Path.DirectorySeparatorChar));
-                if (!File.Exists(file))
-                {
-                    _owner.Textures._textures[relative] = null;
-                    return;
-                }
-
-                texture = new Texture2D(2, 2, TextureFormat.RGBA32, false);
-                if (!texture.LoadImage(File.ReadAllBytes(file)))
-                {
-                    UnityEngine.Object.Destroy(texture);
-                    texture = null;
-                }
-                else
-                {
-                    texture.filterMode = FilterMode.Bilinear;
-                    texture.wrapMode = TextureWrapMode.Clamp;
-                }
-
-                _owner.Textures._textures[relative] = texture;
-            }
-
-            if (texture != null)
-            {
-                var fit = Mathf.Min(destination.width / texture.width, destination.height / texture.height);
-                var fitted = new Rect(destination.center.x - texture.width * fit * 0.5f, destination.center.y - texture.height * fit * 0.5f, texture.width * fit, texture.height * fit);
-                DrawTextureWithSource(fitted, texture, new Rect(0, 0, 1, 1));
+                DrawTextureWithSource(destination, image, new Rect(0f, 0f, 1f, 1f));
             }
         }
 
@@ -2208,7 +2250,7 @@ namespace PlantsVsZombies.Game
 
             var origin = new Vector2(BoardLayout.AdventureGridX + grave.Column * BoardLayout.CellWidth,
                 _owner.Layout.AdventureCellY(grave.Row, grave.Column));
-            var stone = _owner.Textures.Load("Tombstones.png");
+            var stone = _owner.Textures.LoadImage("Tombstones.png");
             if (stone != null)
             {
                 var eaten = 0;
@@ -2221,13 +2263,13 @@ namespace PlantsVsZombies.Game
                     }
                 }
 
-                DrawAdventureGraveBlit(stone, pose.Stone(grave.Row, stone.width / 5, stone.height / 4, eaten), origin);
+                DrawAdventureGraveBlit(stone, pose.Stone(grave.Row, stone.Width / 5, stone.Height / 4, eaten), origin);
             }
 
-            var mound = _owner.Textures.Load("Tombstone_mounds.png");
+            var mound = _owner.Textures.LoadImage("Tombstone_mounds.png");
             if (mound != null)
             {
-                DrawAdventureGraveBlit(mound, pose.Mound(grave.Row, mound.width / 5, mound.height / 4), origin);
+                DrawAdventureGraveBlit(mound, pose.Mound(grave.Row, mound.Width / 5, mound.Height / 4), origin);
             }
 
             if (pose.Age < 1.6f)
@@ -2242,7 +2284,7 @@ namespace PlantsVsZombies.Game
         /// <param name="texture">The original stone or soil atlas.</param>
         /// <param name="blit">The source cell and relative destination.</param>
         /// <param name="origin">The lawn cell origin in board pixels.</param>
-        private void DrawAdventureGraveBlit(Texture texture, NativeBlit blit, Vector2 origin)
+        private void DrawAdventureGraveBlit(SpriteImage texture, NativeBlit blit, Vector2 origin)
         {
             var source = blit.Source;
             if (source.Height <= 0)
@@ -2252,8 +2294,8 @@ namespace PlantsVsZombies.Game
 
             var destination = blit.Destination;
             DrawTextureWithSource(new Rect(origin.x + destination.X, origin.y + destination.Y, destination.Width, destination.Height),
-                texture, new Rect(source.X / (float)texture.width, 1f - (source.Y + source.Height) / (float)texture.height,
-                    source.Width / (float)texture.width, source.Height / (float)texture.height));
+                texture, new Rect(source.X / (float)texture.Width, 1f - (source.Y + source.Height) / (float)texture.Height,
+                    source.Width / (float)texture.Width, source.Height / (float)texture.Height));
         }
 
         /// <summary>Stores adventure particles.</summary>
@@ -2550,7 +2592,7 @@ namespace PlantsVsZombies.Game
                 }
             }
 
-            var texture = _owner.Textures.Load(image);
+            var texture = _owner.Textures.LoadImage(image);
             if (texture == null)
             {
                 return;
@@ -2566,7 +2608,7 @@ namespace PlantsVsZombies.Game
 
             try
             {
-                DrawTextureWithSource(new Rect(x, y, texture.width * .5f, texture.height), texture, new Rect(column * .5f, 0f, .5f, 1f));
+                DrawTextureWithSource(new Rect(x, y, texture.Width * .5f, texture.Height), texture, new Rect(column * .5f, 0f, .5f, 1f));
             }
             finally
             {
@@ -2677,7 +2719,7 @@ namespace PlantsVsZombies.Game
             }
 
             var shadowName = night ? "plantshadow2.png" : "plantshadow.png";
-            var shadow = _owner.Textures.Load(shadowName);
+            var shadow = _owner.Textures.LoadImage(shadowName);
             if (shadow == null)
             {
                 return;
@@ -2690,13 +2732,15 @@ namespace PlantsVsZombies.Game
                 growth = (plant.PresentationAwakeAge - 120f + AdventureRenderRemainder) * 12f / grow.Count;
             }
 
-            DrawImage(shadowName, AdventurePlantShadowRules.Bounds(plant, cellOrigin, drawHeight, new Vector2(shadow.width, shadow.height), growth));
+            using var hierarchyShadow = _owner.RequiredAnimations.Hierarchy.BeginNamedSprite("Shadow");
+            DrawImage(shadowName, AdventurePlantShadowRules.Bounds(plant, cellOrigin, drawHeight, new Vector2(shadow.Width, shadow.Height), growth));
         }
 
         /// <summary>Performs draw adventure plant.</summary>
         /// <param name = "plant">The plant.</param>
         private void DrawAdventurePlant(Plant plant)
         {
+            using var hierarchyActor = _owner.RequiredAnimations.Hierarchy.BeginActor("Plants", plant.Id, AdventurePlantAnimation(plant.Kind));
             float x = BoardLayout.AdventureGridX + plant.Column * BoardLayout.CellWidth, y = _owner.Layout.AdventureCellY(plant.Row, plant.Column);
             var name = AdventurePlantAnimation(plant.Kind);
             var size = plant.IsSmall ? .5f : 1f;
@@ -3013,6 +3057,7 @@ namespace PlantsVsZombies.Game
         /// <param name = "zombie">The zombie.</param>
         private void DrawAdventureZombie(Zombie zombie)
         {
+            using var hierarchyActor = _owner.RequiredAnimations.Hierarchy.BeginActor("Zombies", zombie.Id, ZombieHierarchyName(zombie.Kind));
             if (!_owner.RequiredGame.IsModeZombieVisible(zombie))
             {
                 return;
@@ -3022,12 +3067,13 @@ namespace PlantsVsZombies.Game
             var origin = AdventureZombieOrigin(zombie, x);
             var inPool = zombie.PresentationInPool ?? (_owner.RequiredGame.Adventure.Level.IsWaterRow(zombie.Row) && x >= 0f && x < 9f);
             var shadowName = _owner.RequiredGame.Adventure.Level.IsNight ? "plantshadow2.png" : "plantshadow.png";
-            var shadow = _owner.Textures.Load(shadowName);
+            var shadow = _owner.Textures.LoadImage(shadowName);
             if (shadow != null && HasAdventureZombieShadow(zombie, inPool))
             {
                 var nativeX = AdventureZombieNativeRules.NativePositionX(x, size);
                 var floor = AdventureFloorYAtPixel(zombie.Row, nativeX + 40f);
-                DrawImage(shadowName, AdventureZombieShadowBounds(zombie, x, floor, new Vector2(shadow.width, shadow.height), inPool));
+                using var hierarchyShadow = _owner.RequiredAnimations.Hierarchy.BeginNamedSprite("Shadow");
+                DrawImage(shadowName, AdventureZombieShadowBounds(zombie, x, floor, new Vector2(shadow.Width, shadow.Height), inPool));
             }
             string name = AdventureAnimationCatalog.AdventureZombieAnimation(zombie.Kind), clip = _owner.RequiredGame.AdventurePresentationZombieAnimation(zombie);
             if (!string.Equals(zombie.PresentationAnimation, clip, StringComparison.Ordinal))
@@ -3357,6 +3403,7 @@ namespace PlantsVsZombies.Game
                     continue;
                 }
 
+                using var hierarchyActor = _owner.RequiredAnimations.Hierarchy.BeginActor("Zombies", zombie.Id, ZombieHierarchyName(zombie.Kind));
                 if (corpse.Burn != null)
                 {
                     DrawAdventureBurnedCorpse(corpse);
@@ -3793,14 +3840,14 @@ namespace PlantsVsZombies.Game
             }
 
             var image = AdventureAwardImage(award.NativeType);
-            var source = _owner.Textures.Load(image);
+            var source = _owner.Textures.LoadImage(image);
             if (source == null)
             {
                 return;
             }
 
             var columns = award.NativeType == 21 ? 2 : 1;
-            var destination = new Rect(center.x - source.width * size / columns / 2, center.y - source.height * size / 2, source.width * size / columns, source.height * size);
+            var destination = new Rect(center.x - source.Width * size / columns / 2, center.y - source.Height * size / 2, source.Width * size / columns, source.Height * size);
             CanvasUI.DrawTextureWithTexCoords(destination, source, new Rect(0, 0, 1f / columns, 1));
         }
 
@@ -3822,7 +3869,7 @@ namespace PlantsVsZombies.Game
 
             // PC app+0x884 is ADManager, not WidgetManager. 0x405750 loads
             // images/ad/game_pass.jpg into ADManager+104/+4; 0x40FCF0 draws it at(0,0,800,300).
-            var background = _owner.Textures.Load("AwardScreen_Back_new.jpg");
+            var background = _owner.Textures.LoadImage("AwardScreen_Back_new.jpg");
             if (background != null)
             {
                 CanvasUI.DrawTexture(new Rect(0, 0, 800, 600), background);
@@ -3842,10 +3889,10 @@ namespace PlantsVsZombies.Game
             else
             {
                 AdventureAwardText(award.NativeType, out title, out name, out description);
-                var icon = _owner.Textures.Load(AdventureAwardImage(award.NativeType, true));
+                var icon = _owner.Textures.LoadImage(AdventureAwardImage(award.NativeType, true));
                 if (icon != null)
                 {
-                    CanvasUI.DrawTexture(new Rect(240 - icon.width * .5f, 426 - icon.height * .5f, icon.width, icon.height), icon);
+                    CanvasUI.DrawTexture(new Rect(240 - icon.Width * .5f, 426 - icon.Height * .5f, icon.Width, icon.Height), icon);
                 }
             }
 
@@ -3902,21 +3949,21 @@ namespace PlantsVsZombies.Game
         {
             var note = award.NativeType == 18 ? 4 : _owner.RequiredGame.Adventure.Level.Number / 10;
             DrawImage(note % 2 == 0 ? "background2.jpg" : "background1.jpg", new Rect(-700, -300, 2800, 1200));
-            var paper = _owner.Textures.Load("ZombieNote.jpg");
+            var paper = _owner.Textures.LoadImage("ZombieNote.jpg");
             if (paper != null)
             {
-                CanvasUI.DrawTexture(new Rect(80, 80, paper.width, paper.height), paper);
+                CanvasUI.DrawTexture(new Rect(80, 80, paper.Width, paper.Height), paper);
             }
 
             var writing = note < 4 ? "ZombieNote" + (note + 1) + ".png" : "Credits_ZombieNote.png";
             // resources.xml supplies a black color image plus the handwriting alpha grid.
             var inkColor = note < 4 ? "ZombieNoteBlack" + (note + 1) + ".png" : "Credits_ZombieNoteBlack.png";
-            var ink = _owner.Textures.LoadAlphaGrid(inkColor, writing);
+            var ink = _owner.Textures.LoadAlphaGridImage(inkColor, writing);
             var x = note == 1 ? 133 : note == 2 ? 120 : note == 3 ? 102 : note == 4 ? 114 : 131;
             var y = note == 1 ? 127 : note == 2 || note == 3 ? 117 : note == 4 ? 138 : 132;
             if (ink != null)
             {
-                CanvasUI.DrawTexture(new Rect(x, y, ink.width, ink.height), ink);
+                CanvasUI.DrawTexture(new Rect(x, y, ink.Width, ink.Height), ink);
             }
 
             Label(new Rect(200, 40, 400, 40), OriginalProgressionText("FOUND_NOTE"), 22, new Color(1, 200f / 255, 0), TextAnchor.MiddleCenter, true);
@@ -4230,9 +4277,10 @@ namespace PlantsVsZombies.Game
         /// <returns>The resulting original final wave renderer.</returns>
         private global::PlantsVsZombies.Reanimation.ReanimationRenderer? OriginalFinalWaveRenderer()
         {
-            if (File.Exists(Path.Combine(_owner._root, "reanim", "FinalWave.reanim")) && File.Exists(Path.Combine(_owner._root, "reanim", "FinalWave.png")))
+            if (_owner.RequiredAnimations.TryReadResource("reanim/FinalWave.reanim", out _)
+                && _owner.RequiredAnimations.TryGetNativeAnimationInfo("FinalWave", null, out _))
             {
-                return _owner._animations;
+                return _owner.RequiredAnimations;
             }
 
             if (_owner.WaveNotices._bundledWaveAnimations == null)
@@ -4260,19 +4308,19 @@ namespace PlantsVsZombies.Game
 
             if (_hugeWaveTextAnimation == null)
             {
-                var path = Path.Combine(_owner._root, "reanim", "TextFadeOn.reanim");
-                if (!File.Exists(path))
+                const string identity = "reanim/TextFadeOn.reanim";
+                if (!_owner.RequiredAnimations.TryReadResource(identity, out var text))
                 {
-                    var bundled = EnsureOriginalWaveFiles();
+                    var bundled = Resources.Load<TextAsset>("PvZWaveNotices/TextFadeOn");
                     if (bundled == null)
                     {
                         return;
                     }
 
-                    path = Path.Combine(bundled, "reanim", "TextFadeOn.reanim");
+                    text = bundled.text;
                 }
 
-                _hugeWaveTextAnimation = AdventureWaveTextAnimation.Load(path);
+                _hugeWaveTextAnimation = AdventureWaveTextAnimation.Parse(text, identity);
             }
 
             if (_hugeWaveText == null)
@@ -4338,8 +4386,8 @@ namespace PlantsVsZombies.Game
         /// <param name = "price">The price.</param>
         private void DrawAdventureCard(PlantKind kind, Rect card, bool price)
         {
-            var bank = _owner.Textures.Load("seeds.png");
-            if (card.width > 50.01f && _owner.Textures.Load("SeedPacket_Larger.png") != null)
+            var bank = _owner.Textures.LoadImage("seeds.png");
+            if (card.width > 50.01f && _owner.Textures.LoadImage("SeedPacket_Larger.png") != null)
             {
                 DrawImage("SeedPacket_Larger.png", card);
             }
@@ -4358,7 +4406,7 @@ namespace PlantsVsZombies.Game
             if (id >= 0 && id < 49)
             {
                 var cell = AlmanacPortraitLayout.PlantAtlasCell(id);
-                var atlas = cell >= 0 ? _owner.Textures.Load("packet_plants.png") : null;
+                var atlas = cell >= 0 ? _owner.Textures.LoadImage("packet_plants.png") : null;
                 if (atlas != null)
                 {
                     var source = new Rect(cell / 13f, 0, 1f / 13f, 1);
@@ -4459,7 +4507,7 @@ namespace PlantsVsZombies.Game
             var board = _owner.RequiredGame.Adventure;
             var progress = _owner.RequiredGame.Presentation.ProgressMeter;
             var visible = (progress.Visible || board.Level.Mode == AdventureMode.Boss) && board.Level.Mode != AdventureMode.Vasebreaker;
-            var meter = visible ? _owner.Textures.Load("FlagMeter.png") : null;
+            var meter = visible ? _owner.Textures.LoadImage("FlagMeter.png") : null;
             if (meter != null)
             {
                 // PC DrawProgressMeter 0x4229F0: (600,575), 143px fill, 135px head travel.
@@ -4472,7 +4520,7 @@ namespace PlantsVsZombies.Game
                         new Rect(sourceX / 158f, 0, fill / 158f, .5f));
                 }
 
-                var parts = _owner.Textures.Load("FlagMeterParts.png");
+                var parts = _owner.Textures.LoadImage("FlagMeterParts.png");
                 if (parts != null)
                 {
                     if (AdventureProgressMeterState.HasFlags(board.Level.Number, board.Level.IsReplay))
@@ -5053,7 +5101,7 @@ namespace PlantsVsZombies.Game
                     if (!s.Brains[r])
                     {
                         var rect = new Rect(8, _owner.Layout.AdventureCellY(r, 0) + 27, 38, 35);
-                        var brain = _owner.Textures.Load("brain.png");
+                        var brain = _owner.Textures.LoadImage("brain.png");
                         if (brain != null)
                         {
                             CanvasUI.DrawTexture(rect, brain);
@@ -5356,15 +5404,15 @@ namespace PlantsVsZombies.Game
         /// <param name = "y">The y.</param>
         private void DrawNativeProgressionImage(string name, float x, float y)
         {
-            var t = _owner.Textures.Load(name);
+            var t = _owner.Textures.LoadImage(name);
             if (t == null && name.EndsWith(".png"))
             {
-                t = _owner.Textures.Load(name.Substring(0, name.Length - 4) + ".jpg");
+                t = _owner.Textures.LoadImage(name.Substring(0, name.Length - 4) + ".jpg");
             }
 
             if (t != null)
             {
-                CanvasUI.DrawTexture(new Rect(x, y, t.width, t.height), t, ScaleMode.StretchToFill, true);
+                CanvasUI.DrawTexture(new Rect(x, y, t.Width, t.Height), t, ScaleMode.StretchToFill, true);
             }
         }
 
@@ -5373,14 +5421,14 @@ namespace PlantsVsZombies.Game
         /// <param name = "card">The card.</param>
         private void DrawProgressionPlantCard(PlantKind kind, Rect card)
         {
-            var seeds = _owner.Textures.Load("seeds.png");
+            var seeds = _owner.Textures.LoadImage("seeds.png");
             if (seeds != null)
             {
                 CanvasUI.DrawTextureWithTexCoords(card, seeds, new Rect(2f / 9f, 0, 1f / 9f, 1));
             }
 
             var cell = AlmanacPortraitLayout.PlantAtlasCell((int)kind);
-            var atlas = cell < 0 ? null : _owner.Textures.Load("packet_plants.png");
+            var atlas = cell < 0 ? null : _owner.Textures.LoadImage("packet_plants.png");
             if (atlas != null)
             {
                 CanvasUI.DrawTextureWithTexCoords(card, atlas, new Rect(cell / 13f, 0, 1f / 13f, 1));
@@ -5487,8 +5535,8 @@ namespace PlantsVsZombies.Game
                 }
             }
 
-            OriginalUiWidgets.ImageButton(_textureLookup, new Rect(252, 402, _owner.Textures.RequiredLoad("Store_PrevButton.png").width, _owner.Textures.RequiredLoad("Store_PrevButton.png").height), "Store_PrevButton.png", "Store_PrevButtonHighlight.png", null, OriginalUiWidgets.Hovered(new Rect(252, 402, 96, 75)), OriginalUiWidgets.Pressed(new Rect(252, 402, 96, 75)), true);
-            OriginalUiWidgets.ImageButton(_textureLookup, new Rect(596, 402, _owner.Textures.RequiredLoad("Store_NextButton.png").width, _owner.Textures.RequiredLoad("Store_NextButton.png").height), "Store_NextButton.png", "Store_NextButtonHighlight.png", null, OriginalUiWidgets.Hovered(new Rect(596, 402, 136, 83)), OriginalUiWidgets.Pressed(new Rect(596, 402, 136, 83)), true);
+            OriginalUiWidgets.ImageButton(_textureLookup, new Rect(252, 402, _owner.Textures.RequiredLoadImage("Store_PrevButton.png").Width, _owner.Textures.RequiredLoadImage("Store_PrevButton.png").Height), "Store_PrevButton.png", "Store_PrevButtonHighlight.png", null, OriginalUiWidgets.Hovered(new Rect(252, 402, 96, 75)), OriginalUiWidgets.Pressed(new Rect(252, 402, 96, 75)), true);
+            OriginalUiWidgets.ImageButton(_textureLookup, new Rect(596, 402, _owner.Textures.RequiredLoadImage("Store_NextButton.png").Width, _owner.Textures.RequiredLoadImage("Store_NextButton.png").Height), "Store_NextButton.png", "Store_NextButtonHighlight.png", null, OriginalUiWidgets.Hovered(new Rect(596, 402, 136, 83)), OriginalUiWidgets.Pressed(new Rect(596, 402, 136, 83)), true);
             OriginalUiWidgets.ImageButton(_textureLookup, new Rect(366, 512, 138, 80), "Store_MainMenuButton.png", "Store_MainMenuButtonHighlight.png", "Store_MainMenuButtonDown.png", OriginalUiWidgets.Hovered(new Rect(366, 512, 138, 80)), OriginalUiWidgets.Pressed(new Rect(366, 512, 138, 80)));
             Label(new Rect(366, 512, 138, 80), OriginalProgressionText(_owner.Store._storeIntroNextLabel ? "STORE_NEXT_LEVEL_BUTTON" : "STORE_MAIN_MENU_BUTTON"), 15, new Color(98f / 255f, 153f / 255f, 235f / 255f), TextAnchor.MiddleCenter, true);
             DrawNativeProgressionImage("coinbank.png", 650, 559);
@@ -5702,15 +5750,15 @@ namespace PlantsVsZombies.Game
         {
             if (_originalProgressionStrings.Count == 0)
             {
-                var file = Path.Combine(_owner._root, "properties", "LawnStrings.txt");
-                if (!File.Exists(file))
+                if (!_owner.Textures.TryReadText("properties/LawnStrings.txt", out var text))
                 {
                     return key;
                 }
 
                 string? current = null;
                 var value = new StringBuilder();
-                foreach (string line in File.ReadAllLines(file))
+                using var reader = new StringReader(text);
+                for (var line = reader.ReadLine(); line != null; line = reader.ReadLine())
                 {
                     if (line.StartsWith("[") && line.EndsWith("]"))
                     {
@@ -5929,7 +5977,7 @@ namespace PlantsVsZombies.Game
         /// <param name = "rect">The rect.</param>
         private void DrawNativeModeZombieCard(ZombieKind kind, Rect rect)
         {
-            var seeds = _owner.Textures.Load("seeds.png");
+            var seeds = _owner.Textures.LoadImage("seeds.png");
             if (seeds != null)
             {
                 _owner.RequiredAnimations.DrawNativeImage(seeds, rect, new Rect(2f / 9f, 0, 1f / 9f, 1));
