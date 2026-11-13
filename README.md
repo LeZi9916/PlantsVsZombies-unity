@@ -53,7 +53,7 @@ python3 -B Tools/PrepareRuntimeAssets.py \
 
 棋盘图像与动画部件通过逻辑图片句柄提交，按原绘制顺序合并到复用的动态网格；相邻、同图集页与同混合状态的命令共用一个 MeshRenderer。Canvas、水面及其他绘制插层保留合批边界。颜色、灰度和命中反馈使用顶点数据，部件不再分别设置 MaterialPropertyBlock。第 31 层 `PvZ Rendering` 专供游戏渲染相机使用。
 
-进入 Play Mode 和构建 Player 前会增量生成四档无损图集（256、512、1024、2048）；也可使用 **PlantsVsZombies > Generate Rendering Atlases**。运行时先根据 `SystemInfo.maxTextureSize` 和默认 16 MiB 单页预算选档，再按需加载页面；缺页或尺寸错配会降档，超大原图通过带采样保护边的切片保留像素精度。生成物位于忽略的 `Assets/Generated/PvZRendering`，不要提交。原始素材和既有 `.meta` 不变，首次生成需要额外磁盘空间。正式资源路径同时打包动画、粒子与原始文本；外部素材目录及合成测试保留散图兼容路径。
+进入 Play Mode 和构建 Player 前会增量生成四档无损图集（256、512、1024、2048）；也可使用 **PlantsVsZombies > Generate Rendering Atlases**。页面按实际占用输出紧致矩形（可为非二次幂），常用战斗页由完整动画、装备换图与粒子依赖确定，冷资源单独存放。运行时先根据 `SystemInfo.maxTextureSize` 和默认 16 MiB 单页预算选档，再按需加载页面；缺页或尺寸错配会降档，超大原图通过带采样保护边的切片保留像素精度。生成物位于忽略的 `Assets/Generated/PvZRendering`，不要提交。原始素材和既有 `.meta` 不变，首次生成需要额外磁盘空间。正式资源路径同时打包动画、粒子与原始文本；外部素材目录及合成测试保留散图兼容路径。
 
 Hierarchy 的 `PvZ Actors/Plants` 和 `PvZ Actors/Zombies` 下按实体 ID 管理部件、头部、旗帜和阴影。节点开关控制显隐，动画继续负责姿态；选中 sprite 可在只读 Inspector 查看源资源和完整变换，实际 Renderer 由批次池管理。透明网格会保守剔除空白区域并保留双线性边缘，符合条件的命中、灰度及生产亮度反馈直接绘制，局部合成仍保留原混合语义。
 

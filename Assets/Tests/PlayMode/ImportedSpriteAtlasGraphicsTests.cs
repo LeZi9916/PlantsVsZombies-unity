@@ -12,7 +12,7 @@ using UnityEngine.TestTools;
 
 namespace PlantsVsZombies.Tests.PlayMode
 {
-    /// <summary>Verifies actual generated PNG imports and deserialized catalog UVs reach every band of a full two-kilopixel GPU page.</summary>
+    /// <summary>Verifies actual generated PNG imports and deserialized catalog UVs reach every band of an unscaled GPU page, including non-power-of-two output.</summary>
     public sealed class ImportedSpriteAtlasGraphicsTests
     {
         /// <summary>Bakes a large synthetic original, imports real PNG pages, reloads the serialized catalog, and verifies GPU pixels.</summary>
@@ -22,7 +22,7 @@ namespace PlantsVsZombies.Tests.PlayMode
         {
             if (SystemInfo.maxTextureSize < 2048)
             {
-                Assert.Ignore("This regression specifically verifies a full 2048-pixel imported page; smaller layouts have separate selection tests.");
+                Assert.Ignore("This regression selects the 2048-pixel layout for an unscaled 1200-pixel source; smaller layouts have separate selection tests.");
             }
             yield return null;
             var id = Guid.NewGuid().ToString("N");
@@ -115,8 +115,9 @@ namespace PlantsVsZombies.Tests.PlayMode
             Assert.That(texture, Is.Not.Null);
             Assert.That(texture!.format, Is.EqualTo(TextureFormat.RGBA32));
             Assert.That(texture.isReadable, Is.False);
-            Assert.That(texture.width, Is.EqualTo(2048));
-            Assert.That(texture.height, Is.EqualTo(2048));
+            Assert.That(texture.width, Is.InRange(1204, 2048), "The complete 1200-pixel source and both two-pixel halos must survive import.");
+            Assert.That(texture.height, Is.InRange(1204, 2048), "Tightly cropped NPOT pages must retain every original source band.");
+            Assert.That(texture.mipmapCount, Is.EqualTo(1));
             return texture;
         }
 

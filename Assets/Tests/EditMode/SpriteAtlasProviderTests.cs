@@ -88,6 +88,77 @@ namespace PlantsVsZombies.Tests.EditMode
             Assert.That(image.TryGetRegion(source, 2, out _), Is.False);
         }
 
+        /// <summary>Checks legal non-power-of-two pages retain exact source dimensions on supported hardware.</summary>
+        /// <param name="hardwareMaximum">The simulated maximum supported texture edge.</param>
+        [TestCase(2048)]
+        [TestCase(16384)]
+        public void NonPowerOfTwoPageRetainsExactDimensionsWithoutRescaling(int hardwareMaximum)
+        {
+            var page = CreateTexture(1404, 604);
+            var calls = 0;
+            using var provider = new SpriteAssetProvider(Catalog(NonPowerOfTwoLayout()), hardwareMaximum, _ =>
+            {
+                calls++;
+                return page;
+            }, IgnoreReleasedTexture);
+            var image = provider.LoadImage("images/non-power.png");
+            Assert.That(image.Width, Is.EqualTo(1400));
+            Assert.That(image.Height, Is.EqualTo(600));
+            Assert.That(image.GetRegionCount(new Rect(0f, 0f, 1f, 1f)), Is.EqualTo(1));
+            Assert.That(image.TryGetRegion(new Rect(0f, 0f, 1f, 1f), 0, out var region), Is.True);
+            Assert.That(region.Texture, Is.SameAs(page));
+            Assert.That(region.Texture.width, Is.EqualTo(1404));
+            Assert.That(region.Texture.height, Is.EqualTo(604));
+            Assert.That(calls, Is.EqualTo(1));
+        }
+
+        /// <summary>Checks metadata exceeding its selected device layout is rejected rather than silently shrinking an NPOT page.</summary>
+        [Test]
+        public void NonPowerOfTwoPageCannotBypassSelectedHardwareLimit()
+        {
+            var layout = NonPowerOfTwoLayout();
+            layout.MaximumPageSize = 1024;
+            var calls = 0;
+            using var provider = new SpriteAssetProvider(Catalog(layout), 1024, _ =>
+            {
+                calls++;
+                return CreateTexture(1404, 604);
+            }, IgnoreReleasedTexture);
+            var image = provider.LoadImage("images/non-power.png");
+            Assert.Throws<InvalidOperationException>(() => image.GetRegionCount(new Rect(0f, 0f, 1f, 1f)));
+            Assert.That(calls, Is.Zero, "Invalid page metadata must be rejected before requesting GPU storage.");
+            Assert.That(provider.LoadedPageCount, Is.Zero);
+        }
+
+        /// <summary>Checks original sheet crops and Clamp extension use exact non-power-of-two page UV denominators.</summary>
+        [Test]
+        public void NonPowerOfTwoPagePreservesPartialSourceUvAndClampedEdgeTexels()
+        {
+            var page = CreateTexture(1404, 604);
+            using var provider = new SpriteAssetProvider(Catalog(NonPowerOfTwoLayout()), 2048, _ => page, IgnoreReleasedTexture);
+            var image = provider.LoadImage("images/non-power.png");
+            var crop = new Rect(.25f, .25f, .5f, .5f);
+            Assert.That(image.GetRegionCount(crop), Is.EqualTo(1));
+            Assert.That(image.TryGetRegion(crop, 0, out var middle), Is.True);
+            Assert.That(middle.SourceUv, Is.EqualTo(crop));
+            Assert.That(middle.TextureUv.x, Is.EqualTo(352f / 1404f).Within(.000001f));
+            Assert.That(middle.TextureUv.y, Is.EqualTo(152f / 604f).Within(.000001f));
+            Assert.That(middle.TextureUv.width, Is.EqualTo(700f / 1404f).Within(.000001f));
+            Assert.That(middle.TextureUv.height, Is.EqualTo(300f / 604f).Within(.000001f));
+            var clamped = new Rect(-.25f, .25f, .5f, .5f);
+            Assert.That(image.GetRegionCount(clamped), Is.EqualTo(2));
+            Assert.That(image.TryGetRegion(clamped, 0, out var edge), Is.True);
+            Assert.That(edge.SourceUv, Is.EqualTo(new Rect(-.25f, .25f, .25f, .5f)));
+            Assert.That(edge.TextureUv.x, Is.EqualTo(2.5f / 1404f).Within(.000001f));
+            Assert.That(edge.TextureUv.y, Is.EqualTo(152f / 604f).Within(.000001f));
+            Assert.That(edge.TextureUv.width, Is.Zero, "Clamp extensions sample the exact original edge texel center.");
+            Assert.That(edge.TextureUv.height, Is.EqualTo(300f / 604f).Within(.000001f));
+            Assert.That(image.TryGetRegion(clamped, 1, out var interior), Is.True);
+            Assert.That(interior.SourceUv, Is.EqualTo(new Rect(0f, .25f, .25f, .5f)));
+            Assert.That(interior.TextureUv.x, Is.EqualTo(2f / 1404f).Within(.000001f));
+            Assert.That(interior.TextureUv.width, Is.EqualTo(350f / 1404f).Within(.000001f));
+        }
+
         /// <summary>Checks an observed resource-loading failure switches the complete image mapping to a smaller layout.</summary>
         [Test]
         public void MissingPageRetriesAnEntireSmallerLayoutWithoutMixingPageCoordinates()
@@ -510,6 +581,38 @@ namespace PlantsVsZombies.Tests.EditMode
             var texture = new Texture2D(width, height, TextureFormat.RGBA32, false);
             _textures.Add(texture);
             return texture;
+        }
+
+        /// <summary>Creates realistic unscaled background metadata with a two-pixel halo on a 1404-by-604 page.</summary>
+        /// <returns>The complete NPOT layout used for hardware and exact UV regressions.</returns>
+        private static SpriteAtlasLayout NonPowerOfTwoLayout()
+        {
+            return new SpriteAtlasLayout
+            {
+                MaximumPageSize = 2048,
+                Pages = new[] { "non-power-page" },
+                Images = new[]
+                {
+                    new SpriteAtlasImage
+                    {
+                        SourceIdentity = "images/non-power.png",
+                        Width = 1400,
+                        Height = 600,
+                        VisiblePixels = new[] { new Rect(0f, 0f, 1400f, 600f) },
+                        Tiles = new[]
+                        {
+                            new SpriteAtlasTile
+                            {
+                                Page = 0,
+                                PageWidth = 1404,
+                                PageHeight = 604,
+                                SourcePixels = new Rect(0f, 0f, 1400f, 600f),
+                                TextureUv = new Rect(2f / 1404f, 2f / 604f, 1400f / 1404f, 600f / 604f)
+                            }
+                        }
+                    }
+                }
+            };
         }
 
         /// <summary>Creates a complete injected catalog for layout-selection regressions.</summary>

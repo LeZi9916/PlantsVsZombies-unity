@@ -43,8 +43,10 @@ namespace PlantsVsZombies.Editor
             internal int PackingPriority;
             /// <summary>The padded tile area of the complete family, used to place large hot families before fragmented gaps form.</summary>
             internal long PackingFamilyArea;
-            /// <summary>Whether this large board background owns pages independently of unrelated images.</summary>
+            /// <summary>Whether this common group or large background owns pages independently of unrelated images.</summary>
             internal bool DedicatedPage;
+            /// <summary>Whether complete original clips or explicit battle dependencies reference this exact logical source.</summary>
+            internal bool CommonBattle;
         }
 
         /// <summary>Describes one tile placement before the atlas page dimensions are finalized.</summary>
@@ -133,10 +135,21 @@ namespace PlantsVsZombies.Editor
             AssetDatabase.ImportAsset(catalogPath, ImportAssetOptions.ForceSynchronousImport);
             var sources = DecodeSources(root, paths);
             AddManifestAliasesAndMasks(root, sources);
+            var imageIdentities = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             foreach (var source in sources)
             {
-                source.DedicatedPage = source.Identity.StartsWith("images/background", StringComparison.OrdinalIgnoreCase) && source.Width >= 1024;
-                source.PackingFamily = source.DedicatedPage ? source.Identity : SourceFamily(source.Identity);
+                imageIdentities[source.Identity] = source.Identity;
+                foreach (var alias in source.Aliases)
+                {
+                    imageIdentities[alias] = source.Identity;
+                }
+            }
+            var common = SpriteAtlasHotDependencies.Collect(root, imageIdentities);
+            foreach (var source in sources)
+            {
+                source.CommonBattle = common.Contains(source.Identity);
+                source.DedicatedPage = source.CommonBattle || source.Identity.StartsWith("images/background", StringComparison.OrdinalIgnoreCase) && source.Width >= 1024;
+                source.PackingFamily = source.CommonBattle ? "BattleCommon" : source.DedicatedPage ? source.Identity : SourceFamily(source.Identity);
                 source.PackingPriority = SourcePriority(source);
             }
             AssignFamilyAreas(sources);
@@ -217,7 +230,8 @@ namespace PlantsVsZombies.Editor
         private static string Fingerprint(string root, List<string> paths)
         {
             using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
-            hash.AppendData(Encoding.UTF8.GetBytes("PvZAtlasBakeV4;256,512,1024,2048;RGBA32;Pad2;Grid8;Halo1;Pieces32;AtomicFamiliesLargestFirst;BattleUiAndMowers;DedicatedBoardBackgrounds;ExactFirstImport;AtomicCatalog;ColorSourceFamilies"));
+            hash.AppendData(Encoding.UTF8.GetBytes("PvZAtlasBakeV5;256,512,1024,2048;RGBA32;Pad2;Grid8;Halo1;Pieces32;ExactCommonClipDependencies;SealedCommon;RectCandidates64;TightNPOT;DedicatedBoardBackgrounds;ExactFirstImport;AtomicCatalog;ColorSourceFamilies"));
+            hash.AppendData(Encoding.UTF8.GetBytes(SpriteAtlasHotDependencies.RecipeIdentity));
             foreach (var path in paths)
             {
                 hash.AppendData(Encoding.UTF8.GetBytes(path));
@@ -524,35 +538,13 @@ namespace PlantsVsZombies.Editor
         /// <returns>Zero for shared battle artwork, one for other actors, two for static images, or three for dedicated backgrounds.</returns>
         private static int SourcePriority(Source source)
         {
+            if (source.CommonBattle)
+            {
+                return 0;
+            }
             if (source.DedicatedPage)
             {
                 return 3;
-            }
-            switch (source.PackingFamily.ToLowerInvariant())
-            {
-                case "peashooter":
-                case "sunflower":
-                case "zombie":
-                case "wallnut":
-                case "potatomine":
-                case "cherrybomb":
-                case "snowpea":
-                case "repeater":
-                case "chomper":
-                case "blank":
-                case "seedbank":
-                case "sunbank":
-                case "shovelbank":
-                case "shovel":
-                case "button":
-                case "lawnmower":
-                case "poolcleaner":
-                case "roofcleaner":
-                    return 0;
-            }
-            if (source.Identity.IndexOf("shadow", StringComparison.OrdinalIgnoreCase) >= 0)
-            {
-                return 0;
             }
             return source.Identity.StartsWith("reanim/", StringComparison.OrdinalIgnoreCase) ? 1 : 2;
         }
@@ -763,6 +755,11 @@ namespace PlantsVsZombies.Editor
                 }
             }
             var firstPage = pages.Count;
+            if (dedicated && TryCreateTightPage(maximum, placements, firstPage, out var tightPage))
+            {
+                pages.Add(tightPage!);
+                return;
+            }
             if (TryPlaceFamily(new Page(maximum) { Dedicated = dedicated }, maximum, placements, firstPage, out var newPage))
             {
                 pages.Add(newPage!);
@@ -774,6 +771,36 @@ namespace PlantsVsZombies.Editor
             {
                 Place(pages, maximum, placement, firstPage);
             }
+        }
+
+        /// <summary>Finds a compact sealed common or background page without altering any source tile dimensions.</summary>
+        /// <param name="maximum">The selected device tier's maximum page edge.</param>
+        /// <param name="placements">The complete lossless content tiles belonging to this sealed group.</param>
+        /// <param name="pageIndex">The new page's stable index in the selected layout.</param>
+        /// <param name="page">Receives the chosen exact-size page, or null when several pages are required.</param>
+        /// <returns>True when one lossless NPOT page can contain the entire group.</returns>
+        private static bool TryCreateTightPage(int maximum, List<Placement> placements, int pageIndex, out Page? page)
+        {
+            page = null;
+            var sizes = new Vector2Int[placements.Count];
+            for (var index = 0; index < sizes.Length; index++)
+            {
+                sizes[index] = new Vector2Int(placements[index].SourcePixels.width + Padding * 2, placements[index].SourcePixels.height + Padding * 2);
+            }
+            if (!SpriteAtlasRectanglePacker.TryPack(sizes, maximum, out var positions, out var extent))
+            {
+                return false;
+            }
+            page = new Page(maximum) { Width = extent.x, Height = extent.y, Dedicated = true };
+            page.Free.Clear();
+            for (var index = 0; index < placements.Count; index++)
+            {
+                var placement = placements[index];
+                placement.Destination = positions[index];
+                placement.Tile.Page = pageIndex;
+                page.Placements.Add(placement);
+            }
+            return true;
         }
 
         /// <summary>Dry-runs all family rectangles against one page and commits metadata only after every rectangle fits.</summary>
@@ -909,8 +936,8 @@ namespace PlantsVsZombies.Editor
         /// <param name="path">The generated PNG asset path.</param>
         private static void WritePage(Page page, string path)
         {
-            var width = Mathf.NextPowerOfTwo(Math.Max(4, page.Width));
-            var height = Mathf.NextPowerOfTwo(Math.Max(4, page.Height));
+            var width = Math.Max(4, page.Width);
+            var height = Math.Max(4, page.Height);
             var pixels = new Color32[width * height];
             foreach (var placement in page.Placements)
             {

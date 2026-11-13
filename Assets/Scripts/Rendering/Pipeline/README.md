@@ -134,3 +134,39 @@ heatmaps, per-size offscreen heatmaps, and texture inventories. Whole-frame
 RGBA comparison has maximum channel differences of 2/255, 3/255, and 7/255
 for neutral, hit, and chilled states; the original graphics tolerances are
 unchanged. Run with `PVZ_RENDER_PROFILE=1` to enable the optional CPU markers.
+
+## Lossless memory compaction
+
+The subsequent V5 bake replaces broad filename-prefix promotion with complete
+common-animation, equipment, particle, and board-UI dependencies. The common
+page is sealed against unrelated cold artwork. Offline rectangle trials minimize
+actual used page bounds; PNGs use exact non-power-of-two sizes, RGBA32, Clamp,
+bilinear filtering, and no mipmaps. Original image dimensions, pixels, aliases,
+and two-pixel neighbor halos are unchanged. No runtime repacking or lossy texture
+compression is introduced. The dependency recipe itself participates in the source
+fingerprint, including the original currency animations and button highlight.
+
+Using the same reference workload and sampling as above:
+
+| Metric | V4 checkpoint | V5 compact pages |
+| --- | --- | --- |
+| Engine total texture counter | 67.05 MiB | 33.40 MiB |
+| Resident atlas logical RGBA pixels | 40.00 MiB / 3 pages | 6.35 MiB / 2 pages |
+| Neutral draw calls | 8 | 7 |
+| Neutral presentation CPU mean | 3.199 ms | 3.176 ms |
+| Mixed eight-plant / four-zombie draw calls | 16 | 7 |
+| Mixed presentation CPU mean | 3.426 ms | 3.303 ms |
+
+The original loose-source reference counter was 31.22 MiB. The counter above is
+kept separate from `GetRuntimeMemorySizeLong`, which also includes Editor/native
+object allocations and must not be described as GPU memory. Benchmark CSV output
+records format, graphics format, readability, mip count, and actual provider-owned
+pages. All resident pages remain nonreadable, single-mip RGBA32. Four whole-frame
+comparisons (neutral/hit/chilled and a mixed deck) have a maximum channel difference
+of 1/255 from the V4 checkpoint, within the unchanged graphics tolerances.
+
+Evidence is under `.unity-runs/atlas-memory`: `comparison.json`, before/final
+images, pixel comparisons, full atlas-page inventories, and test XML. Actual GPU
+timing and other target devices remain unverified. On Windows, opaque `color|mask`
+resource identities are split before filesystem path operations; the full identity
+and alpha pairing are preserved.

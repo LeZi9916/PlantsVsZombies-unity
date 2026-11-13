@@ -36,6 +36,8 @@ namespace PlantsVsZombies.Tests.PlayMode
             {
                 root = Application.streamingAssetsPath;
             }
+            var plantKinds = ReadEnvironmentKinds("PVZ_RENDER_BENCHMARK_PLANTS", new[] { PlantKind.Sunflower, PlantKind.Peashooter, PlantKind.Peashooter });
+            var zombieKinds = ReadEnvironmentKinds("PVZ_RENDER_BENCHMARK_ZOMBIES", new[] { ZombieKind.Normal });
             yield return null;
             Directory.CreateDirectory(output!);
             var host = new GameObject("Inactive rendering benchmark");
@@ -80,7 +82,7 @@ namespace PlantsVsZombies.Tests.PlayMode
                     owner._game.Plants.Add(new Plant
                     {
                         Id = index + 1,
-                        Kind = index % 3 == 0 ? PlantKind.Sunflower : PlantKind.Peashooter,
+                        Kind = plantKinds[index % plantKinds.Length],
                         Layer = PlantLayer.Main,
                         Row = index / 6,
                         Column = index % 6,
@@ -93,14 +95,18 @@ namespace PlantsVsZombies.Tests.PlayMode
 
                 for (var index = 0; index < 50; index++)
                 {
+                    var kind = zombieKinds[index % zombieKinds.Length];
+                    var armor = kind == ZombieKind.Buckethead ? 1100f : kind == ZombieKind.Conehead ? 370f : 0f;
                     owner._game.Zombies.Add(new Zombie
                     {
                         Id = 1000 + index,
-                        Kind = ZombieKind.Normal,
+                        Kind = kind,
                         Row = index % 5,
                         X = 6.4f + index / 5 * .2f,
                         Health = 270f,
                         StartingHealth = 270f,
+                        ArmorHealth = armor,
+                        PresentationMaxArmor = armor,
                         PresentationAnimation = "anim_walk",
                         PresentationAnimationAge = .3f
                     });
@@ -126,7 +132,8 @@ namespace PlantsVsZombies.Tests.PlayMode
                         yield return null;
                     }
 
-                    var result = new Measurement { State = state, Width = target.width, Height = target.height };
+                    var result = new Measurement { State = state, Width = target.width, Height = target.height,
+                        PlantKinds = string.Join(",", plantKinds), ZombieKinds = string.Join(",", zombieKinds) };
                     var cpuSamples = new double[900];
                     var gpuSamples = new double[900];
                     var profileTotals = new long[profiles.Length];
@@ -175,6 +182,7 @@ namespace PlantsVsZombies.Tests.PlayMode
                     result.TextureBytes = Texture.currentTextureMemory;
                     result.CaptureSurfaces = animations.NativeSurfaceCount;
                     ReadBatchStatistics(animations, result);
+                    SaveTextureMemory(output!, state, animations, result);
                     using (var capture = new RenderingCoverageCapture())
                     {
                         using (capture.Begin())
@@ -189,7 +197,6 @@ namespace PlantsVsZombies.Tests.PlayMode
                     }
                     SaveCoverage(camera, target.width, target.height, output!, state, result);
                     File.WriteAllText(Path.Combine(output!, "state-" + state + ".json"), JsonUtility.ToJson(result, true));
-                    SaveTextureMemory(output!, state);
                     var oldActive = RenderTexture.active;
                     RenderTexture.active = target;
                     pixels.ReadPixels(new Rect(0, 0, 800, 600), 0, 0);
@@ -216,6 +223,36 @@ namespace PlantsVsZombies.Tests.PlayMode
                 UnityEngine.Object.Destroy(pixels);
                 UnityEngine.Object.Destroy(host);
             }
+        }
+
+        /// <summary>Reads an optional deterministic benchmark species list without changing the default board.</summary>
+        /// <typeparam name="T">The plant or zombie enumeration used by the fixture.</typeparam>
+        /// <param name="variable">The optional environment variable containing comma-separated enum names.</param>
+        /// <param name="defaults">The existing species cycle retained when the variable is absent.</param>
+        /// <returns>The explicitly selected species cycle or the original default cycle.</returns>
+        /// <exception cref="InvalidOperationException">A requested species name is empty, unknown, or undefined.</exception>
+        private static T[] ReadEnvironmentKinds<T>(string variable, T[] defaults) where T : struct, Enum
+        {
+            var value = Environment.GetEnvironmentVariable(variable);
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return defaults;
+            }
+
+            var names = value.Split(',');
+            var selected = new T[names.Length];
+            for (var index = 0; index < names.Length; index++)
+            {
+                var name = names[index].Trim();
+                if (name.Length == 0 || !Enum.TryParse<T>(name, true, out var kind) || !Enum.IsDefined(typeof(T), kind))
+                {
+                    throw new InvalidOperationException(variable + " contains an unknown species: " + name);
+                }
+
+                selected[index] = kind;
+            }
+
+            return selected;
         }
 
         /// <summary>Reads optional batch diagnostics while remaining usable against the pre-optimization snapshot.</summary>
@@ -246,23 +283,94 @@ namespace PlantsVsZombies.Tests.PlayMode
             measurement.CapacitySplits = Convert.ToInt32(statistics.GetType().GetProperty("CapacitySplitCount", flags)!.GetValue(statistics));
         }
 
-        /// <summary>Lists the largest already-loaded textures without loading additional image assets.</summary>
+        /// <summary>Records resident texture objects before allocating diagnostic heatmaps, keeping each memory counter's meaning explicit.</summary>
         /// <param name="output">The ignored benchmark output directory.</param>
         /// <param name="state">The fixed feedback state being measured.</param>
-        private static void SaveTextureMemory(string output, int state)
+        /// <param name="animations">The provider owner whose actual resident atlas page references are inspected.</param>
+        /// <param name="measurement">Receives separate logical texel and native-object totals without replacing the engine texture counter.</param>
+        private static void SaveTextureMemory(string output, int state, ReanimationRenderer animations, Measurement measurement)
         {
+            var flags = BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public;
+            var provider = typeof(ReanimationRenderer).GetField("_assets", flags)?.GetValue(animations);
+            var pages = provider?.GetType().GetField("_pages", flags)?.GetValue(provider) as IDictionary;
+            var atlas = new System.Collections.Generic.HashSet<Texture2D>();
+            var atlasPages = new System.Collections.Generic.List<(int Index, Texture2D Texture)>();
+            if (pages != null)
+            {
+                foreach (DictionaryEntry entry in pages)
+                {
+                    if (entry.Value is Texture2D texture && texture != null)
+                    {
+                        atlasPages.Add((Convert.ToInt32(entry.Key), texture));
+                        if (atlas.Add(texture))
+                        {
+                            measurement.AtlasLogicalRGBABytes += LogicalRGBABytes(texture);
+                            measurement.AtlasNativeObjectBytes += UnityEngine.Profiling.Profiler.GetRuntimeMemorySizeLong(texture);
+                            if (texture.isReadable)
+                            {
+                                measurement.AtlasReadablePageCount++;
+                            }
+                        }
+                    }
+                }
+            }
+
+            const string columns = "name,width,height,loadedNativeBytes,format,graphicsFormat,isReadable,mipCount,logicalRGBABytes,isAtlasPage";
+            atlasPages.Sort((left, right) => left.Index.CompareTo(right.Index));
+            var pageReport = new System.Text.StringBuilder();
+            pageReport.Append("pageIndex,").AppendLine(columns);
+            foreach (var page in atlasPages)
+            {
+                pageReport.Append(page.Index).Append(',');
+                AppendTextureMemory(pageReport, page.Texture, true);
+            }
+
+            File.WriteAllText(Path.Combine(output, "atlas-pages-" + state + ".csv"), pageReport.ToString());
             var textures = Resources.FindObjectsOfTypeAll<Texture2D>();
             Array.Sort(textures, (left, right) => UnityEngine.Profiling.Profiler.GetRuntimeMemorySizeLong(right)
                 .CompareTo(UnityEngine.Profiling.Profiler.GetRuntimeMemorySizeLong(left)));
             var report = new System.Text.StringBuilder();
-            report.AppendLine("name,width,height,loadedNativeBytes");
-            for (var index = 0; index < Math.Min(30, textures.Length); index++)
+            report.AppendLine(columns);
+            for (var index = 0; index < textures.Length; index++)
             {
-                var texture = textures[index];
-                report.Append(texture.name.Replace(",", "_")).Append(',').Append(texture.width).Append(',').Append(texture.height)
-                    .Append(',').Append(UnityEngine.Profiling.Profiler.GetRuntimeMemorySizeLong(texture)).AppendLine();
+                measurement.AllTexture2DNativeObjectBytes += UnityEngine.Profiling.Profiler.GetRuntimeMemorySizeLong(textures[index]);
+                if (index < 30 || atlas.Contains(textures[index]))
+                {
+                    AppendTextureMemory(report, textures[index], atlas.Contains(textures[index]));
+                }
             }
+
             File.WriteAllText(Path.Combine(output, "textures-" + state + ".csv"), report.ToString());
+        }
+
+        /// <summary>Writes one already-resident texture's format and distinct memory observations.</summary>
+        /// <param name="report">The CSV buffer receiving this texture.</param>
+        /// <param name="texture">The resident texture; this method never loads a resource.</param>
+        /// <param name="atlasPage">Whether the provider currently retains this exact texture as a page.</param>
+        private static void AppendTextureMemory(System.Text.StringBuilder report, Texture2D texture, bool atlasPage)
+        {
+            report.Append(texture.name.Replace(",", "_")).Append(',').Append(texture.width).Append(',').Append(texture.height)
+                .Append(',').Append(UnityEngine.Profiling.Profiler.GetRuntimeMemorySizeLong(texture))
+                .Append(',').Append(texture.format).Append(',').Append(texture.graphicsFormat)
+                .Append(',').Append(texture.isReadable).Append(',').Append(texture.mipmapCount)
+                .Append(',').Append(LogicalRGBABytes(texture)).Append(',').Append(atlasPage).AppendLine();
+        }
+
+        /// <summary>Counts logical 32-bit RGBA texels across all mip levels, independently of actual GPU format and native-object storage.</summary>
+        /// <param name="texture">The resident texture whose logical dimensions are counted.</param>
+        /// <returns>The logical RGBA byte count; this is not a driver-allocation or process-memory measurement.</returns>
+        private static ulong LogicalRGBABytes(Texture2D texture)
+        {
+            ulong bytes = 0;
+            var width = texture.width;
+            var height = texture.height;
+            var mipCount = texture.mipmapCount;
+            for (var mip = 0; mip < mipCount; mip++)
+            {
+                bytes += (ulong)Math.Max(1, width >> mip) * (ulong)Math.Max(1, height >> mip) * 4UL;
+            }
+
+            return bytes;
         }
 
         /// <summary>Exports a CPU-rasterized coverage heatmap of the actual submitted scene and Canvas meshes.</summary>
@@ -398,6 +506,10 @@ namespace PlantsVsZombies.Tests.PlayMode
         {
             /// <summary>The fixed feedback state: neutral, hit, or chilled.</summary>
             public int State;
+            /// <summary>The deterministic plant species cycle used by this fixed board.</summary>
+            public string PlantKinds = "";
+            /// <summary>The deterministic zombie species cycle used by this fixed board.</summary>
+            public string ZombieKinds = "";
             /// <summary>The number of measured frames.</summary>
             public int Frames;
             /// <summary>The target width in pixels.</summary>
@@ -456,6 +568,14 @@ namespace PlantsVsZombies.Tests.PlayMode
             public long DrawCalls;
             /// <summary>The average engine SetPass counter.</summary>
             public long SetPassCalls;
+            /// <summary>The logical 32-bit RGBA texel bytes across all resident atlas-page mip levels, independent of physical GPU format.</summary>
+            public ulong AtlasLogicalRGBABytes;
+            /// <summary>The provider's page native-object memory reported by the Unity Profiler, which is not a dedicated VRAM counter.</summary>
+            public long AtlasNativeObjectBytes;
+            /// <summary>The total native-object memory of all resident Texture2D objects, including Editor and test resources.</summary>
+            public long AllTexture2DNativeObjectBytes;
+            /// <summary>The resident atlas pages exposing CPU-readable pixel copies.</summary>
+            public int AtlasReadablePageCount;
             /// <summary>The total engine texture memory, including the test runner.</summary>
             public ulong TextureBytes;
         }

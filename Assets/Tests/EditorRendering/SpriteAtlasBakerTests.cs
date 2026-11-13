@@ -203,6 +203,10 @@ namespace PlantsVsZombies.Tests.EditorRendering
             WriteSolidImage("SeedBank.png", 90, 15);
             WriteSolidImage("Shovel.png", 12, 12);
             WriteSolidImage("LawnMower_body.png", 12, 12);
+            WriteAnimation("Zombie", "IMAGE_ZOMBIE_BODY", "IMAGE_ZOMBIE_HEAD");
+            WriteAnimation("PeaShooterSingle", "IMAGE_PEASHOOTER_HEAD");
+            WriteAnimation("SunFlower", "IMAGE_SUNFLOWER_FACE");
+            WriteAnimation("LawnMower", "IMAGE_LAWNMOWER_BODY");
             var catalog = SpriteAtlasBaker.Bake(_source, _output, true);
             foreach (var layout in catalog.Layouts)
             {
@@ -229,8 +233,8 @@ namespace PlantsVsZombies.Tests.EditorRendering
             var unrelated = FindImage(layout, "images/unrelated.png");
             Assert.That(background.Tiles.Length, Is.EqualTo(1));
             Assert.That(background.Tiles[0].Page, Is.Not.EqualTo(unrelated.Tiles[0].Page));
-            Assert.That(background.Tiles[0].PageWidth, Is.EqualTo(2048));
-            Assert.That(background.Tiles[0].PageHeight, Is.EqualTo(1024));
+            Assert.That(background.Tiles[0].PageWidth, Is.EqualTo(1404));
+            Assert.That(background.Tiles[0].PageHeight, Is.EqualTo(604));
             foreach (var image in layout.Images)
             {
                 if (image.SourceIdentity == background.SourceIdentity)
@@ -242,6 +246,45 @@ namespace PlantsVsZombies.Tests.EditorRendering
                     Assert.That(tile.Page, Is.Not.EqualTo(background.Tiles[0].Page));
                 }
             }
+        }
+
+        /// <summary>Checks unrelated similarly named artwork cannot inflate the sealed common battle page.</summary>
+        [Test]
+        public void ColdArtworkCannotEnterOrRefillTheCommonBattlePage()
+        {
+            WriteSolidImage("Zombie_head.png", 31, 29);
+            WriteSolidImage("ShovelBank.png", 37, 33);
+            WriteSolidImage("Sunflower_trophy.png", 128, 128);
+            WriteSolidImage("Zombie_hand_rock.png", 21, 17);
+            WriteSolidImage("Zombie_bobsled4.png", 35, 22);
+            WriteSolidImage("SelectorScreen_Shadow_Adventure.png", 64, 32);
+            WriteAnimation("Zombie", "IMAGE_ZOMBIE_HEAD");
+            var catalog = SpriteAtlasBaker.Bake(_source, _output, true);
+            foreach (var layout in catalog.Layouts)
+            {
+                var head = FindImage(layout, "images/Zombie_head.png");
+                var commonPage = head.Tiles[0].Page;
+                Assert.That(FindImage(layout, "images/ShovelBank.png").Tiles[0].Page, Is.EqualTo(commonPage));
+                foreach (var name in new[] { "Sunflower_trophy.png", "Zombie_hand_rock.png", "Zombie_bobsled4.png", "SelectorScreen_Shadow_Adventure.png" })
+                {
+                    var cold = FindImage(layout, "images/" + name);
+                    Assert.That(cold.Tiles[0].Page, Is.Not.EqualTo(commonPage), name + " is not a common animation dependency.");
+                }
+            }
+        }
+
+        /// <summary>Writes an original animation fragment containing image references across its complete frame sequence.</summary>
+        /// <param name="name">The original animation filename stem.</param>
+        /// <param name="identifiers">All image identifiers referenced by the synthetic clip.</param>
+        private void WriteAnimation(string name, params string[] identifiers)
+        {
+            Directory.CreateDirectory(Path.Combine(_source, "reanim"));
+            var text = "<fps>12</fps><track><name>all</name>";
+            foreach (var identifier in identifiers)
+            {
+                text += "<t><i>" + identifier + "</i></t>";
+            }
+            File.WriteAllText(Path.Combine(_source, "reanim", name + ".reanim"), text + "</track>");
         }
 
         /// <summary>Writes an opaque test source whose full content participates in rectangle packing.</summary>
