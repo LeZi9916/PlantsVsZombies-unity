@@ -2567,12 +2567,13 @@ namespace PlantsVsZombies.Reanimation
         /// <param name = "rate">The rate.</param>
         /// <param name = "sourceRate">The source rate.</param>
         /// <param name = "loop">The loop.</param>
+        /// <param name="fullLastFrame">Whether sampling includes the full final source frame.</param>
         /// <returns>The resulting native seconds.</returns>
-        private static float NativeSeconds(Clip clip, float seconds, float rate, float sourceRate, bool loop)
+        private static float NativeSeconds(Clip clip, float seconds, float rate, float sourceRate, bool loop, bool fullLastFrame = false)
         {
             var phase = Math.Max(0d, seconds) * Math.Max(0d, rate) / clip.Count;
             phase = loop ? phase - Math.Floor(phase) : Math.Min(1d, phase);
-            return (float)(phase * (clip.Count - 1) / sourceRate);
+            return (float)(Math.Min(clip.Count - 1, phase * (fullLastFrame ? clip.Count : clip.Count - 1)) / sourceRate);
         }
 
         /// <summary>Performs draw native playback.</summary>
@@ -2595,7 +2596,8 @@ namespace PlantsVsZombies.Reanimation
         /// <param name="crazyDaveHeldItemAge">The elapsed time of the held item's animation.</param>
         /// <param name="trackOffset">Optional native pixel offsets applied before each track's placement and scaling.</param>
         /// <returns>The resulting draw native playback.</returns>
-        public bool DrawNativePlayback(string? name, Vector2 origin, float scale, float seconds, string? animation, bool loop, float framesPerSecond = -1f, Func<string, bool>? visible = null, string? overrideTrack = null, string? overrideImage = null, bool facingLeft = false, string? instanceKey = null, int blendTicks = 20, float verticalScale = -1f, float mirrorWidth = 80f, string? crazyDaveHeldItem = null, float crazyDaveHeldItemAge = 0f, Func<string, Vector2>? trackOffset = null)
+        /// <param name="fullLastFrame">Whether the native loop displays the full final source frame.</param>
+        public bool DrawNativePlayback(string? name, Vector2 origin, float scale, float seconds, string? animation, bool loop, float framesPerSecond = -1f, Func<string, bool>? visible = null, string? overrideTrack = null, string? overrideImage = null, bool facingLeft = false, string? instanceKey = null, int blendTicks = 20, float verticalScale = -1f, float mirrorWidth = 80f, string? crazyDaveHeldItem = null, float crazyDaveHeldItemAge = 0f, Func<string, Vector2>? trackOffset = null, bool fullLastFrame = false)
         {
             using var objectScope = BeginObjectScope();
             Reanimation? asset;
@@ -2613,7 +2615,7 @@ namespace PlantsVsZombies.Reanimation
                 placement.m11 = verticalScale;
             }
 
-            return DrawInternal(name, new Rect(0, 0, 1, 1), NativeSeconds(clip, seconds, rate, asset.Fps, loop), animation, false, ZombieVariant.Normal, false, visible, overrideTrack, image, placement, false, PrepareNativeBlend(instanceKey, animation, seconds, blendTicks), crazyDaveHeldItem, crazyDaveHeldItemAge, trackOffset);
+            return DrawInternal(name, new Rect(0, 0, 1, 1), NativeSeconds(clip, seconds, rate, asset.Fps, loop, fullLastFrame), animation, false, ZombieVariant.Normal, false, visible, overrideTrack, image, placement, false, PrepareNativeBlend(instanceKey, animation, seconds, blendTicks), crazyDaveHeldItem, crazyDaveHeldItemAge, trackOffset);
         }
 
         /// <summary>Draws Dave's original blink attached to the current head pose.</summary>

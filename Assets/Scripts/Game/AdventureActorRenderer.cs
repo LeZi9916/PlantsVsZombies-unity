@@ -56,6 +56,8 @@ namespace PlantsVsZombies.Game
         private ZombieVariant _variant;
         /// <summary>Whether the zombie uses an attached plant head.</summary>
         private bool _plantHead;
+        /// <summary>Identifies the unclipped native pool overlay pass.</summary>
+        private bool _waterOverlay;
 
         /// <summary>Creates reusable callbacks for one synchronous presenter.</summary>
         /// <param name="renderer">The animation renderer owned by the game session.</param>
@@ -158,8 +160,9 @@ namespace PlantsVsZombies.Game
         /// <param name="loop">Whether playback loops.</param>
         /// <param name="key">The stable native playback identity.</param>
         /// <param name="surfaceKey">The stable combat surface identity.</param>
+        /// <param name="waterSurfaceKey">The separate surface for native unclipped pool overlays.</param>
         internal void DrawZombie(Zombie zombie, string name, string? clip, Vector2 origin, float scale, float seconds,
-            float rate, bool loop, string key, string surfaceKey)
+            float rate, bool loop, string key, string surfaceKey, string? waterSurfaceKey = null)
         {
             _zombie = zombie;
             _name = name;
@@ -197,7 +200,19 @@ namespace PlantsVsZombies.Game
                 viewport.yMax = Math.Min(viewport.yMax, nativeY + 113f);
             }
 
+            // PC GetDrawPos and DrawReanim use the waterline of the logical body, before the -8 overlay.
+            var waterNativeY = origin.y + zombie.PresentationAltitude - 120f * (1f - scale) + 8f;
+            viewport.yMax = Math.Min(viewport.yMax, AdventureZombieMotionRules.ClipBottom(zombie, waterNativeY, scale));
+            _waterOverlay = false;
             RequiredRenderer.DrawNativeZombieCombat(zombie, viewport, _drawZombie, surfaceKey);
+            if (zombie.PresentationInPool == true || zombie.PresentationPoolRow || zombie.Kind == ZombieKind.DuckyTube
+                || zombie.Kind == ZombieKind.Snorkel && zombie.PresentationNativePhase == 58)
+            {
+                // Original duck tube, whitewater, and hands ignore the live pool clipping rectangle.
+                _waterOverlay = true;
+                RequiredRenderer.DrawNativeZombieCombat(zombie, new Rect(origin.x - 160, origin.y - 160, 500, 460), _drawZombie, waterSurfaceKey ?? key);
+                _waterOverlay = false;
+            }
         }
 
         /// <summary>Submits the configured plant without allocating callback captures.</summary>
@@ -250,9 +265,37 @@ namespace PlantsVsZombies.Game
                 return false;
             }
 
+            var water = _zombie.PresentationInPool == true || _zombie.PresentationPoolRow || _zombie.Kind == ZombieKind.DuckyTube;
+            var ignoresWaterClip = IsWaterOverlayTrack(track, water);
+            if (_waterOverlay != ignoresWaterClip)
+            {
+                return false;
+            }
+
             return !string.Equals(_name, "Zombie", StringComparison.OrdinalIgnoreCase)
-                || _zombie.Kind == ZombieKind.DuckyTube && string.Equals(track, "Zombie_duckytube", StringComparison.OrdinalIgnoreCase)
+                || water && (string.Equals(track, "Zombie_duckytube", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(track, "Zombie_whitewater", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(track, "Zombie_whitewater2", StringComparison.OrdinalIgnoreCase))
                 || ReanimationRenderer.IsZombieTrackVisible(track, _variant);
+        }
+
+        /// <summary>Checks the native SetupWaterTrack and ReanimIgnoreClipRect exemptions.</summary>
+        /// <param name="track">The authored track name.</param>
+        /// <param name="water">Whether a plain zombie wears its pool-row costume.</param>
+        /// <returns>Whether this track belongs to the unclipped water overlay pass.</returns>
+        private bool IsWaterOverlayTrack(string track, bool water)
+        {
+            if (_zombie.Kind == ZombieKind.Snorkel)
+            {
+                return track.IndexOf("whitewater", StringComparison.OrdinalIgnoreCase) >= 0;
+            }
+
+            return water && string.Equals(_name, "Zombie", StringComparison.OrdinalIgnoreCase)
+                && (string.Equals(track, "Zombie_duckytube", StringComparison.OrdinalIgnoreCase) && _zombie.PresentationNativePhase != 1
+                    || string.Equals(track, "Zombie_whitewater", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(track, "Zombie_whitewater2", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(track, "Zombie_outerarm_hand", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(track, "Zombie_innerarm3", StringComparison.OrdinalIgnoreCase));
         }
 
         /// <summary>Submits the configured zombie and any flag or plant head attachment.</summary>
@@ -260,11 +303,13 @@ namespace PlantsVsZombies.Game
         private bool DrawZombiePose()
         {
             var painted = string.Equals(_name, "Zombie", StringComparison.OrdinalIgnoreCase) && !_zombie.Headless && !_plantHead
-                && !_backwards && _zombie.Kind != ZombieKind.Flag && _zombie.Kind != ZombieKind.DuckyTube
+                && !_backwards && _zombie.PresentationInPool != true && !_zombie.PresentationPoolRow && _zombie.Kind != ZombieKind.Flag && _zombie.Kind != ZombieKind.DuckyTube
                 ? RequiredRenderer.DrawZombiePlayback(_origin, _scale, _seconds, _variant, _clip, _loop, _rate, true, null, _key)
                 : RequiredRenderer.DrawNativePlayback(_name, _origin, _scale, _seconds, _clip, _loop, _rate, _zombieVisible, null, null,
-                    _backwards, _key, _clip == "anim_gasp" ? 10 : AdventureDancerRules.AnimationBlendTicks(_zombie), -1f, 90f);
-            if (_plantHead && !_zombie.Headless)
+                    _backwards, _key, _clip == "anim_gasp" ? 10 : _zombie.Kind == ZombieKind.Snorkel && _zombie.PresentationNativePhase != 58
+                        ? 0 : AdventureDancerRules.AnimationBlendTicks(_zombie), -1f, 90f,
+                    fullLastFrame: _zombie.Kind == ZombieKind.Snorkel && _zombie.PresentationNativePhase == 59);
+            if (_plantHead && !_zombie.Headless && !_waterOverlay)
             {
                 RequiredRenderer.DrawNativePlantHeadAttachment(_origin, _scale, _clip, _seconds, _rate, _zombie.ModeHead, _zombie.PresentationPlantHeadAge, _backwards);
             }

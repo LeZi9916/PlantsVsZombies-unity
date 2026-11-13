@@ -108,3 +108,12 @@ and bottom cropping. Tooltip fixtures keep combat names and availability warning
 while reserving descriptions for the seed chooser. Audio checks decode original
 non-silent PCM and inspect production source playback; they do not measure a
 physical speaker or replace target-device listening checks.
+
+Native motion regressions use the same original-resource environment variable.
+`AdventureNativeMotionTests` covers pole-vault events and Tall-nut contact, the
+PC pool-entry probes, snorkel phases and bank limits, and Threepeater velocity
+decay. `OriginalNativeMotionTests` compares rise/reverse-dive pixels, checks the
+native waterline and original splash artwork, and decodes/plays the vault and
+water Foley. Run only those filters for changes to these paths. The motion
+constants follow PC `541850`, `5421A0`, `54B5F0`, `548D40`, `549740`, `4752E0`,
+and `47CCB0`; the mobile-derived reference source has different pool thresholds.

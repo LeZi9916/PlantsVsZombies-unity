@@ -1,0 +1,301 @@
+#nullable enable
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using System.IO;
+using System.Reflection;
+using NUnit.Framework;
+using PlantsVsZombies.Adventure;
+using PlantsVsZombies.Audio;
+using PlantsVsZombies.Game;
+using PlantsVsZombies.Reanimation;
+using PlantsVsZombies.Rendering;
+using PlantsVsZombies.Simulation;
+using UnityEngine;
+using UnityEngine.Networking;
+using UnityEngine.TestTools;
+
+namespace PlantsVsZombies.Tests.PlayMode
+{
+    /// <summary>Checks changed native motion using the original animation artwork, real graphics, and sound files.</summary>
+    public sealed class OriginalNativeMotionTests
+    {
+        /// <summary>Checks reverse-dive pixels, water-death clipping, and the previously missing original water splash.</summary>
+        /// <returns>The graphics initialization frame.</returns>
+        [UnityTest]
+        public IEnumerator SnorkelReverseDiveMatchesRiseAndDeathClipsAtWaterline()
+        {
+            var root = ResourceRoot();
+            yield return null;
+            var host = new GameObject("Inactive native motion fixture");
+            host.SetActive(false);
+            var owner = host.AddComponent<PvZGame>();
+            using var animations = new ReanimationRenderer(root);
+            var presenter = new GamePresenter(owner);
+            var target = new RenderTexture(800, 600, 24, RenderTextureFormat.ARGB32);
+            target.Create();
+            var pixels = new Texture2D(800, 600, TextureFormat.RGBA32, false);
+            try
+            {
+                owner._root = root;
+                owner._animations = animations;
+                owner._game = new GameSimulation(new GameRules { AdventureLevel = 21 }, 7529);
+                owner._game.ChooseDefaultAdventureSeeds();
+                var flags = BindingFlags.Instance | BindingFlags.NonPublic;
+                typeof(GamePresenter).GetField("_renderingBoardObjects", flags)!.SetValue(presenter, true);
+                var draw = typeof(GamePresenter).GetMethod("DrawAdventureZombie", flags)!;
+                var zombie = new Zombie
+                {
+                    Id = 81, Kind = ZombieKind.Snorkel, Row = 2, X = 4f,
+                    Health = 270f, StartingHealth = 270f, PresentationInPool = true,
+                    PresentationAltitude = 10f, Eating = true, PresentationNativePhase = 60
+                };
+                owner._game.Zombies.Add(zombie);
+                owner._game.AdventurePresentationZombieAnimation(zombie);
+                zombie.PresentationAnimationAge = .2f;
+                Submit(animations, presenter, draw, zombie);
+                Read(animations, target, pixels);
+                var rise = pixels.GetPixels32();
+                Assert.That(VisiblePixels(rise, 0, 600), Is.GreaterThan(100));
+                Save(pixels, "snorkel-rise.png");
+                zombie.PresentationNativePhase = 62;
+                zombie.Eating = false;
+                zombie.PresentationAnimationAge = .3f;
+                Submit(animations, presenter, draw, zombie);
+                Read(animations, target, pixels);
+                Assert.That(pixels.GetPixels32(), Is.EqualTo(rise), "Down-from-eating must reverse the original uptoeat clip.");
+                Save(pixels, "snorkel-dive.png");
+
+                zombie.PresentationNativePhase = 58;
+                zombie.PresentationInPool = false;
+                owner._game.AdventurePresentationZombieAnimation(zombie);
+                zombie.PresentationAnimationAge = 0f;
+                Submit(animations, presenter, draw, zombie);
+                zombie.PresentationAnimationAge = .7f;
+                Submit(animations, presenter, draw, zombie);
+                Read(animations, target, pixels);
+                Assert.That(VisiblePixels(pixels.GetPixels32(), 0, 600), Is.GreaterThan(100));
+                Save(pixels, "snorkel-jump.png");
+
+                zombie.PresentationNativePhase = 61;
+                zombie.PresentationInPool = true;
+                typeof(GameSimulation).GetMethod("AdventurePresentationZombieDeath", flags)!.Invoke(owner._game, new object[] { zombie, 0U });
+                owner._game.Presentation.Corpses[0].Age = .8f;
+                var corpse = typeof(GamePresenter).GetMethod("DrawAdventureCorpses", flags)!;
+                ObjectSpriteRenderer.BeginSceneFrame();
+                SpriteDrawState.Clip = new Rect(0, 0, 800, 600);
+                animations.BeginObjectFrame();
+                animations.DrawNativeImage(Texture2D.whiteTexture, new Rect(0, 0, 800, 600), new Rect(0, 0, 1, 1));
+                corpse.Invoke(presenter, new object[] { 2 });
+                animations.EndObjectFrame();
+                Read(animations, target, pixels);
+                var death = pixels.GetPixels32();
+                Assert.That(VisiblePixels(death, 0, 339), Is.GreaterThan(100));
+                AssertBodyClipped(animations, 338f);
+                Save(pixels, "snorkel-death.png");
+
+                ObjectSpriteRenderer.BeginSceneFrame();
+                SpriteDrawState.Clip = new Rect(0, 0, 800, 600);
+                animations.BeginObjectFrame();
+                animations.DrawNativeImage(Texture2D.whiteTexture, new Rect(0, 0, 800, 600), new Rect(0, 0, 1, 1));
+                Assert.That(animations.DrawNativePlayback("splash", new Vector2(350, 280), 1.2f, .2f, null, false, 18f,
+                    verticalScale: .8f), Is.True, "The production resource root must contain the exact original splash reanimation and artwork.");
+                animations.EndObjectFrame();
+                Read(animations, target, pixels);
+                Assert.That(VisiblePixels(pixels.GetPixels32(), 0, 600), Is.GreaterThan(50));
+                Save(pixels, "native-water-splash.png");
+            }
+            finally
+            {
+                presenter.Dispose();
+                target.Release();
+                UnityEngine.Object.Destroy(target);
+                UnityEngine.Object.Destroy(pixels);
+                foreach (var texture in owner.Textures._textures.Values)
+                {
+                    if (texture != null)
+                    {
+                        UnityEngine.Object.Destroy(texture);
+                    }
+                }
+
+                owner.Textures._textures.Clear();
+                UnityEngine.Object.Destroy(host);
+            }
+        }
+
+        /// <summary>Checks real motion Foley samples decode and reach the production shared voice pool.</summary>
+        /// <returns>The audio decoding and playback frame boundaries.</returns>
+        [UnityTest]
+        public IEnumerator OriginalVaultAndWaterFoleyReachProductionVoices()
+        {
+            var root = ResourceRoot();
+            var host = new GameObject("Inactive motion Foley fixture");
+            host.SetActive(false);
+            var owner = host.AddComponent<PvZGame>();
+            var audioHost = new GameObject("Motion Foley voices");
+            var source = audioHost.AddComponent<AudioSource>();
+            source.playOnAwake = false;
+            source.ignoreListenerPause = true;
+            using var voices = new AudioVoicePool(audioHost, source, 8);
+            if (UnityEngine.Object.FindObjectsByType<AudioListener>(FindObjectsSortMode.None).Length == 0)
+            {
+                audioHost.AddComponent<AudioListener>();
+            }
+
+            var previousPause = AudioListener.pause;
+            AudioListener.pause = false;
+            var effects = owner.Sounds;
+            var flags = BindingFlags.Instance | BindingFlags.NonPublic;
+            owner._root = root;
+            effects._audioSource = source;
+            effects._soundVolume = .7f;
+            effects._soundVoices = voices;
+            typeof(GameSoundEffects).GetField("_zombiePartAudioLoading", flags)!.SetValue(effects, true);
+            var play = typeof(GameSoundEffects).GetMethod("PlayAdventureZombieFoley", flags)!;
+            try
+            {
+                foreach (var foley in new[] { 74, 78, 48, 52, 53 })
+                {
+                    var sample = AdventureZombieFoleyData.Definitions[foley].Samples[0];
+                    using var request = UnityWebRequestMultimedia.GetAudioClip(new Uri(Path.Combine(root, "sounds", sample + ".ogg")).AbsoluteUri, AudioType.OGGVORBIS);
+                    yield return request.SendWebRequest();
+                    Assert.That(request.result, Is.EqualTo(UnityWebRequest.Result.Success), sample + ": " + request.error);
+                    var clip = DownloadHandlerAudioClip.GetContent(request);
+                    var data = new float[clip.samples * clip.channels];
+                    Assert.That(clip.GetData(data, 0), Is.True);
+                    Assert.That(Array.Exists(data, value => Math.Abs(value) > .001f), Is.True, sample);
+                    effects._presentationSounds[sample] = clip;
+                    voices.StopAll();
+                    play.Invoke(effects, new object[] { new AdventureZombieSoundEvent { Foley = foley, Tick = 100 } });
+                    yield return null;
+                    Assert.That(Array.Exists(audioHost.GetComponents<AudioSource>(), voice => voice.isPlaying && voice.clip == clip),
+                        Is.True, sample + " must reach a production audio voice.");
+                }
+            }
+            finally
+            {
+                voices.StopAll();
+                AudioListener.pause = previousPause;
+                foreach (var clip in effects._presentationSounds.Values)
+                {
+                    UnityEngine.Object.Destroy(clip);
+                }
+
+                effects._presentationSounds.Clear();
+                UnityEngine.Object.Destroy(audioHost);
+                UnityEngine.Object.Destroy(host);
+            }
+        }
+
+        /// <summary>Gets an explicitly supplied read-only original runtime asset directory.</summary>
+        /// <returns>The existing resource root.</returns>
+        private static string ResourceRoot()
+        {
+            var root = Environment.GetEnvironmentVariable("PVZ_BOARD_STRESS_ASSETS") ?? "";
+            if (!Directory.Exists(Path.Combine(root, "reanim")))
+            {
+                Assert.Ignore("Set PVZ_BOARD_STRESS_ASSETS to the original runtime resource directory.");
+            }
+
+            return root;
+        }
+
+        /// <summary>Submits the production zombie presenter over a white background.</summary>
+        /// <param name="animations">The production native animation renderer.</param>
+        /// <param name="presenter">The production game presenter.</param>
+        /// <param name="draw">The private presenter entry point.</param>
+        /// <param name="zombie">The initialized native pose.</param>
+        private static void Submit(ReanimationRenderer animations, GamePresenter presenter, MethodInfo draw, Zombie zombie)
+        {
+            ObjectSpriteRenderer.BeginSceneFrame();
+            SpriteDrawState.Clip = new Rect(0, 0, 800, 600);
+            animations.BeginObjectFrame();
+            animations.DrawNativeImage(Texture2D.whiteTexture, new Rect(0, 0, 800, 600), new Rect(0, 0, 1, 1));
+            draw.Invoke(presenter, new object[] { zombie });
+            animations.EndObjectFrame();
+        }
+
+        /// <summary>Renders the submitted objects and reads their real graphics output.</summary>
+        /// <param name="animations">The renderer owning the submitted sprite pool.</param>
+        /// <param name="target">The real graphics render target.</param>
+        /// <param name="pixels">The reusable readable output texture.</param>
+        private static void Read(ReanimationRenderer animations, RenderTexture target, Texture2D pixels)
+        {
+            var pool = (ObjectSpriteRenderer)typeof(ReanimationRenderer).GetField("_objectRenderer", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(animations)!;
+            pool.RenderTo(target);
+            var previous = RenderTexture.active;
+            RenderTexture.active = target;
+            pixels.ReadPixels(new Rect(0, 0, 800, 600), 0, 0);
+            pixels.Apply();
+            RenderTexture.active = previous;
+        }
+
+        /// <summary>Checks actual submitted body clipping bounds while preserving native unclipped whitewater tracks.</summary>
+        /// <param name="animations">The renderer that submitted the retained death pose.</param>
+        /// <param name="bottom">The original DrawReanim body clipping edge.</param>
+        private static void AssertBodyClipped(ReanimationRenderer animations, float bottom)
+        {
+            var flags = BindingFlags.Instance | BindingFlags.NonPublic;
+            var load = typeof(ReanimationRenderer).GetMethod("LoadTexture", flags)!;
+            var whitewater1 = load.Invoke(animations, new object[] { "IMAGE_REANIM_ZOMBIE_SNORKLE_WHITEWATER1" });
+            var whitewater2 = load.Invoke(animations, new object[] { "IMAGE_REANIM_ZOMBIE_SNORKLE_WHITEWATER2" });
+            var whitewater3 = load.Invoke(animations, new object[] { "IMAGE_REANIM_ZOMBIE_SNORKLE_WHITEWATER3" });
+            var pool = (ObjectSpriteRenderer)typeof(ReanimationRenderer).GetField("_objectRenderer", flags)!.GetValue(animations)!;
+            var sprites = (List<ObjectSprite>)typeof(ObjectSpriteRenderer).GetField("_sprites", flags)!.GetValue(pool)!;
+            var bodyQuads = 0;
+            for (var index = 0; index < pool.SubmittedObjectCount; index++)
+            {
+                var sprite = sprites[index];
+                var texture = sprite.Properties.GetTexture(Shader.PropertyToID("_MainTex"));
+                if (texture == Texture2D.whiteTexture || ReferenceEquals(texture, whitewater1) || ReferenceEquals(texture, whitewater2) || ReferenceEquals(texture, whitewater3))
+                {
+                    continue;
+                }
+
+                bodyQuads++;
+                Assert.That(sprite.Properties.GetFloat(Shader.PropertyToID("_ClipEnabled")), Is.EqualTo(1f));
+                Assert.That(sprite.Properties.GetVector(Shader.PropertyToID("_ClipRect")).w,
+                    Is.LessThanOrEqualTo(bottom + .01f), "Native death body artwork must stop at the original waterline.");
+            }
+
+            Assert.That(bodyQuads, Is.GreaterThan(0));
+        }
+
+        /// <summary>Counts visible original artwork in an inclusive/exclusive band of logical screen rows.</summary>
+        /// <param name="pixels">The complete bottom-left-origin camera readback.</param>
+        /// <param name="top">The first logical screen row to include.</param>
+        /// <param name="bottom">The first logical screen row to exclude.</param>
+        /// <returns>The nonwhite pixel count in that band.</returns>
+        private static int VisiblePixels(Color32[] pixels, int top, int bottom)
+        {
+            var count = 0;
+            for (var y = top; y < bottom; y++)
+            {
+                for (var x = 0; x < 800; x++)
+                {
+                    var color = pixels[(599 - y) * 800 + x];
+                    if (color.r + color.g + color.b < 714)
+                    {
+                        count++;
+                    }
+                }
+            }
+
+            return count;
+        }
+
+        /// <summary>Writes optional graphics diagnostics only into the caller's selected test output directory.</summary>
+        /// <param name="pixels">The completed real graphics output.</param>
+        /// <param name="name">The diagnostic filename.</param>
+        private static void Save(Texture2D pixels, string name)
+        {
+            var directory = Environment.GetEnvironmentVariable("PVZ_BOARD_STRESS_OUTPUT");
+            if (!string.IsNullOrEmpty(directory))
+            {
+                Directory.CreateDirectory(directory);
+                File.WriteAllBytes(Path.Combine(directory, name), pixels.EncodeToPNG());
+            }
+        }
+    }
+}

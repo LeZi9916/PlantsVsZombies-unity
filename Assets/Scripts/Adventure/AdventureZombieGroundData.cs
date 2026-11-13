@@ -26,6 +26,9 @@ namespace PlantsVsZombies.Adventure
         private static Dictionary<string, AdventureZombieGroundClip> Create()
         {
             var result = new Dictionary<string, AdventureZombieGroundClip>(StringComparer.OrdinalIgnoreCase);
+            // Original Zombie_snorkle.reanim: jumpinpool frames 59..77 and uptoeat frames 85..96.
+            result["Zombie_snorkle/anim_jumpinpool"] = new AdventureZombieGroundClip(19, 12f, null);
+            result["Zombie_snorkle/anim_uptoeat"] = new AdventureZombieGroundClip(12, 12f, null);
             // Literal local PC Zombie_disco.reanim clip spans and authored _ground samples.
             result["Zombie_disco/anim_moonwalk"] = new AdventureZombieGroundClip(27, 24f, new float[] {
                 -9.8f, -9.8f, -9.8f, -13.3f, -16.7f, -20.1f, -23.6f, -27f, -30.4f,

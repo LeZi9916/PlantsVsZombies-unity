@@ -1911,6 +1911,19 @@ namespace PlantsVsZombies.Game
                         }
                     }
 
+                    foreach (var effect in _owner.RequiredGame.Presentation.ZombieSplashes)
+                    {
+                        if (effect.Row != row)
+                        {
+                            continue;
+                        }
+
+                        _owner.RequiredAnimations.DrawNativePlayback("splash", new Vector2(effect.X, effect.Y), effect.ScaleX,
+                            effect.Age + AdventureRenderRemainder, null, false, 18f, verticalScale: effect.ScaleY);
+                        RequiredAdventureParticles.Draw(_presentationKeys.Get("zombie-pool-splash-", effect.Id), "PlantingPool",
+                            effect.Age + AdventureRenderRemainder, new Vector2(effect.ParticleX, effect.ParticleY), effect.Id);
+                    }
+
                     DrawAdventureDetachedArms(row);
                     DrawAdventureDetachedZombieParts(row, false);
                     DrawAdventurePlantBiteEffects(row);
@@ -2338,6 +2351,7 @@ namespace PlantsVsZombies.Game
                 y -= Mathf.Min(260f, zombie.DropRemaining * 120f);
             }
 
+            y += zombie.PresentationVaultPositionY - zombie.PresentationAltitude;
             if (zombie.GraveRiseTicks > 0)
             {
                 y -= AdventureZombieRiseRules.Altitude(zombie.GraveRiseTicks);
@@ -2917,6 +2931,7 @@ namespace PlantsVsZombies.Game
 
             var age = zombie.PresentationAnimationAge + (zombie.FrozenRemaining > 0 ? 0 : AdventureRenderRemainder * (zombie.ChillRemaining > 0 ? .5f : 1f));
             var rate = _owner.RequiredGame.AdventurePresentationZombieRate(zombie);
+            age = AdventureZombieMotionRules.PlaybackSeconds(zombie, age);
             var spotlight = AdventureDancerRules.HasSpotlight(zombie) && _owner.RequiredGame.State != MatchState.Lost;
             if (spotlight)
             {
@@ -2924,7 +2939,7 @@ namespace PlantsVsZombies.Game
             }
 
             DrawAdventureZombiePose(zombie, name, clip, origin, size, age, rate,
-                zombie.PresentationNewspaperGaspRemaining <= 0f && !string.Equals(clip, "anim_jump", StringComparison.Ordinal)
+                zombie.PresentationNewspaperGaspRemaining <= 0f && !AdventureZombieMotionRules.PlaysOnce(zombie)
                 && !AdventureDancerRules.HoldsPoint(zombie));
             if (spotlight)
             {
@@ -3104,7 +3119,11 @@ namespace PlantsVsZombies.Game
             var surface = _presentationKeys.Get("native-zombie-combat-", zombie.Id);
             _adventurePresentationSurfaces.Add(surface);
             _adventurePresentationLiveSurfaces.Add(surface);
-            ActorRenderer.DrawZombie(zombie, name, clip, origin, size, age, rate, loop, _presentationKeys.Get("actor-", zombie.Id), surface);
+            var waterSurface = _presentationKeys.Get("native-zombie-water-", zombie.Id);
+            _adventurePresentationSurfaces.Add(waterSurface);
+            _adventurePresentationLiveSurfaces.Add(waterSurface);
+            ActorRenderer.DrawZombie(zombie, name, clip, origin, size, age, rate, loop,
+                _presentationKeys.Get("actor-", zombie.Id), surface, waterSurface);
             CanvasUI.Color = previous;
         }
 
@@ -3190,7 +3209,7 @@ namespace PlantsVsZombies.Game
                     continue;
                 }
 
-                RequiredAdventureParticles.Draw(_presentationKeys.Get("native-plant-bite-", effect.Id), effect.ParticleId == 35 ? "WallnutEatSmall" : effect.ParticleId == 36 ? "WallnutEatLarge" : "MindControl", effect.Age + AdventureRenderRemainder, new Vector2(effect.NativeX + effect.OffsetX, effect.NativeY + effect.OffsetY), effect.Seed);
+                RequiredAdventureParticles.Draw(_presentationKeys.Get("native-plant-bite-", effect.Id), effect.ParticleId == 35 ? "WallnutEatSmall" : effect.ParticleId == 36 ? "WallnutEatLarge" : effect.ParticleId == 29 ? "TallNutBlock" : "MindControl", effect.Age + AdventureRenderRemainder, new Vector2(effect.NativeX + effect.OffsetX, effect.NativeY + effect.OffsetY), effect.Seed);
             }
         }
 
@@ -3405,7 +3424,13 @@ namespace PlantsVsZombies.Game
             var y = BoardLayout.AdventureGridY + row * _owner.Layout.AdventurePitch + _owner.Layout.AdventureSlope(x) + 30f;
             var age = pea.PresentationAge + AdventureRenderRemainder;
             var shortPuff = AdventurePuffShroomRules.IsShortRange(pea.SourceKind);
-            if (shortPuff)
+            if (pea.SourceKind == PlantKind.Threepeater)
+            {
+                // All three native peas start at the plant's common muzzle before the side shots curve outward.
+                y = pea.PresentationLaunchY + Mathf.Lerp(pea.PresentationPreviousLaneOffset,
+                    pea.PresentationLaneOffset, AdventureRenderRemainder * 100f);
+            }
+            else if (shortPuff)
             {
                 y = pea.PresentationLaunchY;
             }

@@ -33,6 +33,14 @@ namespace PlantsVsZombies.Simulation
         public float FrozenRemaining;
         /// <summary>Retains the original dancer phase counters and linked backup identifiers.</summary>
         public global::PlantsVsZombies.Adventure.AdventureDancerState? DancerState;
+        /// <summary>Stores whether the original lawn row equips the zombie's pool costume before entry.</summary>
+        public bool PresentationPoolRow;
+        /// <summary>Stores the original pool or falling altitude in pixels.</summary>
+        public float PresentationAltitude;
+        /// <summary>Stores the original one-frame mPosY displacement when a pole vault hits Tall-nut.</summary>
+        public float PresentationVaultPositionY;
+        /// <summary>Stores the native horizontal velocity retained throughout a pole vault.</summary>
+        internal float _poleVaultVelocity;
         /// <summary>Stores ability timer.</summary>
         public float AbilityTimer;
         /// <summary>Stores airborne.</summary>

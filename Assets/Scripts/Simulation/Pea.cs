@@ -21,6 +21,8 @@ namespace PlantsVsZombies.Simulation
         public float PresentationPreviousX, PresentationPreviousRow, PresentationRotation, PresentationSpin;
         /// <summary>Stores presentation native age, presentation lob height, presentation previous lob height, presentation lob initial velocity, presentation lob x, presentation launch y.</summary>
         public float PresentationNativeAge, PresentationLobHeight, PresentationPreviousLobHeight, PresentationLobInitialVelocity = -7f, PresentationLobX, PresentationLaunchY;
+        /// <summary>Stores the Threepeater's vertical displacement and decaying velocity in native pixels per tick.</summary>
+        public float PresentationLaneOffset, PresentationPreviousLaneOffset, PresentationLaneVelocity;
         /// <summary>Stores presentation motion initialized.</summary>
         public bool PresentationMotionInitialized;
         /// <summary>Gets or sets presentation can impact.</summary>
@@ -103,6 +105,9 @@ namespace PlantsVsZombies.Simulation
             PresentationLobInitialVelocity = -7f;
             PresentationLobX = 0f;
             PresentationLaunchY = 0f;
+            PresentationLaneOffset = 0f;
+            PresentationPreviousLaneOffset = 0f;
+            PresentationLaneVelocity = 0f;
             PresentationMotionInitialized = false;
             PresentationInitialized = false;
             Damage = 20f;
