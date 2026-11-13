@@ -63,6 +63,8 @@ namespace PlantsVsZombies.UI
         private float _descriptionHeight, _scrollOffset;
         /// <summary>Stores description rect.</summary>
         private Rect _descriptionRect;
+        /// <summary>Reuses the Canvas text layout engine for rich body measurements on every supported Editor platform.</summary>
+        private readonly TextGenerator _bodyLayout = new TextGenerator();
         /// <summary>Stores font.</summary>
         private Font? _font;
         /// <summary>Stores heading style,  title style,  label style,  body style,  small style,  icon style.</summary>
@@ -734,7 +736,7 @@ namespace PlantsVsZombies.UI
             CanvasUI.Label(plants ? new Rect(480, 270, 274, 35) : new Rect(480, 344, 268, 35), Text(key), _titleStyle);
             var header = plants ? new Rect(485, 309, 258, 100) : new Rect(485, 377, 258, 100);
             var headerText = Text(key + "_DESCRIPTION_HEADER");
-            var headerHeight = Math.Min(80f, RequiredBodyStyle.CalcHeight(new GUIContent(headerText), header.width));
+            var headerHeight = Math.Min(80f, MeasureBodyTextHeight(headerText, header.width));
             header.height = headerHeight;
             CanvasUI.Label(header, headerText, _bodyStyle);
             var bottom = plants ? (id == 48 ? 539f : 505f) : 537f;
@@ -744,7 +746,7 @@ namespace PlantsVsZombies.UI
                 _formattedDescription = FormatDescription(Text(key + "_DESCRIPTION"));
             }
 
-            _descriptionHeight = RequiredBodyStyle.CalcHeight(new GUIContent(_formattedDescription), _descriptionRect.width - 8f);
+            _descriptionHeight = MeasureBodyTextHeight(_formattedDescription, _descriptionRect.width - 8f);
             _scrollOffset = Math.Max(0f, Math.Min(_scrollOffset, Math.Max(0f, _descriptionHeight - _descriptionRect.height)));
             CanvasUI.BeginGroup(_descriptionRect);
             CanvasUI.Label(new Rect(0, -_scrollOffset, _descriptionRect.width - 8f, _descriptionHeight + 2f), _formattedDescription, _bodyStyle);
@@ -930,6 +932,34 @@ namespace PlantsVsZombies.UI
             _bodyStyle.wordWrap = true;
             _bodyStyle.richText = true;
             _bodyStyle.clipping = TextClipping.Clip;
+        }
+
+        /// <summary>Measures the same wrapped rich-text geometry used by CanvasTextGraphic instead of IMGUI font metrics.</summary>
+        /// <param name="value">The unchanged plain header or formatted rich body text.</param>
+        /// <param name="width">The available logical text width after style padding.</param>
+        /// <returns>The rounded-up preferred Canvas text height in logical pixels.</returns>
+        private float MeasureBodyTextHeight(string value, float width)
+        {
+            var style = RequiredBodyStyle;
+            var font = style.font != null ? style.font : CanvasUI.DefaultFont;
+            var settings = new TextGenerationSettings
+            {
+                font = font,
+                fontSize = font.dynamic ? Mathf.Max(1, style.fontSize) : 0,
+                fontStyle = style.fontStyle,
+                color = style.normal.textColor,
+                richText = style.richText,
+                textAnchor = style.alignment,
+                pivot = new Vector2(0f, 1f),
+                generationExtents = new Vector2(Mathf.Max(0f, width), 0f),
+                horizontalOverflow = style.wordWrap ? HorizontalWrapMode.Wrap : HorizontalWrapMode.Overflow,
+                verticalOverflow = VerticalWrapMode.Overflow,
+                lineSpacing = 1f,
+                scaleFactor = 1f,
+                resizeTextForBestFit = false,
+                updateBounds = false
+            };
+            return Mathf.Ceil(_bodyLayout.GetPreferredHeight(value, settings));
         }
 
         /// <summary>Performs style.</summary>
@@ -1243,6 +1273,7 @@ namespace PlantsVsZombies.UI
             _assets?.Dispose();
             _assets = null;
             _textures.Clear();
+            ((IDisposable)_bodyLayout).Dispose();
             Destroy(_font);
             _disposed = true;
         }

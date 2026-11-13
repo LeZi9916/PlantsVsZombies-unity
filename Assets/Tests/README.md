@@ -172,3 +172,26 @@ Pole Vaulter preview failure, the cache-hit invalid-importer failure, and fixed
 whole-portrait/lifetime tests. The fixed workload retains seven draw calls and
 33.4 MiB total texture counter. macOS Metal verification does not establish
 Windows Editor D3D validation; reproduce the reported direct-entry case there.
+
+## Almanac description layout regressions
+
+`AlmanacDescriptionLayoutTests` checks positive multiline/Chinese rich-text
+heights, original token spacing, scroll bounds, and agreement with Unity UI
+Text's own layout settings. The almanac measures with a retained `TextGenerator`;
+IMGUI `GUIStyle.CalcHeight` can return zero for the same dynamic font on macOS,
+which clips the entire body while the short header remains visible.
+
+With `PVZ_BOARD_STRESS_ASSETS` set as above, `AlmanacDescriptionGraphicsTests`
+checks original plant/zombie description pixels through real menu navigation,
+then scrolls the long body to its bottom. `CanvasGroupedTextGraphicsTests`
+independently checks rich text group clipping against an absolute label before
+and after dynamic font atlas growth. Run both layout and graphics coverage:
+
+```powershell
+./Tools/Tests/Run-UnityTests.ps1 -Platform EditMode -TestFilter 'AlmanacDescriptionLayoutTests;PointerRoutingTests;UiSpriteImageTests'
+./Tools/Tests/Run-UnityTests.ps1 -Platform PlayMode -TestFilter 'Almanac;CanvasPresentationTests;CanvasGroupedTextGraphicsTests;SeedBankLayoutTests;OriginalBattleTooltipTests'
+```
+
+The `.unity-runs/almanac-text` evidence records the macOS Metal zero-height
+failure and fixed card/scroll screenshots using Unity 6000.3.17f1. Windows Editor
+and target-platform Players remain unverified for this text-layout change.
