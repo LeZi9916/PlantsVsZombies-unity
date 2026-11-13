@@ -161,22 +161,27 @@ namespace PlantsVsZombies.Tests.PlayMode
             var play = typeof(GameSoundEffects).GetMethod("PlayAdventureZombieFoley", flags)!;
             try
             {
-                foreach (var foley in new[] { 74, 78, 48, 52, 53 })
+                foreach (var foley in new[] { 74, 78, 48, 52, 53, 16, 22, 23, 46 })
                 {
-                    var sample = AdventureZombieFoleyData.Definitions[foley].Samples[0];
-                    using var request = UnityWebRequestMultimedia.GetAudioClip(new Uri(Path.Combine(root, "sounds", sample + ".ogg")).AbsoluteUri, AudioType.OGGVORBIS);
-                    yield return request.SendWebRequest();
-                    Assert.That(request.result, Is.EqualTo(UnityWebRequest.Result.Success), sample + ": " + request.error);
-                    var clip = DownloadHandlerAudioClip.GetContent(request);
-                    var data = new float[clip.samples * clip.channels];
-                    Assert.That(clip.GetData(data, 0), Is.True);
-                    Assert.That(Array.Exists(data, value => Math.Abs(value) > .001f), Is.True, sample);
-                    effects._presentationSounds[sample] = clip;
+                    var clips = new List<AudioClip>();
+                    foreach (var sample in AdventureZombieFoleyData.Definitions[foley].Samples)
+                    {
+                        using var request = UnityWebRequestMultimedia.GetAudioClip(new Uri(Path.Combine(root, "sounds", sample + ".ogg")).AbsoluteUri, AudioType.OGGVORBIS);
+                        yield return request.SendWebRequest();
+                        Assert.That(request.result, Is.EqualTo(UnityWebRequest.Result.Success), sample + ": " + request.error);
+                        var clip = DownloadHandlerAudioClip.GetContent(request);
+                        var data = new float[clip.samples * clip.channels];
+                        Assert.That(clip.GetData(data, 0), Is.True);
+                        Assert.That(Array.Exists(data, value => Math.Abs(value) > .001f), Is.True, sample);
+                        effects._presentationSounds[sample] = clip;
+                        clips.Add(clip);
+                    }
+
                     voices.StopAll();
                     play.Invoke(effects, new object[] { new AdventureZombieSoundEvent { Foley = foley, Tick = 100 } });
                     yield return null;
-                    Assert.That(Array.Exists(audioHost.GetComponents<AudioSource>(), voice => voice.isPlaying && voice.clip == clip),
-                        Is.True, sample + " must reach a production audio voice.");
+                    Assert.That(Array.Exists(audioHost.GetComponents<AudioSource>(), voice => voice.isPlaying && clips.Contains(voice.clip)),
+                        Is.True, "Foley " + foley + " must reach a production audio voice.");
                 }
             }
             finally

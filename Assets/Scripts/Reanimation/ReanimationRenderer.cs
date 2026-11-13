@@ -3524,9 +3524,10 @@ namespace PlantsVsZombies.Reanimation
         /// <param name="scale">The zombie's native particle scale override.</param>
         /// <param name="boardTransform">The outer board-to-target transform before sampling this track.</param>
         /// <param name="alpha">The sampled track's attachment opacity.</param>
-        /// <returns>Whether the original seaweed system submitted artwork.</returns>
+        /// <param name="particleName">The unchanged original particle definition, defaulting to pool-emergence seaweed.</param>
+        /// <returns>Whether the original attached particle system submitted artwork.</returns>
         internal bool DrawNativePoolParticleAttachment(OriginalParticleRenderer particles, string key, float age, Vector2 origin,
-            int seed, float scale, Matrix4x4 boardTransform, float alpha)
+            int seed, float scale, Matrix4x4 boardTransform, float alpha, string particleName = "Zombie_seaweed")
         {
             var previousMatrix = SpriteMatrix;
             var previousColor = SpriteDrawState.Color;
@@ -3537,7 +3538,7 @@ namespace PlantsVsZombies.Reanimation
                 SpriteDrawState.Color = _nativeCombatZombie == null
                     ? new Color(previousColor.r, previousColor.g, previousColor.b, previousColor.a * alpha)
                     : NativeZombieTrackColor(0, alpha);
-                return particles.Draw(key, "Zombie_seaweed", age, origin, seed, scale);
+                return particles.Draw(key, particleName, age, origin, seed, scale);
             }
             finally
             {

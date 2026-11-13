@@ -1359,6 +1359,96 @@ namespace PlantsVsZombies.Simulation
             RemoveAdventurePlantAndStack(plant);
         }
 
+        /// <summary>Starts the PC Jalapeno body on anim_explode with its original independent fuse.</summary>
+        /// <param name="plant">The newly placed or transformed Jalapeno.</param>
+        private void InitializeAdventureJalapeno(Plant plant)
+        {
+            if (plant.JalapenoPresentation != null)
+            {
+                return;
+            }
+
+            // PC 46C07A..46C0A4 selects 10 + RandFloat(5); case 20 shares 46C615's special=100/once-and-hold branch.
+            var state = new AdventureJalapenoState { Rate = 10f + AdventureCherryRandomFloat(5f) };
+            plant.JalapenoPresentation = state;
+            plant._presentationKind = PlantKind.Jalapeno;
+            plant.PresentationRate = state.Rate;
+            plant.ActionTimer = AdventureJalapenoState.FuseTicks * .01f;
+        }
+
+        /// <summary>Advances the PC special countdown before animating the original Jalapeno pose and shake.</summary>
+        /// <param name="plant">The Jalapeno whose fixed native update is due.</param>
+        /// <returns>True because the native fuse owns this plant's action timer.</returns>
+        private bool AdvanceAdventureJalapeno(Plant plant)
+        {
+            InitializeAdventureJalapeno(plant);
+            var state = plant.JalapenoPresentation!;
+            if (state.Detonated)
+            {
+                return true;
+            }
+
+            if (state.Countdown > 0)
+            {
+                state.Countdown--;
+            }
+
+            plant.ActionTimer = state.Countdown * .01f;
+            if (state.Countdown == 0)
+            {
+                DetonateAdventureJalapeno(plant);
+            }
+
+            // PC Animate 473200 explicitly includes seed 20; both RandFloat(2)-1 draws also occur on detonation.
+            state.ShakeX = AdventureCherryRandomFloat(2f) - 1f;
+            state.ShakeY = AdventureCherryRandomFloat(2f) - 1f;
+            state.AnimationTicks++;
+            state.NormalizedTime = Math.Min(.999999f, state.NormalizedTime + .01f * state.Rate / AdventureJalapenoState.ExplodeFrameCount);
+            return true;
+        }
+
+        /// <summary>Runs the existing row burn exactly once when the independent native Jalapeno fuse reaches zero.</summary>
+        /// <param name="plant">The Jalapeno consumed by its original row special.</param>
+        private void DetonateAdventureJalapeno(Plant plant)
+        {
+            InitializeAdventureJalapeno(plant);
+            var state = plant.JalapenoPresentation!;
+            if (state.Detonated)
+            {
+                return;
+            }
+
+            state.Detonated = true;
+            state.Countdown = 0;
+            plant.ActionTimer = 0f;
+            BurnAdventureRow(plant.Row);
+            for (var i = Adventure._ice.Count - 1; i >= 0; i--)
+            {
+                if (Adventure._ice[i].Row == plant.Row)
+                {
+                    // PC DoSpecial 474B10 retains this row's ice for twenty final updates.
+                    Adventure._ice[i].RemainingTicks = 20;
+                }
+            }
+
+            for (var i = Adventure._balls.Count - 1; i >= 0; i--)
+            {
+                if (Adventure._balls[i].Row == plant.Row && Adventure._balls[i].IsIce)
+                {
+                    Adventure._balls.RemoveAt(i);
+                }
+            }
+            if (Adventure.BossHeadVulnerable)
+            {
+                DamageAdventureBoss(1800f);
+            }
+
+            AdventurePresentationExplosion(PlantKind.Jalapeno, plant.Column + .5f, plant.Row);
+            RequestAdventureZombieFoley(65);
+            RemoveAdventurePlantAndStack(plant);
+            Raise(GameEvent.JalapenoExplosion);
+        }
+
         /// <summary>Gets or sets uses native adventure conveyor.</summary>
         public bool UsesNativeAdventureConveyor
         {
@@ -2149,6 +2239,12 @@ namespace PlantsVsZombies.Simulation
                 return;
             }
 
+            if (plant.Kind == PlantKind.Jalapeno)
+            {
+                InitializeAdventureJalapeno(plant);
+                return;
+            }
+
             if (plant.Kind == PlantKind.PotatoMine)
             {
                 InitializeAdventurePotatoMine(plant);
@@ -2207,6 +2303,11 @@ namespace PlantsVsZombies.Simulation
             if (plant.Kind == PlantKind.CherryBomb)
             {
                 return AdvanceAdventureCherryBomb(plant);
+            }
+
+            if (plant.Kind == PlantKind.Jalapeno)
+            {
+                return AdvanceAdventureJalapeno(plant);
             }
 
             if (plant.Kind == PlantKind.PotatoMine)
@@ -2840,7 +2941,7 @@ namespace PlantsVsZombies.Simulation
                 return AdventurePlantingFailure.Crater;
             }
 
-            if (a._ice.Exists(v => v.Row == row && v.Column == column))
+            if (a._ice.Exists(v => v.Row == row && v.CoversColumn(column)))
             {
                 return AdventurePlantingFailure.Ice;
             }
@@ -3332,31 +3433,7 @@ namespace PlantsVsZombies.Simulation
                             DetonateAdventureCherryBomb(p);
                             break;
                         case PlantKind.Jalapeno:
-                            BurnAdventureRow(p.Row);
-                            for (var i = Adventure._ice.Count - 1; i >= 0; i--)
-                            {
-                                if (Adventure._ice[i].Row == p.Row)
-                                {
-                                    Adventure._ice.RemoveAt(i);
-                                }
-                            }
-
-                            for (var i = Adventure._balls.Count - 1; i >= 0; i--)
-                            {
-                                if (Adventure._balls[i].Row == p.Row && Adventure._balls[i].IsIce)
-                                {
-                                    Adventure._balls.RemoveAt(i);
-                                }
-                            }
-                            if (Adventure.BossHeadVulnerable)
-                            {
-                                DamageAdventureBoss(1800f);
-                            }
-
-                            AdventurePresentationExplosion(PlantKind.Jalapeno, x, p.Row);
-                            RequestAdventureZombieFoley(65);
-                            RemoveAdventurePlantAndStack(p);
-                            Raise(GameEvent.JalapenoExplosion);
+                            DetonateAdventureJalapeno(p);
                             break;
                         case PlantKind.IceShroom:
                             RequestAdventureZombieFoley(18);
@@ -3414,7 +3491,15 @@ namespace PlantsVsZombies.Simulation
                                 {
                                     if (z.Kind == ZombieKind.Zomboni || z.Kind == ZombieKind.Catapult)
                                     {
-                                        KillAdventureZombie(z);
+                                        if (z.Kind == ZombieKind.Zomboni)
+                                        {
+                                            HitAdventureZombie(z, 20f, true, 32U);
+                                        }
+                                        else
+                                        {
+                                            KillAdventureZombie(z);
+                                        }
+
                                         RemoveAdventurePlantAndStack(p);
                                         RequestAdventureZombieFoley(1);
                                         break;
@@ -4011,8 +4096,9 @@ namespace PlantsVsZombies.Simulation
                 Zombie? hit = null;
                 foreach (Zombie z in Zombies)
                 {
-                    if (allowDamage && p.PresentationCanImpact && z.GraveRiseTicks <= 0 && z.PresentationNativePhase != 50 && (!p.Homing || z.Id == p.TargetZombieId) && !z.Hypnotized && Math.Abs(z.Row - p.FlightRow) < 0.45f && !p.HitIds.Contains(z.Id) && (!z.Airborne || p.HitsAir) && (!z.Submerged || p.Lobbed) && (AdventurePuffShroomRules.IsShortRange(p.SourceKind)
-                        ? AdventurePuffShroomRules.Collides(p, z)
+                    if (allowDamage && p.PresentationCanImpact && z.GraveRiseTicks <= 0 && z.PresentationNativePhase != 50 && (!p.Homing || z.Id == p.TargetZombieId) && !z.Hypnotized && Math.Abs(z.Row - p.FlightRow) < 0.45f && !p.HitIds.Contains(z.Id) && (!z.Airborne || p.HitsAir) && (!z.Submerged || p.Lobbed) && (z.Kind == ZombieKind.Zomboni
+                        ? AdventureZomboniRules.ProjectileCollides(p, z)
+                        : AdventurePuffShroomRules.IsShortRange(p.SourceKind) ? AdventurePuffShroomRules.Collides(p, z)
                         : z.X >= Math.Min(before, p.X) - 0.25f && z.X <= Math.Max(before, p.X) + 0.25f))
                     {
                         if (hit == null || Math.Abs(z.X - before) < Math.Abs(hit.X - before))
@@ -4081,7 +4167,8 @@ namespace PlantsVsZombies.Simulation
         private void HitAdventureZombie(Zombie z, float damage, bool bypassShield = false, uint damageFlags = 0)
         {
             if (!Zombies.Contains(z) || z.GraveRiseTicks > 0
-                || z.PresentationNativePhase == 50 && (damageFlags & 0x10) == 0)
+                || z.PresentationNativePhase == 50 && (damageFlags & 0x10) == 0
+                || z.ZomboniState?.FlatTires == true)
             {
                 return;
             }
@@ -4115,11 +4202,66 @@ namespace PlantsVsZombies.Simulation
             AdventurePresentationZombieEquipmentDamaged(z, damageFlags);
             AdventurePresentationZombieBodyDamaged(z, damageFlags);
             Raise(GameEvent.ZombieHit);
-            if (z.Health <= 0)
+            if (z.Kind == ZombieKind.Zomboni && (damageFlags & 32U) != 0)
+            {
+                BeginAdventureZomboniFlatDeath(z);
+            }
+            else if (z.Health <= 0)
             {
                 z.Health = 0f;
                 KillAdventureZombie(z, damageFlags);
             }
+        }
+
+        /// <summary>Starts PC ZamboniDeath's authored tire puncture and 280-update wheelie.</summary>
+        /// <param name="zombie">The vehicle hit by the original spike damage flag.</param>
+        private void BeginAdventureZomboniFlatDeath(Zombie zombie)
+        {
+            var state = zombie.ZomboniState ??= new AdventureZomboniState();
+            state.FlatTires = true;
+            state.DeathTicks = 280;
+            state.Wheelie2 = _random.Next(4) == 0
+                && AdventureZombieNativeRules.NativePositionX(zombie.X, AdventureDancerRules.Scale(zombie)) < 600f;
+            zombie.PresentationNativePhase = 1;
+            zombie.PresentationAnimation = state.Animation;
+            zombie.PresentationAnimationAge = 0f;
+            zombie.PresentationNativeVelocity = 0f;
+            zombie.Speed = 0f;
+            zombie.Eating = false;
+            zombie.FrozenRemaining = 0f;
+            zombie.PresentationButter = 0f;
+            RequestAdventureZombieFoley(22);
+            AddAdventureZomboniParticle(zombie, "ZamboniTire", 29f, 114f);
+        }
+
+        /// <summary>Creates an unchanged original vehicle particle at the PC unscaled native origin.</summary>
+        /// <param name="zombie">The source vehicle whose position and row determine the particle layer.</param>
+        /// <param name="particle">The original particle definition name.</param>
+        /// <param name="offsetX">The unscaled horizontal offset from mPosX.</param>
+        /// <param name="offsetY">The unscaled vertical offset from mPosY.</param>
+        private void AddAdventureZomboniParticle(Zombie zombie, string particle, float offsetX, float offsetY)
+        {
+            var nativeX = AdventureZombieNativeRules.NativePositionX(zombie.X, AdventureDancerRules.Scale(zombie));
+            Presentation.ZomboniParticles.Add(new AdventureZomboniParticle
+            {
+                Id = ++Presentation._effectId, Seed = _random.Next(), Row = zombie.Row, Particle = particle,
+                X = nativeX + offsetX, Y = AdventureBiteNativeY(zombie, nativeX) + offsetY
+            });
+        }
+
+        /// <summary>Emits PC ZamboniDeath's original explosion once, without a generic corpse animation.</summary>
+        /// <param name="zombie">The ice vehicle whose body is being removed.</param>
+        private void ExplodeAdventureZomboni(Zombie zombie)
+        {
+            var state = zombie.ZomboniState ??= new AdventureZomboniState();
+            if (state.Exploded)
+            {
+                return;
+            }
+
+            state.Exploded = true;
+            AddAdventureZomboniParticle(zombie, state.Wheelie2 ? "ZamboniExplosion2" : "ZamboniExplosion", 80f, 60f);
+            RequestAdventureZombieFoley(23);
         }
 
         /// <summary>Performs kill adventure zombie.</summary>
@@ -4835,6 +4977,16 @@ namespace PlantsVsZombies.Simulation
                 }
             }
 
+            for (var i = Presentation.ZomboniParticles.Count - 1; i >= 0; i--)
+            {
+                var effect = Presentation.ZomboniParticles[i];
+                effect.Age += dt;
+                if (effect.Age >= effect.Duration)
+                {
+                    Presentation.ZomboniParticles.RemoveAt(i);
+                }
+            }
+
             AdvanceAdventureGraves();
             AdvanceAdventureExplosionPresentation();
             AdvanceAdventureIcePresentation(dt);
@@ -5120,6 +5272,14 @@ namespace PlantsVsZombies.Simulation
         /// <param name="damageFlags">The original lethal hit flags passed to Zombie::DieWithLoot.</param>
         private void AdventurePresentationZombieDeath(Zombie zombie, uint damageFlags = 0)
         {
+            if (zombie.Kind == ZombieKind.Zomboni
+                && (zombie.PresentationDeath == AdventureZombieDeathPresentation.Normal
+                    || zombie.PresentationDeath == AdventureZombieDeathPresentation.Mowed))
+            {
+                ExplodeAdventureZomboni(zombie);
+                return;
+            }
+
             if (zombie.PresentationDeath == global::PlantsVsZombies.Adventure.AdventureZombieDeathPresentation.Mowed)
             {
                 AdventurePresentationZombieMowedParts(zombie);
@@ -6382,7 +6542,7 @@ namespace PlantsVsZombies.Simulation
 
             Adventure.FogBlownRemaining = Math.Max(0f, Adventure.FogBlownRemaining - dt);
             TickCellTimers(Adventure._craters, dt);
-            TickCellTimers(Adventure._ice, dt);
+            AdvanceAdventureIceTrails();
             AdvanceAdventureEconomy(dt);
             AdvanceAdventureWhackSeedBank(dt);
             if (Adventure.Level.Mode == AdventureMode.Boss)
@@ -6661,7 +6821,8 @@ namespace PlantsVsZombies.Simulation
             var choices = new List<int>();
             for (var r = 0; r < RowCount; r++)
             {
-                if (l.IsLawnRow(r) && AdventureZombiePoolRules.CanSpawnInRow(kind, l.IsWaterRow(r), Adventure.CurrentWave))
+                if (l.IsLawnRow(r) && AdventureZombiePoolRules.CanSpawnInRow(kind, l.IsWaterRow(r), Adventure.CurrentWave)
+                    && (kind != ZombieKind.Bobsled || Adventure._ice.Exists(ice => ice.Row == r && ice.RemainingTicks > 0)))
                 {
                     if ((kind != ZombieKind.Gargantuar || r != 0) && (kind != ZombieKind.Dancing || l.HasPool || l.IsLawnRow(r - 1) && l.IsLawnRow(r + 1)))
                     {
@@ -7627,7 +7788,7 @@ namespace PlantsVsZombies.Simulation
                         {
                             if (z.Kind == ZombieKind.Zomboni || z.Kind == ZombieKind.Catapult)
                             {
-                                HitAdventureZombie(z, 1800f, true);
+                                HitAdventureZombie(z, 1800f, true, z.Kind == ZombieKind.Zomboni ? 32U : 0U);
                                 RequestAdventureZombieFoley(1);
                                 p.Health -= 50f;
                                 p.VehicleHitsTaken++;
@@ -8144,7 +8305,7 @@ namespace PlantsVsZombies.Simulation
         /// <returns>The resulting adventure bite native y.</returns>
         private float AdventureBiteNativeY(Zombie z, float x)
         {
-            return 80f + z.Row * (Adventure.Level.HasPool || Adventure.Level.HasRoof ? 85f : 100f) + (Adventure.Level.HasRoof ? Math.Max(0f, 5f - x / 80f) * 20f - 10f : 0f) - 30f - (z.Kind == ZombieKind.Balloon ? 30f : 0f) - (z.Kind == ZombieKind.Pogo && !z.UsedAbility ? 16f : 0f);
+            return 80f + z.Row * (Adventure.Level.HasPool || Adventure.Level.HasRoof ? 85f : 100f) + (Adventure.Level.HasRoof ? Math.Max(0f, 5f - x / 80f) * 20f - 10f : 0f) - 30f - (z.Kind == ZombieKind.Balloon ? 30f : 0f) - (z.Kind == ZombieKind.Pogo && !z.UsedAbility ? 16f : 0f) + z.PresentationVaultPositionY;
         }
 
         /// <summary>Performs adventure plant eating rectangle.</summary>
@@ -8704,6 +8865,13 @@ namespace PlantsVsZombies.Simulation
         /// <param name = "z">The z.</param>
         private void RefreshAdventureZombieNativeSpeed(Zombie z)
         {
+            if (z.ZomboniState?.FlatTires == true)
+            {
+                z.PresentationNativeVelocity = 0f;
+                z.Speed = 0f;
+                return;
+            }
+
             if (z.PresentationWhackSpeed)
             {
                 return;
@@ -9042,6 +9210,11 @@ namespace PlantsVsZombies.Simulation
         /// <returns>The resulting adventure presentation zombie animation.</returns>
         public string AdventurePresentationZombieAnimation(Zombie z)
         {
+            if (z.Kind == ZombieKind.Zomboni && z.ZomboniState?.FlatTires == true)
+            {
+                return z.ZomboniState.Animation;
+            }
+
             string asset = AdventureZombiePresentationAsset(z), clip;
             var motionClip = AdventureZombieMotionRules.Animation(z);
             if (motionClip != null)
@@ -9152,6 +9325,11 @@ namespace PlantsVsZombies.Simulation
         /// <returns>The resulting adventure presentation zombie rate.</returns>
         public float AdventurePresentationZombieRate(Zombie z)
         {
+            if (z.Kind == ZombieKind.Zomboni && z.ZomboniState?.FlatTires == true)
+            {
+                return z.ZomboniState.Rate;
+            }
+
             var clip = AdventurePresentationZombieAnimation(z);
             if (AdventureDancerRules.IsDancer(z))
             {
@@ -9332,6 +9510,12 @@ namespace PlantsVsZombies.Simulation
                 return;
             }
 
+            if (z.Kind == ZombieKind.Zomboni)
+            {
+                // PC TakeBodyDamage 0x54D080 requests ShieldHit on every unsuppressed body hit.
+                RequestAdventureZombieFoley(46);
+            }
+
             var remaining = damage;
             if ((!bypassShield || (damageFlags & 2U) != 0) && z.ShieldHealth > 0f)
             {
@@ -9364,6 +9548,18 @@ namespace PlantsVsZombies.Simulation
         /// <param name = "damageFlags">The damage flags.</param>
         private void AdventurePresentationZombieBodyDamaged(Zombie z, uint damageFlags = 0)
         {
+            if (z.Kind == ZombieKind.Zomboni)
+            {
+                var state = z.ZomboniState ??= new AdventureZomboniState();
+                if (z.Health > 0f && state.SmokeStartAge < 0f
+                    && AdventureZombieEquipmentRules.DamageIndex(z.Health, (int)z.StartingHealth) == 2)
+                {
+                    state.SmokeStartAge = z.Age;
+                }
+
+                return;
+            }
+
             var kind = z.ModeHead >= 26 ? z.ModeHead : (int)z.Kind;
             var height = z.PresentationNativeHeight;
             if (height < 0 && ModeSession != null && ModeSession.Definition.Mechanic == global::PlantsVsZombies.Modes.ModeMechanic.Aquarium)
@@ -9506,6 +9702,12 @@ namespace PlantsVsZombies.Simulation
             }
 
             Zombies.Add(z);
+            if (kind == ZombieKind.Zomboni)
+            {
+                z.ZomboniState = new AdventureZomboniState();
+                RequestAdventureZombieFoley(16);
+            }
+
             SpawnedZombies++;
             return z;
         }
@@ -9608,12 +9810,19 @@ namespace PlantsVsZombies.Simulation
             {
                 // The native jump artwork has moved 150 pixels relative to the walking origin.
                 z.X -= 150f / 80f;
+                z.PresentationVaultPositionY = 0f;
                 SetAdventureZombieMotionPhase(z, 13);
                 return true;
             }
 
             // PC vault velocity ignores chill; the authored reanimation clock still slows down.
             z.X -= z._poleVaultVelocity * (dt * 100f) / 80f;
+            if (Adventure.Level.HasRoof)
+            {
+                var nativeX = AdventureZombieNativeRules.NativePositionX(z.X, AdventureDancerRules.Scale(z));
+                z.PresentationVaultPositionY = AdventureZombieMotionRules.PoleVaultRoofOffset(nativeX, (float)progress);
+            }
+
             return true;
         }
 
@@ -9787,6 +9996,50 @@ namespace PlantsVsZombies.Simulation
             RequestAdventureZombieFoley(foley);
         }
 
+        /// <summary>Updates the original row countdowns before vehicles extend the ice during their action update.</summary>
+        private void AdvanceAdventureIceTrails()
+        {
+            for (var index = Adventure._ice.Count - 1; index >= 0; index--)
+            {
+                var trail = Adventure._ice[index];
+                trail.RemainingTicks--;
+                trail.AgeTicks++;
+                if (trail.RemainingTicks <= 0)
+                {
+                    Adventure._ice.RemoveAt(index);
+                }
+            }
+        }
+
+        /// <summary>Extends the shared native ice row rather than generating independently expiring cell stamps.</summary>
+        /// <param name="zombie">The vehicle advancing its original ice front.</param>
+        private void ExtendAdventureIceTrail(Zombie zombie)
+        {
+            var x = AdventureZombieNativeRules.NativePositionX(zombie.X, AdventureDancerRules.Scale(zombie));
+            var permanent = ModeSession != null && ModeSession.Definition.Mechanic == ModeMechanic.Bobsled;
+            foreach (var trail in Adventure._ice)
+            {
+                if (trail.Row == zombie.Row)
+                {
+                    trail.Extend(x, Adventure.Level.HasRoof, permanent);
+                    return;
+                }
+            }
+
+            if ((int)(x + 118f) >= 800)
+            {
+                return;
+            }
+
+            var created = new AdventureIceTrail { Row = zombie.Row };
+            created.Extend(x, Adventure.Level.HasRoof, permanent);
+            if (created.RemainingTicks > 0)
+            {
+                created.Id = ++Presentation._effectId;
+                Adventure._ice.Add(created);
+            }
+        }
+
         /// <summary>Performs advance adventure zombies.</summary>
         /// <param name = "dt">The dt.</param>
         private void AdvanceAdventureZombies(float dt)
@@ -9801,6 +10054,17 @@ namespace PlantsVsZombies.Simulation
                 }
 
                 z.Age += dt;
+                if (z.Kind == ZombieKind.Zomboni && z.ZomboniState?.FlatTires == true)
+                {
+                    if (--z.ZomboniState.DeathTicks <= 0)
+                    {
+                        ExplodeAdventureZomboni(z);
+                        KillAdventureZombie(z);
+                    }
+
+                    continue;
+                }
+
                 if (z.PoolState != null)
                 {
                     if (z.PoolState.SplashAge >= 0f)
@@ -10037,11 +10301,7 @@ namespace PlantsVsZombies.Simulation
 
                 if (z.Kind == ZombieKind.Zomboni)
                 {
-                    var col = (int)Math.Floor(z.X);
-                    if (col >= 0 && col < 9 && !HasCellTimer(Adventure._ice, z.Row, col))
-                    {
-                        Adventure._ice.Add(new AdventureCellTimer { Row = z.Row, Column = col, Remaining = 30f });
-                    }
+                    ExtendAdventureIceTrail(z);
                 }
 
                 Zombie? opponent = null;
@@ -10151,9 +10411,14 @@ namespace PlantsVsZombies.Simulation
                 {
                     if (z.Kind == ZombieKind.Zomboni || z.Kind == ZombieKind.Catapult)
                     {
-                        if (target.Kind == PlantKind.Spikerock)
+                        if (z.Kind == ZombieKind.Zomboni && target.Kind == PlantKind.Spikeweed)
                         {
-                            HitAdventureZombie(z, 1800f, true);
+                            HitAdventureZombie(z, 20f, true, 32U);
+                            RemoveAdventurePlantAndStack(target);
+                        }
+                        else if (target.Kind == PlantKind.Spikerock)
+                        {
+                            HitAdventureZombie(z, 1800f, true, z.Kind == ZombieKind.Zomboni ? 32U : 0U);
                             target.Health -= 50;
                             target.VehicleHitsTaken++;
                             if (target.Health <= 0)
@@ -12597,10 +12862,10 @@ namespace PlantsVsZombies.Simulation
                 {
                     if (!a.Level.IsWaterRow(r))
                     {
-                        for (var c = 3; c < 9; c++)
+                        a._ice.Add(new AdventureIceTrail
                         {
-                            a._ice.Add(new AdventureCellTimer { Row = r, Column = c, Remaining = float.MaxValue });
-                        }
+                            Id = ++Presentation._effectId, Row = r, MinX = 400, RemainingTicks = int.MaxValue
+                        });
                     }
                 }
             }
@@ -12792,7 +13057,7 @@ namespace PlantsVsZombies.Simulation
 
             Adventure.FogBlownRemaining = Math.Max(0f, Adventure.FogBlownRemaining - dt);
             TickCellTimers(Adventure._craters, dt);
-            TickCellTimers(Adventure._ice, dt);
+            AdvanceAdventureIceTrails();
             if (d.Mechanic == ModeMechanic.Aquarium)
             {
                 TickModeAquarium(dt);
@@ -14765,7 +15030,7 @@ namespace PlantsVsZombies.Simulation
             var spawned = 0;
             foreach (ZombieKind entry in wave.Zombies)
             {
-                var kind = entry == ZombieKind.Bobsled && !a._ice.Exists(c => c.Column < 8) ? ZombieKind.Normal : entry;
+                var kind = entry == ZombieKind.Bobsled && !a._ice.Exists(c => c.RemainingTicks > 0 && c.MinX < 700) ? ZombieKind.Normal : entry;
                 var row = ChooseAdventureZombieRow(kind);
                 var x = 9.5f + spawned++ * 0.12f;
                 if (a.Level.Mode == AdventureMode.WhackAZombie && a._graves.Count > 0)

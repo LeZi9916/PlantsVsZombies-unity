@@ -311,9 +311,10 @@ namespace PlantsVsZombies.Game
                 && _zombie.PoolState == null && _zombie.PresentationInPool != true && !_zombie.PresentationPoolRow
                 ? RequiredRenderer.DrawZombiePlayback(_origin, _scale, _seconds, _variant, _clip, _loop, _rate, true, null, _key)
                 : RequiredRenderer.DrawNativePlayback(_name, _origin, _scale, _seconds, _clip, _loop, _rate, _zombieVisible, null, null,
-                    _backwards, _key, _clip == "anim_gasp" ? 10 : _zombie.Kind == ZombieKind.Snorkel && _zombie.PresentationNativePhase != 58
+                    _backwards, _key, _clip == "anim_gasp" || _zombie.ZomboniState?.FlatTires == true ? 10 : _zombie.Kind == ZombieKind.Snorkel && _zombie.PresentationNativePhase != 58
                         ? 0 : AdventureDancerRules.AnimationBlendTicks(_zombie), -1f, 90f,
-                    trackAttachment: _poolParticles != null && _zombie.PoolState?.SeaweedAge >= 0f ? _poolTrackAttachment : null,
+                    trackAttachment: _poolParticles != null && (_zombie.PoolState?.SeaweedAge >= 0f
+                        || _zombie.ZomboniState?.FlatTires == true) ? _poolTrackAttachment : null,
                     fullLastFrame: _zombie.Kind == ZombieKind.Snorkel && _zombie.PresentationNativePhase == 59);
             if (_plantHead && !_zombie.Headless)
             {
@@ -331,6 +332,17 @@ namespace PlantsVsZombies.Game
         private void DrawPoolTrackAttachment(string track, Matrix4x4 placement, Matrix4x4 boardTransform, float alpha)
         {
             var particles = _poolParticles;
+            if (particles != null && _zombie.ZomboniState?.FlatTires == true && !_zombie.ZomboniState.Wheelie2
+                && _poolHeadKey != null && string.Equals(track, "Zombie_zamboni_1", StringComparison.OrdinalIgnoreCase))
+            {
+                // PC 0x54A899 attaches the original smoke 35,85 pixels into the animated hood track.
+                var smokePoint = placement.MultiplyPoint3x4(new Vector3(35f, 85f, 0f));
+                RequiredRenderer.DrawNativePoolParticleAttachment(particles, _poolHeadKey,
+                    (280 - _zombie.ZomboniState.DeathTicks) * .01f + _remainder,
+                    new Vector2(smokePoint.x, smokePoint.y), _zombie.Id, 1f, boardTransform, alpha, "ZamboniSmoke");
+                return;
+            }
+
             var pool = _zombie.PoolState;
             if (particles == null || pool == null || pool.SeaweedAge < 0f)
             {

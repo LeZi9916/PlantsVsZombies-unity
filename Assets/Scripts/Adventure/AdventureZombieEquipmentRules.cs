@@ -233,6 +233,11 @@ namespace PlantsVsZombies.Adventure
         {
             var helm = HelmType(z);
             var bodyTrack = Same(asset, body);
+            if (bodyTrack && z.Kind == ZombieKind.Zomboni)
+            {
+                return AdventureZomboniRules.DamageImage(z, track);
+            }
+
             // PC UpdateZombieNewspaper (0x541829) replaces only anim_head1 after the gasp completes.
             if (bodyTrack && z.Kind == ZombieKind.Newspaper && z.PresentationNativePhase == 31 && Same(track, "anim_head1"))
             {

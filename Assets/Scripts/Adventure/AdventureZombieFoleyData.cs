@@ -11,6 +11,18 @@ namespace PlantsVsZombies.Adventure
         {
             // PC Foley table 0x74B3B8, stride 52; names resolved by resource initialization 0x4935B0.
             {
+                16,
+                new AdventureZombieFoleyDefinition(5f, new[] { "zamboni" })
+            },
+            {
+                22,
+                new AdventureZombieFoleyDefinition(0f, new[] { "balloon_pop" })
+            },
+            {
+                23,
+                new AdventureZombieFoleyDefinition(0f, new[] { "explosion" })
+            },
+            {
                 7,
                 new AdventureZombieFoleyDefinition(0f, new[] { "plant", "plant2" })
             },

@@ -83,6 +83,10 @@ namespace PlantsVsZombies.Tests.EditMode
             {
                 plant.RequiredCherryBombPresentation.Countdown = 1;
             }
+            else if (kind == PlantKind.Jalapeno)
+            {
+                plant.JalapenoPresentation!.Countdown = 1;
+            }
             else if (kind == PlantKind.PotatoMine)
             {
                 plant.MinePhase = MinePhase.Armed;

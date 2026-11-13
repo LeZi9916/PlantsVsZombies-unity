@@ -88,6 +88,41 @@ namespace PlantsVsZombies.Tests.EditMode
             Assert.That(AdventureZombieFoleyData.Definitions[78].Samples, Is.EqualTo(new[] { "polevault" }));
         }
 
+        /// <summary>Checks the original virtual foot position on and across the roof's slope boundary.</summary>
+        /// <param name="nativeX">The unchanged body position before authored jump displacement.</param>
+        /// <param name="offset">The original extra floor height halfway through the jump.</param>
+        [TestCase(300f, 18.75f)]
+        [TestCase(450f, 6.25f)]
+        [TestCase(500f, 0f)]
+        public void PoleVaultRoofFloorUsesAuthoredFootPosition(float nativeX, float offset)
+        {
+            Assert.That(AdventureZombieMotionRules.PoleVaultRoofOffset(nativeX, .5f), Is.EqualTo(offset));
+        }
+
+        /// <summary>Checks real roof updates retain the original floor correction until the authored landing.</summary>
+        [Test]
+        public void RoofPoleVaultUpdatesBodyAndContactHeightThenClearsOffsetAtLanding()
+        {
+            var game = Board(41);
+            var target = new Plant { Kind = PlantKind.Wallnut, Row = 2, Column = 3, Health = 4000f };
+            game.Plants.Add(target);
+            var zombie = Spawn(game, ZombieKind.PoleVaulter, 2, AdventureZombieNativeRules.GridX(420f));
+            Invoke(game, "BeginAdventurePoleVault", zombie, target);
+            game.Update(.9f);
+
+            // PC 541850 samples mPosY at mPosX - 150*animTime; 54D620 adds the 40-pixel foot probe.
+            var progress = .9f * 24f / 43f;
+            Assert.That(zombie.PresentationNativePhase, Is.EqualTo(12));
+            Assert.That(zombie.PresentationVaultPositionY, Is.EqualTo(progress * 37.5f).Within(.001f));
+            var nativeX = AdventureZombieNativeRules.NativePositionX(zombie.X);
+            var nativeY = 80f + 2f * 85f + Math.Max(0f, 400f - (nativeX - 150f * progress)) * .25f - 40f;
+            Assert.That(game.AdventureZombieAttackRectangle(zombie).Y, Is.EqualTo((int)nativeY));
+
+            game.Update(.9f);
+            Assert.That(zombie.PresentationNativePhase, Is.EqualTo(13));
+            Assert.That(zombie.PresentationVaultPositionY, Is.Zero);
+        }
+
         /// <summary>Checks that Tall-nut blocks during the vault's authored contact window.</summary>
         [Test]
         public void PoleVaultHitsTallNutDuringJump()

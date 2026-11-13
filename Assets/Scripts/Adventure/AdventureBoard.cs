@@ -15,6 +15,7 @@ namespace PlantsVsZombies.Adventure
         internal AdventureBoard(AdventureLevelSpec level)
         {
             Level = level;
+            _iceView = _ice.AsReadOnly();
         }
 
         /// <summary>Gets the independent PC PoolEffect counter advanced before board objects update.</summary>
@@ -82,7 +83,9 @@ namespace PlantsVsZombies.Adventure
         /// <summary>Stores craters.</summary>
         internal readonly List<AdventureCellTimer> _craters = new List<AdventureCellTimer>();
         /// <summary>Stores ice.</summary>
-        internal readonly List<AdventureCellTimer> _ice = new List<AdventureCellTimer>();
+        internal readonly List<AdventureIceTrail> _ice = new List<AdventureIceTrail>();
+        /// <summary>Retains one read-only ice view for every row's repeated presentation queries.</summary>
+        private readonly IReadOnlyList<AdventureIceTrail> _iceView;
         /// <summary>Stores balls.</summary>
         internal readonly List<AdventureBossBall> _balls = new List<AdventureBossBall>();
         /// <summary>Stores nuts.</summary>
@@ -124,11 +127,11 @@ namespace PlantsVsZombies.Adventure
         }
 
         /// <summary>Gets or sets ice trails.</summary>
-        public IReadOnlyList<AdventureCellTimer> IceTrails
+        public IReadOnlyList<AdventureIceTrail> IceTrails
         {
             get
             {
-                return _ice.AsReadOnly();
+                return _iceView;
             }
         }
 

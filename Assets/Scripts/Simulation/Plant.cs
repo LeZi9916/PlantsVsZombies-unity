@@ -14,6 +14,8 @@ namespace PlantsVsZombies.Simulation
         public AdventureScaredyShroomState? ScaredyShroomPresentation { get; internal set; }
         /// <summary>Gets the pre-explosion body and head state, created when a Doom-shroom first updates awake.</summary>
         public AdventureDoomShroomState? DoomShroomPresentation { get; internal set; }
+        /// <summary>Gets or sets the original Jalapeno fuse animation and native per-update shake.</summary>
+        public AdventureJalapenoState? JalapenoPresentation { get; internal set; }
         /// <summary>Gets or sets cherry bomb presentation.</summary>
         public global::PlantsVsZombies.Adventure.AdventureCherryBombState? CherryBombPresentation { get; internal set; }
 

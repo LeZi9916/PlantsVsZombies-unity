@@ -16,6 +16,17 @@ namespace PlantsVsZombies.Adventure
             return (int)nativeX + 45 >= 40 && (int)nativeX < 680;
         }
 
+        /// <summary>Samples the roof floor beneath the pole vault's authored horizontal displacement.</summary>
+        /// <param name="nativeX">The zombie's current native position before animation displacement.</param>
+        /// <param name="progress">The normalized original jump reanimation time.</param>
+        /// <returns>The additional native row height caused by the original virtual foot position.</returns>
+        internal static float PoleVaultRoofOffset(float nativeX, float progress)
+        {
+            // PC 541850 temporarily subtracts 150 * animTime before calling GetPosYBasedOnRow (54D620).
+            var footX = nativeX - 150f * Math.Max(0f, Math.Min(1f, progress));
+            return (Math.Max(0f, 400f - footX) - Math.Max(0f, 400f - nativeX)) * .25f;
+        }
+
         /// <summary>Selects the native phase's animation before generic eating or walking selection.</summary>
         /// <param name="zombie">The zombie with an initialized native phase.</param>
         /// <returns>The phase animation, or null for the existing generic selector.</returns>
@@ -55,7 +66,8 @@ namespace PlantsVsZombies.Adventure
         internal static bool PlaysOnce(Zombie zombie)
         {
             var phase = zombie.PresentationNativePhase;
-            return zombie.Kind == ZombieKind.PoleVaulter && phase == 12
+            return zombie.Kind == ZombieKind.Zomboni && zombie.ZomboniState?.FlatTires == true
+                || zombie.Kind == ZombieKind.PoleVaulter && phase == 12
                 || zombie.Kind == ZombieKind.Snorkel && (phase == 58 || phase == 60 || phase == 62);
         }
 

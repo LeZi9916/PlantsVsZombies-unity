@@ -1043,6 +1043,35 @@ namespace PlantsVsZombies.Game
 
             return true;
         }
+
+        /// <summary>Draws the PC Jalapeno fuse using only its original authored explode frames and native shake.</summary>
+        /// <param name="plant">The plant whose original fuse pose is displayed.</param>
+        /// <param name="origin">The existing native plant origin before per-update shake.</param>
+        /// <param name="scale">The existing native plant scale.</param>
+        /// <returns>Whether the plant is a Jalapeno handled by this original fuse draw.</returns>
+        private bool DrawAdventureJalapeno(Plant plant, Vector2 origin, float scale)
+        {
+            if (plant.Kind != PlantKind.Jalapeno)
+            {
+                return false;
+            }
+
+            var state = plant.JalapenoPresentation;
+            var seconds = state?.SampleSeconds(AdventureRenderRemainder) ?? 0f;
+            var rate = state?.Rate ?? 10f;
+            if (state != null)
+            {
+                origin += new Vector2(state.ShakeX, state.ShakeY);
+            }
+
+            var highlighted = _owner._shovel && ReferenceEquals(plant, _owner.Layout.AdventureShovelTarget(_owner.AdventureBoard._adventurePointer));
+            RegisterPlantSurface(plant, highlighted);
+            ActorRenderer.DrawPlant(plant, "Jalapeno", origin, scale, seconds, AdventureJalapenoState.Animation, false, rate,
+                null, _presentationKeys.Get("plant-", plant.Id), new Rect(origin.x - 80f, origin.y - 160f, 300f, 340f), 0,
+                AdventureRenderRemainder, _presentationKeys.Get("producer-plant-", plant.Id), highlighted);
+            return true;
+        }
+
         /// <summary>Performs draw adventure seed bank background.</summary>
         /// <param name = "origin">The origin.</param>
         /// <param name = "count">The count.</param>
@@ -1363,6 +1392,15 @@ namespace PlantsVsZombies.Game
                 if (!explosion.Overlay && explosion.Row == row)
                 {
                     DrawAdventureExplosion(explosion, _adventureParticles);
+                }
+            }
+
+            foreach (var effect in _owner.RequiredGame.Presentation.ZomboniParticles)
+            {
+                if (effect.Row == row)
+                {
+                    _adventureParticles.Draw(_presentationKeys.Get("zamboni-particle-", effect.Id), effect.Particle,
+                        effect.Age + AdventureRenderRemainder, new Vector2(effect.X, effect.Y), effect.Seed);
                 }
             }
 
@@ -1951,11 +1989,6 @@ namespace PlantsVsZombies.Game
                     DrawAdventureCrater(crater);
                 }
 
-                foreach (var ice in _owner.RequiredGame.Adventure.IceTrails)
-                {
-                    DrawImage("ice.png", new Rect(BoardLayout.AdventureGridX + ice.Column * BoardLayout.CellWidth, _owner.Layout.AdventureCellY(ice.Row, ice.Column) + 44, 84, 42));
-                }
-
                 if (level.Mode == AdventureMode.Bowling && (!_owner.Opening.AdventureIntroActive || _owner.Opening._bowlingLineVisible))
                 {
                     Fill(new Rect(278, 90, 4, 475), new Color(0.9f, 0.08f, 0.04f));
@@ -1968,6 +2001,15 @@ namespace PlantsVsZombies.Game
 
                 for (var row = 0; row < _owner.RequiredGame.RowCount; row++)
                 {
+                    foreach (var ice in _owner.RequiredGame.Adventure.IceTrails)
+                    {
+                        if (ice.Row == row)
+                        {
+                            // PC ice layer is 200000 + row * 10000 + 2, before this row's actors.
+                            DrawAdventureIceTrail(ice);
+                        }
+                    }
+
                     foreach (var grave in _owner.RequiredGame.Adventure._graves)
                     {
                         if (grave.Row == row)
@@ -1994,6 +2036,7 @@ namespace PlantsVsZombies.Game
                         }
                     }
 
+                    DrawAdventureIceSparkles(row);
                     for (var layer = 0; layer <= (int)PlantLayer.Effect; layer++)
                     {
                         foreach (Plant plant in _owner.RequiredGame.Plants)
@@ -2736,6 +2779,74 @@ namespace PlantsVsZombies.Game
             DrawImage(shadowName, AdventurePlantShadowRules.Bounds(plant, cellOrigin, drawHeight, new Vector2(shadow.Width, shadow.Height), growth));
         }
 
+        /// <summary>Tiles the unscaled PC ice image and cap from the exact continuous board-pixel front.</summary>
+        /// <param name="trail">The surviving native row and its melting countdown.</param>
+        private void DrawAdventureIceTrail(AdventureIceTrail trail)
+        {
+            var tile = _owner.Textures.LoadImage("ice.png");
+            var cap = _owner.Textures.LoadImage("ice_cap.png");
+            if (tile == null || cap == null || trail.RemainingTicks <= 0)
+            {
+                return;
+            }
+
+            var previous = CanvasUI.Color;
+            try
+            {
+                CanvasUI.Color = new Color(previous.r, previous.g, previous.b, previous.a * trail.Opacity);
+                var y = _owner.Layout.AdventureCellY(trail.Row, 8) + 20f;
+                // PC Board::DrawIce 0x421697 uses +13; the mobile-derived source uses a different cap overlap.
+                var start = trail.MinX + 13;
+                for (var x = start; x < 800;)
+                {
+                    var width = x == start ? (800 - start) % tile.Width : tile.Width;
+                    if (width == 0)
+                    {
+                        width = tile.Width;
+                    }
+
+                    DrawTextureWithSource(new Rect(x, y, width, tile.Height), tile,
+                        new Rect((tile.Width - width) / (float)tile.Width, 0f, width / (float)tile.Width, 1f));
+                    x += width;
+                }
+
+                DrawTextureWithSource(new Rect(trail.MinX, y, cap.Width, cap.Height), cap, new Rect(0f, 0f, 1f, 1f));
+            }
+            finally
+            {
+                CanvasUI.Color = previous;
+            }
+        }
+
+        /// <summary>Draws the PC IceSparkle emitter in its original row layer above the continuous ice image.</summary>
+        /// <param name="row">The zero-based lawn row being drawn.</param>
+        private void DrawAdventureIceSparkles(int row)
+        {
+            if (_adventureParticles == null)
+            {
+                return;
+            }
+
+            var previous = SpriteDrawState.Color;
+            try
+            {
+                foreach (var trail in _owner.RequiredGame.Adventure.IceTrails)
+                {
+                    if (trail.Row == row && trail.AgeTicks > 0)
+                    {
+                        SpriteDrawState.Color = new Color(previous.r, previous.g, previous.b, previous.a * trail.Opacity);
+                        _adventureParticles.Draw(_presentationKeys.Get("native-ice-sparkles-", trail.Id), "IceSparkle",
+                            (trail.AgeTicks - 1) * .01f + AdventureRenderRemainder,
+                            new Vector2(trail.MinX, _owner.Layout.AdventureCellY(row, 8)), trail.Id);
+                    }
+                }
+            }
+            finally
+            {
+                SpriteDrawState.Color = previous;
+            }
+        }
+
         /// <summary>Performs draw adventure plant.</summary>
         /// <param name = "plant">The plant.</param>
         private void DrawAdventurePlant(Plant plant)
@@ -2767,6 +2878,11 @@ namespace PlantsVsZombies.Game
 
             var origin = new Vector2(x + (1f - size) * 40f, y + drawHeight + (1f - size) * 80f);
             if (DrawAdventureCherryBomb(plant, origin, size))
+            {
+                return;
+            }
+
+            if (DrawAdventureJalapeno(plant, origin, size))
             {
                 return;
             }
@@ -3123,6 +3239,25 @@ namespace PlantsVsZombies.Game
             }
 
             DrawAdventureTangleKelpGrab(zombie, x);
+            DrawAdventureZomboniSmoke(zombie, x);
+        }
+
+        /// <summary>Draws the PC damaged engine's attached smoke at its unscaled native position.</summary>
+        /// <param name="zombie">The ice vehicle retaining the original smoke attachment.</param>
+        /// <param name="x">The interpolated horizontal position shared with the visible body.</param>
+        private void DrawAdventureZomboniSmoke(Zombie zombie, float x)
+        {
+            var state = zombie.ZomboniState;
+            if (_adventureParticles == null || state == null || state.SmokeStartAge < 0f)
+            {
+                return;
+            }
+
+            var nativeX = AdventureZombieNativeRules.NativePositionX(x, AdventureDancerRules.Scale(zombie));
+            var nativeY = AdventureFloorYAtPixel(zombie.Row, nativeX + 40f) - 30f;
+            _adventureParticles.Draw(_presentationKeys.Get("zamboni-engine-smoke-", zombie.Id), "ZamboniSmoke",
+                zombie.Age - state.SmokeStartAge + AdventureRenderRemainder,
+                new Vector2(nativeX + 27f, nativeY + 72f), zombie.Id);
         }
 
         /// <summary>Draws the original once-and-hold kelp attachment after its target's complete body.</summary>
@@ -3334,8 +3469,12 @@ namespace PlantsVsZombies.Game
             _adventurePresentationSurfaces.Add(surface);
             _adventurePresentationLiveSurfaces.Add(surface);
             var seaweed = zombie.PoolState != null && zombie.PoolState.SeaweedAge >= 0f;
+            var wheelieSmoke = zombie.Kind == ZombieKind.Zomboni && zombie.ZomboniState?.FlatTires == true
+                && !zombie.ZomboniState.Wheelie2;
             ActorRenderer.DrawZombie(zombie, name, clip, origin, size, age, rate, loop, _presentationKeys.Get("actor-", zombie.Id), surface,
-                seaweed ? _adventureParticles : null, seaweed ? _presentationKeys.Get("pool-seaweed-head-", zombie.Id) : null,
+                seaweed || wheelieSmoke ? _adventureParticles : null,
+                wheelieSmoke ? _presentationKeys.Get("zamboni-wheelie-smoke-", zombie.Id)
+                    : seaweed ? _presentationKeys.Get("pool-seaweed-head-", zombie.Id) : null,
                 seaweed ? _presentationKeys.Get("pool-seaweed-arm-", zombie.Id) : null,
                 seaweed ? _presentationKeys.Get("pool-seaweed-tube-", zombie.Id) : null, AdventureRenderRemainder);
             CanvasUI.Color = previous;
