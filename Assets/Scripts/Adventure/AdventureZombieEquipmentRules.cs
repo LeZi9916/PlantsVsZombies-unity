@@ -143,6 +143,15 @@ namespace PlantsVsZombies.Adventure
             }
         }
 
+        /// <summary>Gets the original particle emitted when a held shield is detached.</summary>
+        /// <param name="zombie">The zombie supplying its original shield type.</param>
+        /// <returns>The PC particle identifier, or minus one when the zombie has no supported shield.</returns>
+        public static int ShieldParticle(Zombie zombie)
+        {
+            // PC DropShield 0x54C7A0 and the local particle table 0x74C8D8.
+            return zombie.Kind == ZombieKind.ScreenDoor ? 12 : zombie.Kind == ZombieKind.Newspaper ? 13 : zombie.Kind == ZombieKind.Ladder ? 54 : -1;
+        }
+
         /// <summary>Performs shield track.</summary>
         /// <param name = "z">The z.</param>
         /// <returns>The resulting shield track.</returns>

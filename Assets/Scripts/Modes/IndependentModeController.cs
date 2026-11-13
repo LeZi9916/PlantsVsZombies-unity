@@ -639,7 +639,7 @@ namespace PlantsVsZombies.Modes
                 }
             }
 
-            if (m != ModeMechanic.IZombie && m != ModeMechanic.Beghouled && m != ModeMechanic.BeghouledTwist && AdventureBoardController.s_adventureShovelButton.Contains(point))
+            if (m != ModeMechanic.IZombie && m != ModeMechanic.Beghouled && m != ModeMechanic.BeghouledTwist && _owner.Layout.AdventureShovelButton.Contains(point))
             {
                 _owner._shovel = !_owner._shovel;
                 _owner.Sounds.PlayPresentationSound("shovel");

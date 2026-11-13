@@ -100,6 +100,58 @@ namespace PlantsVsZombies.Adventure
                 : phase >= 45 && phase <= 49 ? 18f : -1f;
         }
 
+        /// <summary>Checks whether the original pointing clip plays once and holds its final pose.</summary>
+        /// <param name="zombie">The dancer whose current phase is inspected.</param>
+        /// <returns>True during the pointing gesture and its two-hundred-update hold.</returns>
+        public static bool HoldsPoint(Zombie zombie)
+        {
+            return IsDancer(zombie) && !zombie.Eating
+                && zombie.PresentationNativePhase >= 41 && zombie.PresentationNativePhase <= 43;
+        }
+
+        /// <summary>Gets the original blend selected by dancer initialization, dance updates, and meal transitions.</summary>
+        /// <param name="zombie">The actor whose current native body playback is being drawn.</param>
+        /// <returns>Zero for entrance or emergence, ten for ordinary dance steps, and twenty for pointing or meals.</returns>
+        public static int AnimationBlendTicks(Zombie zombie)
+        {
+            if (!IsDancer(zombie) || zombie.Eating || zombie.PresentationNativePhase < 40 || zombie.PresentationNativePhase > 50)
+            {
+                return 20;
+            }
+
+            return zombie.PresentationNativePhase == 50 ? 0 : zombie.DancerState?.AnimationBlendTicks ?? 20;
+        }
+
+        /// <summary>Checks the original PC spotlight phase exclusions at 0x548B00.</summary>
+        /// <param name="zombie">The actor whose native phase selects the spotlight.</param>
+        /// <returns>True for a leader after its first pointing gesture and outside normal death.</returns>
+        public static bool HasSpotlight(Zombie zombie)
+        {
+            var phase = zombie.PresentationNativePhase;
+            return zombie.Kind == ZombieKind.Dancing && phase != 40 && phase != 41 && phase != 0 && phase != 1;
+        }
+
+        /// <summary>Gets the original PC spotlight color cycle at 0x548B4E.</summary>
+        /// <param name="ageTicks">The leader's age in native one-hundred-Hertz updates.</param>
+        /// <returns>The packed twenty-four-bit RGB color used for both original spotlight images.</returns>
+        public static int SpotlightColor(int ageTicks)
+        {
+            var index = ageTicks >= 700 ? ageTicks / 100 * 7 % 5 : 0;
+            switch (index)
+            {
+                case 1:
+                    return 0x72EAAA;
+                case 2:
+                    return 0xD87ECA;
+                case 3:
+                    return 0x5A6E8C;
+                case 4:
+                    return 0xF05A82;
+                default:
+                    return 0xFAFAA0;
+            }
+        }
+
         /// <summary>Gets whether the original dancer body is mirrored for the current dance step.</summary>
         /// <param name="zombie">The live dancer.</param>
         /// <returns>The body-facing flag after the original mind-control inversion.</returns>
@@ -380,6 +432,7 @@ namespace PlantsVsZombies.Adventure
                 return;
             }
 
+            var previousPhase = zombie.PresentationNativePhase;
             zombie.PresentationNativePhase = phase;
             if (zombie.DancerState != null)
             {
@@ -388,6 +441,13 @@ namespace PlantsVsZombies.Adventure
 
             if (restartAnimation)
             {
+                if (zombie.DancerState != null)
+                {
+                    // PC Init, 0x544600 and 0x544750 preserve the first walk's twenty-tick blend after the point hold.
+                    zombie.DancerState.AnimationBlendTicks = previousPhase < 0 || phase == 40 ? 0
+                        : phase == 44 && previousPhase == 43 ? 20 : phase >= 44 && phase <= 49 ? 10 : 20;
+                }
+
                 zombie.PresentationAnimation = Animation(zombie);
                 zombie.PresentationAnimationAge = phase == 45 ? .6f * 22f / 18f : 0f;
                 zombie._presentationWalkPhase = phase == 45 ? .6f : 0f;

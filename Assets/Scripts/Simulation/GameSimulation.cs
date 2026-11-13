@@ -2244,22 +2244,39 @@ namespace PlantsVsZombies.Simulation
             var cactus = plant.Kind == PlantKind.Cactus;
             var kernel = plant.Kind == PlantKind.KernelPult;
             var scaredy = plant.Kind == PlantKind.ScaredyShroom;
+            var state = plant.RequiredTiming;
+            var pendingProjectiles = 0;
+            if (scaredy)
+            {
+                // UpdateShooting precedes UpdateScaredyShroom, which in turn precedes UpdateShooter.
+                var shooting = global::PlantsVsZombies.Timing.PlantTiming.Tick(state,
+                    new global::PlantsVsZombies.Timing.PlantTimingInput(true, true, false, false, false,
+                        global::PlantsVsZombies.Timing.ShootingTrack.Body, plant.PresentationShotAge * 35f >= 15f, 0));
+                pendingProjectiles = shooting.ProjectilesCreated;
+                AdvanceAdventureScaredyShroom(plant, state.ShootingCountdown > 0 && shooting.State.ShootingCountdown == 0,
+                    shooting.State.ShootingCountdown > 0);
+                state = shooting.State;
+                if (plant.ScaredyShroomPresentation!.NativePhase != 1)
+                {
+                    state = global::PlantsVsZombies.Timing.PlantTiming.FromRaw(state.Kind, 150, state.ShootingCountdown);
+                }
+            }
+
             var targetZombie = fume || shortPuff || sunflower ? null : FindAdventureTarget(plant.Row,
                 plant.ModeFacesLeft ? -1f : plant.Column + .4f, plant.ModeFacesLeft ? plant.Column + .5f : 20f, cactus);
             var target = fume ? FindAdventureFumeTarget(plant) != null : shortPuff ? FindAdventurePuffTarget(plant) != null
                 : !sunflower && (targetZombie != null || !plant.ModeFacesLeft && CanShootAdventureBoss(plant))
-                    && (!scaredy || !HasZombieNear(plant.Row, plant.Column + .5f, 1, 1.5f, true));
-            var state = plant.RequiredTiming;
+                    && (!scaredy || plant.ScaredyShroomPresentation!.NativePhase == 1);
             // PC 0x46D240 starts the body animation and its species-specific shooting counter together.
             var track = shortPuff || fume || scaredy || cactus || plant.Kind == PlantKind.CabbagePult || kernel
                 || plant.Kind == PlantKind.MelonPult || plant.Kind == PlantKind.WinterMelon
                 ? global::PlantsVsZombies.Timing.ShootingTrack.Body : global::PlantsVsZombies.Timing.ShootingTrack.Head;
-            var input = new global::PlantsVsZombies.Timing.PlantTimingInput(true, true, true, true, target, track, true, 0);
+            var input = new global::PlantsVsZombies.Timing.PlantTimingInput(true, !scaredy, true, true, target, track, true, 0);
             var bound = global::PlantsVsZombies.Timing.PlantTiming.RequiredRandomBound(state, input);
             var draw = bound == 0 ? 0 : _random.Next(bound);
             var butter = kernel && state.Countdown <= 1 && target && _random.Next(4) == 0;
             var result = global::PlantsVsZombies.Timing.PlantTiming.Tick(state,
-                new global::PlantsVsZombies.Timing.PlantTimingInput(true, true, true, true, target, track, true, draw, butter));
+                new global::PlantsVsZombies.Timing.PlantTimingInput(true, !scaredy, true, true, target, track, true, draw, butter));
             plant.Timing = result.State;
             plant.ActionTimer = result.State.Countdown * .01f;
             if (result.AnimationStarted)
@@ -2282,7 +2299,7 @@ namespace PlantsVsZombies.Simulation
                 RequestAdventureZombieFoley(4);
             }
 
-            for (var i = 0; i < result.ProjectilesCreated; i++)
+            for (var i = 0; i < result.ProjectilesCreated + pendingProjectiles; i++)
             {
                 if (fume)
                 {
@@ -2311,6 +2328,56 @@ namespace PlantsVsZombies.Simulation
             }
 
             return true;
+        }
+
+        /// <summary>Updates the original Scaredy-shroom state using the native circle and actual zombie rectangles.</summary>
+        /// <param name="plant">The awake mushroom whose body is being advanced.</param>
+        /// <param name="finishedShooting">Whether UpdateShooting just restored the original idle animation.</param>
+        /// <param name="shooting">Whether the current original shooting animation still owns the body.</param>
+        private void AdvanceAdventureScaredyShroom(Plant plant, bool finishedShooting, bool shooting)
+        {
+            var state = plant.ScaredyShroomPresentation;
+            if (state == null)
+            {
+                state = new AdventureScaredyShroomState();
+                plant.ScaredyShroomPresentation = state;
+            }
+
+            var nearby = false;
+            if (!shooting)
+            {
+                var plantY = 80 + plant.Row * (Adventure.Level.HasPool || Adventure.Level.HasRoof ? 85 : 100)
+                    + (Adventure.Level.HasRoof ? (int)(Math.Max(0f, 5f - plant.Column) * 20f - 10f) : 0);
+                foreach (var zombie in Zombies)
+                {
+                    var nativeX = (int)AdventureZombieNativeRules.NativePositionX(zombie.X, AdventureDancerRules.Scale(zombie));
+                    var body = AdventureZombieTargetingRules.BodyRectangle(zombie, (int)AdventureBiteNativeY(zombie, nativeX));
+                    var bodyY = body.Y + zombie.PresentationBiteBodyY;
+                    var clip = zombie.PresentationBiteClipHeight > -100 ? zombie.PresentationBiteClipHeight : 0;
+                    if (zombie.GraveRiseTicks > 0)
+                    {
+                        var altitude = (int)AdventureZombieRiseRules.Altitude(zombie.GraveRiseTicks);
+                        bodyY -= altitude;
+                        clip = -altitude + Math.Min(zombie.GraveRiseTicks, 40);
+                    }
+                    else if (zombie.PresentationNativePhase == 50 && zombie.DancerState != null)
+                    {
+                        var altitude = AdventureDancerRules.RiseAltitude(zombie.DancerState.PhaseTicks);
+                        bodyY -= altitude;
+                        clip = -altitude;
+                    }
+
+                    if (AdventureScaredyShroomRules.CanScare(plant, zombie, body, bodyY, body.Height - clip, plantY))
+                    {
+                        nearby = true;
+                        break;
+                    }
+                }
+            }
+
+            var randomUnit = state.NeedsRandom(nearby, shooting) ? (float)_random.NextDouble() : 0f;
+            state.Tick(nearby, shooting, randomUnit, finishedShooting);
+            plant.PresentationBiteNativeState = state.NativePhase;
         }
 
         /// <summary>Advances the original shared shooting countdown of a multi-head plant.</summary>
@@ -4736,6 +4803,9 @@ namespace PlantsVsZombies.Simulation
             {
                 return;
             }
+
+            // PC DieWithLoot 0x54F030 calls DropShield(1) before selecting the death clip.
+            DropAdventureZombieHeldShield(zombie, 1U);
 
             var rate = zombie.Kind == ZombieKind.Football ? 24f : zombie.Kind == ZombieKind.Gargantuar || zombie.Kind == ZombieKind.Snorkel || zombie.Kind == ZombieKind.Yeti ? 14f : zombie.Kind == ZombieKind.Digger || zombie.Kind == ZombieKind.Boss ? 18f : 24f + (float)_random.NextDouble() * 6f;
             var roll = _random.Next(100);
@@ -8102,7 +8172,7 @@ namespace PlantsVsZombies.Simulation
 
             if (z._presentationShieldBeforeHit > 0 && z.ShieldHealth <= 0)
             {
-                var id = z.Kind == ZombieKind.ScreenDoor ? 12 : z.Kind == ZombieKind.Newspaper ? 13 : z.Kind == ZombieKind.Ladder ? 54 : -1;
+                var id = AdventureZombieEquipmentRules.ShieldParticle(z);
                 if (id >= 0 && !suppressParts)
                 {
                     AddAdventureZombiePart(z, kind, id, global::PlantsVsZombies.Adventure.AdventureZombieEquipmentRules.ShieldTrack(z), null);
@@ -8279,10 +8349,46 @@ namespace PlantsVsZombies.Simulation
             }
         }
 
+        /// <summary>Detaches a remaining shield from the held pose before a native death replaces it.</summary>
+        /// <param name="zombie">The dying shield carrier whose intact pose is captured.</param>
+        /// <param name="flags">The original DropShield mask; bit 1 suppresses the newspaper rip and bit 16 suppresses particles.</param>
+        private void DropAdventureZombieHeldShield(Zombie zombie, uint flags)
+        {
+            if (zombie.ShieldHealth <= 0f)
+            {
+                return;
+            }
+
+            var particle = AdventureZombieEquipmentRules.ShieldParticle(zombie);
+            if (particle < 0)
+            {
+                return;
+            }
+
+            if ((flags & 16U) == 0)
+            {
+                var kind = zombie.ModeHead >= 26 ? zombie.ModeHead : (int)zombie.Kind;
+                AddAdventureZombiePart(zombie, kind, particle, AdventureZombieEquipmentRules.ShieldTrack(zombie), null);
+                if (zombie.Kind == ZombieKind.Newspaper && (flags & 1U) == 0)
+                {
+                    RequestAdventureZombieFoley(67);
+                }
+            }
+
+            zombie.ShieldHealth = 0f;
+        }
+
         /// <summary>Performs adventure presentation zombie mowed parts.</summary>
         /// <param name = "z">The z.</param>
         private void AdventurePresentationZombieMowedParts(Zombie z)
         {
+            var inPool = z.PresentationInPool ?? (Adventure.Level.IsWaterRow(z.Row) && z.X >= 0f && z.X < 9f);
+            if (!inPool || !Adventure.Level.IsWaterRow(z.Row))
+            {
+                // PC MowDown 0x54E776/0x54E8CA drops shields, including a newspaper rip.
+                DropAdventureZombieHeldShield(z, 0U);
+            }
+
             var kind = z.ModeHead >= 26 ? z.ModeHead : (int)z.Kind;
             var height = z.PresentationNativeHeight;
             var sled = z.PresentationHasSled ?? (z.Kind == ZombieKind.Bobsled && !z.UsedAbility);
@@ -8291,7 +8397,6 @@ namespace PlantsVsZombies.Simulation
                 return;
             }
 
-            var inPool = z.PresentationInPool ?? (Adventure.Level.IsWaterRow(z.Row) && z.X >= 0f && z.X < 9f);
             if (!z.Headless)
             {
                 LoseAdventureZombieHead(z, kind, inPool, true, 0);
@@ -8571,6 +8676,13 @@ namespace PlantsVsZombies.Simulation
 
             if (!string.Equals(z.PresentationAnimation, clip, StringComparison.Ordinal))
             {
+                if (AdventureDancerRules.IsDancer(z) && z.DancerState != null
+                    && (z.Eating || string.Equals(z.PresentationAnimation, "anim_eat", StringComparison.Ordinal)))
+                {
+                    // PC StartEating and StopEating use twenty-tick blends independently of the current dance phase.
+                    z.DancerState.AnimationBlendTicks = 20;
+                }
+
                 z.PresentationAnimation = clip;
                 z.PresentationAnimationAge = 0f;
                 z._presentationWalkPhase = 0f;

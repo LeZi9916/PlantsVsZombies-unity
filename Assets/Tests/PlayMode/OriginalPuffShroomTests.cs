@@ -234,6 +234,61 @@ namespace PlantsVsZombies.Tests.PlayMode
             Assert.That(game.Peas.Count, Is.Zero, "Fume-shroom does not create a travelling projectile.");
         }
 
+        /// <summary>Checks the production presenter displays each original Scaredy-shroom fear and recovery body.</summary>
+        /// <returns>Frame boundaries for actual original artwork rendering and reference comparisons.</returns>
+        [UnityTest]
+        public IEnumerator ScaredyUsesOriginalLoweringScaredIdleAndRaisingClips()
+        {
+            var game = new GameSimulation(new GameRules { AdventureLevel = 11 }, 7529);
+            _owner._game = game;
+            Assert.That(game.ChooseDefaultAdventureSeeds(), Is.True);
+            _owner.Textures._textures["plantshadow.png"] = null!;
+            _owner.Textures._textures["plantshadow2.png"] = null!;
+            var state = new AdventureScaredyShroomState();
+            var plant = new Plant
+            {
+                Id = 83,
+                Kind = PlantKind.ScaredyShroom,
+                Row = 0,
+                Column = 1,
+                Health = 300f,
+                PresentationRate = 12f,
+                ScaredyShroomPresentation = state
+            };
+            game.Plants.Add(plant);
+            var draw = typeof(GamePresenter).GetMethod("DrawAdventurePlant", BindingFlags.Instance | BindingFlags.NonPublic)!;
+            var origin = new Vector2(120f, 80f + AlmanacPortraitLayout.PlantHeightOffset(13));
+            state.Tick(true, false, 0f);
+            for (var phase = 0; phase < 3; phase++)
+            {
+                for (var tick = 0; tick < 30; tick++)
+                {
+                    state.Tick(phase != 2, false, .5f);
+                }
+
+                Assert.That(state.Animation, Is.EqualTo(phase == 0 ? "anim_scared" : phase == 1 ? "anim_scaredidle" : "anim_grow"));
+                yield return Capture(() => draw.Invoke(_presenter, new object[] { plant }));
+                var actual = _pixels.GetPixels32();
+                Save("scaredy-body-" + phase + ".png");
+                yield return Capture(() => _animations.DrawNativePlayback("ScaredyShroom", origin, 1f,
+                    state.SampleSeconds(0f), state.Animation, state.Loop, state.Rate));
+                Assert.That(ChangedPixels(actual, _pixels.GetPixels32()), Is.LessThan(10),
+                    "Production must select the original " + state.Animation + " artwork and native rate.");
+
+                if (phase == 0)
+                {
+                    for (var tick = 0; tick < 100; tick++)
+                    {
+                        state.Tick(true, false, 0f);
+                    }
+                }
+                else if (phase == 1)
+                {
+                    state.Tick(false, false, .5f);
+                }
+            }
+        }
+
         /// <summary>Counts visible camera pixel differences while tolerating negligible channel rounding.</summary>
         /// <param name="first">The production camera frame.</param>
         /// <param name="second">The reference camera frame.</param>

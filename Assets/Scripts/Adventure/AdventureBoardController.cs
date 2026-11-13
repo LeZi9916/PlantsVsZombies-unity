@@ -101,8 +101,6 @@ namespace PlantsVsZombies.Adventure
         private static readonly Rect s_adventureActionButton = new Rect(316, 356, 168, 48);
         /// <summary>Stores adventure menu button.</summary>
         internal static readonly Rect s_adventureMenuButton = new Rect(704, 6, 90, 34);
-        /// <summary>Stores adventure shovel button.</summary>
-        internal static readonly Rect s_adventureShovelButton = new Rect(600, 0, 70, 72);
 
         /// <summary>Performs adventure feedback.</summary>
         /// <param name = "text">The text.</param>
@@ -369,7 +367,7 @@ namespace PlantsVsZombies.Adventure
                 }
             }
 
-            if (board.Level.Number >= 5 && s_adventureShovelButton.Contains(point))
+            if (board.Level.Number >= 5 && _owner.Layout.AdventureShovelButton.Contains(point))
             {
                 _owner._shovel = !_owner._shovel;
                 _owner.Sounds.PlayPresentationSound("shovel");

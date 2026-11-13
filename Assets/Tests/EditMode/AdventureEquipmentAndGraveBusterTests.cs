@@ -52,6 +52,115 @@ namespace PlantsVsZombies.Tests.EditMode
             Assert.That(zombie.Health, Is.EqualTo(270f));
         }
 
+        /// <summary>Regresses PC DieWithLoot's DropShield(1) when a piercing hit kills an intact shield carrier.</summary>
+        /// <param name="kind">One of the original three shield carriers.</param>
+        /// <param name="particle">The PC detached shield particle identifier.</param>
+        [TestCase(ZombieKind.ScreenDoor, 12)]
+        [TestCase(ZombieKind.Newspaper, 13)]
+        [TestCase(ZombieKind.Ladder, 54)]
+        public void PiercingBodyDeathDetachesHeldShieldOnce(ZombieKind kind, int particle)
+        {
+            var game = new GameSimulation(new GameRules { AdventureLevel = 11 }, 7529);
+            var zombie = SpawnShieldCarrier(game, kind);
+            var clip = game.AdventurePresentationZombieAnimation(zombie);
+            zombie.PresentationAnimationAge = .35f;
+            Hit(game, zombie, 1000f, true);
+            Assert.That(game.Zombies.Contains(zombie), Is.False);
+            Assert.That(zombie.ShieldHealth, Is.Zero);
+            var drop = game.Presentation.ZombiePartDrops.Single(part => part.ParticleId == particle);
+            Assert.That(drop.Anchor, Is.EqualTo(AdventureZombieEquipmentRules.ShieldTrack(zombie)));
+            Assert.That(drop.Animation, Is.EqualTo(clip), "The detached object retains the held pose before the death clip starts.");
+            Assert.That(drop.AnimationAge, Is.EqualTo(.35f));
+            Assert.That(drop.Duration, Is.EqualTo(.4f));
+            Assert.That(game.Presentation.Corpses, Has.Count.EqualTo(1));
+            Assert.That(AdventureZombieEquipmentRules.TrackVisible(zombie, drop.Anchor!), Is.False);
+            Assert.That(game.Presentation.ZombieSounds.Any(sound => sound.Foley == 67), Is.False,
+                "PC death passes bit 1 and does not play the newspaper rip or surprise.");
+            Assert.That(zombie.PresentationNewspaperGaspRemaining, Is.Zero);
+            Hit(game, zombie, 1000f, true);
+            Assert.That(game.Presentation.ZombiePartDrops.Count(part => part.ParticleId == particle), Is.EqualTo(1));
+        }
+
+        /// <summary>Preserves ordinary breakage while preventing a later body death from emitting the same shield twice.</summary>
+        /// <param name="kind">One of the original three shield carriers.</param>
+        [TestCase(ZombieKind.ScreenDoor)]
+        [TestCase(ZombieKind.Newspaper)]
+        [TestCase(ZombieKind.Ladder)]
+        public void BrokenShieldDoesNotDetachAgainAtBodyDeath(ZombieKind kind)
+        {
+            var game = new GameSimulation(new GameRules { AdventureLevel = 11 }, 7529);
+            var zombie = SpawnShieldCarrier(game, kind);
+            var particle = AdventureZombieEquipmentRules.ShieldParticle(zombie);
+            var bodyHealth = zombie.Health;
+            Hit(game, zombie, zombie.ShieldHealth, false);
+            Assert.That(zombie.Health, Is.EqualTo(bodyHealth));
+            Assert.That(game.Presentation.ZombiePartDrops.Count(part => part.ParticleId == particle), Is.EqualTo(1));
+            if (kind == ZombieKind.Newspaper)
+            {
+                Assert.That(zombie.PresentationNewspaperGaspRemaining, Is.GreaterThan(0f));
+                Assert.That(game.Presentation.ZombieSounds.Any(sound => sound.Foley == 67), Is.True);
+            }
+
+            Hit(game, zombie, 1000f, true);
+            Assert.That(game.Presentation.ZombiePartDrops.Count(part => part.ParticleId == particle), Is.EqualTo(1));
+        }
+
+        /// <summary>Preserves the PC mower's DropShield(0) path, including the newspaper rip.</summary>
+        /// <param name="kind">One of the original three shield carriers.</param>
+        [TestCase(ZombieKind.ScreenDoor)]
+        [TestCase(ZombieKind.Newspaper)]
+        [TestCase(ZombieKind.Ladder)]
+        public void MowerDetachesRemainingShield(ZombieKind kind)
+        {
+            var game = new GameSimulation(new GameRules { AdventureLevel = 11 }, 7529);
+            var zombie = SpawnShieldCarrier(game, kind);
+            zombie.PresentationDeath = AdventureZombieDeathPresentation.Mowed;
+            typeof(GameSimulation).GetMethod("KillAdventureZombie", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .Invoke(game, new object[] { zombie, 0U });
+            Assert.That(zombie.ShieldHealth, Is.Zero);
+            Assert.That(game.Presentation.ZombiePartDrops.Count(part => part.ParticleId == AdventureZombieEquipmentRules.ShieldParticle(zombie)), Is.EqualTo(1));
+            Assert.That(game.Presentation.ZombieSounds.Any(sound => sound.Foley == 67), Is.EqualTo(kind == ZombieKind.Newspaper));
+        }
+
+        /// <summary>Keeps ash, swallowed, removed, and no-body-part deaths outside the normal held-shield detachment path.</summary>
+        /// <param name="death">The original special death presentation.</param>
+        /// <param name="flags">The native damage flags passed to death.</param>
+        [TestCase(AdventureZombieDeathPresentation.Burned, 0U)]
+        [TestCase(AdventureZombieDeathPresentation.Eaten, 0U)]
+        [TestCase(AdventureZombieDeathPresentation.Removed, 0U)]
+        [TestCase(AdventureZombieDeathPresentation.Normal, 16U)]
+        public void SpecialDeathsDoNotAddNormalShieldDrops(AdventureZombieDeathPresentation death, uint flags)
+        {
+            var game = new GameSimulation(new GameRules { AdventureLevel = 11 }, 7529);
+            var zombie = SpawnShieldCarrier(game, ZombieKind.ScreenDoor);
+            zombie.PresentationDeath = death;
+            zombie.Health = 0f;
+            typeof(GameSimulation).GetMethod("KillAdventureZombie", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .Invoke(game, new object[] { zombie, flags });
+            Assert.That(game.Presentation.ZombiePartDrops, Is.Empty);
+        }
+
+        /// <summary>Creates one production shield carrier at an explicit combat location.</summary>
+        /// <param name="game">The isolated adventure simulation receiving the zombie.</param>
+        /// <param name="kind">The original shield carrier to initialize.</param>
+        /// <returns>The spawned live zombie with its original body and shield health.</returns>
+        private static Zombie SpawnShieldCarrier(GameSimulation game, ZombieKind kind)
+        {
+            return (Zombie)typeof(GameSimulation).GetMethod("SpawnAdventureZombie", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .Invoke(game, new object[] { kind, 2, 4f, 0 })!;
+        }
+
+        /// <summary>Applies the actual production hit path without bypassing its death and part transitions.</summary>
+        /// <param name="game">The simulation containing the live zombie.</param>
+        /// <param name="zombie">The shield carrier receiving the hit.</param>
+        /// <param name="damage">The native damage before shield absorption.</param>
+        /// <param name="piercing">Whether the hit bypasses held shields.</param>
+        private static void Hit(GameSimulation game, Zombie zombie, float damage, bool piercing)
+        {
+            typeof(GameSimulation).GetMethod("HitAdventureZombie", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .Invoke(game, new object[] { zombie, damage, piercing, 0U });
+        }
+
         /// <summary>Checks the eating state, countdown and sink offset derived from the plant timer.</summary>
         [Test]
         public void GraveBusterTimerMapsToOriginalCountdownAndSink()

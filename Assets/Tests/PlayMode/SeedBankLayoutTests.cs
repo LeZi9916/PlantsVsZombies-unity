@@ -141,6 +141,33 @@ namespace PlantsVsZombies.Tests.PlayMode
             Assert.That(_owner.IndependentModes.ModeSeedRect(3), Is.EqualTo(new Rect(232, 8, 50, 70)));
         }
 
+        /// <summary>Places the original shovel beside the configured bank rather than the number of selected cards.</summary>
+        /// <param name="capacity">The purchased seed bank capacity.</param>
+        /// <param name="x">The PC 0x416BC0 holder's absolute horizontal coordinate.</param>
+        [TestCase(6, 456f)]
+        [TestCase(7, 516f)]
+        [TestCase(8, 532f)]
+        [TestCase(9, 568f)]
+        [TestCase(10, 609f)]
+        public void ShovelPositionUsesOriginalBankCapacity(int capacity, float x)
+        {
+            _owner._game = new GameSimulation(new GameRules { AdventureLevel = 8, AdventurePacketSlots = capacity }, 9151);
+            Assert.That(_owner.Layout.AdventureShovelButton, Is.EqualTo(new Rect(x, 0f, 70f, 72f)));
+        }
+
+        /// <summary>Keeps the original slot machine exception while both bowling challenges use conveyor capacity.</summary>
+        /// <param name="mode">The original supported challenge identifier.</param>
+        /// <param name="x">The absolute original shovel holder coordinate.</param>
+        [TestCase(17, 609f)]
+        [TestCase(18, 600f)]
+        [TestCase(33, 609f)]
+        public void ShovelPositionPreservesOriginalChallengeExceptions(int mode, float x)
+        {
+            _owner.IndependentModes._modeSession = new ModeSession(mode, packetSlots: 6);
+            _owner._game = _owner.IndependentModes.RequiredModeSession.Game;
+            Assert.That(_owner.Layout.AdventureShovelButton, Is.EqualTo(new Rect(x, 0f, 70f, 72f)));
+        }
+
         /// <summary>Preserves the original first-adventure fixed one-to-four packet counts.</summary>
         /// <param name="level">The tutorial adventure level with an original fixed packet count.</param>
         [TestCase(1)]
@@ -187,6 +214,146 @@ namespace PlantsVsZombies.Tests.PlayMode
             Assert.That(_owner._selected, Is.EqualTo(1), "The first gameplay click uses the retained final bank origin.");
         }
 
+        /// <summary>Uses PC 0x49F100's conveyor artwork throughout its native introduction slide.</summary>
+        /// <returns>Frames rendering every adventure conveyor mode and the partial slide of level 2-10.</returns>
+        [UnityTest]
+        public IEnumerator ConveyorIntroductionsUseTheMovingConveyorWithoutSeedSlots()
+        {
+            _owner.Textures._textures.Add("ConveyorBelt_backdrop.png", Texture(516, 87, Color.green));
+            _owner.Textures._textures.Add("ConveyorBelt.png", Texture(512, 84, Color.yellow));
+            foreach (var number in new[] { 5, 10, 20, 25, 30, 40, 45, 50 })
+            {
+                _owner._game = new GameSimulation(new GameRules { AdventureLevel = number }, 9151);
+                var level = _owner.RequiredGame.Adventure.Level;
+                var clock = new AdventureIntroClock(AdventureIntroPresentation.CreatePlan(new AdventureIntroContext
+                {
+                    Level = number,
+                    NativeBackground = (int)level.Terrain,
+                    IsConveyor = level.HasConveyor,
+                    IsStormyNight = level.Mode == AdventureMode.Storm,
+                    IsFinalBoss = level.Mode == AdventureMode.Boss,
+                    ChooseSeedsOverride = level.ChoosesSeeds
+                }));
+                _owner.Opening._adventureIntro = clock;
+                var target = clock.Plan.BankOnStart + (number == 20 ? 120 : 260);
+                while (clock.NativeTime < target)
+                {
+                    clock.Tick();
+                }
+
+                _owner.Opening._adventureIntroFrame = clock.Frame;
+                Assert.That(_owner.RequiredGame.UsesNativeAdventureConveyor, Is.True);
+                Assert.That(_owner.Opening.AdventureIntroActive, Is.True);
+                yield return Render(() => typeof(GamePresenter).GetMethod("DrawAdventureOpeningInterface",
+                    BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(_presenter, null));
+                AssertColor(Pixel(20, 10), Color.white);
+                AssertColor(Pixel(110, 10), Color.green);
+                if (number == 20)
+                {
+                    Assert.That(clock.Frame.SeedBankY, Is.InRange(-86, -1));
+                    AssertColor(Pixel(110, 50), Color.white);
+                    while (clock.NativeTime < clock.Plan.BankOnEnd + 10)
+                    {
+                        clock.Tick();
+                    }
+
+                    _owner.Opening._adventureIntroFrame = clock.Frame;
+                    yield return Render(() => typeof(GamePresenter).GetMethod("DrawAdventureOpeningInterface",
+                        BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(_presenter, null));
+                    AssertColor(Pixel(110, 50), Color.green);
+                }
+                else
+                {
+                    AssertColor(Pixel(110, 70), Color.yellow);
+                }
+            }
+        }
+
+        /// <summary>Preserves PC 0x425B40's bank translation across the last opening and first playing frame.</summary>
+        /// <returns>Actual camera frames covering every adventure conveyor introduction and its gameplay handoff.</returns>
+        [UnityTest]
+        public IEnumerator ConveyorHandoffKeepsNativeArtworkPacketAndInputCoordinates()
+        {
+            _owner.Textures._textures.Add("ConveyorBelt_backdrop.png", Texture(516, 87, Color.green));
+            _owner.Textures._textures.Add("ConveyorBelt.png", Texture(512, 84, Color.yellow));
+            var flags = BindingFlags.Instance | BindingFlags.NonPublic;
+            var opening = typeof(GamePresenter).GetMethod("DrawAdventureOpeningInterface", flags)!;
+            var playing = typeof(GamePresenter).GetMethod("DrawAdventureSeedBankContents", flags)!;
+            var add = typeof(GameSimulation).GetMethod("AddAdventurePacket", flags)!;
+            foreach (var number in new[] { 5, 10, 20, 25, 30, 40, 45, 50 })
+            {
+                _owner._game = new GameSimulation(new GameRules { AdventureLevel = number }, 9151);
+                _owner.AdventureBoard._selectedAdventurePacket = -1;
+                var level = _owner.RequiredGame.Adventure.Level;
+                var clock = new AdventureIntroClock(AdventureIntroPresentation.CreatePlan(new AdventureIntroContext
+                {
+                    Level = number,
+                    NativeBackground = (int)level.Terrain,
+                    IsConveyor = level.HasConveyor,
+                    IsStormyNight = level.Mode == AdventureMode.Storm,
+                    IsFinalBoss = level.Mode == AdventureMode.Boss,
+                    ChooseSeedsOverride = level.ChoosesSeeds
+                }));
+                _owner.Opening._adventureIntro = clock;
+                while (clock.NativeTime < clock.Plan.End - AdventureIntroPresentation.NativeUpdate)
+                {
+                    clock.Tick();
+                }
+
+                _owner.Opening._adventureIntroFrame = clock.Frame;
+                // Bowling and the boss legitimately prefill packets; this geometry fixture supplies two explicit slots.
+                _owner.RequiredGame.Adventure._packets.Clear();
+                var first = (AdventurePacket)add.Invoke(_owner.RequiredGame, new object?[] { PlantKind.Peashooter, null, null })!;
+                first.ConveyorOffsetX = 0;
+                var last = (AdventurePacket)add.Invoke(_owner.RequiredGame, new object?[] { PlantKind.Peashooter, null, null })!;
+                last.ConveyorOffsetX = 440;
+                Assert.That(_owner.Opening.AdventureIntroActive, Is.True);
+                yield return Render(() => opening.Invoke(_presenter, null));
+                AssertNativeConveyorGeometry();
+                var packet = _owner.Layout.AdventureSeedRect(0, true);
+                var openingPixels = new[] { Pixel(96, 40), Pixel(126, 40), Pixel(155, 70), Pixel(595, 40), Pixel(604, 40) };
+                clock.Tick();
+                _owner.Opening._adventureIntroFrame = clock.Frame;
+                Assert.That(_owner.Opening.AdventureIntroActive, Is.False);
+                yield return Render(() => playing.Invoke(_presenter, null));
+                AssertNativeConveyorGeometry();
+                Assert.That(_owner.Layout.AdventureSeedRect(0, true), Is.EqualTo(packet));
+                var playingPixels = new[] { Pixel(96, 40), Pixel(126, 40), Pixel(155, 70), Pixel(595, 40), Pixel(604, 40) };
+                for (var index = 0; index < openingPixels.Length; index++)
+                {
+                    AssertColor(playingPixels[index], openingPixels[index]);
+                }
+
+                GameMemberReflection.Invoke(_owner, "HandleAdventureClick", new object[] { packet.center });
+                Assert.That(_owner.AdventureBoard._selectedAdventurePacket, Is.EqualTo(first.Id),
+                    "The first playing click must use the same native packet coordinates as the opening draw.");
+            }
+
+            _owner.Opening._adventureIntro = null;
+            _owner.Opening._adventureIntroFrame = null;
+            _owner.AdventureBoard._selectedAdventurePacket = -1;
+            yield return Render(() => playing.Invoke(_presenter, null));
+            AssertNativeConveyorGeometry();
+        }
+
+        /// <summary>Checks absolute PC bank-local geometry after its retained ten-pixel translation.</summary>
+        private void AssertNativeConveyorGeometry()
+        {
+            // PC 0x44778C ends at bank X=10; 0x425CC4 adds it before 0x49F100.
+            // Backdrop (83,0), belt (90,63), packet (91,8), and clip (90,0,501,600) are bank-local.
+            Assert.That(_owner.Layout.AdventureConveyorOrigin, Is.EqualTo(new Vector2(10f, 0f)));
+            Assert.That(_owner.Layout.AdventureConveyorClip, Is.EqualTo(new Rect(100f, 0f, 501f, 87f)));
+            Assert.That(_owner.Layout.AdventureSeedRect(0, true), Is.EqualTo(new Rect(101f, 8f, 50f, 70f)));
+            AssertColor(Pixel(91, 40), Color.white);
+            AssertColor(Pixel(96, 40), Color.green);
+            AssertColor(Pixel(126, 40), Color.blue);
+            AssertColor(Pixel(155, 70), Color.yellow);
+            AssertColor(Pixel(595, 40), Color.blue);
+            AssertColor(Pixel(604, 40), Color.green);
+            Assert.That(_owner.Layout.AdventurePacketContains(1, new Vector2(600f, 40f)), Is.True);
+            Assert.That(_owner.Layout.AdventurePacketContains(1, new Vector2(604f, 40f)), Is.False);
+        }
+
         /// <summary>Keeps the shovel at PC 0x4244A0's native offset and below actors crossing the holder.</summary>
         /// <returns>Frame boundaries before checking the actual world and interface composition.</returns>
         [UnityTest]
@@ -200,9 +367,77 @@ namespace PlantsVsZombies.Tests.PlayMode
                 _renderer.DrawNativeImage(Texture2D.whiteTexture, new Rect(600, 10, 10, 10), new Rect(0, 0, 1, 1));
                 typeof(GamePresenter).GetMethod("DrawAdventureInterface", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(_presenter, null);
             });
-            AssertColor(Pixel(594, 5), Color.green);
+            AssertColor(Pixel(603, 5), Color.green);
             AssertColor(Pixel(606, 15), Color.white);
-            AssertColor(Pixel(620, 30), Color.red);
+            AssertColor(Pixel(629, 30), Color.red);
+        }
+
+        /// <summary>Checks real PC artwork and both shovel input paths across adventure conveyor levels and purchased capacities.</summary>
+        /// <returns>Camera frames comparing production composition with the original absolute-coordinate oracle.</returns>
+        [UnityTest]
+        public IEnumerator OriginalConveyorShovelAlignsWithBeltAndHitArea()
+        {
+            var root = Environment.GetEnvironmentVariable("PVZ_BOARD_STRESS_ASSETS") ?? "";
+            if (!File.Exists(Path.Combine(root, "images", "ConveyorBelt_backdrop.png")))
+            {
+                Assert.Ignore("Set PVZ_BOARD_STRESS_ASSETS to the read-only original runtime resource directory.");
+            }
+
+            var backdrop = LoadOriginalImage(root, "ConveyorBelt_backdrop.png");
+            var belt = LoadOriginalImage(root, "ConveyorBelt.png");
+            var holder = LoadOriginalImage(root, "ShovelBank.png");
+            var shovel = LoadOriginalImage(root, "Shovel.png");
+            Assert.That(backdrop.width, Is.EqualTo(516));
+            Assert.That(holder.width, Is.EqualTo(70));
+            yield return Render(() =>
+            {
+                // PC 0x49F100 uses bank (10,0), while 0x416BC0 directly returns holder (609,0).
+                CanvasUI.DrawTexture(new Rect(93f, 0f, backdrop.width, backdrop.height), backdrop);
+                CanvasUI.DrawTextureWithTexCoords(new Rect(100f, 63f, belt.width, belt.height / 6f), belt, new Rect(0f, 5f / 6f, 1f, 1f / 6f));
+                CanvasUI.DrawTexture(new Rect(609f, 0f, holder.width, holder.height), holder);
+                CanvasUI.DrawTexture(new Rect(602f, -3f, shovel.width, shovel.height), shovel);
+            });
+            var expected = _pixels.GetPixels32();
+            var flags = BindingFlags.Instance | BindingFlags.NonPublic;
+            var drawShovel = typeof(GamePresenter).GetMethod("DrawAdventureShovelBank", flags)!;
+            var drawBank = typeof(GamePresenter).GetMethod("DrawAdventureSeedBankContents", flags)!;
+            foreach (var capacity in new[] { 6, 10 })
+            {
+                foreach (var level in new[] { 5, 10, 20, 25, 30, 40, 45, 50 })
+                {
+                    _owner._game = new GameSimulation(new GameRules { AdventureLevel = level, AdventurePacketSlots = capacity }, 9151);
+                    _owner.RequiredGame.Adventure._packets.Clear();
+                    _owner._shovel = false;
+                    Assert.That(_owner.Layout.AdventureShovelButton, Is.EqualTo(new Rect(609f, 0f, 70f, 72f)));
+                    yield return Render(() =>
+                    {
+                        drawShovel.Invoke(_presenter, null);
+                        drawBank.Invoke(_presenter, null);
+                    });
+                    var actual = _pixels.GetPixels32();
+                    var differences = 0;
+                    for (var index = 0; index < actual.Length; index++)
+                    {
+                        if (Math.Abs(actual[index].r - expected[index].r) + Math.Abs(actual[index].g - expected[index].g)
+                            + Math.Abs(actual[index].b - expected[index].b) > 12)
+                        {
+                            differences++;
+                        }
+                    }
+
+                    Assert.That(differences, Is.LessThan(5), "Original conveyor/shovel composition: level " + level + ", purchased slots " + capacity);
+                    _owner.AdventureBoard.HandleAdventureClick(new Vector2(605f, 35f));
+                    Assert.That(_owner._shovel, Is.False, "The old overlap strip must not pick up the shovel.");
+                    _owner.AdventureBoard.HandleAdventureClick(new Vector2(675f, 35f));
+                    Assert.That(_owner._shovel, Is.True, "The visible holder's right edge must pick up the shovel.");
+                    if (level == 5)
+                    {
+                        _owner._shovel = false;
+                        _owner.Opening.HandleBowlingShovelLesson(new Vector2(675f, 35f));
+                        Assert.That(_owner._shovel, Is.True, "The opening shovel lesson must share the holder's original hit area.");
+                    }
+                }
+            }
         }
 
         /// <summary>Checks native price ink bounds independently of the presenter's bitmap baseline calculation.</summary>
@@ -394,6 +629,20 @@ namespace PlantsVsZombies.Tests.PlayMode
             typeof(GamePresenter).GetMethod("DrawChooserBank", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(_presenter, new object[] { _owner.Layout.SeedBankCapacity });
             _renderer.EndObjectFrame();
             CanvasUI.EndFrame();
+        }
+
+        /// <summary>Loads one original loose image into this fixture's cache without modifying the supplied artwork.</summary>
+        /// <param name="root">The read-only original resource directory.</param>
+        /// <param name="name">The original image filename relative to its images directory.</param>
+        /// <returns>The decoded source texture retained until fixture teardown.</returns>
+        private Texture2D LoadOriginalImage(string root, string name)
+        {
+            var texture = new Texture2D(2, 2, TextureFormat.RGBA32, false);
+            _textures.Add(texture);
+            Assert.That(texture.LoadImage(File.ReadAllBytes(Path.Combine(root, "images", name))), Is.True, name);
+            texture.wrapMode = TextureWrapMode.Clamp;
+            _owner.Textures._textures[name] = texture;
+            return texture;
         }
 
         /// <summary>Creates one decoded synthetic source texture and retains its lifetime for this test.</summary>

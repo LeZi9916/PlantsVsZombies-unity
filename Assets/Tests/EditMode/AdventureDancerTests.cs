@@ -233,6 +233,103 @@ namespace PlantsVsZombies.Tests.EditMode
             Assert.That(AdventureDancerRules.FacesRight(leader), Is.False);
         }
 
+        /// <summary>Checks the complete production update keeps the entrance, point, hold, and backup dance sequence.</summary>
+        [Test]
+        public void CompleteBoardUpdatesFinishEntranceAndHoldTheSummoningPose()
+        {
+            var game = CreateGame();
+            var leader = Spawn(game, ZombieKind.Dancing, 2, 8.5f);
+            var entranceX = leader.X;
+            var entranceTicks = leader.DancerState!.PhaseTicks;
+            for (var tick = 0; tick < entranceTicks; tick++)
+            {
+                game.Update(.01f);
+            }
+
+            Assert.That(leader.X, Is.LessThan(entranceX), "The authored negative ground track moves the moonwalk left into the lawn.");
+            Assert.That(leader.PresentationNativePhase, Is.EqualTo(41));
+            Assert.That(AdventureDancerRules.HasSpotlight(leader), Is.False);
+            game.Update(.38f);
+            Assert.That(leader.PresentationNativePhase, Is.EqualTo(43));
+            Assert.That(game.Zombies.Count, Is.EqualTo(5));
+            Assert.That(AdventureDancerRules.HasSpotlight(leader), Is.True);
+            Assert.That(leader.PresentationAnimationAge, Is.GreaterThanOrEqualTo(9f / 24f));
+            var heldX = leader.X;
+            game.Update(1.6f);
+            Assert.That(leader.PresentationNativePhase, Is.EqualTo(43));
+            Assert.That(leader.X, Is.EqualTo(heldX));
+            Assert.That(leader.PresentationAnimationAge, Is.GreaterThanOrEqualTo(9f / 24f));
+            foreach (var backup in game.Zombies)
+            {
+                if (backup.Kind == ZombieKind.BackupDancer)
+                {
+                    Assert.That(backup.PresentationNativePhase, Is.Not.EqualTo(50));
+                    Assert.That(AdventureDancerRules.HasSpotlight(backup), Is.False);
+                }
+            }
+        }
+
+        /// <summary>Checks the exact PC spotlight palette and native age boundaries.</summary>
+        /// <param name="ageTicks">The leader's native age counter.</param>
+        /// <param name="rgb">The expected packed RGB color from PC DrawDancerReanim.</param>
+        [TestCase(699, 0xFAFAA0)]
+        [TestCase(700, 0xF05A82)]
+        [TestCase(800, 0x72EAAA)]
+        [TestCase(900, 0x5A6E8C)]
+        [TestCase(1000, 0xFAFAA0)]
+        [TestCase(1100, 0xD87ECA)]
+        public void SpotlightUsesOriginalAgeBasedColorCycle(int ageTicks, int rgb)
+        {
+            Assert.That(AdventureDancerRules.SpotlightColor(ageTicks), Is.EqualTo(rgb));
+        }
+
+        /// <summary>Preserves the original distinct initialization, pointing, dance, emergence, and meal blend durations.</summary>
+        [Test]
+        public void BodyBlendsUseOriginalDurationsForEachDanceAndMealTransition()
+        {
+            var game = CreateGame();
+            var leader = Spawn(game, ZombieKind.Dancing, 2, 6f);
+            Assert.That(AdventureDancerRules.AnimationBlendTicks(leader), Is.Zero);
+            leader.DancerState!.PhaseTicks = 1;
+            AdventureDancerRules.Tick(leader, 0, false, false);
+            Assert.That(leader.PresentationNativePhase, Is.EqualTo(41));
+            Assert.That(AdventureDancerRules.AnimationBlendTicks(leader), Is.EqualTo(20));
+            leader.DancerState.PhaseAge = 1d;
+            AdventureDancerRules.Tick(leader, 0, false, false);
+            Assert.That(leader.PresentationNativePhase, Is.EqualTo(43));
+            Assert.That(AdventureDancerRules.AnimationBlendTicks(leader), Is.EqualTo(20));
+            leader.DancerState.PhaseTicks = 1;
+            AdventureDancerRules.Tick(leader, 0, false, false);
+            Assert.That(leader.PresentationNativePhase, Is.EqualTo(44));
+            Assert.That(AdventureDancerRules.AnimationBlendTicks(leader), Is.EqualTo(20));
+
+            foreach (var clock in new[] { 240, 260, 380, 460 })
+            {
+                AdventureDancerRules.Tick(leader, clock, false, false);
+                Assert.That(AdventureDancerRules.AnimationBlendTicks(leader), Is.EqualTo(10));
+            }
+
+            leader.Eating = true;
+            game.AdventurePresentationZombieAnimation(leader);
+            Assert.That(AdventureDancerRules.AnimationBlendTicks(leader), Is.EqualTo(20));
+            leader.Eating = false;
+            game.AdventurePresentationZombieAnimation(leader);
+            Assert.That(AdventureDancerRules.AnimationBlendTicks(leader), Is.EqualTo(20));
+            AdventureDancerRules.Tick(leader, 240, false, false);
+            Assert.That(AdventureDancerRules.AnimationBlendTicks(leader), Is.EqualTo(10));
+            leader.PresentationNativePhase = 1;
+            Assert.That(AdventureDancerRules.AnimationBlendTicks(leader), Is.EqualTo(20));
+
+            var backup = Spawn(game, ZombieKind.BackupDancer, 2, 6f);
+            Assert.That(AdventureDancerRules.AnimationBlendTicks(backup), Is.Zero);
+            backup.PresentationNativePhase = 50;
+            backup.DancerState!.PhaseTicks = 1;
+            Assert.That(AdventureDancerRules.AnimationBlendTicks(backup), Is.Zero);
+            AdventureDancerRules.Tick(backup, 0, false, false);
+            Assert.That(backup.PresentationNativePhase, Is.EqualTo(44));
+            Assert.That(AdventureDancerRules.AnimationBlendTicks(backup), Is.EqualTo(10));
+        }
+
         /// <summary>Creates a night board with no automatic waves or plants near the tested dancers.</summary>
         /// <returns>The isolated production simulation.</returns>
         private static GameSimulation CreateGame()

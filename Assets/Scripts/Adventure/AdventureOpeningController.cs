@@ -524,7 +524,7 @@ namespace PlantsVsZombies.Adventure
                 return;
             }
 
-            if (AdventureBoardController.s_adventureShovelButton.Contains(point))
+            if (_owner.Layout.AdventureShovelButton.Contains(point))
             {
                 _owner._shovel = !_owner._shovel;
                 _owner.Sounds.PlayPresentationSound("shovel");

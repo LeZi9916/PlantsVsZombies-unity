@@ -63,8 +63,24 @@ namespace PlantsVsZombies.BoardUI
             return new Rect(GridX + sun.X * CellWidth - 35, GridY + sun.Y * CellHeight - 35, 70, 70);
         }
 
-        /// <summary>Stores native conveyor clip.</summary>
-        internal static readonly Rect s_nativeConveyorClip = new Rect(90, 0, 501, 87);
+        /// <summary>Stores the PC conveyor clipping rectangle relative to the seed bank.</summary>
+        private static readonly Rect s_nativeConveyorClip = new Rect(90, 0, 501, 87);
+
+        /// <summary>Gets the PC conveyor's bank origin through introduction and gameplay.</summary>
+        /// <remarks>PC 0x425CC4 adds the bank position; 0x44778C retains X=10 after the introduction.</remarks>
+        internal Vector2 AdventureConveyorOrigin => !_owner.IndependentModes.IsModeBoard && _owner.Opening._adventureIntroFrame == null
+            ? new Vector2(10f, 0f) : AdventureSeedBankOrigin;
+
+        /// <summary>Gets the conveyor clipping rectangle at the same origin used by its artwork and input.</summary>
+        internal Rect AdventureConveyorClip
+        {
+            get
+            {
+                var clip = s_nativeConveyorClip;
+                clip.position += AdventureConveyorOrigin;
+                return clip;
+            }
+        }
 
         /// <summary>Performs adventure packet contains.</summary>
         /// <param name = "index">The index.</param>
@@ -72,7 +88,7 @@ namespace PlantsVsZombies.BoardUI
         /// <returns>The resulting adventure packet contains.</returns>
         internal bool AdventurePacketContains(int index, Vector2 point)
         {
-            return (!_owner.RequiredGame.UsesNativeAdventureConveyor || s_nativeConveyorClip.Contains(point)) && AdventureSeedRect(index, true).Contains(point);
+            return (!_owner.RequiredGame.UsesNativeAdventureConveyor || AdventureConveyorClip.Contains(point)) && AdventureSeedRect(index, true).Contains(point);
         }
 
         /// <summary>Stores adventure grid x.</summary>
@@ -206,7 +222,8 @@ namespace PlantsVsZombies.BoardUI
         {
             if (packet && _owner._game != null && _owner._game.UsesNativeAdventureConveyor && index < _owner._game.Adventure.Packets.Count)
             {
-                return new Rect(_owner._game.AdventureConveyorCardX(index), 8, 50, 70);
+                var conveyor = AdventureConveyorOrigin;
+                return new Rect(conveyor.x + _owner._game.AdventureConveyorCardX(index), conveyor.y + 8f, 50f, 70f);
             }
 
             if (packet)
@@ -235,6 +252,22 @@ namespace PlantsVsZombies.BoardUI
                 }
 
                 return _owner._choosingSeeds ? 7 : _owner._deck.Count;
+            }
+        }
+
+        /// <summary>Gets the original shovel holder and click rectangle beside the current bank.</summary>
+        /// <remarks>PC 0x416BC0 uses bank capacity; 0x427AF0 fixes conveyor capacity at ten.</remarks>
+        internal Rect AdventureShovelButton
+        {
+            get
+            {
+                if (_owner.IndependentModes.IsModeBoard && _owner.IndependentModes.RequiredModeSession.Definition.Id == 18)
+                {
+                    return new Rect(600f, 0f, 70f, 72f);
+                }
+
+                var capacity = _owner.RequiredGame.UsesNativeAdventureConveyor ? 10 : SeedBankCapacity;
+                return new Rect(456f + AdventureSeedSlotLayout.BackgroundExtra(capacity), 0f, 70f, 72f);
             }
         }
 

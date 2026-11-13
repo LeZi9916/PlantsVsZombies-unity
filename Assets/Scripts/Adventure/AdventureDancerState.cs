@@ -19,5 +19,8 @@ namespace PlantsVsZombies.Adventure
 
         /// <summary>Tracks the current phase's unpaused animation time in seconds.</summary>
         public double PhaseAge;
+
+        /// <summary>Retains the native blend duration selected when the current body clip starts.</summary>
+        public int AnimationBlendTicks;
     }
 }

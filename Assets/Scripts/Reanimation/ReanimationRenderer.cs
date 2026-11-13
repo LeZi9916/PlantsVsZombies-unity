@@ -68,6 +68,8 @@ namespace PlantsVsZombies.Reanimation
             public string? Animation = string.Empty;
             /// <summary>Stores started at, fraction.</summary>
             public float StartedAt, Fraction;
+            /// <summary>Retains the caller's unwrapped playback clock to detect a replay of the same clip.</summary>
+            public float LastSeconds;
             /// <summary>The outer presentation frame that most recently sampled this actor.</summary>
             public int LastSeenFrame;
             /// <summary>Stores from.</summary>
@@ -92,6 +94,8 @@ namespace PlantsVsZombies.Reanimation
             if (blend.Fraction < 1f && blend.From.TryGetValue(track, out previous))
             {
                 var interpolated = Interpolate(previous, pose, blend.Fraction);
+                interpolated.Kx = BlendNativeAngle(previous.Kx, pose.Kx, blend.Fraction);
+                interpolated.Ky = BlendNativeAngle(previous.Ky, pose.Ky, blend.Fraction);
                 // The current track owns images/visibility; native blending interpolates transforms.
                 interpolated.Texture = pose.Texture;
                 interpolated.Visibility = pose.Visibility;
@@ -2233,6 +2237,18 @@ namespace PlantsVsZombies.Reanimation
             };
         }
 
+        /// <summary>Blends one pose angle using the local PC executable's cross-animation rule.</summary>
+        /// <param name="previous">The angle retained when the previous body animation was interrupted.</param>
+        /// <param name="current">The angle sampled from the new body animation.</param>
+        /// <param name="fraction">The completed fraction of the original pose blend.</param>
+        /// <returns>The new angle directly when the difference exceeds 180 degrees, otherwise the linear blend.</returns>
+        internal static float BlendNativeAngle(float previous, float current, float fraction)
+        {
+            // PC BlendTransform 0x481180 replaces the old angle with the new angle outside +/-180.
+            // Authored keyframes remain unwrapped and use Interpolate's ordinary linear sampling.
+            return Math.Abs(previous - current) > 180f ? current : Lerp(previous, current, fraction);
+        }
+
         /// <summary>Performs lerp.</summary>
         /// <param name = "from">The from.</param>
         /// <param name = "to">The to.</param>
@@ -2463,8 +2479,10 @@ namespace PlantsVsZombies.Reanimation
                 blend.Fraction = 1f;
                 _nativePoseBlends.Add(key, blend);
             }
-            else if (!string.Equals(blend.Animation, animation, StringComparison.OrdinalIgnoreCase))
+            else if (!string.Equals(blend.Animation, animation, StringComparison.OrdinalIgnoreCase) || seconds < blend.LastSeconds)
             {
+                // PC PlayReanim 0x4830B0 starts a fresh blend even when the named clip is unchanged.
+                // Normal loops wrap only in NativeSeconds, after this unwrapped playback clock is inspected.
                 blend.From.Clear();
                 foreach (var pose in blend.Current)
                 {
@@ -2475,6 +2493,7 @@ namespace PlantsVsZombies.Reanimation
             }
 
             blend.Fraction = ticks <= 0 || blend.From.Count == 0 ? 1f : Mathf.Clamp01((seconds - blend.StartedAt) * 100f / ticks);
+            blend.LastSeconds = seconds;
             blend.LastSeenFrame = _nativeBlendFrame;
             return blend;
         }

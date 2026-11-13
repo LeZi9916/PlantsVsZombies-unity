@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
 using NUnit.Framework;
+using PlantsVsZombies.Adventure;
 using PlantsVsZombies.Game;
 using PlantsVsZombies.Reanimation;
 using PlantsVsZombies.Rendering;
@@ -101,6 +102,101 @@ namespace PlantsVsZombies.Tests.PlayMode
                 pool.RenderTo(target);
                 Read(target, pixels);
                 Save(pixels, "newspaper-angry.png");
+            }
+            finally
+            {
+                presenter.Dispose();
+                animations.Dispose();
+                foreach (var texture in owner.Textures._textures.Values)
+                {
+                    if (texture != null)
+                    {
+                        UnityEngine.Object.Destroy(texture);
+                    }
+                }
+
+                owner.Textures._textures.Clear();
+                target.Release();
+                UnityEngine.Object.Destroy(target);
+                UnityEngine.Object.Destroy(pixels);
+                UnityEngine.Object.Destroy(host);
+            }
+        }
+
+        /// <summary>Regresses all three held shields falling from a piercing body death with their original particle artwork.</summary>
+        /// <returns>A frame boundary allowing the real graphics device to initialize.</returns>
+        [UnityTest]
+        public IEnumerator PiercingDeathsRenderEveryOriginalShieldDrop()
+        {
+            var root = ResourceRoot();
+            yield return null;
+            var host = new GameObject("Inactive original shield death fixture");
+            host.SetActive(false);
+            var owner = host.AddComponent<PvZGame>();
+            var animations = new ReanimationRenderer(root);
+            var presenter = new GamePresenter(owner);
+            var target = new RenderTexture(800, 600, 24, RenderTextureFormat.ARGB32);
+            target.Create();
+            var pixels = new Texture2D(800, 600, TextureFormat.RGBA32, false);
+            try
+            {
+                owner._root = root;
+                owner._animations = animations;
+                Assert.That(animations.TryGetNativeAnimationInfo("Zombie", "anim_walk", out _), Is.True, animations.LastError);
+                var flags = BindingFlags.Instance | BindingFlags.NonPublic;
+                typeof(GamePresenter).GetField("_renderingBoardObjects", flags)!.SetValue(presenter, true);
+                var spawn = typeof(GameSimulation).GetMethod("SpawnAdventureZombie", flags)!;
+                var hit = typeof(GameSimulation).GetMethod("HitAdventureZombie", flags)!;
+                var begin = typeof(GamePresenter).GetMethod("BeginAdventurePresentation", flags)!;
+                var end = typeof(GamePresenter).GetMethod("EndAdventurePresentation", flags)!;
+                var draw = typeof(GamePresenter).GetMethod("DrawAdventureDetachedZombieParts", flags)!;
+                var load = typeof(ReanimationRenderer).GetMethod("LoadTexture", flags)!;
+                foreach (var kind in new[] { ZombieKind.ScreenDoor, ZombieKind.Newspaper, ZombieKind.Ladder })
+                {
+                    owner._game = new GameSimulation(new GameRules { AdventureLevel = 11 }, 7529);
+                    var zombie = (Zombie)spawn.Invoke(owner._game, new object[] { kind, 2, 4f, 0 })!;
+                    zombie.Headless = true;
+                    owner._game.AdventurePresentationZombieAnimation(zombie);
+                    zombie.PresentationAnimationAge = .35f;
+                    hit.Invoke(owner._game, new object[] { zombie, 1000f, true, 0U });
+                    Assert.That(owner._game.Presentation.ZombiePartDrops, Has.Count.EqualTo(1), kind.ToString());
+                    var drop = owner._game.Presentation.ZombiePartDrops[0];
+                    Assert.That(drop.ParticleId, Is.EqualTo(AdventureZombieEquipmentRules.ShieldParticle(zombie)));
+                    var image = (Texture2D)load.Invoke(animations, new object[] { AdventureZombieEquipmentRules.ShieldImage(zombie, 2)! })!;
+                    var previousPosition = Vector3.zero;
+                    foreach (var age in new[] { .01f, .2f, .32f })
+                    {
+                        drop.Age = age;
+                        ObjectSpriteRenderer.BeginSceneFrame();
+                        animations.BeginObjectFrame();
+                        animations.DrawNativeImage(Texture2D.whiteTexture, new Rect(0, 0, 800, 600), new Rect(0, 0, 1, 1));
+                        begin.Invoke(presenter, null);
+                        draw.Invoke(presenter, new object[] { 2, false });
+                        end.Invoke(presenter, null);
+                        animations.EndObjectFrame();
+                        var pool = (ObjectSpriteRenderer)typeof(ReanimationRenderer).GetField("_objectRenderer", flags)!.GetValue(animations)!;
+                        var sprites = (List<ObjectSprite>)typeof(ObjectSpriteRenderer).GetField("_sprites", flags)!.GetValue(pool)!;
+                        var sprite = Find(pool, sprites, image);
+                        Assert.That(sprite, Is.Not.Null, kind + " must submit its original detached shield image at " + age);
+                        var position = sprite!.Vertices[0];
+                        if (age > .01f)
+                        {
+                            Assert.That((position - previousPosition).sqrMagnitude, Is.GreaterThan(.25f),
+                                kind + " must follow its original launch, spin and falling particle fields.");
+                        }
+
+                        previousPosition = position;
+                        pool.RenderTo(target);
+                        Read(target, pixels);
+                        Assert.That(VisiblePixels(pixels, new Rect(0, 0, 800, 600)), Is.GreaterThan(20),
+                            kind + " must remain visible through its falling animation.");
+                    }
+
+                    Save(pixels, "shield-death-" + kind + ".png");
+                    drop.Age = .4f;
+                    typeof(GameSimulation).GetMethod("AdvanceAdventureZombieParts", flags)!.Invoke(owner._game, new object[] { 0f });
+                    Assert.That(owner._game.Presentation.ZombiePartDrops, Is.Empty, "Original shield systems end after 40 ticks.");
+                }
             }
             finally
             {

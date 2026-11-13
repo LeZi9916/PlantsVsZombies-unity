@@ -224,6 +224,128 @@ namespace PlantsVsZombies.Tests.PlayMode
                 "The complete dancer must rise above the partially clipped emerging silhouette.");
         }
 
+        /// <summary>Compares both production spotlight layers and the held body with the PC coordinate and palette oracle.</summary>
+        /// <returns>Frames rendering the actual leader and the independently placed original images.</returns>
+        [UnityTest]
+        public IEnumerator SpotlightMatchesOriginalImagesPlacementLayeringAndPalette()
+        {
+            var game = _owner.RequiredGame;
+            var dancer = (Zombie)typeof(GameSimulation).GetMethod("SpawnAdventureZombie", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .Invoke(game, new object[] { ZombieKind.Dancing, 2, AdventureZombieNativeRules.GridX(400f, .8f), 0 })!;
+            dancer.PresentationNativePhase = 43;
+            dancer.PresentationAnimation = "anim_point";
+            dancer.PresentationAnimationAge = 9f / 24f;
+            foreach (var age in new[] { 5f, 7f, 11f })
+            {
+                dancer.Age = age;
+                _animations.ResetNativePlayback();
+                yield return Capture(() => DrawBattleActor(dancer));
+                var production = _pixels.GetPixels32();
+                _animations.ResetNativePlayback();
+                yield return Capture(() =>
+                {
+                    // PC 0x548B00 draws the 50x20 pool and 50x155 beam at 4x around the unchanged body.
+                    var light = age == 5f ? new Color32(250, 250, 160, 255)
+                        : age == 7f ? new Color32(240, 90, 130, 255) : new Color32(216, 126, 202, 255);
+                    SpriteDrawState.Color = light;
+                    Assert.That(_animations.DrawResourceSprite("IMAGE_SPOTLIGHT2", new Vector2(470f, 350f), 4f), Is.True);
+                    SpriteDrawState.Color = Color.white;
+                    Assert.That(_animations.DrawNativePlayback("Zombie_disco", new Vector2(421f, 266f), .8f,
+                        9f / 24f, "anim_point", false, 24f), Is.True, _animations.LastError);
+                    SpriteDrawState.Color = light;
+                    Assert.That(_animations.DrawResourceSprite("IMAGE_SPOTLIGHT", new Vector2(470f, 80f), 4f), Is.True);
+                    SpriteDrawState.Color = Color.white;
+                });
+                Assert.That(DifferentPixels(production, _pixels.GetPixels32()), Is.LessThan(5),
+                    "The spotlight must preserve the PC source offsets, 4x image size, body layering, and native color cycle.");
+            }
+        }
+
+        /// <summary>Checks repeated native arm-raise clips blend from the last displayed dance step instead of an old walk pose.</summary>
+        /// <returns>Frames advancing the production backup through phases forty-five, forty-six, and forty-eight.</returns>
+        [UnityTest]
+        public IEnumerator RaisedArmRestartsBlendFromCurrentPoseAcrossNativeDanceSteps()
+        {
+            var game = _owner.RequiredGame;
+            var backup = (Zombie)typeof(GameSimulation).GetMethod("SpawnAdventureZombie", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .Invoke(game, new object[] { ZombieKind.BackupDancer, 2, 6.5f, 0 })!;
+            game.Update(2.39f);
+            Assert.That(backup.PresentationNativePhase, Is.EqualTo(44));
+            yield return Capture(() => DrawBattleActor(backup));
+            game.Update(.01f);
+            Assert.That(backup.PresentationNativePhase, Is.EqualTo(45));
+            Assert.That(backup.PresentationAnimationAge, Is.EqualTo(.6f * 22f / 18f).Within(.001f));
+            yield return Capture(() => DrawBattleActor(backup));
+            game.Update(.19f);
+            yield return Capture(() => DrawBattleActor(backup));
+            game.Update(.01f);
+            Assert.That(backup.PresentationNativePhase, Is.EqualTo(46));
+            Assert.That(backup.PresentationAnimationAge, Is.Zero);
+            yield return Capture(() => DrawBattleActor(backup));
+            game.Update(.21f);
+            yield return CompareDancerWithUnblendedSource(backup);
+
+            game.Update(.98f);
+            Assert.That(backup.PresentationNativePhase, Is.EqualTo(46));
+            yield return Capture(() => DrawBattleActor(backup));
+            game.Update(.01f);
+            Assert.That(backup.PresentationNativePhase, Is.EqualTo(48));
+            Assert.That(backup.PresentationAnimationAge, Is.Zero);
+            yield return Capture(() => DrawBattleActor(backup));
+            game.Update(.21f);
+            yield return CompareDancerWithUnblendedSource(backup);
+        }
+
+        /// <summary>Checks an eating animation keeps looping when a meal interrupts the leader's held pointing phase.</summary>
+        /// <returns>Frames comparing the original eating pose one complete authored cycle apart.</returns>
+        [UnityTest]
+        public IEnumerator EatingDuringPointHoldKeepsItsOriginalLoop()
+        {
+            var game = _owner.RequiredGame;
+            var leader = (Zombie)typeof(GameSimulation).GetMethod("SpawnAdventureZombie", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .Invoke(game, new object[] { ZombieKind.Dancing, 2, 6.5f, 0 })!;
+            leader.PresentationNativePhase = 43;
+            leader.Eating = true;
+            leader.PresentationAnimation = "anim_eat";
+            leader.PresentationAnimationAge = .12f;
+            yield return Capture(() => DrawBattleActor(leader));
+            var first = _pixels.GetPixels32();
+            leader.PresentationAnimationAge += 31f / 36f;
+            yield return Capture(() => DrawBattleActor(leader));
+            Assert.That(DifferentPixels(first, _pixels.GetPixels32()), Is.LessThan(5),
+                "The once-and-hold rule applies to anim_point, while an interrupted anim_eat must retain its native loop.");
+        }
+
+        /// <summary>Compares a completed production dance blend with the original clip while retaining its live playback identity.</summary>
+        /// <param name="zombie">The dancer whose replay transition has completed.</param>
+        /// <returns>Frames rendering the blended production pose and the direct original source pose.</returns>
+        private IEnumerator CompareDancerWithUnblendedSource(Zombie zombie)
+        {
+            yield return Capture(() => DrawBattleActor(zombie));
+            var production = _pixels.GetPixels32();
+            yield return Capture(() =>
+            {
+                var previous = CanvasUI.Matrix;
+                try
+                {
+                    // Keep the actual actor's blend identity alive while the camera compares its direct source pose.
+                    CanvasUI.Matrix = previous * Matrix4x4.Translate(new Vector3(-2000f, 0f, 0f));
+                    DrawBattleActor(zombie);
+                }
+                finally
+                {
+                    CanvasUI.Matrix = previous;
+                }
+
+                var origin = (Vector2)typeof(GamePresenter).GetMethod("AdventureZombieOrigin", BindingFlags.Instance | BindingFlags.NonPublic)!
+                    .Invoke(_presenter, new object[] { zombie, zombie.X })!;
+                Assert.That(_animations.DrawNativePlayback("Zombie_backup", origin, .8f,
+                    zombie.PresentationAnimationAge, "anim_armraise", true, 18f), Is.True, _animations.LastError);
+            });
+            Assert.That(DifferentPixels(production, _pixels.GetPixels32()), Is.LessThan(5),
+                "A replayed arm-raise must finish blending from the previous dance pose without reverting to the earlier walk animation.");
+        }
+
         /// <summary>Creates a legal isolated night board whose wave scheduling remains outside this graphics fixture.</summary>
         /// <returns>The playing board used for production actor presentation.</returns>
         private static GameSimulation Fixture()

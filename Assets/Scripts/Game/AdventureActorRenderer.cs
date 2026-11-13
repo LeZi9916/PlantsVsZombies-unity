@@ -263,7 +263,7 @@ namespace PlantsVsZombies.Game
                 && !_backwards && _zombie.Kind != ZombieKind.Flag && _zombie.Kind != ZombieKind.DuckyTube
                 ? RequiredRenderer.DrawZombiePlayback(_origin, _scale, _seconds, _variant, _clip, _loop, _rate, true, null, _key)
                 : RequiredRenderer.DrawNativePlayback(_name, _origin, _scale, _seconds, _clip, _loop, _rate, _zombieVisible, null, null,
-                    _backwards, _key, _clip == "anim_gasp" ? 10 : 20, -1f, 90f);
+                    _backwards, _key, _clip == "anim_gasp" ? 10 : AdventureDancerRules.AnimationBlendTicks(_zombie), -1f, 90f);
             if (_plantHead && !_zombie.Headless)
             {
                 RequiredRenderer.DrawNativePlantHeadAttachment(_origin, _scale, _clip, _seconds, _rate, _zombie.ModeHead, _zombie.PresentationPlantHeadAge, _backwards);
