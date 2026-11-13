@@ -200,6 +200,8 @@ namespace PlantsVsZombies.Tests.EditMode
         public void BalloonHealthIsCountedUntilItsAttachmentBreaks()
         {
             var game = Fixture(38);
+            Assert.That(game.ChooseDefaultAdventureSeeds(), Is.True);
+            game.ResetAdventureWaveSchedule(100000, false, false);
             var balloon = (Zombie)Invoke(game, "SpawnAdventureZombie", ZombieKind.Balloon, 0, 9.5f, 0)!;
             Assert.That(balloon.FlyingHealth, Is.EqualTo(20));
             Assert.That(Invoke(game, "ScheduledWaveHealth", 0), Is.EqualTo(290));
@@ -210,8 +212,20 @@ namespace PlantsVsZombies.Tests.EditMode
             Invoke(game, "ApplyAdventureZombieDamage", balloon, 10f, false, 0u);
             Assert.That(balloon.FlyingHealth, Is.Zero);
             Assert.That(balloon.Health, Is.EqualTo(270f));
-            Assert.That(balloon.Airborne, Is.False);
+            Assert.That(balloon.Airborne, Is.True, "PC IsFlying includes the balloon-popping transition.");
+            Assert.That(balloon.PresentationNativePhase, Is.EqualTo(74));
             Assert.That(Invoke(game, "ScheduledWaveHealth", 0), Is.EqualTo(270));
+            for (var tick = 0; tick < 116; tick++)
+            {
+                game.Update(.01f);
+            }
+
+            Assert.That(balloon.PresentationNativePhase, Is.EqualTo(74));
+            Assert.That(balloon.Airborne, Is.True);
+            game.Update(.01f);
+            Assert.That(balloon.Airborne, Is.False);
+            Assert.That(balloon.PresentationNativePhase, Is.EqualTo(75));
+            Assert.That(balloon.Health, Is.EqualTo(270f));
         }
 
         /// <summary>Checks only PC AddZombieInRow-based creations consume the extra one-in-five variant draw.</summary>
@@ -222,7 +236,8 @@ namespace PlantsVsZombies.Tests.EditMode
             var random = AttachRandom(game);
             var zombie = (Zombie)Invoke(game, "SpawnAdventureBoardZombie", ZombieKind.Normal, 2, 9.5f, 0)!;
             Assert.That(random.Bounds[0], Is.EqualTo(5));
-            Assert.That(random.Bounds[1], Is.EqualTo(40));
+            Assert.That(random.Bounds[1], Is.EqualTo(101), "PC 53DE56/53DED5 initializes the vocal counter before native placement.");
+            Assert.That(random.Bounds[2], Is.EqualTo(40));
             Assert.That(zombie.NativeVariant, Is.True);
             random.Bounds.Clear();
             Invoke(game, "SpawnAdventureZombie", ZombieKind.Normal, 2, 9.5f, 0);

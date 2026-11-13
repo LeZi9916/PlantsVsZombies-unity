@@ -9,5 +9,7 @@ namespace PlantsVsZombies.Adventure
         public int JumpTicks;
         /// <summary>Stores the original clip-transition blend, including independent twenty-update meal transitions.</summary>
         public int AnimationBlendTicks;
+        /// <summary>Identifies the latest zero-blend walking reset, including an unseen pose before immediate eating.</summary>
+        public int WalkingPoseVersion;
     }
 }

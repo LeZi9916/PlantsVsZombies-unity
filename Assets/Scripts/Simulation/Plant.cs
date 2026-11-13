@@ -6,6 +6,10 @@ namespace PlantsVsZombies.Simulation
     /// <summary>Defines plant.</summary>
     public sealed class Plant
     {
+        /// <summary>Gets the original Blover's initial blow, continuing wind, and delayed special action.</summary>
+        public AdventureBloverState? BloverPresentation { get; internal set; }
+        /// <summary>Gets the original cactus's low, rising, high, lowering and body-shooting animation state.</summary>
+        public AdventureCactusState? CactusPresentation { get; internal set; }
         /// <summary>Gets the original kelp grab while the plant and its target remain on the board.</summary>
         public AdventureTangleKelpState? TangleKelpPresentation { get; internal set; }
         /// <summary>Gets or sets the original Squash's target, moving body, and authored attack playback.</summary>

@@ -37,6 +37,11 @@ namespace PlantsVsZombies.Adventure
                 return zombie.PresentationNativePhase == 12 ? "anim_jump" : !zombie.UsedAbility ? "anim_run" : null;
             }
 
+            if (zombie.Kind == ZombieKind.Balloon)
+            {
+                return zombie.PresentationNativePhase == 74 ? "anim_pop" : zombie.Airborne ? "anim_idle" : null;
+            }
+
             if (zombie.Kind == ZombieKind.DolphinRider)
             {
                 switch (zombie.PresentationNativePhase)
@@ -89,6 +94,7 @@ namespace PlantsVsZombies.Adventure
             var phase = zombie.PresentationNativePhase;
             return zombie.Kind == ZombieKind.JackInTheBox && phase == 16
                 || zombie.Kind == ZombieKind.Zomboni && zombie.ZomboniState?.FlatTires == true
+                || zombie.Kind == ZombieKind.Balloon && phase == 74
                 || zombie.Kind == ZombieKind.PoleVaulter && phase == 12
                 || zombie.Kind == ZombieKind.DolphinRider && (phase == 52 || phase == 54)
                 || zombie.Kind == ZombieKind.Snorkel && (phase == 58 || phase == 60 || phase == 62);

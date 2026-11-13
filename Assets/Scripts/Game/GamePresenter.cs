@@ -2207,8 +2207,14 @@ namespace PlantsVsZombies.Game
 
                 DrawAdventurePlantingEffects();
                 DrawAdventureExplosionOverlay();
-                // PC Board::Draw sorts Fog at 500000, before ordinary suns, money and gifts at 600001.
+                // PC preview zombies use layers 200000..301000, below fog at 500000 and pickups at 600001.
+                if (_owner.RequiredGame.AdventureHasFog)
+                {
+                    DrawAdventureOpeningActors();
+                }
+
                 DrawAdventureFog();
+                DrawAdventurePlanternLights();
                 foreach (global::PlantsVsZombies.Simulation.Sun sun in _owner.RequiredGame.Suns)
                 {
                     if (!sun.PresentationNative || !sun.PresentationPickup.Collecting)
@@ -2275,7 +2281,10 @@ namespace PlantsVsZombies.Game
                     Fill(new Rect(0, 80, 800, 520), new Color(0.01f, 0.02f, 0.08f, 0.72f));
                 }
 
-                DrawAdventureOpeningActors();
+                if (!_owner.RequiredGame.AdventureHasFog)
+                {
+                    DrawAdventureOpeningActors();
+                }
             }
             finally
             {
@@ -2288,19 +2297,10 @@ namespace PlantsVsZombies.Game
         private void DrawAdventureFog()
         {
             var game = _owner.RequiredGame;
-            if (!game.AdventureHasFog || _owner._choosingSeeds && !_owner.Opening.AdventureIntroActive)
+            // PC DrawFog 0x426210 draws during the preview as well; the initial offset keeps it over the street.
+            if (!game.AdventureHasFog)
             {
                 return;
-            }
-
-            if (_owner.Opening.AdventureIntroActive)
-            {
-                var intro = _owner.Opening.RequiredAdventureIntro;
-                var plan = intro.Plan;
-                if (intro.NativeTime <= 5950 + plan.DaveTime + plan.SodTime + plan.GraveStoneTime)
-                {
-                    return;
-                }
             }
 
             var image = _owner.Textures.LoadImage("fog.png");
@@ -2597,7 +2597,7 @@ namespace PlantsVsZombies.Game
             pixelX += AdventureZombieMotionRules.DolphinImageOffsetX(zombie);
             y += AdventureZombieMotionRules.DolphinImageOffsetY(zombie);
             y += zombie.PresentationVaultPositionY;
-            if (zombie.PoolState != null)
+            if (zombie.PoolState != null && zombie.Kind != ZombieKind.Balloon)
             {
                 y -= AdventureZombiePoolRules.BodyAltitude(zombie);
             }
@@ -3090,9 +3090,27 @@ namespace PlantsVsZombies.Game
                 loop = scaredy.Loop;
             }
 
+            var blover = plant.Kind == PlantKind.Blover ? plant.BloverPresentation : null;
+            if (blover != null)
+            {
+                clip = blover.Animation;
+                age = blover.SampleSeconds(AdventureRenderRemainder);
+                rate = AdventureBloverState.Rate;
+                loop = blover.Loop;
+            }
+
+            var cactus = plant.Kind == PlantKind.Cactus ? plant.CactusPresentation : null;
+            if (cactus != null)
+            {
+                clip = cactus.Animation;
+                age = cactus.SampleSeconds(AdventureRenderRemainder);
+                rate = cactus.Rate;
+                loop = cactus.Loop;
+            }
+
             var shooting = plant.Kind == PlantKind.Starfruit ? "anim_shoot" : "anim_shooting";
             global::PlantsVsZombies.Reanimation.NativeAnimationInfo shot;
-            if (!plant.Asleep && (scaredy == null || scaredy.NativePhase == 1) && !AdventurePresentationRules.AttachedHead(plant.Kind) && plant.Kind != PlantKind.CobCannon && plant.PresentationShotAge >= 0 && _owner.RequiredAnimations.TryGetNativeAnimationInfo(name, shooting, out shot) && plant.PresentationShotAge < shot.Count / AdventurePresentationRules.ShootingRate(plant.Kind))
+            if (!plant.Asleep && cactus == null && (scaredy == null || scaredy.NativePhase == 1) && !AdventurePresentationRules.AttachedHead(plant.Kind) && plant.Kind != PlantKind.CobCannon && plant.PresentationShotAge >= 0 && _owner.RequiredAnimations.TryGetNativeAnimationInfo(name, shooting, out shot) && plant.PresentationShotAge < shot.Count / AdventurePresentationRules.ShootingRate(plant.Kind))
             {
                 clip = shooting;
                 age = plant.PresentationShotAge + AdventureRenderRemainder;
@@ -3135,7 +3153,7 @@ namespace PlantsVsZombies.Game
             ActorRenderer.DrawPlant(plant, name, origin, size, heads == null ? age : plant.Age + AdventureRenderRemainder,
                 clip, loop, rate, heads, _presentationKeys.Get("plant-", plant.Id), new Rect(x - 80, y - 160, 300, 340),
                 squash != null && squash.NativePhase != 0 ? squash.BlendTicks
-                    : doom != null ? 0 : scaredy != null && scaredy.NativePhase != 1 || plant.Kind == PlantKind.Threepeater || plant.Kind == PlantKind.Cattail ? 10 : 20, AdventureRenderRemainder,
+                    : doom != null || blover != null ? 0 : scaredy != null && scaredy.NativePhase != 1 || plant.Kind == PlantKind.Threepeater || plant.Kind == PlantKind.Cattail ? 10 : 20, AdventureRenderRemainder,
                 _presentationKeys.Get("producer-plant-", plant.Id), highlighted, doom == null ? null : _doomTrackOffset);
 
             if (plant.Kind == PlantKind.FumeShroom && plant.PresentationShotAge >= .35f && plant.PresentationShotAge < 1.35f)
@@ -3153,6 +3171,24 @@ namespace PlantsVsZombies.Game
                         RequiredAdventureParticles.Draw(_presentationKeys.Get("gloom-", plant.Id, burst), "GloomCloud", plant.PresentationShotAge - nativeBursts[burst], new Vector2(x + 40, y + 40), plant.Id + burst);
                     }
                 }
+            }
+        }
+
+        /// <summary>Draws the original attached Plantern shine above fog and below ordinary pickups.</summary>
+        private void DrawAdventurePlanternLights()
+        {
+            foreach (var plant in _owner.RequiredGame.Plants)
+            {
+                if (plant.Kind != PlantKind.Plantern || plant.Health <= 0f)
+                {
+                    continue;
+                }
+
+                // PC PlantInit 0x46BE80 creates effect 46 at mX+40,mY+40, layer 500001, at full native size.
+                var origin = new Vector2(BoardLayout.AdventureGridX + plant.Column * BoardLayout.CellWidth + 40f,
+                    _owner.Layout.AdventureCellY(plant.Row, plant.Column) + 40f);
+                RequiredAdventureParticles.Draw(_presentationKeys.Get("native-plantern-shine-", plant.Id), "LanternShine",
+                    plant.Age + AdventureRenderRemainder, origin, plant.Id);
             }
         }
 
@@ -3431,11 +3467,12 @@ namespace PlantsVsZombies.Game
                 zombie.PresentationAnimationAge = 0;
             }
 
-            // PC UpdateAnimSpeed leaves dolphin's zero-ground-distance entrance and jump clocks unaffected by chill.
-            var dolphinJumpClock = zombie.Kind == ZombieKind.DolphinRider
-                && (zombie.PresentationNativePhase == 52 || zombie.PresentationNativePhase == 54);
+            // PC UpdateAnimSpeed leaves flat-ground flying and jump animation clocks unaffected by chill.
+            var constantGroundClock = zombie.Kind == ZombieKind.Balloon && zombie.Airborne
+                || zombie.Kind == ZombieKind.DolphinRider
+                    && (zombie.PresentationNativePhase == 52 || zombie.PresentationNativePhase == 54);
             var age = zombie.PresentationAnimationAge + (zombie.FrozenRemaining > 0 ? 0
-                : AdventureRenderRemainder * (zombie.ChillRemaining > 0 && !dolphinJumpClock ? .5f : 1f));
+                : AdventureRenderRemainder * (zombie.ChillRemaining > 0 && !constantGroundClock ? .5f : 1f));
             var rate = _owner.RequiredGame.AdventurePresentationZombieRate(zombie);
             age = AdventureZombieMotionRules.PlaybackSeconds(zombie, age);
             var spotlight = AdventureDancerRules.HasSpotlight(zombie) && _owner.RequiredGame.State != MatchState.Lost;
@@ -4081,7 +4118,7 @@ namespace PlantsVsZombies.Game
                 y = pea.PresentationLaunchY + Mathf.Lerp(pea.PresentationPreviousLaneOffset,
                     pea.PresentationLaneOffset, AdventureRenderRemainder * 100f);
             }
-            else if (shortPuff)
+            else if (shortPuff || pea.SourceKind == PlantKind.Cactus)
             {
                 y = pea.PresentationLaunchY;
             }

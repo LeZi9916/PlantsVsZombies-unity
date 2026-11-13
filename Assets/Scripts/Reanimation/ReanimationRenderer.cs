@@ -77,6 +77,8 @@ namespace PlantsVsZombies.Reanimation
             public float LastSeconds;
             /// <summary>The outer presentation frame that most recently sampled this actor.</summary>
             public int LastSeenFrame;
+            /// <summary>Identifies the last simulation-owned zero-blend pose reset sampled by this renderer.</summary>
+            public int SourcePoseVersion;
             /// <summary>Stores from.</summary>
             public Dictionary<string, Frame> From = new Dictionary<string, Frame>();
             /// <summary>Stores current.</summary>
@@ -2429,6 +2431,7 @@ namespace PlantsVsZombies.Reanimation
         {
             blend.From.Clear();
             blend.Current.Clear();
+            blend.SourcePoseVersion = 0;
             if (_inactiveNativePoseBlends.Count < MaximumRetainedPoseBlends)
             {
                 _inactiveNativePoseBlends.Push(blend);
@@ -2495,6 +2498,48 @@ namespace PlantsVsZombies.Reanimation
             blend.LastSeconds = seconds;
             blend.LastSeenFrame = _nativeBlendFrame;
             return blend;
+        }
+
+        /// <summary>Retains an authored zero-blend pose even when simulation transitions again before the next draw.</summary>
+        /// <param name="name">The original reanimation asset containing the intermediate pose.</param>
+        /// <param name="instanceKey">The actor's stable native playback identity.</param>
+        /// <param name="animation">The original clip whose first frame replaces the previous pose.</param>
+        /// <param name="version">The simulation-owned reset version, changed once for each zero-blend transition.</param>
+        /// <returns>Whether this renderer already retained or successfully sampled the requested source pose.</returns>
+        internal bool EnsureNativePlaybackPose(string? name, string? instanceKey, string animation, int version)
+        {
+            if (string.IsNullOrEmpty(instanceKey) || version <= 0)
+            {
+                return false;
+            }
+
+            if (_nativePoseBlends.TryGetValue(instanceKey, out var existing) && existing.SourcePoseVersion == version)
+            {
+                return true;
+            }
+
+            if (!TryGetClip(name, animation, out var asset, out var clip))
+            {
+                return false;
+            }
+
+            var blend = PrepareNativeBlend(instanceKey, animation, 0f, 0)!;
+            blend.From.Clear();
+            blend.Current.Clear();
+            blend.Animation = animation;
+            blend.StartedAt = 0f;
+            blend.LastSeconds = 0f;
+            blend.SourcePoseVersion = version;
+            foreach (var track in asset.Tracks)
+            {
+                var pose = GetFrame(track, clip.Start);
+                if (pose.Visibility >= 0f && pose.Texture != null)
+                {
+                    blend.Current[track.Name] = pose;
+                }
+            }
+
+            return true;
         }
 
         // Additive overload preserves the existing Func<string,bool> signature used by loader/UI.

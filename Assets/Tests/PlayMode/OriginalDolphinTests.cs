@@ -7,6 +7,7 @@ using System.IO;
 using System.Reflection;
 using System.Xml;
 using NUnit.Framework;
+using PlantsVsZombies.Adventure;
 using PlantsVsZombies.Game;
 using PlantsVsZombies.Reanimation;
 using PlantsVsZombies.Rendering;
@@ -166,6 +167,113 @@ namespace PlantsVsZombies.Tests.PlayMode
                 animations.EndObjectFrame();
                 Assert.That(DifferentPixels(death, Read(animations, target, pixels)), Is.Zero,
                     "The original swimming death retains its +50 image offset, altitude, water tracks, and 44-pixel clip height.");
+            }
+            finally
+            {
+                presenter.Dispose();
+                target.Release();
+                UnityEngine.Object.Destroy(target);
+                UnityEngine.Object.Destroy(pixels);
+                owner.Textures.ReleaseAll();
+                UnityEngine.Object.Destroy(host);
+            }
+        }
+
+        /// <summary>Checks a real cached jump transitions to the rebased swim pose before an immediate original meal blend.</summary>
+        /// <returns>A frame boundary for initializing the real graphics device.</returns>
+        [UnityTest]
+        public IEnumerator LandingAndImmediateMealNeverReuseTheDisplacedJumpPose()
+        {
+            var root = Environment.GetEnvironmentVariable("PVZ_BOARD_STRESS_ASSETS") ?? "";
+            if (!File.Exists(Path.Combine(root, "reanim", "Zombie_dolphinrider.reanim")))
+            {
+                Assert.Ignore("Set PVZ_BOARD_STRESS_ASSETS to the read-only original runtime resource directory.");
+            }
+
+            yield return null;
+            var host = new GameObject("Inactive dolphin landing graphics fixture");
+            host.SetActive(false);
+            var owner = host.AddComponent<PvZGame>();
+            using var animations = new ReanimationRenderer(root);
+            using var reference = new ReanimationRenderer(root);
+            var presenter = new GamePresenter(owner);
+            var target = new RenderTexture(800, 600, 24, RenderTextureFormat.ARGB32);
+            target.Create();
+            var pixels = new Texture2D(800, 600, TextureFormat.RGBA32, false);
+            try
+            {
+                owner._root = root;
+                owner._animations = animations;
+                owner._game = new GameSimulation(new GameRules { AdventureLevel = 29 }, 7529);
+                Assert.That(owner._game.ChooseDefaultAdventureSeeds(), Is.True);
+                SpriteSourceTestUtilities.SetImage(owner.Textures, "plantshadow.png", null!);
+                SpriteSourceTestUtilities.SetImage(owner.Textures, "plantshadow2.png", null!);
+                var flags = BindingFlags.Instance | BindingFlags.NonPublic;
+                typeof(GamePresenter).GetField("_renderingBoardObjects", flags)!.SetValue(presenter, true);
+                var draw = typeof(GamePresenter).GetMethod("DrawAdventureZombie", flags)!;
+                var land = typeof(GameSimulation).GetMethod("AdvanceAdventureDolphin", flags)!;
+                foreach (var eating in new[] { false, true })
+                {
+                    var zombie = new Zombie
+                    {
+                        Id = eating ? 902 : 901,
+                        Kind = ZombieKind.DolphinRider,
+                        Row = 2,
+                        X = AdventureZombieNativeRules.GridX(400f),
+                        Health = 500f,
+                        StartingHealth = 500f,
+                        PresentationInPool = true,
+                        PresentationNativePhase = 54,
+                        PresentationNativeHeight = 0,
+                        PresentationAltitude = 10f,
+                        _presentationInitialized = true,
+                        DolphinState = new AdventureDolphinState()
+                    };
+                    zombie.PresentationPreviousX = zombie.X;
+                    owner._game.Zombies.Add(zombie);
+                    owner._game.AdventurePresentationZombieAnimation(zombie);
+                    zombie.PresentationAnimationAge = 2.299f;
+                    Begin(animations);
+                    draw.Invoke(presenter, new object[] { zombie });
+                    animations.EndObjectFrame();
+                    Read(animations, target, pixels);
+                    zombie._presentationPreviousWalkCycle = .99d;
+                    zombie._presentationWalkPhase = 0f;
+                    zombie._presentationWalkLoops = 1;
+                    land.Invoke(owner._game, new object[] { zombie, .01f });
+                    Assert.That(zombie.PresentationNativePhase, Is.EqualTo(55));
+                    Assert.That(zombie.PresentationPreviousX, Is.EqualTo(zombie.X));
+                    zombie.Eating = eating;
+                    var clip = owner._game.AdventurePresentationZombieAnimation(zombie);
+                    var rate = owner._game.AdventurePresentationZombieRate(zombie);
+                    Assert.That(clip, Is.EqualTo(eating ? "anim_eat" : "anim_swim"));
+                    Assert.That(zombie.DolphinState!.AnimationBlendTicks, Is.EqualTo(eating ? 20 : 0));
+                    var origin = new Vector2(AdventureZombieNativeRules.ReanimationSourceX(zombie.X), 262f);
+                    var referenceKey = eating ? "independent-eating-landing" : "independent-swimming-landing";
+                    Begin(reference);
+                    // PC 541C70 invokes StartWalkAnim before EatPlant can call the twenty-tick StartEating blend.
+                    reference.DrawNativePlayback("Zombie_dolphinrider", origin, 1f, 0f, "anim_swim", true, 12f,
+                        instanceKey: referenceKey, blendTicks: 0);
+                    reference.EndObjectFrame();
+                    foreach (var seconds in new[] { 0f, .1f, .2f })
+                    {
+                        zombie.PresentationAnimationAge = seconds;
+                        Begin(animations);
+                        draw.Invoke(presenter, new object[] { zombie });
+                        animations.EndObjectFrame();
+                        var actual = Read(animations, target, pixels);
+                        Save(pixels, "dolphin-cached-landing-" + eating + "-" + (int)(seconds * 100f) + ".png");
+                        Begin(reference);
+                        reference.DrawNativePlayback("Zombie_dolphinrider", origin, 1f, seconds, clip, true, rate,
+                            instanceKey: referenceKey, blendTicks: eating ? 20 : 0);
+                        reference.EndObjectFrame();
+                        var expected = Read(reference, target, pixels);
+                        Assert.That(DifferentPixels(actual, expected), Is.Zero,
+                            "Landing must discard the old jump placement before " + clip + " at native tick " + (int)(seconds * 100f) + ".");
+                    }
+
+                    owner._game.Zombies.Remove(zombie);
+                }
             }
             finally
             {

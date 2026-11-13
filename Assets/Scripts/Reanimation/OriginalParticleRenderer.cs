@@ -68,6 +68,9 @@ namespace PlantsVsZombies.Reanimation
                         return t * t;
                     case "EaseOut":
                         return 2 * t - t * t;
+                    case "Bounce":
+                        // PC TodCurveBounce 0x526C50 returns to the first endpoint at the end of the cycle.
+                        return 1f - Math.Abs(2f * t - 1f);
                     case "FastInOutWeak":
                         // PC 0x526C90 curve 7 calls 0x526BD0, also inside random range brackets.
                         var half = t <= .5f ? t * 2f : (t - .5f) * 2f;
@@ -186,6 +189,8 @@ namespace PlantsVsZombies.Reanimation
             public int ImageFrames = 1;
             /// <summary>Stores random spin, loops, particle loops, additive, dont follow, has alpha, and fullscreen drawing.</summary>
             public bool RandomSpin, Loops, ParticleLoops, Additive, DontFollow, HasAlpha, FullScreen;
+            /// <summary>Starts each particle at the original random integer lifetime update instead of at birth.</summary>
+            public bool RandomStart;
             /// <summary>Stores tracks.</summary>
             public readonly Dictionary<string, Curve> Tracks = new Dictionary<string, Curve>();
             /// <summary>Stores fields.</summary>
@@ -623,6 +628,9 @@ namespace PlantsVsZombies.Reanimation
                         case "RandomLaunchSpin":
                             definition.RandomSpin = child.InnerText == "1";
                             break;
+                        case "RandomStartTime":
+                            definition.RandomStart = child.InnerText.Trim() == "1";
+                            break;
                         case "SystemLoops":
                             definition.Loops = child.InnerText == "1";
                             break;
@@ -703,6 +711,13 @@ namespace PlantsVsZombies.Reanimation
             }
 
             particle.Duration = Math.Max(1, definition.Track("ParticleDuration", 100).Value(emitter.Age / (float)Math.Max(1, emitter.Duration - 1), Random01(system)));
+            if (definition.RandomStart)
+            {
+                // PC SpawnParticle 0x52B7E4..52B7F3 chooses Rand(duration), then performs only the ordinary birth update.
+                particle.Duration = (int)particle.Duration;
+                particle.Age = system.RequiredRandom.Next((int)particle.Duration);
+            }
+
             var systemTime = emitter.Age / (float)Math.Max(1, emitter.Duration - 1);
             var angle = definition.Tracks.ContainsKey("LaunchAngle") ? definition.Track("LaunchAngle").Value(systemTime, Random01(system)) * Mathf.Deg2Rad : Random01(system) * 2 * Mathf.PI;
             var radius = definition.Track("EmitterRadius").Value(systemTime, Random01(system));

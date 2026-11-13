@@ -9,9 +9,26 @@ namespace PlantsVsZombies.Adventure
         /// <summary>Stores definitions.</summary>
         public static readonly Dictionary<int, AdventureZombieFoleyDefinition> Definitions = new Dictionary<int, AdventureZombieFoleyDefinition>
         {
+            // PC 74B3B8 + id * 52: six normal groans, three extra brains variants, and two low giant groans.
+            {
+                11,
+                new AdventureZombieFoleyDefinition(0f, new[] { "groan", "groan2", "groan3", "groan4", "groan5", "groan6" })
+            },
+            {
+                12,
+                new AdventureZombieFoleyDefinition(0f, new[] { "groan", "groan2", "groan3", "groan4", "groan5", "groan6", "sukhbir4", "sukhbir5", "sukhbir6" })
+            },
+            {
+                70,
+                new AdventureZombieFoleyDefinition(2f, new[] { "lowgroan", "lowgroan2" })
+            },
             {
                 34,
                 new AdventureZombieFoleyDefinition(1f, new[] { "jack_surprise", "jack_surprise", "jack_surprise2" })
+            },
+            {
+                60,
+                new AdventureZombieFoleyDefinition(10f, new[] { "ballooninflate" })
             },
             // PC Foley table 0x74B3B8, stride 52; names resolved by resource initialization 0x4935B0.
             {

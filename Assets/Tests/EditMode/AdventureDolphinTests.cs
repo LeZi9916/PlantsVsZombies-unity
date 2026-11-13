@@ -137,11 +137,43 @@ namespace PlantsVsZombies.Tests.EditMode
             Assert.That(zombie.UsedAbility, Is.True);
             Assert.That(zombie.PresentationAltitude, Is.Zero);
             Assert.That((landingX - zombie.X) * 80f, Is.InRange(94f, 94.5f));
+            Assert.That(Math.Abs(zombie.PresentationPreviousX - zombie.X) * 80f, Is.LessThan(1f),
+                "The landing's ninety-four-pixel coordinate rebase must not become render interpolation travel.");
             Assert.That(game.AdventurePresentationZombieAnimation(zombie), Is.EqualTo("anim_swim"));
             Assert.That(AdventureZombieTargetingRules.BodyRectangle(zombie).X, Is.EqualTo((int)NativeX(zombie) + 20));
             Assert.That(AdventureZombieBiteRules.LocalAttackRect(14, 55, false).X, Is.EqualTo(30));
             Assert.That(CountSound(game, 50), Is.EqualTo(1));
             Assert.That(CountSound(game, 53), Is.EqualTo(1));
+        }
+
+        /// <summary>Checks the coordinate rebase before ordinary movement and the independent original meal-transition blend.</summary>
+        /// <param name="eating">Whether the rider starts eating immediately after landing, before its first rendered swim pose.</param>
+        [TestCase(false)]
+        [TestCase(true)]
+        public void LandingRebasesHistoryBeforeFirstSwimOrImmediateMeal(bool eating)
+        {
+            var game = Board();
+            var zombie = Spawn(game, 54, 400f);
+            zombie._presentationInitialized = true;
+            zombie.PresentationPreviousX = zombie.X;
+            zombie.PresentationAltitude = 10f;
+            zombie.DolphinState!.JumpTicks = 0;
+            zombie._presentationPreviousWalkCycle = .99d;
+            zombie._presentationWalkPhase = 0f;
+            zombie._presentationWalkLoops = 1;
+            var before = NativeX(zombie);
+            var previousVersion = zombie.DolphinState.WalkingPoseVersion;
+            Invoke(game, "AdvanceAdventureDolphin", zombie, .01f);
+            Assert.That(zombie.PresentationNativePhase, Is.EqualTo(55));
+            Assert.That(NativeX(zombie), Is.EqualTo(before - 94f).Within(.001f));
+            Assert.That(zombie.PresentationPreviousX, Is.EqualTo(zombie.X),
+                "New swim/eat artwork must use the landing coordinate at every render interpolation fraction.");
+            Assert.That(zombie.DolphinState.WalkingPoseVersion, Is.EqualTo(previousVersion + 1),
+                "Every native landing must seed a new walking pose even when the renderer never displayed its intermediate swim clip.");
+            zombie.Eating = eating;
+            Assert.That(game.AdventurePresentationZombieAnimation(zombie), Is.EqualTo(eating ? "anim_eat" : "anim_swim"));
+            Assert.That(zombie.DolphinState.AnimationBlendTicks, Is.EqualTo(eating ? 20 : 0),
+                "Immediate eating keeps the original twenty-tick meal blend; only the landing rebase is instantaneous.");
         }
 
         /// <summary>Checks the original high-nut contact event replaces the leap with falling and permanently removes the dolphin.</summary>

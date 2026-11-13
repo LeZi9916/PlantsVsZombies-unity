@@ -2233,6 +2233,14 @@ namespace PlantsVsZombies.Simulation
         /// <param name = "plant">The plant.</param>
         private void InitializeAdventureNativePlantTiming(Plant plant)
         {
+            if (plant.Kind == PlantKind.Blover)
+            {
+                // PC PlantInit 46C23A starts anim_blow immediately at twenty fps and delays its special action fifty updates.
+                plant.BloverPresentation = new AdventureBloverState();
+                plant.ActionTimer = .5f;
+                return;
+            }
+
             if (plant.Kind == PlantKind.CherryBomb)
             {
                 InitializeAdventureCherryBomb(plant);
@@ -2321,6 +2329,12 @@ namespace PlantsVsZombies.Simulation
                 return true;
             }
 
+            if (plant.Kind == PlantKind.Cactus && plant.ActionTimer < 100000f)
+            {
+                AdvanceAdventureCactus(plant);
+                return true;
+            }
+
             if ((plant.Kind == PlantKind.Threepeater || plant.Kind == PlantKind.SplitPea) && plant.ActionTimer < 100000f)
             {
                 AdvanceAdventureMultiHeadPlant(plant);
@@ -2348,7 +2362,6 @@ namespace PlantsVsZombies.Simulation
             var sunflower = plant.Kind == PlantKind.Sunflower;
             var shortPuff = AdventurePuffShroomRules.IsShortRange(plant.Kind);
             var fume = plant.Kind == PlantKind.FumeShroom;
-            var cactus = plant.Kind == PlantKind.Cactus;
             var kernel = plant.Kind == PlantKind.KernelPult;
             var scaredy = plant.Kind == PlantKind.ScaredyShroom;
             var state = plant.RequiredTiming;
@@ -2370,12 +2383,12 @@ namespace PlantsVsZombies.Simulation
             }
 
             var targetZombie = fume || shortPuff || sunflower ? null : FindAdventureTarget(plant.Row,
-                plant.ModeFacesLeft ? -1f : plant.Column + .4f, plant.ModeFacesLeft ? plant.Column + .5f : 20f, cactus);
+                plant.ModeFacesLeft ? -1f : plant.Column + .4f, plant.ModeFacesLeft ? plant.Column + .5f : 20f, false);
             var target = fume ? FindAdventureFumeTarget(plant) != null : shortPuff ? FindAdventurePuffTarget(plant) != null
                 : !sunflower && (targetZombie != null || !plant.ModeFacesLeft && CanShootAdventureBoss(plant))
                     && (!scaredy || plant.ScaredyShroomPresentation!.NativePhase == 1);
             // PC 0x46D240 starts the body animation and its species-specific shooting counter together.
-            var track = shortPuff || fume || scaredy || cactus || plant.Kind == PlantKind.CabbagePult || kernel
+            var track = shortPuff || fume || scaredy || plant.Kind == PlantKind.CabbagePult || kernel
                 || plant.Kind == PlantKind.MelonPult || plant.Kind == PlantKind.WinterMelon
                 ? global::PlantsVsZombies.Timing.ShootingTrack.Body : global::PlantsVsZombies.Timing.ShootingTrack.Head;
             var input = new global::PlantsVsZombies.Timing.PlantTimingInput(true, !scaredy, true, true, target, track, true, 0);
@@ -2414,7 +2427,7 @@ namespace PlantsVsZombies.Simulation
                     continue;
                 }
 
-                if (scaredy || cactus || plant.Kind == PlantKind.CabbagePult || kernel || plant.Kind == PlantKind.MelonPult || plant.Kind == PlantKind.WinterMelon)
+                if (scaredy || plant.Kind == PlantKind.CabbagePult || kernel || plant.Kind == PlantKind.MelonPult || plant.Kind == PlantKind.WinterMelon)
                 {
                     FireAdventureNativeTimedProjectile(plant);
                     continue;
@@ -2435,6 +2448,85 @@ namespace PlantsVsZombies.Simulation
             }
 
             return true;
+        }
+
+        /// <summary>Runs PC UpdateShooting, UpdateCactus and UpdateShooter in their original order.</summary>
+        /// <param name="plant">The live cactus whose body and native weapon state are being advanced.</param>
+        private void AdvanceAdventureCactus(Plant plant)
+        {
+            if (!plant.Timing.HasValue)
+            {
+                InitializeAdventureNativePlantTiming(plant);
+            }
+
+            var pose = plant.CactusPresentation;
+            if (pose == null)
+            {
+                pose = new AdventureCactusState(plant.PresentationRate);
+                plant.CactusPresentation = pose;
+            }
+
+            pose.AdvanceAnimation();
+            var state = plant.RequiredTiming;
+            var shooting = global::PlantsVsZombies.Timing.PlantTiming.Tick(state,
+                new global::PlantsVsZombies.Timing.PlantTimingInput(true, true, false, false, false,
+                    global::PlantsVsZombies.Timing.ShootingTrack.Body, pose.AnimationFinished, 0));
+            if (shooting.ProjectilesCreated > 0)
+            {
+                FireAdventureNativeTimedProjectile(plant);
+                plant.PresentationShotAge = pose.SampleSeconds(0f);
+            }
+
+            if (state.ShootingCountdown > 0 && shooting.State.ShootingCountdown == 0)
+            {
+                pose.FinishShooting();
+            }
+
+            var airTarget = false;
+            var groundTarget = false;
+            foreach (var zombie in Zombies)
+            {
+                if (AdventureCactusState.CanTarget(plant, zombie, true))
+                {
+                    airTarget = true;
+                }
+                else if (AdventureCactusState.CanTarget(plant, zombie, false))
+                {
+                    groundTarget = true;
+                }
+            }
+
+            var previousPhase = pose.NativePhase;
+            pose.Update(airTarget, shooting.State.ShootingCountdown > 0);
+            state = shooting.State;
+            if (previousPhase != 31 && pose.NativePhase == 31)
+            {
+                RequestAdventureZombieFoley(63);
+            }
+            else if (previousPhase == 31 && pose.NativePhase == 32)
+            {
+                // PC 0x46F625 resets the launch counter before this tick's UpdateShooter.
+                state = global::PlantsVsZombies.Timing.PlantTiming.FromRaw(state.Kind, 1, state.ShootingCountdown);
+            }
+
+            var high = pose.NativePhase == 32;
+            var target = high ? airTarget : pose.NativePhase == 30 && (groundTarget || CanShootAdventureBoss(plant));
+            var input = new global::PlantsVsZombies.Timing.PlantTimingInput(true, false, true, false, target,
+                global::PlantsVsZombies.Timing.ShootingTrack.Body, true, 0, cactusHigh: high);
+            var bound = global::PlantsVsZombies.Timing.PlantTiming.RequiredRandomBound(state, input);
+            var result = global::PlantsVsZombies.Timing.PlantTiming.Tick(state,
+                new global::PlantsVsZombies.Timing.PlantTimingInput(true, false, true, false, target,
+                    global::PlantsVsZombies.Timing.ShootingTrack.Body, true, bound == 0 ? 0 : _random.Next(bound), cactusHigh: high));
+            plant.Timing = result.State;
+            plant.ActionTimer = result.State.Countdown * .01f;
+            plant.PresentationBiteNativeState = pose.NativePhase;
+            if (result.AnimationStarted)
+            {
+                pose.BeginShooting();
+                plant.PresentationShotAge = 0f;
+                plant._presentationPrefiring = true;
+                plant.ShootAge = 0f;
+            }
         }
 
         /// <summary>Updates the original Scaredy-shroom state using the native circle and actual zombie rectangles.</summary>
@@ -3374,6 +3466,26 @@ namespace PlantsVsZombies.Simulation
                 target.Kind == ZombieKind.DolphinRider ? 65f : (float?)null);
         }
 
+        /// <summary>Runs the original Blover body clock, single wind effect, and two-hundred-update special lifetime.</summary>
+        /// <param name="plant">The planted Blover whose original state is advanced.</param>
+        private void AdvanceAdventureBlover(Plant plant)
+        {
+            var state = plant.BloverPresentation ??= new AdventureBloverState();
+            if (state.Advance())
+            {
+                RequestAdventureZombieFoley(-2);
+                BlowAdventureFliersAway();
+                // PC BlowAwayFliers 474AAE includes the original twenty-second fog return interval.
+                Adventure.FogBlownRemaining = 40f;
+            }
+
+            plant.ActionTimer = state.SpecialTicks * .01f;
+            if (state.Expired)
+            {
+                RemoveAdventurePlantAndStack(plant);
+            }
+        }
+
         /// <summary>Performs advance adventure plants.</summary>
         /// <param name = "dt">The dt.</param>
         private void AdvanceAdventurePlants(float dt)
@@ -3425,6 +3537,12 @@ namespace PlantsVsZombies.Simulation
                     if (p.Kind == PlantKind.Squash)
                     {
                         AdvanceAdventureSquash(p);
+                        continue;
+                    }
+
+                    if (p.Kind == PlantKind.Blover)
+                    {
+                        AdvanceAdventureBlover(p);
                         continue;
                     }
 
@@ -3509,21 +3627,6 @@ namespace PlantsVsZombies.Simulation
                             AdventurePresentationGraveBuster(p, global::PlantsVsZombies.Adventure.AdventureExplosionEffect.GraveBusterDie);
                             RemoveAdventurePlantAndStack(p);
                             DropAdventureLootPiece(x, p.Row, global::PlantsVsZombies.Adventure.AdventureGraveBusterRules.LootDropFactor);
-                            break;
-                        case PlantKind.Blover:
-                            RequestAdventureZombieFoley(-2);
-                            for (var i = Zombies.Count - 1; i >= 0; i--)
-                            {
-                                if (Zombies[i].Airborne)
-                                {
-                                    Zombies[i].PresentationDeath = AdventureZombieDeathPresentation.Removed;
-                                    KillAdventureZombie(Zombies[i]);
-                                }
-                            }
-
-                            // PC Plant::BlowAwayFliers 0x474AAE sets 4000 ticks, including the twenty-second return.
-                            Adventure.FogBlownRemaining = 40f;
-                            RemoveAdventurePlantAndStack(p);
                             break;
                         case PlantKind.PotatoMine:
                             AdvanceAdventurePotatoMine(p);
@@ -3853,7 +3956,20 @@ namespace PlantsVsZombies.Simulation
                 || plant.Kind == PlantKind.MelonPult || plant.Kind == PlantKind.WinterMelon;
             var melon = plant.Kind == PlantKind.MelonPult || plant.Kind == PlantKind.WinterMelon;
             var shot = FireAdventurePea(plant, plant.Row, false, melon ? 80f : plant.Kind == PlantKind.CabbagePult ? 40f : 20f);
-            shot.HitsAir = plant.Kind == PlantKind.Cactus;
+            shot.HitsAir = plant.Kind == PlantKind.Cactus && plant.CactusPresentation?.NativePhase == 32;
+            if (plant.Kind == PlantKind.Cactus)
+            {
+                // PC Plant::Fire 0x4752E0 creates the 30x16 spike at +(93,-50) or +(70,23).
+                // The renderer stores its centre, whereas native projectile coordinates name its top-left corner.
+                shot.X = plant.Column + (shot.HitsAir ? 108f : 85f) / 80f;
+                shot.StartX = shot.X;
+                shot.PresentationPreviousX = shot.X;
+                shot.VelocityX = 3.33f * 100f / 80f;
+                var plantY = 80f + plant.Row * (Adventure.Level.HasPool || Adventure.Level.HasRoof ? 85f : 100f)
+                    + (Adventure.Level.HasRoof ? Math.Max(0f, 5f - plant.Column) * 20f - 10f : 0f);
+                shot.PresentationLaunchY = plantY + (shot.HitsAir ? -42f : 31f)
+                    - (HasPlantKindAt(PlantKind.FlowerPot, plant.Row, plant.Column) ? 5f : 0f);
+            }
             shot.Range = 20f;
             shot.Lobbed = lob;
             shot.PiercesShield = lob;
@@ -4112,7 +4228,7 @@ namespace PlantsVsZombies.Simulation
                 }
 
                 p.Row = (int)Math.Round(p.FlightRow);
-                if (!p.Lobbed && !p.Homing && p.VelocityY == 0 && !AdventurePuffShroomRules.IsShortRange(p.SourceKind))
+                if (!p.Lobbed && !p.Homing && p.VelocityY == 0 && p.SourceKind != PlantKind.Cactus && !AdventurePuffShroomRules.IsShortRange(p.SourceKind))
                 {
                     Plant? torch = null;
                     foreach (var plant in Plants)
@@ -4143,9 +4259,11 @@ namespace PlantsVsZombies.Simulation
                 Zombie? hit = null;
                 foreach (Zombie z in Zombies)
                 {
-                    if (allowDamage && p.PresentationCanImpact && z.GraveRiseTicks <= 0 && z.PresentationNativePhase != 50
+                    if (allowDamage && p.PresentationCanImpact && z.GraveRiseTicks <= 0 && z.PresentationNativePhase != 50 && z.PresentationNativePhase != 74
                         && !(z.Kind == ZombieKind.DolphinRider && (z.PresentationNativePhase == 52 || z.PresentationNativePhase == 54))
-                        && (!p.Homing || z.Id == p.TargetZombieId) && !z.Hypnotized && Math.Abs(z.Row - p.FlightRow) < 0.45f && !p.HitIds.Contains(z.Id) && (!z.Airborne || p.HitsAir) && (!z.Submerged || p.Lobbed) && (z.Kind == ZombieKind.Zomboni
+                        && (!p.Homing || z.Id == p.TargetZombieId) && !z.Hypnotized && Math.Abs(z.Row - p.FlightRow) < 0.45f && !p.HitIds.Contains(z.Id) && (!z.Airborne || p.HitsAir)
+                        && (p.SourceKind != PlantKind.Cactus || z.Airborne == p.HitsAir && AdventureZombieTargetingRules.CanBeAutoTargeted(z, PlantKind.Cactus))
+                        && (!z.Submerged || p.Lobbed) && (z.Kind == ZombieKind.Zomboni
                         ? AdventureZomboniRules.ProjectileCollides(p, z)
                         : AdventurePuffShroomRules.IsShortRange(p.SourceKind) ? AdventurePuffShroomRules.Collides(p, z)
                         : z.X >= Math.Min(before, p.X) - 0.25f && z.X <= Math.Max(before, p.X) + 0.25f))
@@ -4236,8 +4354,11 @@ namespace PlantsVsZombies.Simulation
                 damage -= flyingDamage;
                 if (z.FlyingHealth == 0)
                 {
-                    z.Airborne = false;
-                    z.Speed = 0.18f;
+                    LandAdventureBalloon(z, damageFlags);
+                    if (!Zombies.Contains(z))
+                    {
+                        return;
+                    }
                 }
             }
 
@@ -9134,6 +9255,12 @@ namespace PlantsVsZombies.Simulation
                 z.DolphinState = new AdventureDolphinState();
                 z.PresentationNativePhase = 51;
             }
+            else if (z.Kind == ZombieKind.Balloon)
+            {
+                z.PresentationNativePhase = 73;
+                z.PresentationAltitude = 25f;
+                z.PresentationNativeHeight = 0;
+            }
 
             // Explicit in-lawn spawns retain their pool placement; edge spawns enter through CheckForPool.
             z.PresentationPoolRow = Adventure.Level.IsWaterRow(z.Row);
@@ -9152,6 +9279,12 @@ namespace PlantsVsZombies.Simulation
                     z.PresentationAltitude = 0f;
                     z.PresentationNativePhase = 53;
                 }
+            }
+
+            if (z.Kind == ZombieKind.Balloon)
+            {
+                z.PresentationInPool = false;
+                z.PresentationAltitude = 25f;
             }
 
             if (AdventureDancerRules.IsDancer(z))
@@ -9197,6 +9330,15 @@ namespace PlantsVsZombies.Simulation
             var kind = z.ModeHead >= 26 ? z.ModeHead : (int)z.Kind;
             if (z.Kind == ZombieKind.Bobsled && z.BobsledState != null && !z.UsedAbility)
             {
+                z._presentationSpeedPhase = phase;
+                z._presentationSpeedKind = kind;
+                z.Speed = AdventureZombieNativeRules.GridSpeed(z.PresentationNativeVelocity);
+                return;
+            }
+
+            if (z.Kind == ZombieKind.Balloon && phase == 74)
+            {
+                // PC LandFlyer changes only the clip: PickRandomSpeed happens after the pop finishes.
                 z._presentationSpeedPhase = phase;
                 z._presentationSpeedKind = kind;
                 z.Speed = AdventureZombieNativeRules.GridSpeed(z.PresentationNativeVelocity);
@@ -9426,12 +9568,14 @@ namespace PlantsVsZombies.Simulation
             z._presentationPreviousWalkCycle = z._presentationWalkLoops + (double)z._presentationWalkPhase;
             z._presentationTickSlow = (AdventureDancerRules.IsDancer(z)
                 ? AdventureDancerRules.GroupAffected(z, Zombies, true) : z.ChillRemaining > 0f) ? .5f : 1f;
-            if (z.Kind == ZombieKind.DolphinRider && (z.PresentationNativePhase == 52 || z.PresentationNativePhase == 54))
+            if (z.Kind == ZombieKind.Balloon && z.Airborne
+                || z.Kind == ZombieKind.DolphinRider && (z.PresentationNativePhase == 52 || z.PresentationNativePhase == 54))
             {
-                // PC UpdateAnimSpeed returns on the flat ground track before applying chill to these one-shots.
+                // PC UpdateAnimSpeed leaves the original clocks on flat ground tracks unaffected by chill.
                 z._presentationTickSlow = 1f;
             }
-            if (z.FrozenRemaining > 0f || (AdventureDancerRules.IsDancer(z) || z.Kind == ZombieKind.DolphinRider || z.Kind == ZombieKind.JackInTheBox) && z.PresentationButter > 0f)
+            if (z.FrozenRemaining > 0f || (AdventureDancerRules.IsDancer(z) || z.Kind == ZombieKind.DolphinRider
+                || z.Kind == ZombieKind.JackInTheBox || z.Kind == ZombieKind.Balloon) && z.PresentationButter > 0f)
             {
                 return;
             }
@@ -9655,6 +9799,11 @@ namespace PlantsVsZombies.Simulation
                     z.PresentationPoleVaultBlendTicks = 20;
                 }
 
+                if (z.Kind == ZombieKind.Balloon && z.PresentationAnimation.Length > 0)
+                {
+                    z.PresentationBalloonBlendTicks = 20;
+                }
+
                 if (z.Kind == ZombieKind.DolphinRider
                     && (z.Eating || string.Equals(z.PresentationAnimation, "anim_eat", StringComparison.Ordinal)))
                 {
@@ -9693,6 +9842,11 @@ namespace PlantsVsZombies.Simulation
             if (z.Kind == ZombieKind.JackInTheBox && z.PresentationNativePhase == 16)
             {
                 return 28f;
+            }
+
+            if (z.Kind == ZombieKind.Balloon && z.PresentationNativePhase == 74)
+            {
+                return 24f;
             }
 
             if (AdventureDancerRules.IsDancer(z))
@@ -9815,6 +9969,12 @@ namespace PlantsVsZombies.Simulation
                 || AdventureDancerRules.IsDancer(z) && !AdventureDancerRules.CanWalk(z, Zombies))
             {
                 return 0f;
+            }
+
+            if (z.Kind == ZombieKind.Balloon && z.Airborne)
+            {
+                // PC 546730 uses native velocity in flight and the pop's constant ground track while landing.
+                return z.PresentationNativePhase == 74 ? 0f : z.Speed * dt * (z.ChillRemaining > 0f ? .4f : 1f);
             }
 
             if (z.Kind == ZombieKind.DolphinRider && z.PresentationNativePhase == 52)
@@ -10028,9 +10188,13 @@ namespace PlantsVsZombies.Simulation
 
         /// <summary>Performs request adventure zombie foley.</summary>
         /// <param name = "id">The id.</param>
-        private void RequestAdventureZombieFoley(int id)
+        /// <param name="pitch">The explicit original pitch adjustment in semitones.</param>
+        private void RequestAdventureZombieFoley(int id, float pitch = 0f)
         {
-            Presentation.ZombieSounds.Add(new global::PlantsVsZombies.Adventure.AdventureZombieSoundEvent { Id = ++Presentation._effectId, Foley = id, Tick = (int)System.Math.Round(Elapsed * 100f) });
+            Presentation.ZombieSounds.Add(new global::PlantsVsZombies.Adventure.AdventureZombieSoundEvent
+            {
+                Id = ++Presentation._effectId, Foley = id, Tick = (int)System.Math.Round(Elapsed * 100f), Pitch = pitch
+            });
         }
 
         /// <summary>Performs request adventure projectile impact sound.</summary>
@@ -10062,6 +10226,8 @@ namespace PlantsVsZombies.Simulation
             var z = new Zombie
             {
                 Id = ++Adventure._zombieId,
+                // PC 53DE56/53DED5 initializes every actor's vocal clock before native placement and speed draws.
+                GroanTicks = 400 + _random.Next(101),
                 Kind = kind,
                 Row = row,
                 X = x,
@@ -10113,7 +10279,8 @@ namespace PlantsVsZombies.Simulation
             {
                 // PC LoadPlainZombieReanim 0x53FE40 enables tube artwork by the row, retaining the original kind and armor.
                 z.PoolState = new AdventureZombiePoolState { HasDuckyTube = AdventureZombiePoolRules.UsesPlainBody(kind) };
-                z.PresentationAltitude = 0f;
+                z.PresentationAltitude = kind == ZombieKind.Balloon ? 25f : 0f;
+                z.PoolState.Altitude = z.PresentationAltitude;
                 z.PresentationInPool = false;
                 z.PresentationNativeHeight = 0;
             }
@@ -10122,6 +10289,10 @@ namespace PlantsVsZombies.Simulation
             if (kind == ZombieKind.DolphinRider)
             {
                 RequestAdventureZombieFoley(51);
+            }
+            else if (kind == ZombieKind.Balloon)
+            {
+                RequestAdventureZombieFoley(60);
             }
 
             if (kind == ZombieKind.Zomboni)
@@ -10312,7 +10483,15 @@ namespace PlantsVsZombies.Simulation
         private void SetAdventureDolphinPhase(Zombie z, int phase)
         {
             z.PresentationNativePhase = phase;
-            (z.DolphinState ??= new AdventureDolphinState()).AnimationBlendTicks = phase == 52 ? 20 : 0;
+            var state = z.DolphinState ??= new AdventureDolphinState();
+            state.AnimationBlendTicks = phase == 52 ? 20 : 0;
+            if (phase == 55 || phase == 56)
+            {
+                // PC StartWalkAnim(0) replaces the jump/swim pose before any same-tick meal blend.
+                state.WalkingPoseVersion++;
+                z.PresentationPreviousX = z.X;
+            }
+
             z.PresentationAnimation = string.Empty;
             AdventurePresentationZombieAnimation(z);
             if (phase == 51 || phase == 55 || phase == 56)
@@ -10378,6 +10557,7 @@ namespace PlantsVsZombies.Simulation
                 if (z._presentationWalkLoops > 0)
                 {
                     z.X -= 70f / 80f;
+                    z.PresentationPreviousX -= 70f / 80f;
                     z.PresentationInPool = true;
                     z.PresentationAltitude = 0f;
                     SetAdventureDolphinPhase(z, 53);
@@ -10566,7 +10746,7 @@ namespace PlantsVsZombies.Simulation
             }
             else if (z.PresentationNativeHeight == 7)
             {
-                z.PresentationAltitude = Math.Max(0f, z.PresentationAltitude - (z.Kind == ZombieKind.DolphinRider ? 1f : dt * 100f));
+                z.PresentationAltitude = Math.Max(0f, z.PresentationAltitude - (z.Kind == ZombieKind.DolphinRider || z.Kind == ZombieKind.Balloon ? 1f : dt * 100f));
                 if (z.PresentationAltitude == 0f)
                 {
                     z.PresentationNativeHeight = 0;
@@ -10746,6 +10926,89 @@ namespace PlantsVsZombies.Simulation
             return true;
         }
 
+        /// <summary>Marks the original live flying targets of Plant::BlowAwayFliers without removing their visible bodies.</summary>
+        private void BlowAdventureFliersAway()
+        {
+            foreach (var zombie in Zombies)
+            {
+                if (zombie.Health > 0f && zombie.Airborne && zombie.PresentationNativePhase != 74
+                    && !(zombie.PresentationNativePhase >= 1 && zombie.PresentationNativePhase <= 3))
+                {
+                    zombie.BlowingAway = true;
+                }
+            }
+        }
+
+        /// <summary>Applies PC 546A20's original ten-pixel wind displacement and integer-position exit check.</summary>
+        /// <param name="zombie">The living actor whose original BlowingAway flag may be set.</param>
+        /// <returns>Whether the native right-edge exit removed the actor this update.</returns>
+        private bool AdvanceAdventureBalloonWind(Zombie zombie)
+        {
+            if (!zombie.BlowingAway)
+            {
+                return false;
+            }
+
+            // PC checks the previous integer mX, then adds ten to float mPosX independently of frozen walking.
+            var nativeX = (int)AdventureZombieNativeRules.NativePositionX(zombie.X, AdventureDancerRules.Scale(zombie));
+            zombie.X += 10f / 80f;
+            if (nativeX <= 850)
+            {
+                return false;
+            }
+
+            // The original endpoint is DieWithLoot (54C060), with immediate body removal and one ordinary loot roll.
+            DropAdventureLoot(zombie);
+            zombie.PresentationDeath = AdventureZombieDeathPresentation.Removed;
+            KillAdventureZombie(zombie);
+            return true;
+        }
+
+        /// <summary>Runs PC LandFlyer's original pop transition and immediate pool-row removal.</summary>
+        /// <param name="zombie">The airborne balloon whose attachment health has reached zero.</param>
+        /// <param name="damageFlags">The original damage flags, including suppression of pop artwork and sound.</param>
+        private void LandAdventureBalloon(Zombie zombie, uint damageFlags)
+        {
+            if (zombie.Kind != ZombieKind.Balloon)
+            {
+                return;
+            }
+
+            if ((damageFlags & 16U) == 0 && zombie.PresentationNativePhase == 73)
+            {
+                // PC 5415F0 selects the original twenty-eight-frame pop at 24 fps, with a twenty-update blend.
+                RequestAdventureZombieFoley(22);
+                SetAdventureZombieMotionPhase(zombie, 74);
+                zombie.PresentationBalloonBlendTicks = 20;
+            }
+
+            if (Adventure.Level.IsWaterRow(zombie.Row))
+            {
+                // PC removes a popped balloon immediately on any pool row, retaining its one original loot roll.
+                DropAdventureLoot(zombie);
+                zombie.PresentationDeath = AdventureZombieDeathPresentation.Removed;
+                KillAdventureZombie(zombie);
+                return;
+            }
+
+            zombie.PresentationNativeHeight = 7;
+        }
+
+        /// <summary>Completes PC UpdateZombieFlyer's pop before releasing the original walking body.</summary>
+        /// <param name="zombie">The balloon whose once-and-hold pop clock may have completed.</param>
+        private void AdvanceAdventureBalloon(Zombie zombie)
+        {
+            if (zombie.Kind != ZombieKind.Balloon || zombie.PresentationNativePhase != 74 || zombie._presentationWalkLoops <= 0)
+            {
+                return;
+            }
+
+            zombie.Airborne = false;
+            zombie.UsedAbility = true;
+            SetAdventureZombieMotionPhase(zombie, 75);
+            zombie.PresentationBalloonBlendTicks = 0;
+        }
+
         /// <summary>Updates PC 543AD0's sled push, authored boarding, ice damage, and crash detachment.</summary>
         /// <param name="zombie">The member whose independent native phase counter advances this update.</param>
         private void AdvanceAdventureBobsled(Zombie zombie)
@@ -10831,6 +11094,32 @@ namespace PlantsVsZombies.Simulation
             }
         }
 
+        /// <summary>Runs the PC playing update's ambient vocal attempt before immobilization and action checks.</summary>
+        /// <param name="zombie">The current original actor whose vocal counter is decremented.</param>
+        private void AdvanceAdventureZombieGroan(Zombie zombie)
+        {
+            if (State != MatchState.Playing || Adventure.Phase != AdventurePhase.Playing
+                || zombie.Wave == -2 || zombie.Wave == -3 || zombie.Wave == -4
+                || zombie.Health <= 0f || zombie.PresentationNativePhase >= 1 && zombie.PresentationNativePhase <= 3)
+            {
+                return;
+            }
+
+            // PC 547016..547032 tests equality after decrement, unlike the mobile port's repeated <= 0 attempts.
+            zombie.GroanTicks--;
+            if (zombie.GroanTicks != 0 || _random.Next(Zombies.Count) != 0 || zombie.Headless
+                || zombie.Kind == ZombieKind.Boss || Adventure.RewardPresentation != null)
+            {
+                return;
+            }
+
+            var pitch = Adventure.Level.Mode == AdventureMode.LittleTrouble ? 40f + (float)_random.NextDouble() * 10f : 0f;
+            // PC 547091 selects the low giant vocal before considering the original one-in-five actor variant.
+            RequestAdventureZombieFoley(zombie.Kind == ZombieKind.Gargantuar ? 70 : zombie.NativeVariant ? 12 : 11,
+                zombie.Kind == ZombieKind.Gargantuar ? 0f : pitch);
+            zombie.GroanTicks = 500 + _random.Next(1000);
+        }
+
         /// <summary>Performs advance adventure zombies.</summary>
         /// <param name = "dt">The dt.</param>
         private void AdvanceAdventureZombies(float dt)
@@ -10845,6 +11134,12 @@ namespace PlantsVsZombies.Simulation
                 }
 
                 z.Age += dt;
+                if (AdvanceAdventureBalloonWind(z))
+                {
+                    continue;
+                }
+
+                AdvanceAdventureZombieGroan(z);
                 if (z.Kind == ZombieKind.Zomboni && z.ZomboniState?.FlatTires == true)
                 {
                     if (--z.ZomboniState.DeathTicks <= 0)
@@ -10930,7 +11225,8 @@ namespace PlantsVsZombies.Simulation
                     continue;
                 }
 
-                if ((z.Kind == ZombieKind.DolphinRider || z.Kind == ZombieKind.JackInTheBox) && z.PresentationButter > 0f)
+                if ((z.Kind == ZombieKind.DolphinRider || z.Kind == ZombieKind.JackInTheBox || z.Kind == ZombieKind.Balloon)
+                    && z.PresentationButter > 0f)
                 {
                     continue;
                 }
@@ -10970,6 +11266,7 @@ namespace PlantsVsZombies.Simulation
                     continue;
                 }
 
+                AdvanceAdventureBalloon(z);
                 AdvanceAdventureBobsled(z);
                 z.AbilityTimer -= dt * slow;
                 if (z.Kind == ZombieKind.Bungee)

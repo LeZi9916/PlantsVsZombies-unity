@@ -53,8 +53,12 @@ namespace PlantsVsZombies.Simulation
         public float PresentationVaultPositionY;
         /// <summary>Stores the native horizontal velocity retained throughout a pole vault.</summary>
         internal float _poleVaultVelocity;
+        /// <summary>Stores the original balloon pop and walking transition blend duration in native updates.</summary>
+        internal int PresentationBalloonBlendTicks;
         /// <summary>Retains the original jack-in-the-box phase countdown in native ticks.</summary>
         public int JackInTheBoxTicks;
+        /// <summary>Stores the original ambient vocal countdown in one-hundred-hertz playing updates.</summary>
+        internal int GroanTicks;
         /// <summary>Stores ability timer.</summary>
         public float AbilityTimer;
         /// <summary>The original flying attachment health, included in wave health until the balloon is destroyed.</summary>
@@ -63,6 +67,8 @@ namespace PlantsVsZombies.Simulation
         public bool NativeVariant;
         /// <summary>Stores airborne.</summary>
         public bool Airborne;
+        /// <summary>Retains the original BlowingAway flag until the balloon passes the native right-edge exit.</summary>
+        public bool BlowingAway;
         /// <summary>Stores submerged.</summary>
         public bool Submerged;
         /// <summary>Stores hypnotized.</summary>

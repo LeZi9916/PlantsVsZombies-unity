@@ -114,7 +114,8 @@ namespace PlantsVsZombies.Tests.EditMode
             Assert.That(zombie.Airborne, Is.True);
             Assert.That(zombie.PresentationInPool, Is.False);
             Assert.That(zombie.PoolState!.HasDuckyTube, Is.False);
-            Assert.That(zombie.PoolState.Altitude, Is.Zero);
+            Assert.That(zombie.PoolState.Altitude, Is.EqualTo(25f));
+            Assert.That(zombie.PresentationAltitude, Is.EqualTo(25f));
             Assert.That(game.AdventurePresentationZombieAnimation(zombie), Is.EqualTo("anim_idle"));
         }
 

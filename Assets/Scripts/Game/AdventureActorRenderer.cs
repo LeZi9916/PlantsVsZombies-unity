@@ -328,12 +328,21 @@ namespace PlantsVsZombies.Game
         /// <returns>Whether native zombie artwork was submitted.</returns>
         private bool DrawZombiePose()
         {
+            if (_zombie.Kind == ZombieKind.DolphinRider && _zombie.DolphinState != null
+                && (_zombie.PresentationNativePhase == 55 || _zombie.PresentationNativePhase == 56))
+            {
+                // Native StartWalkAnim(0) runs before StartEating(20), even if no render falls between them.
+                RequiredRenderer.EnsureNativePlaybackPose(_name, _key,
+                    _zombie.PresentationNativePhase == 55 ? "anim_swim" : "anim_walk", _zombie.DolphinState.WalkingPoseVersion);
+            }
+
             var painted = string.Equals(_name, "Zombie", StringComparison.OrdinalIgnoreCase) && !_zombie.Headless && !_plantHead
                 && !_backwards && _zombie.Kind != ZombieKind.Flag && _zombie.Kind != ZombieKind.DuckyTube
                 && _zombie.PoolState == null && _zombie.PresentationInPool != true && !_zombie.PresentationPoolRow
                 ? RequiredRenderer.DrawZombiePlayback(_origin, _scale, _seconds, _variant, _clip, _loop, _rate, true, null, _key)
                 : RequiredRenderer.DrawNativePlayback(_name, _origin, _scale, _seconds, _clip, _loop, _rate, _zombieVisible, null, null,
-                    _backwards, _key, _zombie.Kind == ZombieKind.Bobsled && _zombie.BobsledState != null ? 0
+                    _backwards, _key, _zombie.Kind == ZombieKind.Balloon ? _zombie.PresentationBalloonBlendTicks
+                        : _zombie.Kind == ZombieKind.Bobsled && _zombie.BobsledState != null ? 0
                         : _zombie.Kind == ZombieKind.DolphinRider ? AdventureZombieMotionRules.DolphinBlendTicks(_zombie)
                         : _clip == "anim_gasp" || _zombie.ZomboniState?.FlatTires == true ? 10
                             : _zombie.Kind == ZombieKind.Snorkel && _zombie.PresentationNativePhase != 58

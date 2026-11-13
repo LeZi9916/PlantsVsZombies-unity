@@ -28,6 +28,8 @@ namespace PlantsVsZombies.Adventure
         private static Dictionary<string, Dictionary<string, AdventureZombieGroundClip>> Create()
         {
             var result = new Dictionary<string, AdventureZombieGroundClip>(StringComparer.OrdinalIgnoreCase);
+            // Original Zombie_balloon.reanim uses frames 31..58 for its stationary once-and-hold pop.
+            result["Zombie_balloon/anim_pop"] = new AdventureZombieGroundClip(28, 12f, null);
             // Original Zombie_bobsled.reanim uses frames 78..101 for its held boarding jump.
             result["Zombie_bobsled/anim_jump"] = new AdventureZombieGroundClip(24, 12f, null);
             // Original Zombie_jackbox.reanim holds its sixteen-frame pop at 28 fps.

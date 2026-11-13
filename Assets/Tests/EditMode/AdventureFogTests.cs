@@ -81,19 +81,29 @@ namespace PlantsVsZombies.Tests.EditMode
             Assert.That(state.Opacity(8, 4), Is.EqualTo(255), "Torchwood only clears its original cross, excluding diagonals.");
         }
 
-        /// <summary>Checks the opening countdown remains held during preview and only starts at the fog-roll event.</summary>
-        [Test]
-        public void PreviewHoldsFogOffTheLawnUntilTheRollInEvent()
+        /// <summary>Checks the held preview fog remains visible over the street before returning to the lawn.</summary>
+        /// <param name="level">The original fog stage determining the grid's left column.</param>
+        [TestCase(31)]
+        [TestCase(32)]
+        [TestCase(37)]
+        public void PreviewHoldsFogOverTheStreetUntilTheRollInEvent(int level)
         {
-            var game = new GameSimulation(new GameRules { AdventureLevel = 31 }, 91);
+            var game = new GameSimulation(new GameRules { AdventureLevel = level }, 91);
             game.BeginAdventureFogIntro();
             for (var tick = 0; tick < 600; tick++)
             {
                 game.AdvanceAdventureFog(true);
             }
 
+            var left = game.AdventureFogLeftColumn;
+            var plan = AdventureIntroPresentation.CreatePlan(new AdventureIntroContext { Level = level, NativeBackground = 3 });
+            var preview = AdventureIntroPresentation.Sample(plan, plan.ChooserOnEnd, true);
             Assert.That(game.Adventure.FogBlownRemaining, Is.EqualTo(2f));
-            Assert.That(game.Adventure.Fog.Offset, Is.EqualTo(585f));
+            Assert.That(game.Adventure.Fog.Offset, Is.EqualTo(1065f - left * 80f));
+            Assert.That(game.Adventure.Fog.Opacity(left, 3), Is.EqualTo(200), "Preview fog stays opaque rather than being disabled.");
+            Assert.That(preview.BoardX, Is.EqualTo(-380));
+            Assert.That(left * 80f + game.Adventure.Fog.Offset - 15f + preview.BoardX, Is.EqualTo(670f),
+                "PC fog starts at board x=1050 and remains visible on the right when the camera pans to the street.");
             for (var tick = 0; tick < 201; tick++)
             {
                 game.AdvanceAdventureFog(true, true);
@@ -109,9 +119,17 @@ namespace PlantsVsZombies.Tests.EditMode
         {
             var game = new GameSimulation(new GameRules { AdventureLevel = 32 }, 91);
             game.ChooseDefaultAdventureSeeds();
-            game.Plants.Add(new Plant { Kind = PlantKind.Blover, Row = 0, Column = 4, Health = 300f, ActionTimer = 0f });
-            typeof(GameSimulation).GetMethod("AdvanceAdventurePlants", BindingFlags.Instance | BindingFlags.NonPublic)!
-                .Invoke(game, new object[] { .01f });
+            typeof(GameSimulation).GetMethod("PlaceAdventurePlant", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .Invoke(game, new object[] { PlantKind.Blover, 0, 4 });
+            var advance = typeof(GameSimulation).GetMethod("AdvanceAdventurePlants", BindingFlags.Instance | BindingFlags.NonPublic)!;
+            // PC PlantInit 46C23A sets fifty updates before DoSpecial, independently of the initial blow animation.
+            for (var tick = 0; tick < 49; tick++)
+            {
+                advance.Invoke(game, new object[] { .01f });
+            }
+
+            Assert.That(game.Adventure.FogBlownRemaining, Is.Zero);
+            advance.Invoke(game, new object[] { .01f });
             Assert.That(game.Adventure.FogBlownRemaining, Is.EqualTo(40f));
             Assert.That(new GameSimulation(new GameRules { AdventureLevel = 40 }, 91).AdventureHasFog, Is.False);
         }

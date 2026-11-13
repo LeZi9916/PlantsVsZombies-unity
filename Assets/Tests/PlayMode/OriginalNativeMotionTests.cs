@@ -198,6 +198,93 @@ namespace PlantsVsZombies.Tests.PlayMode
             }
         }
 
+        /// <summary>Checks the original balloon pop falls into a fresh walk pose and the blower carries its visible body off the right edge.</summary>
+        /// <returns>A graphics initialization frame for the unchanged original balloon artwork.</returns>
+        [UnityTest]
+        public IEnumerator BalloonPopFallsIntoWalkingAndBlowerCarriesTheBodyOffscreen()
+        {
+            var root = ResourceRoot();
+            yield return null;
+            var host = new GameObject("Inactive original balloon motion fixture");
+            host.SetActive(false);
+            var owner = host.AddComponent<PvZGame>();
+            using var animations = new ReanimationRenderer(root);
+            var presenter = new GamePresenter(owner);
+            var target = new RenderTexture(800, 600, 24, RenderTextureFormat.ARGB32);
+            target.Create();
+            var pixels = new Texture2D(800, 600, TextureFormat.RGBA32, false);
+            var flags = BindingFlags.Instance | BindingFlags.NonPublic;
+            try
+            {
+                owner._root = root;
+                owner._animations = animations;
+                owner._game = new GameSimulation(new GameRules { AdventureLevel = 38 }, 7529);
+                Assert.That(owner._game.ChooseDefaultAdventureSeeds(), Is.True);
+                owner._game.ResetAdventureWaveSchedule(100000, false, false);
+                typeof(GamePresenter).GetField("_renderingBoardObjects", flags)!.SetValue(presenter, true);
+                var spawn = typeof(GameSimulation).GetMethod("SpawnAdventureZombie", flags)!;
+                var draw = typeof(GamePresenter).GetMethod("DrawAdventureZombie", flags)!;
+                var origin = typeof(GamePresenter).GetMethod("AdventureZombieOrigin", flags)!;
+                var zombie = (Zombie)spawn.Invoke(owner._game, new object[] { ZombieKind.Balloon, 1, 5f, 0 })!;
+                var initialOrigin = (Vector2)origin.Invoke(presenter, new object[] { zombie, zombie.X })!;
+                Submit(animations, presenter, draw, zombie);
+                Read(animations, target, pixels);
+                var flying = pixels.GetPixels32();
+                Assert.That(VisiblePixels(flying, 0, 600), Is.GreaterThan(100));
+                typeof(GameSimulation).GetMethod("HitAdventureZombie", flags)!.Invoke(owner._game, new object[] { zombie, 20f, false, 0U });
+                owner._game.Update(.1f);
+                Assert.That(zombie.PresentationNativePhase, Is.EqualTo(74));
+                var fallingOrigin = (Vector2)origin.Invoke(presenter, new object[] { zombie, zombie.X })!;
+                Assert.That(fallingOrigin.x, Is.EqualTo(initialOrigin.x));
+                Assert.That(fallingOrigin.y - initialOrigin.y, Is.EqualTo(10f));
+                Submit(animations, presenter, draw, zombie);
+                Read(animations, target, pixels);
+                Assert.That(pixels.GetPixels32(), Is.Not.EqualTo(flying), "The original pop must visibly descend instead of switching directly to walking.");
+                Save(pixels, "balloon-original-pop-falling.png");
+                owner._game.Update(1.07f);
+                Assert.That(zombie.PresentationNativePhase, Is.EqualTo(75));
+                Submit(animations, presenter, draw, zombie);
+                Read(animations, target, pixels);
+                var walking = pixels.GetPixels32();
+                Assert.That(VisiblePixels(walking, 0, 600), Is.GreaterThan(100));
+                zombie.Id += 100;
+                Submit(animations, presenter, draw, zombie);
+                Read(animations, target, pixels);
+                Assert.That(pixels.GetPixels32(), Is.EqualTo(walking), "PC StartWalkAnim(0) must not blend the final balloon pop into the landed walk.");
+
+                owner._game.Zombies.Clear();
+                zombie = (Zombie)spawn.Invoke(owner._game, new object[] { ZombieKind.Balloon, 1, 5f, 0 })!;
+                var before = zombie.X;
+                var velocity = zombie.PresentationNativeVelocity;
+                typeof(GameSimulation).GetMethod("BlowAdventureFliersAway", flags)!.Invoke(owner._game, null);
+                owner._game.Update(.05f);
+                Assert.That(owner._game.Zombies.Contains(zombie), Is.True);
+                Assert.That((zombie.X - before) * 80f, Is.EqualTo(5f * (10f - velocity)).Within(.01f));
+                Submit(animations, presenter, draw, zombie);
+                Read(animations, target, pixels);
+                Assert.That(VisiblePixels(pixels.GetPixels32(), 0, 600), Is.GreaterThan(100));
+                Save(pixels, "balloon-original-blown-right.png");
+                owner._game.Update(.5f);
+                Assert.That(owner._game.Zombies, Is.Empty);
+                ObjectSpriteRenderer.BeginSceneFrame();
+                SpriteDrawState.Clip = new Rect(0f, 0f, 800f, 600f);
+                animations.BeginObjectFrame();
+                animations.DrawNativeImage(Texture2D.whiteTexture, new Rect(0f, 0f, 800f, 600f), new Rect(0f, 0f, 1f, 1f));
+                animations.EndObjectFrame();
+                Read(animations, target, pixels);
+                Assert.That(VisiblePixels(pixels.GetPixels32(), 0, 600), Is.Zero);
+            }
+            finally
+            {
+                presenter.Dispose();
+                target.Release();
+                UnityEngine.Object.Destroy(target);
+                UnityEngine.Object.Destroy(pixels);
+                owner.Textures.ReleaseAll();
+                UnityEngine.Object.Destroy(host);
+            }
+        }
+
         /// <summary>Checks real motion Foley samples decode and reach the production shared voice pool.</summary>
         /// <returns>The audio decoding and playback frame boundaries.</returns>
         [UnityTest]
@@ -229,7 +316,7 @@ namespace PlantsVsZombies.Tests.PlayMode
             var play = typeof(GameSoundEffects).GetMethod("PlayAdventureZombieFoley", flags)!;
             try
             {
-                foreach (var foley in new[] { 74, 78, 48, 52, 53, 16, 22, 23, 46, 50, 51 })
+                foreach (var foley in new[] { 74, 78, 48, 52, 53, 16, 22, 23, 46, 50, 51, 60 })
                 {
                     var clips = new List<AudioClip>();
                     foreach (var sample in AdventureZombieFoleyData.Definitions[foley].Samples)

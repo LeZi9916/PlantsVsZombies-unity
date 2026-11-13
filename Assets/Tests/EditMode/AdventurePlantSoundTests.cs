@@ -108,9 +108,34 @@ namespace PlantsVsZombies.Tests.EditMode
         {
             var game = Fixture();
             var plant = Place(game, kind);
-            plant.ActionTimer = .01f;
             game.Presentation.ZombieSounds.Clear();
-            game.Update(.01f);
+            if (kind == PlantKind.Blover)
+            {
+                // PC 46C23A starts a fifty-tick fuse; 4715AB retains the blowing body for two hundred further updates.
+                for (var tick = 0; tick < 49; tick++)
+                {
+                    game.Update(.01f);
+                }
+
+                Assert.That(CountSound(game, sound), Is.Zero);
+                Assert.That(game.Plants, Has.Member(plant));
+                game.Update(.01f);
+                Assert.That(CountSound(game, sound), Is.EqualTo(1));
+                Assert.That(game.Plants, Has.Member(plant));
+                for (var tick = 0; tick < 200; tick++)
+                {
+                    game.Update(.01f);
+                }
+
+                Assert.That(game.Plants, Has.Member(plant));
+                game.Update(.01f);
+            }
+            else
+            {
+                plant.ActionTimer = .01f;
+                game.Update(.01f);
+            }
+
             Assert.That(game.Plants.Contains(plant), Is.False);
             Assert.That(CountSound(game, sound), Is.EqualTo(1));
             Assert.That(CountSound(game, 3), Is.Zero);

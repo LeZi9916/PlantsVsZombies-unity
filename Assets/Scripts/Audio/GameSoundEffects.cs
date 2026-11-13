@@ -580,6 +580,14 @@ namespace PlantsVsZombies.Audio
         /// <param name = "evt">The evt.</param>
         private void PlayAdventureZombieFoley(AdventureZombieSoundEvent evt)
         {
+            if ((evt.Foley == 11 || evt.Foley == 12 || evt.Foley == 70)
+                && (_owner._currentView != PvZGame.ScreenView.Board || _owner._choosingSeeds
+                    || _owner._game == null || _owner._game.State != MatchState.Playing
+                    || _owner._game.Adventure.Phase != AdventurePhase.Playing))
+            {
+                return;
+            }
+
             var directSample = evt.Foley switch
             {
                 -1 => "gulp",
@@ -623,7 +631,7 @@ namespace PlantsVsZombies.Audio
             }
 
             // PC table 0x74B3B8: preserve duplicate entries as variation weights.
-            var semitones = (float)_zombieFoleyRandom.NextDouble() * definition.PitchRange;
+            var semitones = evt.Pitch + (definition.PitchRange == 0f ? 0f : (float)_zombieFoleyRandom.NextDouble() * definition.PitchRange);
             var sample = definition.Samples[_zombieFoleyRandom.Next(definition.Samples.Length)];
             AudioClip clip;
             if (!_presentationSounds.TryGetValue(sample, out clip) || clip == null)

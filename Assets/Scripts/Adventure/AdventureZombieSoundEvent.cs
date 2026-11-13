@@ -7,5 +7,7 @@ namespace PlantsVsZombies.Adventure
     {
         /// <summary>Stores id, foley, tick.</summary>
         public int Id, Foley, Tick;
+        /// <summary>Stores the original explicit Foley pitch adjustment in semitones.</summary>
+        public float Pitch;
     }
 }
