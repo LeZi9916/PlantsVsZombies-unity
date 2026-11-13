@@ -1167,6 +1167,11 @@ namespace PlantsVsZombies.Game
             for (var i = 0; i < _owner.RequiredGame.Adventure.Packets.Count && i < 10; i++)
             {
                 var packet = _owner.RequiredGame.Adventure.Packets[i];
+                if (packet.IsVaseDrop)
+                {
+                    continue;
+                }
+
                 var card = _owner.Layout.AdventureSeedRect(i, true);
                 DrawAdventureConveyorPacket(packet, card);
                 if (_showBackwardsPackets && _owner.IndependentModes._modeSession != null && _owner.IndependentModes._modeSession._backwardPackets.Contains(packet.Id))
@@ -1176,6 +1181,33 @@ namespace PlantsVsZombies.Game
             }
 
             return true;
+        }
+
+        /// <summary>Draws every vase reward at its native Coin position above the lawn and fog.</summary>
+        private void DrawAdventureVasePackets()
+        {
+            var previous = CanvasUI.Color;
+            try
+            {
+                foreach (var packet in _owner.RequiredGame.Adventure.Packets)
+                {
+                    if (!packet.IsVaseDrop)
+                    {
+                        continue;
+                    }
+
+                    var shade = packet.PresentationGrayness / 255f;
+                    // PC DrawSmallSeedPacket resets the alpha to 255 when it applies a non-white grayness.
+                    var alpha = packet.PresentationGrayness == 255 ? packet.PresentationAlpha : 1f;
+                    CanvasUI.Color = new Color(previous.r * shade, previous.g * shade, previous.b * shade, previous.a * alpha);
+                    // PC Coin::Draw 0x43CEE0 truncates usable seed coordinates and keeps the original small card size.
+                    DrawAdventureCard(packet.Kind, new Rect((int)packet.PresentationX, (int)packet.PresentationY, 50f, 70f), false);
+                }
+            }
+            finally
+            {
+                CanvasUI.Color = previous;
+            }
         }
 
         /// <summary>Performs try get adventure cursor plant.</summary>
@@ -2270,6 +2302,7 @@ namespace PlantsVsZombies.Game
 
                 DrawAdventureFog();
                 DrawAdventurePlanternLights();
+                DrawAdventureVasePackets();
                 foreach (global::PlantsVsZombies.Simulation.Sun sun in _owner.RequiredGame.Suns)
                 {
                     if (!sun.PresentationNative || !sun.PresentationPickup.Collecting)

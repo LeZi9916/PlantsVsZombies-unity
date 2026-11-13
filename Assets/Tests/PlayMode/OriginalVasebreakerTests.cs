@@ -13,6 +13,7 @@ using PlantsVsZombies.Reanimation;
 using PlantsVsZombies.Rendering;
 using PlantsVsZombies.Simulation;
 using PlantsVsZombies.UI;
+using PlantsVsZombies.VerifiedData;
 using UnityEngine;
 using UnityEngine.Networking;
 using UnityEngine.TestTools;
@@ -123,6 +124,179 @@ namespace PlantsVsZombies.Tests.PlayMode
                 }
 
                 Assert.That(_owner.RequiredGame.Presentation.VaseSwingSoundSerial, Is.EqualTo(1), "Clicks during an active swing must be ignored.");
+            }
+        }
+
+        /// <summary>Checks every puzzle draws and collects its reward at the original dropped-card position.</summary>
+        [Test]
+        public void VaseRewardsUseNativeGroundCardPositionsAndPickupInput()
+        {
+            foreach (var mode in new[] { 0, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60 })
+            {
+                SetBoard(mode);
+                var vase = SeededVase();
+                var spawn = new Vector2(60f + vase.Column * 80f, 80f + vase.Row * 100f);
+                ClickBoard(mode, new Vector2(80f + vase.Column * 80f, 130f + vase.Row * 100f));
+                AdvanceBoard(mode, .2f);
+                Assert.That(_owner.RequiredGame.Adventure.Packets, Has.Count.EqualTo(1));
+                var packet = _owner.RequiredGame.Adventure.Packets[0];
+                Assert.That(packet.IsVaseDrop, Is.True);
+                Assert.That(_owner.Layout.AdventureSeedRect(0, true), Is.EqualTo(new Rect(spawn.x, spawn.y, 50f, 70f)));
+                Capture(() => Invoke("DrawAdventureVasePackets"));
+                var actual = _pixels.GetPixels32();
+                Assert.That(VisiblePixels(actual, new RectInt(0, 0, 800, 600)), Is.GreaterThan(100));
+                Capture(() => DrawLiteralSeedPacket(packet, 255));
+                AssertMatch(actual, _pixels.GetPixels32(), "The reward uses the original fixed-size card at the vase's usable-coin origin.");
+                Capture(() => Invoke(mode == 0 ? "DrawAdventureSeedBankContents" : "DrawModeSeedBank"));
+                Assert.That(VisiblePixels(_pixels.GetPixels32(), new RectInt(0, 0, 500, 80)), Is.Zero,
+                    "A vase reward must not enter the seed-bank row.");
+                var point = spawn + new Vector2(25f, 35f);
+                Assert.That(_owner.Layout.AdventurePacketContains(0, point), Is.True);
+                Assert.That(_owner.Layout.AdventurePacketContains(0, new Vector2(33f, 43f)), Is.False);
+                ClickBoard(mode, point);
+                Assert.That(_owner.AdventureBoard._selectedAdventurePacket, Is.EqualTo(packet.Id));
+                Assert.That(packet.IsHeld, Is.True);
+                Assert.That(_owner.Layout.AdventurePacketContains(0, point), Is.False);
+                Capture(() => Invoke("DrawAdventureVasePackets"));
+                var held = _pixels.GetPixels32();
+                Capture(() => DrawLiteralSeedPacket(packet, 128));
+                AssertMatch(held, _pixels.GetPixels32(), "The original collected card remains as a gray-128 ghost at its ground position.");
+                var blocked = _owner.RequiredGame.Adventure.Vases[0];
+                ClickBoard(mode, new Vector2(80f + blocked.Column * 80f, 130f + blocked.Row * 100f));
+                Assert.That(packet.IsHeld, Is.True, "An unopened vase rejects planting without releasing the carried seed.");
+                Assert.That(_owner.AdventureBoard._selectedAdventurePacket, Is.EqualTo(packet.Id));
+                _owner.Router.CancelBoardSelection();
+                Assert.That(packet.IsHeld, Is.False);
+                Assert.That(_owner.Layout.AdventurePacketContains(0, point), Is.True);
+            }
+        }
+
+        /// <summary>Checks the eleventh simultaneous vase reward stays visible and selectable without conveyor limits.</summary>
+        [Test]
+        public void VaseRewardsBeyondTenRemainVisibleAndSelectable()
+        {
+            SetBoard(52);
+            for (var index = 0; index < 11; index++)
+            {
+                var vase = SeededVase();
+                Assert.That(_owner.RequiredGame.SmashModeVase(vase.Row, vase.Column), Is.True);
+                AdvanceBoard(52, .2f);
+            }
+
+            Assert.That(_owner.RequiredGame.Adventure.Packets, Has.Count.EqualTo(11));
+            Capture(() => Invoke("DrawAdventureVasePackets"));
+            var actual = _pixels.GetPixels32();
+            Capture(() =>
+            {
+                foreach (var packet in _owner.RequiredGame.Adventure.Packets)
+                {
+                    DrawLiteralSeedPacket(packet, 255);
+                }
+            });
+            AssertMatch(actual, _pixels.GetPixels32(), "All ground drops must be drawn, independently of the conveyor's ten-card capacity.");
+            var last = _owner.RequiredGame.Adventure.Packets[10];
+            var point = _owner.Layout.AdventureSeedRect(10, true).center;
+            Assert.That(_owner.Layout.AdventurePacketContains(10, point), Is.True);
+            ClickBoard(52, point);
+            Assert.That(_owner.AdventureBoard._selectedAdventurePacket, Is.EqualTo(last.Id));
+            Assert.That(last.IsHeld, Is.True);
+        }
+
+        /// <summary>Checks the original imminent-expiry flash and its opaque gray card during the final fade counter.</summary>
+        [Test]
+        public void VaseRewardWarningAndFinalFadeUseOriginalGrayness()
+        {
+            var vase = SeededVase();
+            _owner.RequiredGame.SmashAdventureVase(vase.Row, vase.Column);
+            _owner.RequiredGame.Update(.2f);
+            var packet = _owner.RequiredGame.Adventure.Packets[0];
+            packet.GroundTicks = 1201;
+            Capture(() => Invoke("DrawAdventureVasePackets"));
+            var warning = _pixels.GetPixels32();
+            Capture(() => DrawLiteralSeedPacket(packet, 192));
+            AssertMatch(warning, _pixels.GetPixels32(), "The last three grounded seconds blink using the original gray-192 card.");
+            packet.GroundTicks = 1500;
+            packet.FadeTicks = 8;
+            Capture(() => Invoke("DrawAdventureVasePackets"));
+            AssertMatch(warning, _pixels.GetPixels32(), "PC small-card grayness resets alpha, so the final fifteen ticks remain opaque before removal.");
+        }
+
+        /// <summary>Finds an unopened original seed vase without modifying its recipe.</summary>
+        /// <returns>The first plant-containing vase in creation order.</returns>
+        private AdventureVase SeededVase()
+        {
+            foreach (var vase in _owner.RequiredGame.Adventure.Vases)
+            {
+                if (vase._seed.HasValue)
+                {
+                    return vase;
+                }
+            }
+
+            throw new AssertionException("The original Vasebreaker recipe has no seed vase.");
+        }
+
+        /// <summary>Drives the actual adventure or independent pointer entry point.</summary>
+        /// <param name="mode">Zero for adventure, or the original independent mode identifier.</param>
+        /// <param name="point">The original logical pointer coordinate.</param>
+        private void ClickBoard(int mode, Vector2 point)
+        {
+            _owner.AdventureBoard._adventurePointer = point;
+            if (mode == 0)
+            {
+                _owner.AdventureBoard.HandleAdventureClick(point);
+            }
+            else
+            {
+                Assert.That(_owner.IndependentModes.TryHandleModeClick(point), Is.True);
+            }
+        }
+
+        /// <summary>Advances the public update loop belonging to the current puzzle.</summary>
+        /// <param name="mode">Zero for adventure, or the original independent mode identifier.</param>
+        /// <param name="seconds">The native simulation time to advance.</param>
+        private void AdvanceBoard(int mode, float seconds)
+        {
+            if (mode == 0)
+            {
+                _owner.RequiredGame.Update(seconds);
+            }
+            else
+            {
+                _owner.IndependentModes.RequiredModeSession.Update(seconds);
+            }
+        }
+
+        /// <summary>Draws the original seed background and portrait using independent fixed-size pickup geometry.</summary>
+        /// <param name="packet">The reward whose seed selects the original portrait atlas cell.</param>
+        /// <param name="grayness">The literal PC card brightness to apply.</param>
+        private void DrawLiteralSeedPacket(AdventurePacket packet, int grayness)
+        {
+            var background = _owner.Textures.LoadImage("seeds.png")!;
+            var cell = AlmanacPortraitLayout.PlantAtlasCell((int)packet.Kind);
+            var matrix = Matrix4x4.Translate(new Vector3((int)packet.PresentationX, (int)packet.PresentationY, 0f));
+            var tint = new Color(grayness / 255f, grayness / 255f, grayness / 255f, 1f);
+            Pool.DrawQuad(background, 50f, 70f, new Rect(2f / 9f, 0f, 1f / 9f, 1f), matrix, tint, 0);
+            if (cell >= 0)
+            {
+                var portraits = _owner.Textures.LoadImage("packet_plants.png")!;
+                Pool.DrawQuad(portraits, 50f, 70f, new Rect(cell / 13f, 0f, 1f / 13f, 1f), matrix, tint, 0);
+                return;
+            }
+
+            AlmanacPortraitLayout.PlantThumbnailTransform((int)packet.Kind, new Rect(0f, 0f, 50f, 70f), out var origin, out var scale);
+            Assert.That(VerifiedDataCatalog.TryGetReanimation(VerifiedDataCatalog.Plants[(int)packet.Kind].ReanimationId, out var definition), Is.True);
+            var animation = Path.GetFileNameWithoutExtension(definition!.Path.Replace('\\', '/'));
+            origin += new Vector2((int)packet.PresentationX, (int)packet.PresentationY);
+            var previous = SpriteDrawState.Color;
+            try
+            {
+                SpriteDrawState.Color = tint;
+                Assert.That(_animations.DrawNative(animation, origin, scale, 0f), Is.True);
+            }
+            finally
+            {
+                SpriteDrawState.Color = previous;
             }
         }
 
@@ -270,6 +444,15 @@ namespace PlantsVsZombies.Tests.PlayMode
                 yield return null;
                 Assert.That(source.isPlaying, Is.True, "The impact must play the original unpitched Bonk one-shot.");
                 AssertVoice(audioHost, effects._presentationSounds["vase_breaking"]);
+                voices.StopAll();
+                source.Stop();
+                _owner.RequiredGame.Presentation.VaseBreakSoundSerial += 2;
+                effects.UpdateAdventureVaseAudio();
+                yield return null;
+                var breaking = effects._presentationSounds["vase_breaking"];
+                Assert.That(Array.FindAll(audioHost.GetComponents<AudioSource>(), voice => voice.isPlaying && voice.clip == breaking),
+                    Has.Length.EqualTo(0), "PC Foley 35 retains its ten-update admission window for simultaneous pot openings.");
+                Assert.That(source.isPlaying, Is.True, "Each opened pot still plays the direct, unpitched Bonk sample.");
                 voices.StopAll();
                 source.Stop();
                 effects.UpdateAdventureVaseAudio();

@@ -59,6 +59,38 @@ namespace PlantsVsZombies.Adventure
                 }
             }
         }
+        /// <summary>Returns a held ground card to its original pickup before clearing the cursor.</summary>
+        internal void ClearAdventurePacketSelection()
+        {
+            if (_selectedAdventurePacket >= 0)
+            {
+                _owner._game?.DropVasePacket(_selectedAdventurePacket);
+            }
+
+            _selectedAdventurePacket = -1;
+        }
+
+        /// <summary>Selects a conveyor card or collects the original usable seed coin beneath the pointer.</summary>
+        /// <param name="packet">The card selected by the board's higher-priority pickup hit test.</param>
+        internal void SelectAdventurePacket(AdventurePacket packet)
+        {
+            if (_selectedAdventurePacket == packet.Id)
+            {
+                ClearAdventurePacketSelection();
+                return;
+            }
+
+            ClearAdventurePacketSelection();
+            if (!packet.IsVaseDrop || _owner.RequiredGame.CollectVasePacket(packet.Id))
+            {
+                _selectedAdventurePacket = packet.Id;
+                if (packet.IsVaseDrop)
+                {
+                    _owner.Sounds.PlayPresentationSound("seedlift");
+                }
+            }
+        }
+
         /// <summary>Stores selected adventure packet.</summary>
         internal int _selectedAdventurePacket = -1;
         /// <summary>Stores adventure feedback.</summary>
@@ -101,6 +133,14 @@ namespace PlantsVsZombies.Adventure
             for (var index = 0; index < game.Suns.Count; index++)
             {
                 if (_owner.Layout.AdventureSunRect(game.Suns[index]).Contains(point))
+                {
+                    return null;
+                }
+            }
+
+            for (var index = game.Adventure.Packets.Count - 1; index >= 0; index--)
+            {
+                if (game.Adventure.Packets[index].IsVaseDrop && _owner.Layout.AdventurePacketContains(index, point))
                 {
                     return null;
                 }
@@ -384,11 +424,16 @@ namespace PlantsVsZombies.Adventure
             var packets = board.Level.HasConveyor || board.Level.Mode == AdventureMode.Vasebreaker;
             if (packets)
             {
-                for (var i = 0; i < board.Packets.Count && i < 10; i++)
+                for (var i = board.Packets.Count - 1; i >= 0; i--)
                 {
+                    if (i >= 10 && !board.Packets[i].IsVaseDrop)
+                    {
+                        continue;
+                    }
+
                     if (_owner.Layout.AdventurePacketContains(i, point))
                     {
-                        _selectedAdventurePacket = _selectedAdventurePacket == board.Packets[i].Id ? -1 : board.Packets[i].Id;
+                        SelectAdventurePacket(board.Packets[i]);
                         _owner._selected = -1;
                         _owner._shovel = false;
                         _owner.RequiredGame.CancelAdventureCobCannonAim();
@@ -414,7 +459,7 @@ namespace PlantsVsZombies.Adventure
                         }
 
                         _owner._shovel = false;
-                        _selectedAdventurePacket = -1;
+                        ClearAdventurePacketSelection();
                         _owner.RequiredGame.CancelAdventureCobCannonAim();
                         return;
                     }
@@ -426,7 +471,7 @@ namespace PlantsVsZombies.Adventure
                 _owner._shovel = !_owner._shovel;
                 _owner.Sounds.PlayPresentationSound("shovel");
                 _owner._selected = -1;
-                _selectedAdventurePacket = -1;
+                ClearAdventurePacketSelection();
                 _owner.RequiredGame.CancelAdventureCobCannonAim();
                 return;
             }
@@ -471,7 +516,7 @@ namespace PlantsVsZombies.Adventure
             {
                 if (_owner.RequiredGame.TryUseAdventurePacket(_selectedAdventurePacket, row, col))
                 {
-                    _selectedAdventurePacket = -1;
+                    ClearAdventurePacketSelection();
                 }
                 else
                 {

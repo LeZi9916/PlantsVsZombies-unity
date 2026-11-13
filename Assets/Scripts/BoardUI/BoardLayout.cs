@@ -88,6 +88,14 @@ namespace PlantsVsZombies.BoardUI
         /// <returns>The resulting adventure packet contains.</returns>
         internal bool AdventurePacketContains(int index, Vector2 point)
         {
+            var packet = _owner.RequiredGame.Adventure.Packets[index];
+            if (packet.IsVaseDrop)
+            {
+                // PC Coin::MouseHitTest requires the normal cursor and uses the unscaled floating-point rectangle.
+                return !packet.IsHeld && !_owner._shovel && _owner._selected < 0
+                    && _owner.AdventureBoard._selectedAdventurePacket < 0 && AdventureSeedRect(index, true).Contains(point);
+            }
+
             return (!_owner.RequiredGame.UsesNativeAdventureConveyor || AdventureConveyorClip.Contains(point)) && AdventureSeedRect(index, true).Contains(point);
         }
 
@@ -226,6 +234,15 @@ namespace PlantsVsZombies.BoardUI
         /// <returns>The resulting adventure seed rect.</returns>
         internal Rect AdventureSeedRect(int index, bool packet = false)
         {
+            if (packet && _owner._game != null && index < _owner._game.Adventure.Packets.Count)
+            {
+                var drop = _owner._game.Adventure.Packets[index];
+                if (drop.IsVaseDrop)
+                {
+                    return new Rect(drop.PresentationX, drop.PresentationY, 50f, 70f);
+                }
+            }
+
             if (packet && _owner._game != null && _owner._game.UsesNativeAdventureConveyor && index < _owner._game.Adventure.Packets.Count)
             {
                 var conveyor = AdventureConveyorOrigin;

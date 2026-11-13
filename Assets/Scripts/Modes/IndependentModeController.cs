@@ -415,7 +415,7 @@ namespace PlantsVsZombies.Modes
             var id = _modeSession == null ? 16 : _modeSession.Definition.Id;
             _owner.RequiredModeView.Open(id <= 15 ? 0 : id >= 51 ? 3 : 1);
             _owner._selected = -1;
-            _owner.AdventureBoard._selectedAdventurePacket = -1;
+            _owner.AdventureBoard.ClearAdventurePacketSelection();
             _owner._shovel = false;
             _owner._choosingSeeds = false;
         }
@@ -467,7 +467,7 @@ namespace PlantsVsZombies.Modes
                             _owner._deck.Clear();
                             _owner._deck.AddRange(_owner.RequiredGame.Adventure.SelectedSeeds);
                             _owner._selected = -1;
-                            _owner.AdventureBoard._selectedAdventurePacket = -1;
+                            _owner.AdventureBoard.ClearAdventurePacketSelection();
                             _owner._shovel = false;
                             _owner.AdventureBoard.AdventureFeedback(s.Advice, 6f);
                         }
@@ -599,11 +599,17 @@ namespace PlantsVsZombies.Modes
                 }
                 else
                 {
-                    for (var i = 0; i < _owner.RequiredGame.Adventure.Packets.Count && i < 10; i++)
+                    for (var i = _owner.RequiredGame.Adventure.Packets.Count - 1; i >= 0; i--)
                     {
+                        var packet = _owner.RequiredGame.Adventure.Packets[i];
+                        if (i >= 10 && !packet.IsVaseDrop)
+                        {
+                            continue;
+                        }
+
                         if (_owner.Layout.AdventurePacketContains(i, point))
                         {
-                            _owner.AdventureBoard._selectedAdventurePacket = _owner.AdventureBoard._selectedAdventurePacket == _owner.RequiredGame.Adventure.Packets[i].Id ? -1 : _owner.RequiredGame.Adventure.Packets[i].Id;
+                            _owner.AdventureBoard.SelectAdventurePacket(packet);
                             _owner._selected = -1;
                             _owner._shovel = false;
                             _owner.RequiredGame.CancelAdventureCobCannonAim();
@@ -615,7 +621,7 @@ namespace PlantsVsZombies.Modes
                 if (m == ModeMechanic.Vases && new Rect(550, 8, 47, 64).Contains(point))
                 {
                     _owner._selected = _owner._selected == 0 ? -1 : 0;
-                    _owner.AdventureBoard._selectedAdventurePacket = -1;
+                    _owner.AdventureBoard.ClearAdventurePacketSelection();
                     return true;
                 }
             }
@@ -635,7 +641,7 @@ namespace PlantsVsZombies.Modes
                         {
                             _owner.AdventureBoard.RejectSeedClick(context.Active && !context.CanAfford);
                         }
-                        _owner.AdventureBoard._selectedAdventurePacket = -1;
+                        _owner.AdventureBoard.ClearAdventurePacketSelection();
                         _owner._shovel = false;
                         _owner.RequiredGame.CancelAdventureCobCannonAim();
                         return true;
@@ -648,7 +654,7 @@ namespace PlantsVsZombies.Modes
                 _owner._shovel = !_owner._shovel;
                 _owner.Sounds.PlayPresentationSound("shovel");
                 _owner._selected = -1;
-                _owner.AdventureBoard._selectedAdventurePacket = -1;
+                _owner.AdventureBoard.ClearAdventurePacketSelection();
                 _owner.RequiredGame.CancelAdventureCobCannonAim();
                 return true;
             }
@@ -713,7 +719,7 @@ namespace PlantsVsZombies.Modes
             {
                 if (s.UsePacket(_owner.AdventureBoard._selectedAdventurePacket, row, col))
                 {
-                    _owner.AdventureBoard._selectedAdventurePacket = -1;
+                    _owner.AdventureBoard.ClearAdventurePacketSelection();
                 }
                 else
                 {

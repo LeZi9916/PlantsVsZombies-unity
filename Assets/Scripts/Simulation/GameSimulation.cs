@@ -6207,6 +6207,7 @@ namespace PlantsVsZombies.Simulation
             // Original Board::UpdateGameObjects keeps existing projectiles moving through the award sequence.
             AdvanceAdventureProjectiles(.01f, allowDamage: false);
             AdvanceAdventurePresentationSuns(.01f);
+            AdvanceVasePackets();
             AdvanceAdventureCoins(.01f);
             foreach (var plant in Plants)
             {
@@ -6809,6 +6810,7 @@ namespace PlantsVsZombies.Simulation
             }
 
             UpdateSuns(dt);
+            AdvanceVasePackets();
             AdvanceAdventurePlants(dt);
             AdvanceAdventureProjectiles(dt);
             AdvanceAdventureZombies(dt);
@@ -6973,10 +6975,9 @@ namespace PlantsVsZombies.Simulation
 
             for (var i = a._packets.Count - 1; i >= 0; i--)
             {
-                a._packets[i].Age += dt;
-                if (a.Level.Mode == AdventureMode.Vasebreaker && a._packets[i].Age >= 75f)
+                if (!a._packets[i].IsVaseDrop)
                 {
-                    a._packets.RemoveAt(i);
+                    a._packets[i].Age += dt;
                 }
             }
 
@@ -7396,10 +7397,77 @@ namespace PlantsVsZombies.Simulation
                 FromVaseRow = row,
                 FromVaseColumn = column
             };
+            if (p.IsVaseDrop)
+            {
+                p.InitializeVaseDrop(_random);
+            }
+
             Adventure._packets.Add(p);
             InitializeAdventureConveyorPacket(p, Adventure._packets.Count - 1);
             Adventure.Notice(AdventureNoticeKind.ConveyorPacket, p.Id);
             return p;
+        }
+
+        /// <summary>Collects a live vase seed coin for the normal cursor.</summary>
+        /// <param name="packetId">The identifier of the usable seed coin beneath the pointer.</param>
+        /// <returns>Whether a live, unheld vase seed was collected while the board was playing.</returns>
+        internal bool CollectVasePacket(int packetId)
+        {
+            if (!IsAdventure || State != MatchState.Playing || Adventure.Phase != AdventurePhase.Playing
+                || ModeSession != null && ModeSession.Phase != ModePhase.Playing)
+            {
+                return false;
+            }
+
+            foreach (var packet in Adventure._packets)
+            {
+                if (packet.Id == packetId && packet.IsVaseDrop && !packet.IsHeld)
+                {
+                    packet.CollectVaseDrop();
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>Returns a selected usable seed to its original drop position after cursor cancellation.</summary>
+        /// <param name="packetId">The identifier of the vase seed coin previously held by the cursor.</param>
+        internal void DropVasePacket(int packetId)
+        {
+            if (!IsAdventure)
+            {
+                return;
+            }
+
+            foreach (var packet in Adventure._packets)
+            {
+                if (packet.Id == packetId && packet.IsVaseDrop && packet.IsHeld)
+                {
+                    packet.DropVaseDrop();
+                    return;
+                }
+            }
+        }
+
+        /// <summary>Advances all original vase seed coins once, including expiration and independent recipe cleanup.</summary>
+        private void AdvanceVasePackets()
+        {
+            for (var index = Adventure._packets.Count - 1; index >= 0; index--)
+            {
+                var packet = Adventure._packets[index];
+                if (!packet.IsVaseDrop)
+                {
+                    continue;
+                }
+
+                packet.Age += .01f;
+                if (packet.TickVaseDrop(_random))
+                {
+                    RemoveAdventurePacket(packet);
+                    ModeSession?._backwardPackets.Remove(packet.Id);
+                }
+            }
         }
 
         /// <summary>Strikes the center of a zombie's hammer hit rectangle for simulation-only callers.</summary>
@@ -10998,9 +11066,46 @@ namespace PlantsVsZombies.Simulation
                 RequestAdventureZombieFoley(23);
                 zombie.PresentationDeath = AdventureZombieDeathPresentation.Removed;
                 KillAdventureZombie(zombie);
+                OpenVasesInJackExplosion(x, y);
             }
 
             return true;
+        }
+
+        /// <summary>Opens the original three-by-three vase grid after a Jack-in-the-Box explosion.</summary>
+        /// <param name="x">The same integer board-pixel center used by the zombie's native explosion.</param>
+        /// <param name="y">The same integer vertical center used by the native explosion.</param>
+        private void OpenVasesInJackExplosion(int x, int y)
+        {
+            if (Adventure.Level.Mode != AdventureMode.Vasebreaker)
+            {
+                return;
+            }
+
+            // PC ScaryPotterJackExplode 0x435050 uses clamped grid coordinates, not the plant blast radius.
+            var column = x < 40 ? -1 : Math.Min(8, (x - 40) / 80);
+            var row = column < 0 || y < 80 ? -1 : Math.Min(4, (y - 80) / 100);
+            for (var index = 0; index < Adventure._vases.Count;)
+            {
+                var vase = Adventure._vases[index];
+                if (Math.Abs(vase.Column - column) > 1 || Math.Abs(vase.Row - row) > 1)
+                {
+                    index++;
+                    continue;
+                }
+
+                Adventure._vases.RemoveAt(index);
+                if (ModeSession == null)
+                {
+                    OpenAdventureVase(vase);
+                }
+                else
+                {
+                    OpenModeVase(vase);
+                }
+
+                Presentation.VaseBreakSoundSerial++;
+            }
         }
 
         /// <summary>Marks the original live flying targets of Plant::BlowAwayFliers without removing their visible bodies.</summary>
@@ -13039,15 +13144,15 @@ namespace PlantsVsZombies.Simulation
                 }
             }
 
-            if (m == ModeMechanic.Vases || m == ModeMechanic.Slots)
+            if (m == ModeMechanic.Vases)
+            {
+                return;
+            }
+
+            if (m == ModeMechanic.Slots)
             {
                 foreach (var expiring in new PooledSnapshot<AdventurePacket>(Adventure._packets))
                 {
-                    if (m == ModeMechanic.Vases)
-                    {
-                        expiring.Age += dt;
-                    }
-
                     if (expiring.Age >= 15f)
                     {
                         Adventure._packets.Remove(expiring);
@@ -14325,6 +14430,7 @@ namespace PlantsVsZombies.Simulation
 
             TickModeBackwardPlants(dt);
             UpdateSuns(dt);
+            AdvanceVasePackets();
             AdvanceAdventurePlants(dt);
             AdvanceAdventureProjectiles(dt);
             AdvanceAdventureZombies(dt);

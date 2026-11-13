@@ -396,7 +396,7 @@ namespace PlantsVsZombies.Game
         /// <summary>Performs cancel board selection.</summary>
         internal void CancelBoardSelection()
         {
-            _owner.AdventureBoard._selectedAdventurePacket = -1;
+            _owner.AdventureBoard.ClearAdventurePacketSelection();
             if (_owner.RequiredGame.IsAdventure)
             {
                 _owner.RequiredGame.CancelAdventureCobCannonAim();

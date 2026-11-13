@@ -306,11 +306,29 @@ hammer pixels, decoded sound playback without duplicates, and warm-white flash
 coverage at every viewport corner. Run only the relevant filters:
 
 ```powershell
-./Tools/Tests/Run-UnityTests.ps1 -Platform EditMode -TestFilter 'VasebreakerConveyorTests;VasebreakerMalletTests;AdventureVaseInterludeTests;PuzzleSpawnTests'
-./Tools/Tests/Run-UnityTests.ps1 -Platform PlayMode -TestFilter 'OriginalVasebreakerTests;CrazyDaveOpeningIntegrationTests.VaseStagesPopulateAtTheirOriginalDialogueEntries'
+./Tools/Tests/Run-UnityTests.ps1 -Platform EditMode -TestFilter 'VasebreakerPacketTests;VasebreakerJackExplosionTests;VasebreakerMalletTests;AdventureJackAndCoinTests'
+./Tools/Tests/Run-UnityTests.ps1 -Platform PlayMode -TestFilter 'OriginalVasebreakerTests;OriginalJackAudioTests'
 ```
 
-The focused Unity 6000.3.17f1 macOS run passes 45 EditMode and six PlayMode
-cases with no skipped tests. These fixtures exercise production presentation and
+`VasebreakerPacketTests` checks PC `434D60` and `43B610` usable seed drops
+at `(60 + 80 * column, 80 + 100 * row)`, native velocity draws, gravity `.09`,
+and landing precision. Cards count 1500 grounded updates before fifteen final
+updates, rather than expiring by total age. Held cards remain at their original
+position with grayness 128; only the first cancellation clamps the counter to
+1200. The final-three-second warning uses grayness 192 for thirty of every
+sixty updates. PC `49D260` resets alpha for non-white grayness, so the last
+fifteen updates retain that gray card before removal. No countdown overlay is
+part of the original behavior.
+
+`VasebreakerJackExplosionTests` checks PC `542560` calls `435050` after the
+carrier dies. This opens all pots in the explosion center's three-by-three grid,
+including diagonals and hypnotized carriers, directly in creation order.
+Released contents use the same drop rules; newly released box carriers retain
+their original startup and opening delay. A pending hammer cannot open an
+already exploded pot twice. Direct Bonk samples play for each opened pot;
+VaseBreaking Foley retains its original ten-update admission window.
+
+The focused Unity 6000.3.17f1 macOS follow-up run passes 54 EditMode and nine
+PlayMode cases with no skipped tests. These fixtures exercise production presentation and
 input in isolation; full-level Player playthroughs, physical-speaker listening,
 and other target-platform devices remain unverified.
