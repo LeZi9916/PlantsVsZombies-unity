@@ -227,7 +227,11 @@ namespace PlantsVsZombies.Modes
                 var progress = _owner.Campaign.RequiredAdventureStore.Get(_modeProfileId);
                 var basicSeeds = progress.CompletedRuns > 0 ? 40 : Math.Min(40, AdventureLevelSpec.AwardSeedId(progress.NextLevel));
                 _modeFirstClear = definition.Survival ? record < (definition.Hard ? 10 : 5) : record == 0;
-                _modeSession = new ModeSession(originalModeId, account.SeedAccess(), account.PacketSlots, unchecked(Environment.TickCount ^ (int)DateTime.UtcNow.Ticks), account.PurchaseCount(23) > 0, account.PurchaseCount(22) > 0, basicSeeds);
+                var battleSeed = unchecked(Environment.TickCount ^ (int)DateTime.UtcNow.Ticks);
+                var waveContext = new ModeWaveContext(unchecked((uint)battleSeed),
+                    profileProgress: progress.CompletedRuns, profileLevel: progress.NextLevel);
+                _modeSession = new ModeSession(originalModeId, account.SeedAccess(), account.PacketSlots, battleSeed,
+                    account.PurchaseCount(23) > 0, account.PurchaseCount(22) > 0, basicSeeds, waveContext);
                 var coinProfile = _modeProfileId;
                 var coinReceipt = _modeSession.RunId.ToString("N");
                 _modeSession.Game.Rules.AdventurePacketSlots = account.PacketSlots;

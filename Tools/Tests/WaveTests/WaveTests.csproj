@@ -11,4 +11,5 @@
     <Compile Include="Program.cs.txt" />
   </ItemGroup>
   <Import Project="../SimulationSources.props" />
+  <ItemGroup><Compile Include="../OriginalReferencePaths.cs" /></ItemGroup>
 </Project>

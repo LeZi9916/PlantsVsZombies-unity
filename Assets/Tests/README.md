@@ -254,3 +254,32 @@ for PlayMode. The real-source atlas and original artwork regressions remain requ
 when changing source mapping, clipping or capture boundaries. Editor graphics
 checks and the isolated synthetic Mono/IL2CPP Player smoke do not establish
 complete game behavior or performance on other target platforms.
+
+
+## Original PC spawn fidelity
+
+The spawn regressions use the supplied hash-identified PC executable's machine-code
+results, including all three adventure progress states, local survival selection,
+18-to-50-flag gate reduction, doubled later survival budgets, dynamic weights and
+quotas, and native float stores. Run the focused Unity **6000.3.17f1** suites:
+
+```powershell
+./Tools/Tests/Run-UnityTests.ps1 -Platform EditMode -TestFilter 'AdventureWaveSpawnTests;ModeWaveFidelityTests;AdventureSpawnFidelityTests;PuzzleSpawnTests'
+./Tools/Tests/Run-UnityTests.ps1 -Platform PlayMode -TestFilter OriginalSpawnSmokeTests
+```
+
+The 90 EditMode cases include 200 actual native continuous smooth-row outputs and
+weight boundaries, preserved row history, mower/portal weights, rake selection,
+600/750-tick branches, balloon attachment health, AddZombieInRow variant draws,
+sled fallback creation, and post-creation Umbrella Leaf interception. The PlayMode
+smoke drives 33 public independent-mode sessions through real opening spawns and
+checks the two 750-tick modes reach their second wave within the native window.
+It does not inject entities, clear zombies, or adjust health; unattended Pogo Party
+is not required to survive until a second wave.
+
+The standalone `Tools/Tests/SpawnFidelityTests` runner verifies compact native
+fixtures without the original executable. These local contracts do not prove full
+original-process startup or every target-platform Player's random stream. Explicit
+`ModeWaveContext` inputs preserve known native fields; the local account identity
+is not asserted to equal the original raw profile seed. The forced-Yeti application
+flag is explicit and has no inferred, unverified lifecycle mapping.

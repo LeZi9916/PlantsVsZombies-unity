@@ -4116,12 +4116,6 @@ namespace PlantsVsZombies.Simulation
                 {
                     AdventurePresentationImpact(p, hit);
                     p.HitIds.Add(hit.Id);
-                    if (p.HitsAir && hit.Airborne)
-                    {
-                        hit.Airborne = false;
-                        hit.Speed = 0.18f;
-                    }
-
                     ApplyAdventureProjectileCold(p, hit);
                     if (p.Butter)
                     {
@@ -4189,6 +4183,18 @@ namespace PlantsVsZombies.Simulation
         private void ApplyAdventureZombieDamage(Zombie z, float damage, bool bypassShield, uint damageFlags)
         {
             AdventurePresentationZombieHit(z, damage, bypassShield, damageFlags);
+            if (z.Airborne)
+            {
+                var flyingDamage = Math.Min(z.FlyingHealth, (int)damage);
+                z.FlyingHealth -= flyingDamage;
+                damage -= flyingDamage;
+                if (z.FlyingHealth == 0)
+                {
+                    z.Airborne = false;
+                    z.Speed = 0.18f;
+                }
+            }
+
             // PC TakeDamage bit 1 damages the held shield and also sends the full
             // original damage to the helmet/body; ordinary piercing skips the shield.
             if (!bypassShield || (damageFlags & 2U) != 0)
@@ -6280,19 +6286,23 @@ namespace PlantsVsZombies.Simulation
             var level = AdventureLevels.ForRun(Rules.AdventureLevel, Rules.AdventureCycle, Rules.AdventurePacketSlots);
             RowCount = level.Rows;
             SunAmount = level.StartingSun;
+            var enabledZombieTypes = new bool[34];
             _adventure = new AdventureBoard(level)
             {
                 Phase = level.ChoosesSeeds ? AdventurePhase.ChoosingSeeds : AdventurePhase.Playing,
                 SelectedSeeds = level.DefaultSeeds,
-                Waves = AdventureWavePlan.Build(level, _random),
+                Waves = Rules.DeferAdventureWaveInitialization ? Array.Empty<AdventureWave>()
+                    : AdventureWavePlan.Build(level, _random, context: Rules.AdventureWaveContext, enabledOutput: enabledZombieTypes),
                 Tutorial = level.IsReplay ? AdventureTutorial.Complete : level.Number == 1 ? AdventureTutorial.ChooseSeed : level.Number == 2 ? AdventureTutorial.PlantSunflower : level.Number == 5 ? AdventureTutorial.Shovel : level.Number == 11 ? AdventureTutorial.NightMushrooms : level.Number == 21 ? AdventureTutorial.PoolSupport : level.Number == 31 ? AdventureTutorial.FogVisibility : level.Number == 41 ? AdventureTutorial.RoofPots : level.Mode == AdventureMode.Bowling ? AdventureTutorial.Bowling : level.Mode == AdventureMode.WhackAZombie ? AdventureTutorial.Hammer : level.Mode == AdventureMode.Vasebreaker ? AdventureTutorial.Vases : level.Mode == AdventureMode.Boss ? AdventureTutorial.Boss : level.HasConveyor ? AdventureTutorial.Conveyor : AdventureTutorial.Complete,
                 WaveCountdown = !level.IsReplay && level.Number == 2 ? 50f : level.Mode == AdventureMode.Bowling || level.Mode == AdventureMode.WhackAZombie || level.Mode == AdventureMode.LittleTrouble || level.Mode == AdventureMode.Storm || level.Mode == AdventureMode.Bungee ? 2f : 18f,
                 _nextPacket = 4f,
-                _nextSkySun = !level.IsReplay && level.Number == 1 ? 7f : 4.25f + (float)_random.NextDouble() * 2.75f,
+                _nextSkySun = Rules.DeferAdventureWaveInitialization ? 0f
+                    : !level.IsReplay && level.Number == 1 ? 7f : 4.25f + (float)_random.NextDouble() * 2.75f,
                 _nextHammerSun = 8f,
                 BossHealth = level.Mode == AdventureMode.Boss ? 40000f : 0f,
                 _bossTimer = 12f
             };
+            Array.Copy(enabledZombieTypes, Adventure.EnabledZombieTypes, enabledZombieTypes.Length);
             Adventure._whackSeedBankY = level.Mode == AdventureMode.WhackAZombie ? -87f : 0f;
             InitializeAdventureSeedAccess();
             InitializeReplaySeedChoices();
@@ -6305,6 +6315,12 @@ namespace PlantsVsZombies.Simulation
                     X = -0.5f,
                     Available = Rules.MowersEnabled && level.IsLawnRow(r) && (!level.HasRoof || Rules.AdventureRoofCleaners)
                 });
+            }
+
+            if (Rules.DeferAdventureWaveInitialization)
+            {
+                initialized = true;
+                return;
             }
 
             if (level.HasRoof)
@@ -6845,40 +6861,152 @@ namespace PlantsVsZombies.Simulation
         /// <exception cref = "InvalidOperationException">The operation cannot satisfy its preconditions.</exception>
         private int ChooseAdventureZombieRow(ZombieKind kind)
         {
-            var l = Adventure.Level;
-            var choices = new List<int>();
-            for (var r = 0; r < RowCount; r++)
-            {
-                if (l.IsLawnRow(r) && AdventureZombiePoolRules.CanSpawnInRow(kind, l.IsWaterRow(r), Adventure.CurrentWave)
-                    && (kind != ZombieKind.Bobsled || Adventure._ice.Exists(ice => ice.Row == r && ice.RemainingTicks > 0)))
-                {
-                    if ((kind != ZombieKind.Gargantuar || r != 0) && (kind != ZombieKind.Dancing || l.HasPool || l.IsLawnRow(r - 1) && l.IsLawnRow(r + 1)))
-                    {
-                        choices.Add(r);
-                    }
-                }
-            }
-
-            if (choices.Count == 0)
-            {
-                throw new InvalidOperationException("No legal spawn lane for " + kind);
-            }
-
-            if (Adventure.RakeAttracting && choices.Contains(Adventure.RakeRow))
+            var picker = Adventure.RowPicker;
+            if (Adventure.RakeAttracting && CanAdventureZombieSpawnInRow(kind, Adventure.RakeRow))
             {
                 Adventure.RakeAttracting = false;
+                picker.RecordPick(Adventure.RakeRow);
                 return Adventure.RakeRow;
             }
 
-            // Approximate native smooth row picking by suppressing immediate lane repeats.
-            if (choices.Count > 1 && choices.Contains(Adventure._lastSpawnRow))
+            for (var row = 0; row < AdventureRowPicker.RowCount; row++)
             {
-                choices.Remove(Adventure._lastSpawnRow);
+                var weight = 0f;
+                if (CanAdventureZombieSpawnInRow(kind, row))
+                {
+                    if (ModeSession != null && ModeSession.Definition.Id == 26)
+                    {
+                        weight = AdventurePortalRowSpawnWeight(row);
+                    }
+                    else if (ModeSession == null || ModeSession.Definition.Id != 21 || Adventure.CurrentWave > 3 || row != 5)
+                    {
+                        var sinceMowed = Adventure.CurrentWave - picker.LastMowedWave[row];
+                        if (IsNativeContinuousChallenge && Adventure.CurrentWave == Adventure.Waves.Count - 1)
+                        {
+                            sinceMowed = 100;
+                        }
+
+                        weight = sinceMowed <= 1 ? 0.01f : sinceMowed == 2 ? 0.5f : 1f;
+                    }
+                }
+
+                picker.Weights[row] = weight;
             }
 
-            var picked = choices[_random.Next(choices.Count)];
-            Adventure._lastSpawnRow = picked;
-            return picked;
+            return picker.Pick(_random);
+        }
+
+        /// <summary>Checks PC 0x4197D0's lane gates before smoothing or a forced rake pick.</summary>
+        /// <param name="kind">The native zombie identifier being created.</param>
+        /// <param name="row">The candidate zero-based lane.</param>
+        /// <returns>Whether the board and native mode permit this species in the lane.</returns>
+        private bool CanAdventureZombieSpawnInRow(ZombieKind kind, int row)
+        {
+            var level = Adventure.Level;
+            if (row < 0 || row >= RowCount || !level.IsLawnRow(row))
+            {
+                return false;
+            }
+
+            var mode = ModeSession == null ? 0 : ModeSession.Definition.Id;
+            var wave = Adventure.CurrentWave;
+            if (mode == 31)
+            {
+                wave += (RequiredModeSession.Stage - 1) * RequiredModeSession.Definition.WaveCount;
+            }
+
+            if (!AdventureZombiePoolRules.CanSpawnInRow(kind, level.IsWaterRow(row), wave)
+                || level.HasRoof && (kind == ZombieKind.Zomboni || kind == ZombieKind.Bobsled)
+                || kind == ZombieKind.Bobsled && !Adventure._ice.Exists(ice => ice.Row == row && ice.RemainingTicks > 0))
+            {
+                return false;
+            }
+
+            if (row == 0 && (kind == ZombieKind.Gargantuar || (int)kind == 32) && (mode < 11 || mode > 15))
+            {
+                return false;
+            }
+
+            return kind != ZombieKind.Dancing || level.HasPool || level.IsLawnRow(row - 1) && level.IsLawnRow(row + 1);
+        }
+
+        /// <summary>Checks PC 0x460B30's modes whose last authored wave is reused continuously.</summary>
+        private bool IsNativeContinuousChallenge
+        {
+            get
+            {
+                if (ModeSession == null)
+                {
+                    return Adventure.Level.Mode == AdventureMode.Boss;
+                }
+
+                var mode = ModeSession.Definition.Id;
+                return mode == 18 || mode == 20 || mode == 22 || mode == 24 || mode == 35
+                    || mode == 36 || mode == 40 || mode == 71 || mode == 72;
+            }
+        }
+
+        /// <summary>Preserves PC 0x432A40's portal-path distance and portal-presence lane weights.</summary>
+        /// <param name="row">The zero-based lane from which the zombie would enter.</param>
+        /// <returns>One hundredth near a mower, one on an open portal lane, or one fifth on another lane.</returns>
+        /// <exception cref="InvalidOperationException">An open portal has no matching exit.</exception>
+        private float AdventurePortalRowSpawnWeight(int row)
+        {
+            var portals = RequiredModeSession.Portals;
+            var pathRow = row;
+            var column = 10;
+            var distance = 0;
+            while (distance < 40)
+            {
+                ModePortal? entrance = null;
+                foreach (var portal in portals)
+                {
+                    if (portal.Row == pathRow && portal.Column < column && (entrance == null || portal.Column >= entrance.Column))
+                    {
+                        entrance = portal;
+                    }
+                }
+
+                if (entrance == null)
+                {
+                    distance += column;
+                    break;
+                }
+
+                ModePortal? exit = null;
+                foreach (var portal in portals)
+                {
+                    if (portal != entrance && portal.Pair == entrance.Pair)
+                    {
+                        exit = portal;
+                        break;
+                    }
+                }
+
+                if (exit == null)
+                {
+                    throw new InvalidOperationException("An open spawn portal has no matching exit.");
+                }
+
+                distance += column - entrance.Column;
+                column = exit.Column;
+                pathRow = exit.Row;
+            }
+
+            if (distance < 5)
+            {
+                return 0.01f;
+            }
+
+            foreach (var portal in portals)
+            {
+                if (portal.Row == row)
+                {
+                    return 1f;
+                }
+            }
+
+            return 0.2f;
         }
 
         /// <summary>Performs initialize adventure graves.</summary>
@@ -7168,9 +7296,9 @@ namespace PlantsVsZombies.Simulation
             }
 
             var cells = new List<int>();
-            for (var r = 0; r < 5; r++)
+            for (var c = stage == 0 ? 6 : stage == 1 ? 5 : 4; c < 9; c++)
             {
-                for (var c = stage == 0 ? 6 : stage == 1 ? 5 : 4; c < 9; c++)
+                for (var r = 0; r < 5; r++)
                 {
                     cells.Add(r * 9 + c);
                 }
@@ -7185,16 +7313,31 @@ namespace PlantsVsZombies.Simulation
                 Adventure._vases.Add(vase);
             }
 
-            var show = stage + 1;
+            // PC 0x4338B0 only requests green plant vases for the second and third stages.
+            RevealRandomVasePlants(stage == 0 ? 0 : stage + 1);
+
+            Adventure.Notice(AdventureNoticeKind.VaseStage, stage);
+        }
+
+        /// <summary>Selects the original green plant vases uniformly without replacement in creation order.</summary>
+        /// <param name="count">The number of hidden plant vases to reveal.</param>
+        private void RevealRandomVasePlants(int count)
+        {
+            var plants = new List<AdventureVase>();
             foreach (var vase in Adventure._vases)
             {
-                if (vase._seed.HasValue && show-- > 0)
+                if (vase._seed.HasValue && !vase.ShowsPlant)
                 {
-                    vase.ShowsPlant = true;
+                    plants.Add(vase);
                 }
             }
 
-            Adventure.Notice(AdventureNoticeKind.VaseStage, stage);
+            for (var index = 0; index < count && plants.Count > 0; index++)
+            {
+                var pick = _random.Next(plants.Count);
+                plants[pick].ShowsPlant = true;
+                plants.RemoveAt(pick);
+            }
         }
 
         /// <summary>Performs add vase seeds.</summary>
@@ -7247,7 +7390,7 @@ namespace PlantsVsZombies.Simulation
 
             if (vase._zombie.HasValue)
             {
-                SpawnAdventureZombie(vase._zombie.Value, row, column + 0.5f, Adventure.VaseStage);
+                SpawnAdventureBoardZombie(vase._zombie.Value, row, column + 0.5f, Adventure.VaseStage);
             }
 
             return true;
@@ -7379,7 +7522,7 @@ namespace PlantsVsZombies.Simulation
                     for (var i = 0; i < Math.Min(6, count); i++)
                     {
                         var kind = a.BossHealth < 15000f && i == 0 ? ZombieKind.Gargantuar : a.BossHealth < 30000f && i == 0 ? ZombieKind.Catapult : i % 3 == 0 ? ZombieKind.Buckethead : i % 3 == 1 ? ZombieKind.Conehead : ZombieKind.Normal;
-                        SpawnAdventureZombie(kind, _random.Next(5), 9.5f + i * 0.2f, a._bossCycle);
+                        SpawnAdventureBoardZombie(kind, _random.Next(5), 9.5f + i * 0.2f, a._bossCycle);
                     }
 
                     a.Notice(AdventureNoticeKind.BossAttack, 3);
@@ -9773,6 +9916,7 @@ namespace PlantsVsZombies.Simulation
                 ArmorHealth = armor,
                 ShieldHealth = shield,
                 Airborne = kind == ZombieKind.Balloon,
+                FlyingHealth = kind == ZombieKind.Balloon ? 20 : 0,
                 Submerged = kind == ZombieKind.Digger,
                 AbilityTimer = kind == ZombieKind.JackInTheBox ? 10f + (float)_random.NextDouble() * 15f : kind == ZombieKind.Dancing ? 4f : kind == ZombieKind.Bungee ? 4f : 5f
             };
@@ -9790,6 +9934,7 @@ namespace PlantsVsZombies.Simulation
                 z.Health = (int)z.Health / 4;
                 z.ArmorHealth = (int)z.ArmorHealth / 4;
                 z.ShieldHealth = (int)z.ShieldHealth / 4;
+                z.FlyingHealth /= 4;
                 z.StartingHealth = z.Health;
             }
 
@@ -9820,6 +9965,59 @@ namespace PlantsVsZombies.Simulation
             return z;
         }
 
+        /// <summary>Preserves PC 0x419A60's one-in-five prefix, also inlined for the bungee carrier at 0x41ECCF.</summary>
+        /// <param name="kind">The native species identifier.</param>
+        /// <param name="row">The already selected zero-based row.</param>
+        /// <param name="x">The requested grid position, replaced by native edge initialization when appropriate.</param>
+        /// <param name="wave">The originating zero-based wave.</param>
+        /// <returns>The initialized independent zombie.</returns>
+        private Zombie SpawnAdventureBoardZombie(ZombieKind kind, int row, float x, int wave)
+        {
+            var variant = _random.Next(5) == 0;
+            var zombie = SpawnAdventureZombie(kind, row, x, wave);
+            zombie.NativeVariant = variant;
+            return zombie;
+        }
+
+        /// <summary>Creates PC 0x41EBB0's temporary target grid for columns four through eight and five roof rows.</summary>
+        /// <returns>The twenty-five target weights, initially ten thousand each.</returns>
+        private static int[] CreateAdventureBungeeDropWeights()
+        {
+            var weights = new int[25];
+            for (var index = 0; index < weights.Length; index++)
+            {
+                weights[index] = 10000;
+            }
+
+            return weights;
+        }
+
+        /// <summary>Selects PC 0x41EC80's weighted bungee target and leaves its small residual weight.</summary>
+        /// <param name="weights">The original column-major twenty-five-cell target grid.</param>
+        /// <returns>The target encoded as column times ten plus row.</returns>
+        /// <exception cref="InvalidOperationException">The target grid has no selectable weight.</exception>
+        private int PickAdventureBungeeDropCell(int[] weights)
+        {
+            var total = 0;
+            foreach (var weight in weights)
+            {
+                total += weight;
+            }
+
+            var ticket = _random.Next(total);
+            for (var index = 0; index < weights.Length; index++)
+            {
+                ticket -= weights[index];
+                if (ticket < 0)
+                {
+                    weights[index] = 1;
+                    return (index / 5 + 4) * 10 + index % 5;
+                }
+            }
+
+            throw new InvalidOperationException("The native bungee target grid has no selectable cell.");
+        }
+
         /// <summary>Performs drop adventure zombie.</summary>
         /// <param name = "kind">The kind.</param>
         /// <param name = "row">The row.</param>
@@ -9827,15 +10025,13 @@ namespace PlantsVsZombies.Simulation
         /// <param name = "wave">The wave.</param>
         private void DropAdventureZombie(ZombieKind kind, int row, int column, int wave)
         {
-            if (HasUmbrellaNear(row, column))
-            {
-                RequestAdventureZombieFoley(73);
-                return;
-            }
-
-            var passenger = SpawnAdventureZombie(kind, row, column + 0.5f, wave);
+            // PC 0x41EC80 creates both actors before the bungee update checks Umbrella Leaf.
+            var carrierRow = ChooseAdventureZombieRow(ZombieKind.Bungee);
+            var carrier = SpawnAdventureBoardZombie(ZombieKind.Bungee, carrierRow, column + 0.5f, wave);
+            var passengerRow = ChooseAdventureZombieRow(kind);
+            var passenger = SpawnAdventureBoardZombie(kind, passengerRow, column + 0.5f, wave);
+            passenger.Row = row;
             passenger.DropRemaining = 4f;
-            var carrier = SpawnAdventureZombie(ZombieKind.Bungee, row, column + 0.5f, wave);
             carrier.BungeeCarrier = true;
             carrier.Row = row;
             carrier.TargetColumn = column;
@@ -10762,6 +10958,7 @@ namespace PlantsVsZombies.Simulation
                 {
                     Mowers[z.Row].Available = false;
                     Mowers[z.Row].Active = true;
+                    Adventure.RowPicker.LastMowedWave[z.Row] = Adventure.CurrentWave;
                     Raise(GameEvent.Mower);
                 }
                 else if (!z.Hypnotized && z.X < -0.65f && !Mowers[z.Row].Active)
@@ -11906,7 +12103,9 @@ namespace PlantsVsZombies.Simulation
                 var grave = graves[index];
                 graves.RemoveAt(index);
                 var zombieKind = final ? (_random.Next(2) == 0 ? ZombieKind.Conehead : ZombieKind.Buckethead) : kind;
-                var zombie = SpawnAdventureZombie(zombieKind, grave.Row, grave.Column + 0.5f, a.CurrentWave - 1);
+                var row = ChooseAdventureZombieRow(zombieKind);
+                var zombie = SpawnAdventureBoardZombie(zombieKind, row, grave.Column + 0.5f, a.CurrentWave - 1);
+                zombie.Row = grave.Row;
                 zombie.PresentationNativeVelocity = 0.5f + (float)_random.NextDouble() * (speedMax - 0.5f);
                 zombie.Speed = AdventureZombieNativeRules.GridSpeed(zombie.PresentationNativeVelocity);
                 zombie.PresentationWhackSpeed = true;
@@ -12029,7 +12228,10 @@ namespace PlantsVsZombies.Simulation
                 var index = _random.Next(graves.Count);
                 var g = graves[index];
                 graves.RemoveAt(index);
-                var z = SpawnAdventureZombie(final ? (_random.Next(2) == 0 ? ZombieKind.Conehead : ZombieKind.Buckethead) : kind, g.Row, g.Column + 0.5f, a.CurrentWave - 1);
+                var zombieKind = final ? (_random.Next(2) == 0 ? ZombieKind.Conehead : ZombieKind.Buckethead) : kind;
+                var row = ChooseAdventureZombieRow(zombieKind);
+                var z = SpawnAdventureBoardZombie(zombieKind, row, g.Column + 0.5f, a.CurrentWave - 1);
+                z.Row = g.Row;
                 z.Speed = 0.5f + (float)_random.NextDouble() * (speedMax - 0.5f);
                 z.PresentationNativeVelocity = z.Speed * .8f;
                 z.PresentationWhackSpeed = true;
@@ -13576,7 +13778,8 @@ namespace PlantsVsZombies.Simulation
             Adventure._finalAmbush = false;
             Adventure._warned = false;
             Adventure._previousWaveHealth = 0;
-            Adventure.WaveCountdown = 18f;
+            Adventure.WaveCountdown = s.Definition.Survival ? 6f : 18f;
+            Adventure.RowPicker.ResetMowedWaves();
             if (s.Definition.Mechanic == ModeMechanic.Vases)
             {
                 Plants.Clear();
@@ -14111,9 +14314,9 @@ namespace PlantsVsZombies.Simulation
             var id = s.Definition.Id;
             var min = id == 51 ? 4 : id == 52 || id == 53 || id == 57 ? 3 : 2;
             var cells = new List<int>();
-            for (var r = 0; r < 5; r++)
+            for (var c = min; c < 9; c++)
             {
-                for (var c = min; c < 9; c++)
+                for (var r = 0; r < 5; r++)
                 {
                     if (id != 52 || c != 8)
                     {
@@ -14214,15 +14417,7 @@ namespace PlantsVsZombies.Simulation
                 }
             }
 
-            var green = 0;
-            foreach (var vase in Adventure._vases)
-            {
-                if (vase._seed.HasValue && green < 2)
-                {
-                    vase.ShowsPlant = true;
-                    green++;
-                }
-            }
+            RevealRandomVasePlants(2);
 
             if (id == 52)
             {
@@ -14286,7 +14481,7 @@ namespace PlantsVsZombies.Simulation
             }
             else if (vase._zombie.HasValue)
             {
-                SpawnAdventureZombie(vase._zombie.Value, row, column + 0.5f, s.Stage - 1);
+                SpawnAdventureBoardZombie(vase._zombie.Value, row, column + 0.5f, s.Stage - 1);
             }
 
             return true;
@@ -14304,7 +14499,7 @@ namespace PlantsVsZombies.Simulation
             switch (s.Definition.Id)
             {
                 case 61:
-                    ModeFixedPlant(1, 3, 1);
+                    ModeFixedPlant(1, 3, 2);
                     ModeFixedPlant(1, 3, 3);
                     ModeRandomPlants(1, 7);
                     ModeRandomPlants(17, 3);
@@ -14802,7 +14997,7 @@ namespace PlantsVsZombies.Simulation
                 return false;
             }
 
-            var z = SpawnAdventureZombie(kind, row, column + 0.5f, s.Stage - 1);
+            var z = SpawnAdventureBoardZombie(kind, row, column + 0.5f, s.Stage - 1);
             if (kind == ZombieKind.Bungee)
             {
                 z.Row = row;
@@ -15225,16 +15420,19 @@ namespace PlantsVsZombies.Simulation
             SpawnScheduledAdventureWave(a.Waves[a.CurrentWave]);
             s.HealthAtWaveStart = ScheduledWaveHealth(a.CurrentWave - 1);
             s.IsFinalWave = a.CurrentWave == a.Waves.Count;
+            var mode = ModeSession == null ? 0 : ModeSession.Definition.Id;
             var flagNext = a.CurrentWave < a.Waves.Count && a.Waves[a.CurrentWave].IsFlag;
-            if (flagNext && a.Level.Mode != AdventureMode.Bowling)
+            if (flagNext && a.Level.Mode != AdventureMode.Bowling && mode != 31)
             {
                 s.HealthToNextWave = 0;
                 s.CountdownTicks = 4500;
             }
             else
             {
-                s.HealthToNextWave = (int)((0.5 + _random.NextDouble() * 0.15) * s.HealthAtWaveStart);
-                s.CountdownTicks = a.Level.Mode == AdventureMode.LittleTrouble ? 750 : 2500 + _random.Next(600);
+                var threshold = AdventureSpawnRandom.NextRange(_random, 0.5f, 0.65f);
+                s.HealthToNextWave = (int)((double)threshold * s.HealthAtWaveStart);
+                s.CountdownTicks = a.Level.Mode == AdventureMode.LittleTrouble || mode == 27 || mode == 31
+                    ? 750 : 2500 + _random.Next(600);
             }
 
             s.InitialCountdownTicks = s.CountdownTicks;
@@ -15256,7 +15454,8 @@ namespace PlantsVsZombies.Simulation
             {
                 if (z.Wave == wave && z.Health > 0 && !z.Headless && !z.Hypnotized && z.Kind != ZombieKind.Bungee && !z.BungeeCarrier && z.LinkedZombieId == 0)
                 {
-                    total += Math.Max(0, (int)z.Health) + Math.Max(0, (int)z.ArmorHealth) + Math.Max(0, (int)(z.ShieldHealth * 0.2f));
+                    total += Math.Max(0, (int)z.Health) + Math.Max(0, (int)z.ArmorHealth)
+                        + Math.Max(0, (int)(z.ShieldHealth * 0.2f)) + Math.Max(0, z.FlyingHealth);
                 }
             }
 
@@ -15295,12 +15494,30 @@ namespace PlantsVsZombies.Simulation
         private void SpawnScheduledAdventureWave(AdventureWave wave)
         {
             var a = Adventure;
+            var dropWeights = a.Level.Mode == AdventureMode.Bungee ? CreateAdventureBungeeDropWeights() : null;
             var spawned = 0;
-            foreach (ZombieKind entry in wave.Zombies)
+            foreach (var kind in wave.Zombies)
             {
-                var kind = entry == ZombieKind.Bobsled && !a._ice.Exists(c => c.RemainingTicks > 0 && c.MinX < 700) ? ZombieKind.Normal : entry;
-                var row = ChooseAdventureZombieRow(kind);
                 var x = 9.5f + spawned++ * 0.12f;
+                if (kind == ZombieKind.Bobsled && !a._ice.Exists(ice => ice.RemainingTicks > 0 && ice.MinX < 700))
+                {
+                    for (var follower = 0; follower < 4; follower++)
+                    {
+                        var fallbackRow = ChooseAdventureZombieRow(ZombieKind.Normal);
+                        SpawnAdventureBoardZombie(ZombieKind.Normal, fallbackRow, x, wave.Index);
+                    }
+
+                    continue;
+                }
+
+                if (a.Level.Mode == AdventureMode.Bungee && kind != ZombieKind.Bungee && kind != ZombieKind.Zomboni)
+                {
+                    var cell = PickAdventureBungeeDropCell(dropWeights!);
+                    DropAdventureZombie(kind, cell % 10, cell / 10, wave.Index);
+                    continue;
+                }
+
+                var row = kind == ZombieKind.Boss ? 0 : ChooseAdventureZombieRow(kind);
                 if (a.Level.Mode == AdventureMode.WhackAZombie && a._graves.Count > 0)
                 {
                     var grave = a._graves[_random.Next(a._graves.Count)];
@@ -15308,25 +15525,15 @@ namespace PlantsVsZombies.Simulation
                     x = grave.Column + 0.5f;
                 }
 
-                if (entry == ZombieKind.Bobsled)
+                var leader = SpawnAdventureBoardZombie(kind, row, x, wave.Index);
+                if (kind == ZombieKind.Bobsled)
                 {
-                    for (var i = 0; i < 4; i++)
+                    for (var follower = 1; follower < 4; follower++)
                     {
-                        var sled = SpawnAdventureZombie(kind, row, x + i * 0.2f, wave.Index);
-                        if (i > 0 && sled.Kind == ZombieKind.Bobsled)
-                        {
-                            // Original ZombieInitialize gives the 300 helm health only to the leader (no parent zombie).
-                            sled.ArmorHealth = 0f;
-                        }
+                        var sled = SpawnAdventureZombie(kind, row, x + follower * 0.2f, wave.Index);
+                        sled.LinkedZombieId = leader.Id;
+                        sled.ArmorHealth = 0f;
                     }
-                }
-                else if (a.Level.Mode == AdventureMode.Bungee && kind != ZombieKind.Bungee && kind != ZombieKind.Zomboni)
-                {
-                    DropAdventureZombie(kind, row, _random.Next(4, 9), wave.Index);
-                }
-                else
-                {
-                    SpawnAdventureZombie(kind, row, x, wave.Index);
                 }
             }
 
@@ -15366,7 +15573,8 @@ namespace PlantsVsZombies.Simulation
                 {
                     int pick = _random.Next(cells.Count), cell = cells[pick];
                     cells.RemoveAt(pick);
-                    var z = SpawnAdventureZombie(PickScheduledAmbushZombie(false), cell % 10, cell / 10 + 0.5f, wave);
+                    var kind = PickScheduledAmbushZombie(false);
+                    var z = SpawnAdventureBoardZombie(kind, cell % 10, cell / 10 + 0.5f, wave);
                     InitializeAdventurePoolZombie(z, cell / 10);
                     a.Notice(AdventureNoticeKind.PoolAmbush, (int)z.Kind, z.Row, cell / 10);
                 }
@@ -15374,20 +15582,12 @@ namespace PlantsVsZombies.Simulation
             else if (a.Level.HasRoof && !iced)
             {
                 var count = a.Level.Number <= 42 ? 2 : 3;
-                var cells = new List<int>();
-                for (var c = 4; c < Columns; c++)
+                var dropWeights = CreateAdventureBungeeDropWeights();
+                for (var index = 0; index < count; index++)
                 {
-                    for (var r = 0; r < RowCount; r++)
-                    {
-                        cells.Add(c * 10 + r);
-                    }
-                }
-
-                for (var i = 0; i < count && cells.Count > 0; i++)
-                {
-                    int pick = _random.Next(cells.Count), cell = cells[pick];
-                    cells.RemoveAt(pick);
-                    DropAdventureZombie(PickScheduledAmbushZombie(false), cell % 10, cell / 10, wave);
+                    var kind = PickScheduledAmbushZombie(false);
+                    var cell = PickAdventureBungeeDropCell(dropWeights);
+                    DropAdventureZombie(kind, cell % 10, cell / 10, wave);
                 }
             }
 
@@ -15395,7 +15595,10 @@ namespace PlantsVsZombies.Simulation
             {
                 foreach (var grave in a._graves)
                 {
-                    var z = SpawnAdventureZombie(PickScheduledAmbushZombie(true), grave.Row, grave.Column + 0.5f, wave);
+                    var kind = PickScheduledAmbushZombie(true);
+                    var row = ChooseAdventureZombieRow(kind);
+                    var z = SpawnAdventureBoardZombie(kind, row, grave.Column + 0.5f, wave);
+                    z.Row = grave.Row;
                     InitializeAdventureGraveZombie(z, grave.Column);
                     a.Notice(AdventureNoticeKind.GraveRise, (int)z.Kind, grave.Row, grave.Column);
                 }
@@ -15575,11 +15778,11 @@ namespace PlantsVsZombies.Simulation
                 2,
                 4
             };
-            var table = VerifiedDataCatalog.AdventureLevels[Adventure.Level.Number - 1];
-            foreach (int id in ids)
+            foreach (var id in ids)
             {
                 var d = VerifiedDataCatalog.Zombies[id];
-                if (id != 0 && ((!Adventure.Level.IsReplay && Adventure.Level.Number < d.BaseLevelGateRaw) || table.ZombieFlagsRaw[id] == 0))
+                if (ModeSession == null && !Adventure.Level.IsReplay && Adventure.Level.Number < d.BaseLevelGateRaw
+                    || id != 0 && !Adventure.EnabledZombieTypes[id])
                 {
                     continue;
                 }

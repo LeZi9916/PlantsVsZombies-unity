@@ -70,7 +70,7 @@ internal static class AdventureUnitTests
     }
     private static void NativeTables(string workspace)
     {
-        byte[] pe=File.ReadAllBytes(Path.Combine(Directory.GetParent(workspace).FullName,"PlantsVsZombies.exe"));
+        byte[] pe=File.ReadAllBytes(Path.Combine(PlantsVsZombies.Tests.OriginalReferencePaths.OriginRoot(),"PlantsVsZombies.exe"));
         using(var hash=SHA256.Create())Check(BitConverter.ToString(hash.ComputeHash(pe)).Replace("-","")=="E1511201EC2AE9A7E30259F04BC2EC7272BADB2574A2E9B405D0E916AE5C082C","local executable identity, opened read-only");
         for(int n=1;n<=50;n++)
         {
@@ -80,7 +80,7 @@ internal static class AdventureUnitTests
             for(int z=0;z<34;z++)Check(PlantsVsZombies.VerifiedData.VerifiedDataCatalog.AdventureLevels[n-1].ZombieFlagsRaw[z]==BitConverter.ToInt32(pe,Offset(pe,0x74EEA0)+z*204+n*4),"native row eligibility "+n+":"+z);
             Check(spec.DefaultSeeds.All(k=>spec.UnlockedSeeds.Contains(k)),"no default unearned seed "+n);
             Check(spec.UnlockedSeeds.Distinct().Count()==spec.UnlockedSeeds.Count,"unlocked cards have no duplicate awards "+n);
-            Check(plan.All(w=>w.Zombies.Count>0 && w.Zombies.All(z=>(int)z<=24)),"executable zombie behavior for every planned spawn "+n);
+            Check(plan.All(w=>w.Zombies.Count>0 && w.Zombies.All(z=>(int)z<=(n==50?25:24))),"executable zombie behavior for every planned spawn "+n);
         }
         Check(AdventureLevels.Get(5).Mode==AdventureMode.Bowling && AdventureLevels.Get(15).Mode==AdventureMode.WhackAZombie && AdventureLevels.Get(25).Mode==AdventureMode.LittleTrouble && AdventureLevels.Get(35).Mode==AdventureMode.Vasebreaker && AdventureLevels.Get(45).Mode==AdventureMode.Bungee,"special modes placed in actual adventure slots");
         Check(AdventureLevels.Get(10).RewardSeed==PlantKind.PuffShroom && AdventureLevels.Get(20).RewardSeed==PlantKind.LilyPad && AdventureLevels.Get(30).RewardSeed==PlantKind.SeaShroom && AdventureLevels.Get(40).RewardSeed==PlantKind.CabbagePult,"stage reward sequence");
@@ -135,7 +135,14 @@ internal static class AdventureUnitTests
         Check(!terrain.IsAdventureCellVisible(1,7),"fog obscures right side");Check(terrain.TryPlant(PlantKind.Plantern,1,5)&&terrain.IsAdventureCellVisible(1,7),"plantern clears nearby fog");
         var balloon=SpawnFixture(terrain,ZombieKind.Balloon,0,7);Check(balloon.Airborne,"balloon flies");Check(terrain.TryPlant(PlantKind.Blover,0,1),"blover plants");terrain.Update(1);Check(!terrain.Zombies.Contains(balloon)&&terrain.Adventure.FogBlownRemaining>0,"blover removes air enemies and clears fog");
         var magnetic=Fixture(49,PlantKind.MagnetShroom,PlantKind.CoffeeBean);CreditFixture(magnetic);Check(magnetic.TryPlant(PlantKind.MagnetShroom,1,1)&&magnetic.TryPlant(PlantKind.CoffeeBean,1,1),"day magnet needs real coffee");var plastic=SpawnFixture(magnetic,ZombieKind.Conehead,1,3);var bucket=SpawnFixture(magnetic,ZombieKind.Buckethead,1,4);magnetic.Update(2.6f);Check(plastic.ArmorHealth==370&&bucket.ArmorHealth==0,"magnet attracts metal and leaves plastic cone");
-        var protection=Fixture(49,PlantKind.UmbrellaLeaf);CreditFixture(protection);Check(protection.TryPlant(PlantKind.UmbrellaLeaf,1,1),"umbrella on prepot");int before=protection.SpawnedZombies;Invoke(protection,"DropAdventureZombie",ZombieKind.Normal,1,1,0);Check(protection.SpawnedZombies==before,"umbrella rejects nearby bungee payload");
+        var protection = Fixture(49, PlantKind.UmbrellaLeaf);
+        CreditFixture(protection);
+        Check(protection.TryPlant(PlantKind.UmbrellaLeaf, 1, 1), "umbrella on prepot");
+        var before = protection.SpawnedZombies;
+        Invoke(protection, "DropAdventureZombie", ZombieKind.Normal, 1, 1, 0);
+        Check(protection.SpawnedZombies == before + 2, "PC 0x41EC80 creates the bungee pair before umbrella interception");
+        Invoke(protection, "AdvanceAdventureZombies", .01f);
+        Check(!protection.Zombies.Any(z => z.Kind == ZombieKind.Bungee), "umbrella intercepts the initialized carrier");
     }
     private static void Specials()
     {

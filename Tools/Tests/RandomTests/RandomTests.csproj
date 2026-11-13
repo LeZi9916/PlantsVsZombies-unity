@@ -12,4 +12,5 @@
     <Compile Include="../../../Assets/Scripts/Randomness/OriginalRandom.cs" Link="Runtime/%(Filename)%(Extension)" />
     <Compile Include="../../../Assets/Scripts/Randomness/OriginalRandomState.cs" Link="Runtime/%(Filename)%(Extension)" />
   </ItemGroup>
+  <ItemGroup><Compile Include="../OriginalReferencePaths.cs" /></ItemGroup>
 </Project>

@@ -99,6 +99,9 @@ namespace PlantsVsZombies.Modes
             }
         }
 
+        /// <summary>Gets the explicit original profile and board inputs for eligibility and local seed derivation.</summary>
+        public ModeWaveContext WaveContext { get; private set; }
+
         /// <summary>Gets or sets zombie cards.</summary>
         public IReadOnlyList<ZombieKind> ZombieCards { get; internal set; } = System.Array.Empty<ZombieKind>();
 
@@ -110,15 +113,18 @@ namespace PlantsVsZombies.Modes
         /// <param name = "roofCleaners">The roof cleaners.</param>
         /// <param name = "poolCleaners">The pool cleaners.</param>
         /// <param name = "unlockedBasicSeeds">The unlocked basic seeds.</param>
-        public ModeSession(int originalModeId, AdventureSeedAccess? access = null, int packetSlots = 6, int randomSeed = 12345, bool roofCleaners = false, bool poolCleaners = false, int unlockedBasicSeeds = 40)
+        /// <param name="waveContext">The explicit native seed and profile inputs; null uses the supplied seed and first-run progress.</param>
+        public ModeSession(int originalModeId, AdventureSeedAccess? access = null, int packetSlots = 6, int randomSeed = 12345, bool roofCleaners = false, bool poolCleaners = false, int unlockedBasicSeeds = 40, ModeWaveContext? waveContext = null)
         {
             Definition = ModeCatalog.Get(originalModeId);
+            WaveContext = waveContext ?? new ModeWaveContext(unchecked((uint)randomSeed));
             RunId = Guid.NewGuid();
             PacketSlots = Math.Max(6, Math.Min(10, packetSlots));
             Stage = 1;
             UnlockedBasicSeeds = Math.Max(1, Math.Min(40, unlockedBasicSeeds));
             Game = new GameSimulation(new GameRules {
                 AdventureLevel = Definition.BoardLevel,
+                DeferAdventureWaveInitialization = true,
                 AdventureRoofCleaners = roofCleaners,
                 AdventurePoolCleaners = poolCleaners,
                 MowersEnabled = !Definition.Puzzle

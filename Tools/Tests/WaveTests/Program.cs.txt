@@ -1,3 +1,4 @@
+#nullable enable
 using System;
 using System.Collections.Generic;
 using System.Globalization;
@@ -25,19 +26,11 @@ internal static class WaveTests
         throw new InvalidOperationException(context + ": expected " + typeof(T).Name);
     }
 
+    /// <summary>Finds the separate original PC evidence directory.</summary>
+    /// <returns>The absolute original evidence root.</returns>
     private static string FindRoot()
     {
-        string[] starts = { AppContext.BaseDirectory, Environment.CurrentDirectory };
-        foreach (string start in starts)
-        {
-            for (DirectoryInfo current = new DirectoryInfo(start); current != null; current = current.Parent)
-            {
-                if (File.Exists(Path.Combine(current.FullName, "analysis", "ida", "balance", "zombies_full.json")) &&
-                    File.Exists(Path.Combine(current.FullName, "PvZUnity", "Tools", "Tests", "WaveTests", "native-oracle.json")))
-                    return current.FullName;
-            }
-        }
-        throw new DirectoryNotFoundException("Cannot locate the local EXE, balance exports, and oracle fixture.");
+        return PlantsVsZombies.Tests.OriginalReferencePaths.OriginRoot();
     }
 
     private static int Field(JsonElement row, string name)
@@ -56,7 +49,7 @@ internal static class WaveTests
     {
         string root = FindRoot();
         string balance = Path.Combine(root, "analysis", "ida", "balance");
-        string fixture = Path.Combine(root, "PvZUnity", "Tools", "Tests", "WaveTests", "native-oracle.json");
+        string fixture = Path.Combine(PlantsVsZombies.Tests.OriginalReferencePaths.RepositoryRoot(), "Tools", "Tests", "WaveTests", "native-oracle.json");
         using (JsonDocument native = JsonDocument.Parse(File.ReadAllText(fixture)))
         using (JsonDocument zombies = JsonDocument.Parse(File.ReadAllText(Path.Combine(balance, "zombies_full.json"))))
         using (JsonDocument levels = JsonDocument.Parse(File.ReadAllText(Path.Combine(balance, "adventure_levels_full.json"))))

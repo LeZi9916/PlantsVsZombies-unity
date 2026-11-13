@@ -1,3 +1,4 @@
+#nullable enable
 using System;
 using System.Diagnostics;
 using System.IO;
@@ -14,16 +15,11 @@ internal static class Program
         if (!condition) throw new Exception(message);
     }
 
+    /// <summary>Finds the original executable and its machine-code oracle.</summary>
+    /// <returns>The absolute original evidence root.</returns>
     private static string Workspace()
     {
-        DirectoryInfo directory = new DirectoryInfo(AppContext.BaseDirectory);
-        while (directory != null)
-        {
-            if (File.Exists(Path.Combine(directory.FullName, "PlantsVsZombies.exe")) &&
-                Directory.Exists(Path.Combine(directory.FullName, "PvZUnity"))) return directory.FullName;
-            directory = directory.Parent;
-        }
-        throw new DirectoryNotFoundException("Could not find the workspace and original executable.");
+        return PlantsVsZombies.Tests.OriginalReferencePaths.OriginRoot();
     }
 
     private static int Main()
@@ -31,7 +27,7 @@ internal static class Program
         string workspace = Workspace();
         var start = new ProcessStartInfo { RedirectStandardOutput = true, RedirectStandardError = true,
             UseShellExecute = false, CreateNoWindow = true, WorkingDirectory = workspace };
-        if (Environment.OSVersion.Platform == PlatformID.Win32NT)
+        if (Environment.OSVersion.Platform == PlatformID.Win32NT && string.IsNullOrEmpty(Environment.GetEnvironmentVariable("PVZ_ORACLE_PYTHON")))
         {
             start.FileName = "wsl.exe";
             start.ArgumentList.Add("-d");
@@ -43,12 +39,16 @@ internal static class Program
         }
         else
         {
-            start.FileName = "python3";
+            start.FileName = Environment.GetEnvironmentVariable("PVZ_ORACLE_PYTHON") ?? "python3";
             start.ArgumentList.Add(Path.Combine(workspace, "analysis", "ida", "random", "machine_oracle.py"));
-            start.Environment["PYTHONPATH"] = Path.Combine(workspace, "analysis", "ida", "plant_timing", "vendor");
+            var pythonPath = Environment.GetEnvironmentVariable("PVZ_ORACLE_PYTHONPATH");
+            if (!string.IsNullOrEmpty(pythonPath))
+            {
+                start.Environment["PYTHONPATH"] = pythonPath;
+            }
             start.Environment["PYTHONDONTWRITEBYTECODE"] = "1";
         }
-        using (Process process = Process.Start(start))
+        using (var process = Process.Start(start) ?? throw new InvalidOperationException("The native oracle process did not start."))
         {
             string json = process.StandardOutput.ReadToEnd();
             string error = process.StandardError.ReadToEnd();

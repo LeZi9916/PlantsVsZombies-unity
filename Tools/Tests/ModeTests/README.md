@@ -16,3 +16,8 @@ The focused advice regression checks all 55 mode introductions, suppresses repea
 survival-stage tutorials, and resolves controlled slot results through the production
 slot update. Advice uses the original bracketed LawnStrings keys; modes without an
 original introduction keep an empty advice string.
+
+The native wave regression additionally checks local survival eligibility, zero-weight
+slots, the doubled later-stage budget, the 18-to-50-flag gate curve, dynamic weights
+and quotas, forced Columns waves, and the original 40-wave mode lengths. Full
+machine-code-derived plan and candidate fixtures run in `SpawnFidelityTests`.

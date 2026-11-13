@@ -8,6 +8,12 @@ namespace PlantsVsZombies.Simulation
     /// <summary>Defines game rules.</summary>
     public sealed class GameRules
     {
+        /// <summary>Defers adventure wave generation until an independent mode supplies its own native plan.</summary>
+        internal bool DeferAdventureWaveInitialization;
+
+        /// <summary>Provides explicitly known native adventure generation flags without inferring unverified application state.</summary>
+        public AdventureWaveGenerationContext AdventureWaveContext;
+
         /// <summary>Stores adventure cycle.</summary>
         public int AdventureCycle = 1;
         /// <summary>Stores adventure dave seed.</summary>

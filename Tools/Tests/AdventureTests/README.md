@@ -1,5 +1,7 @@
 # 冒险核心回归
 
+Native table checks use `PVZ_ORIGIN_ROOT` to locate separately stored read-only PC evidence; a sibling `pvz-origin` directory is also discovered. Requires .NET SDK 9 or newer.
+
 在 PvZUnity 根目录运行 `dotnet run --project Tools/Tests/AdventureTests/AdventureTests.csproj -c Release`。默认先运行独立断言，再运行真实连续50关冒险，成功退出码为0。自动玩家只调用公开操作，不增加阳光、不注入植物/僵尸、不清场、不调血或改胜利；独立单位测试中明确标记的 fixture 使用内部测试状态，二者分开报告。
 
 连续冒险每关使用固定种子 `level*104729`，通过同一用户GUID、同一AdventureCampaign逐关战斗、拾取奖励、磁盘保存并重读验证。测试过程中自动重开存储进行断言，不替代用户关闭再打开Player的交互测试。失败时退出码非0且CSV记录实际失败，不会强行解锁余下关卡。

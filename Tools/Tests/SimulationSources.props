@@ -19,6 +19,7 @@
   <!-- PvZGame collaborators depend on UnityEngine and stay outside the Unity-independent boundary. -->
   <ItemGroup>
     <Compile Remove="$(MSBuildThisFileDirectory)../../Assets/Scripts/Adventure/AdventureAnimationCatalog.cs" />
+    <Compile Remove="$(MSBuildThisFileDirectory)../../Assets/Scripts/Adventure/AdventurePlantShadowRules.cs" />
     <Compile Remove="$(MSBuildThisFileDirectory)../../Assets/Scripts/Adventure/AdventureBoardController.cs" />
     <Compile Remove="$(MSBuildThisFileDirectory)../../Assets/Scripts/Adventure/AdventureCampaignController.cs" />
     <Compile Remove="$(MSBuildThisFileDirectory)../../Assets/Scripts/Adventure/AdventureOpeningController.cs" />

@@ -51,6 +51,10 @@ namespace PlantsVsZombies.Simulation
         internal float _poleVaultVelocity;
         /// <summary>Stores ability timer.</summary>
         public float AbilityTimer;
+        /// <summary>The original flying attachment health, included in wave health until the balloon is destroyed.</summary>
+        public int FlyingHealth;
+        /// <summary>The original one-in-five initialization variant selected by Board::AddZombieInRow.</summary>
+        public bool NativeVariant;
         /// <summary>Stores airborne.</summary>
         public bool Airborne;
         /// <summary>Stores submerged.</summary>

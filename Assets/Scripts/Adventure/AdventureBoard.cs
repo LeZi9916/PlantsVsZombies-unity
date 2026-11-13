@@ -245,8 +245,10 @@ namespace PlantsVsZombies.Adventure
         internal int _skySunCount;
         /// <summary>Stores warned.</summary>
         internal bool _warned;
-        /// <summary>Stores last spawn row.</summary>
-        internal int _lastSpawnRow = -1;
+        /// <summary>The exact enabled-type mask retained by the current native wave generator.</summary>
+        internal bool[] EnabledZombieTypes { get; } = new bool[34];
+        /// <summary>The original six-lane selection history and mower suppression markers.</summary>
+        internal AdventureRowPicker RowPicker { get; } = new AdventureRowPicker();
         /// <summary>Stores last conveyor seed.</summary>
         internal PlantKind? _lastConveyorSeed;
         /// <summary>Stores final ambush.</summary>

@@ -1,5 +1,6 @@
 # Keep C# working files consistent with .editorconfig while storing normalized text.
 *.cs text eol=crlf
+Tools/Tests/WaveTests/Program.cs.txt text eol=crlf
 
 # Preserve existing CRLF Git blobs without creating unrelated normalization changes.
 Assets/Scripts/Adventure/AdventureZombieMotionRules.cs -text whitespace=cr-at-eol

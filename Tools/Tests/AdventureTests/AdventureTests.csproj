@@ -3,4 +3,5 @@
 <ItemGroup><Compile Include="Program.cs"/><Compile Include="PlaythroughBot.cs"/><Compile Include="AdventureUnitTests.cs"/><Compile Include="UpgradePlantTests.cs"/><Compile Include="CombatFidelityRegressionTests.cs"/><Compile Include="RewardProjectileRegressionTests.cs"/><Compile Include="PuffShroomRegressionTests.cs"/><Compile Include="FumeShroomRegressionTests.cs"/><Compile Include="CoinFeedbackRegressionTests.cs"/><Compile Include="MultiHeadTimingRegressionTests.cs"/><Compile Include="StarfruitRegressionTests.cs"/></ItemGroup>
 <ItemGroup></ItemGroup>
   <Import Project="../SimulationSources.props" />
+  <ItemGroup><Compile Include="../OriginalReferencePaths.cs" /></ItemGroup>
 </Project>
