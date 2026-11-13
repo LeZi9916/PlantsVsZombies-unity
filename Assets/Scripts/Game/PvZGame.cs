@@ -439,6 +439,7 @@ namespace PlantsVsZombies.Game
             using (s_updateAudioMarker.Auto())
             {
                 Sounds.UpdateAdventureZombiePartAudio();
+                Sounds.UpdateAdventureVaseAudio();
             }
             Rewards.UpdateAdventureRewardContinuation();
             Router.HandleEscape();

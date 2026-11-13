@@ -8,6 +8,26 @@ namespace PlantsVsZombies.Adventure
     /// <summary>Defines adventure presentation state.</summary>
     public sealed class AdventurePresentationState
     {
+        /// <summary>Defines the eight-frame, forty-FPS pot-opening hammer duration in native updates.</summary>
+        internal const int VaseMalletDurationTicks = 20;
+        /// <summary>Gets the column beneath the single active pot-opening hammer.</summary>
+        public int VaseMalletColumn { get; internal set; }
+        /// <summary>Gets the row beneath the single active pot-opening hammer.</summary>
+        public int VaseMalletRow { get; internal set; }
+        /// <summary>Gets the native updates remaining before the hammer releases its vase contents.</summary>
+        public int VaseMalletTicks { get; internal set; }
+        /// <summary>Gets the elapsed seconds of the current forty-FPS pot-opening animation.</summary>
+        public float VaseMalletAge => (VaseMalletDurationTicks - VaseMalletTicks) * .01f;
+        /// <summary>Counts accepted pot-opening swings that request the original Swing Foley.</summary>
+        public int VaseSwingSoundSerial { get; internal set; }
+        /// <summary>Counts opened pots that request the original Bonk and VaseBreaking sounds.</summary>
+        public int VaseBreakSoundSerial { get; internal set; }
+        /// <summary>Identifies each original screen flash emitted when a puzzle stage is cleared.</summary>
+        public int VaseScreenFlashSerial { get; internal set; }
+        /// <summary>Gets or sets elapsed native flash updates, or minus one before the first flash.</summary>
+        internal int VaseScreenFlashTicks { get; set; } = -1;
+        /// <summary>Gets the screen flash's native age in seconds, or minus one before the first flash.</summary>
+        public float VaseScreenFlashAge => VaseScreenFlashTicks < 0 ? -1f : VaseScreenFlashTicks * .01f;
         /// <summary>Retains the original PC flag meter's native animation state.</summary>
         public readonly AdventureProgressMeterState ProgressMeter = new AdventureProgressMeterState();
         /// <summary>Retains the native board widget displacement shared by board artwork and its interface.</summary>

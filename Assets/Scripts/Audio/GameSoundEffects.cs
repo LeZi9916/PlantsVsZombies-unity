@@ -254,6 +254,52 @@ namespace PlantsVsZombies.Audio
             }
         }
 
+        /// <summary>Identifies the simulation whose vase sound serials have been consumed.</summary>
+        private GameSimulation? _vaseAudioGame;
+        /// <summary>Counts vase swings already delivered to the original Foley player.</summary>
+        private int _vaseSwingSoundSerial;
+        /// <summary>Counts vase impacts already delivered to the original sample and Foley players.</summary>
+        private int _vaseBreakSoundSerial;
+        /// <summary>Reuses the native Foley request for event-driven vase feedback.</summary>
+        private readonly AdventureZombieSoundEvent _vaseFoley = new AdventureZombieSoundEvent();
+
+        /// <summary>Plays the original swing at mallet creation and both impact sounds when the pot opens.</summary>
+        internal void UpdateAdventureVaseAudio()
+        {
+            var game = _owner._game;
+            if (!ReferenceEquals(_vaseAudioGame, game))
+            {
+                _vaseAudioGame = game;
+                _vaseSwingSoundSerial = 0;
+                _vaseBreakSoundSerial = 0;
+            }
+
+            if (game == null || !game.IsAdventure || _audioSource == null)
+            {
+                return;
+            }
+
+            _vaseFoley.Tick = game.Adventure._ticks;
+            while (_vaseSwingSoundSerial < game.Presentation.VaseSwingSoundSerial)
+            {
+                _vaseSwingSoundSerial++;
+                _vaseFoley.Foley = 47;
+                PlayAdventureZombieFoley(_vaseFoley);
+            }
+
+            while (_vaseBreakSoundSerial < game.Presentation.VaseBreakSoundSerial)
+            {
+                _vaseBreakSoundSerial++;
+                if (_presentationSounds.TryGetValue("bonk", out var bonk) && bonk != null)
+                {
+                    _audioSource.PlayOneShot(bonk);
+                }
+
+                _vaseFoley.Foley = 35;
+                PlayAdventureZombieFoley(_vaseFoley);
+            }
+        }
+
         /// <summary>Stores potato mine audio game.</summary>
         private GameSimulation? _potatoMineAudioGame;
         /// <summary>Stores potato mine rise audio serial.</summary>

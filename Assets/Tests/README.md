@@ -283,3 +283,34 @@ original-process startup or every target-platform Player's random stream. Explic
 `ModeWaveContext` inputs preserve known native fields; the local account identity
 is not asserted to equal the original raw profile seed. The forced-Yeti application
 flag is explicit and has no inferred, unverified lifecycle mapping.
+
+## Original PC Vasebreaker feedback
+
+`VasebreakerConveyorTests` and `VasebreakerMalletTests` cover adventure 4-5's
+three stages and all ten standalone puzzles, including endless. They preserve
+real adventure conveyors, the single active hammer, deferred seed/zombie/sun
+contents, pause behavior, and stage-clear flash timing.
+
+The supplied PC executable's `434A50` starts `anim_open_pot` at the fixed vase
+cell with forty FPS; `4349E0` opens it after twenty native updates. Its
+PlayOnceAndHold loop samples `(frameCount - 1) * normalizedTime`. `459120`
+draws the original 80x101 foreground at grid(-5,-15), with a separate additive
+alpha-196 hover pass. Foley 47 uses Swing with [0,+2] semitones; opening at
+`434D60` uses direct unpitched Bonk and Foley 35 VaseBreaking with [-5,0]
+semitones. Intermediate-stage clearing starts the unchanged fifty-tick
+`ScreenFlash.xml` at Dave's entrance, before the next dialogue population entry.
+
+With `PVZ_BOARD_STRESS_ASSETS` set to the read-only runtime resource directory,
+`OriginalVasebreakerTests` checks the actual click paths, original atlas and
+hammer pixels, decoded sound playback without duplicates, and warm-white flash
+coverage at every viewport corner. Run only the relevant filters:
+
+```powershell
+./Tools/Tests/Run-UnityTests.ps1 -Platform EditMode -TestFilter 'VasebreakerConveyorTests;VasebreakerMalletTests;AdventureVaseInterludeTests;PuzzleSpawnTests'
+./Tools/Tests/Run-UnityTests.ps1 -Platform PlayMode -TestFilter 'OriginalVasebreakerTests;CrazyDaveOpeningIntegrationTests.VaseStagesPopulateAtTheirOriginalDialogueEntries'
+```
+
+The focused Unity 6000.3.17f1 macOS run passes 45 EditMode and six PlayMode
+cases with no skipped tests. These fixtures exercise production presentation and
+input in isolation; full-level Player playthroughs, physical-speaker listening,
+and other target-platform devices remain unverified.

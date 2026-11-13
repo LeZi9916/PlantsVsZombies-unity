@@ -26,7 +26,25 @@ internal static class ModeCoreProbe
         var veteran=new Plant{Kind=PlantKind.Peashooter,Row=2,Column=0,Layer=PlantLayer.Main,Health=211};survival.Game.Plants.Add(veteran);AddSun(survival.Game,200);int sunBefore=survival.Game.SunAmount;survival.Game.Mowers[0].Available=false;
         survival.Game.Adventure.CurrentWave=survival.Game.Adventure.Waves.Count;survival.Game.Adventure._finalAmbush=true;survival.Update(0.01f);
         Check(survival.HasNextStage&&survival.FlagsCompleted==1,"survival flag/round completion");survival.Game.Adventure.TotalWavesSpawned=80;Check(survival.Continue(),"survival next round");Check(survival.Game.Plants.Contains(veteran)&&veteran.Health==211,"survival preserves actual plants/health");Check(survival.Game.SunAmount==sunBefore&&!survival.Game.Mowers[0].Available&&survival.Game.Adventure.TotalWavesSpawned==0,"survival carries sun and used mower; native wave-loot counter resets");Check(survival.Phase==ModePhase.ChoosingSeeds&&survival.Stage==2,"survival reselects seeds");
-        var vase=new ModeSession(52);int leftCell=-1;foreach(var pair in vase._vaseSeeds)if(pair.Value==52){leftCell=pair.Key;break;}Check(leftCell>=0,"PC leftpeater recipe");int before=vase.Game.Adventure.Vases.Count;Check(vase.SmashVase(leftCell/9,leftCell%9),"smash original vase");Check(vase.Game.Adventure.Vases.Count==before-1,"vase actually removed");int packet=vase.Game.Adventure.Packets[0].Id;Check(vase.UsePacket(packet,0,0),"free vase packet plant");Check(vase.Game.Plants.Exists(p=>p.Row==0&&p.Column==0&&p.ModeFacesLeft),"PC seed52 faces left");
+        var vase = new ModeSession(52);
+        var leftCell = -1;
+        foreach (var pair in vase._vaseSeeds)
+        {
+            if (pair.Value == 52)
+            {
+                leftCell = pair.Key;
+                break;
+            }
+        }
+
+        Check(leftCell >= 0, "PC leftpeater recipe");
+        var before = vase.Game.Adventure.Vases.Count;
+        Check(vase.SmashVase(leftCell / 9, leftCell % 9), "smash original vase");
+        vase.Update(.2f);
+        Check(vase.Game.Adventure.Vases.Count == before - 1, "vase actually removed after the native hammer swing");
+        var packet = vase.Game.Adventure.Packets[0].Id;
+        Check(vase.UsePacket(packet, 0, 0), "free vase packet plant");
+        Check(vase.Game.Plants.Exists(plant => plant.Row == 0 && plant.Column == 0 && plant.ModeFacesLeft), "PC seed52 faces left");
         var iz = new ModeSession(61);
         Check(iz.Game.Plants[0].Kind == PlantKind.Sunflower && iz.Game.Plants[0].Column == 3 && iz.Game.Plants[0].Row == 2,
             "PC 0x435C3F first fixed sunflower uses zero-based row two");
@@ -67,7 +85,16 @@ internal static class ModeCoreProbe
         bowling.Update(.01f);
         Check(committed == 5 && !bowling.Game.Adventure.Coins.Contains(gold), "Coin retry commits cumulative units once");
         vase.Game.ApplyModePurchases(true,null);var nutCells=new List<int>();foreach(var pair in vase._vaseSeeds)if(pair.Value==3)nutCells.Add(pair.Key);Check(nutCells.Count>=2,"PC vase wall-nut packets available");
-        vase.SmashVase(nutCells[0]/9,nutCells[0]%9);int firstNut=vase.Game.Adventure.Packets[vase.Game.Adventure.Packets.Count-1].Id;Check(vase.UsePacket(firstNut,1,0),"first-aid initial wall-nut");vase.Game.AdventurePlantAt(1,0,PlantLayer.Main).Health=1000;vase.SmashVase(nutCells[1]/9,nutCells[1]%9);int nextNut=vase.Game.Adventure.Packets[vase.Game.Adventure.Packets.Count-1].Id;Check(vase.UsePacket(nextNut,1,0)&&vase.Game.AdventurePlantAt(1,0,PlantLayer.Main).Health==4000,"purchased first-aid heals through mode packet planting");
+        vase.SmashVase(nutCells[0] / 9, nutCells[0] % 9);
+        vase.Update(.2f);
+        var firstNut = vase.Game.Adventure.Packets[vase.Game.Adventure.Packets.Count - 1].Id;
+        Check(vase.UsePacket(firstNut, 1, 0), "first-aid initial wall-nut");
+        vase.Game.AdventurePlantAt(1, 0, PlantLayer.Main).Health = 1000;
+        vase.SmashVase(nutCells[1] / 9, nutCells[1] % 9);
+        vase.Update(.2f);
+        var nextNut = vase.Game.Adventure.Packets[vase.Game.Adventure.Packets.Count - 1].Id;
+        Check(vase.UsePacket(nextNut, 1, 0) && vase.Game.AdventurePlantAt(1, 0, PlantLayer.Main).Health == 4000,
+            "purchased first-aid heals through mode packet planting");
         var variants=new ModeSession(32);variants.ChooseSeeds(variants.Game.Adventure.SelectedSeeds);int nextId=5000;
         Func<int,int,Zombie> addVariant=(kind,row)=>{var z=new Zombie{Id=++nextId,Kind=(ZombieKind)kind,Row=row,X=8f,Health=270,StartingHealth=270,Speed=.18f};variants.Game.Zombies.Add(z);return z;};
         var jalapeno=addVariant(28,0);var gatling=addVariant(29,1);var squash=addVariant(30,2);var tall=addVariant(31,3);variants.Update(.01f);

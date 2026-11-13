@@ -5105,6 +5105,11 @@ namespace PlantsVsZombies.Simulation
         /// <param name = "dt">The dt.</param>
         private void AdventurePresentationTick(float dt)
         {
+            if (Presentation.VaseScreenFlashTicks >= 0 && Presentation.VaseScreenFlashTicks < 50)
+            {
+                Presentation.VaseScreenFlashTicks++;
+            }
+
             // PC Board::Update consumes one Rand(2) only while the decremented counter is nonzero.
             var shake = Presentation.ScreenShake;
             shake.Tick(shake.TicksRemaining > 1 && _random.Next(2) == 0);
@@ -6816,6 +6821,7 @@ namespace PlantsVsZombies.Simulation
             }
 
             AdvanceAdventureMowers(dt);
+            AdvanceVaseMallet();
             AdvanceAdventureSpecials(dt);
             AdvanceAdventureUpgradeWorld(dt);
             AdvanceAdventureProgressMeter();
@@ -7469,6 +7475,7 @@ namespace PlantsVsZombies.Simulation
         /// <summary>Performs initialize vase stage.</summary>
         private void InitializeVaseStage()
         {
+            Presentation.VaseMalletTicks = 0;
             Adventure._packets.Clear();
             Adventure._vases.Clear();
             Plants.Clear();
@@ -7565,36 +7572,105 @@ namespace PlantsVsZombies.Simulation
             }
         }
 
-        /// <summary>Performs smash adventure vase.</summary>
-        /// <param name = "row">The row.</param>
-        /// <param name = "column">The column.</param>
-        /// <returns>The resulting smash adventure vase.</returns>
+        /// <summary>Starts the original delayed hammer swing over an adventure vase.</summary>
+        /// <param name="row">The target vase's lawn row.</param>
+        /// <param name="column">The target vase's lawn column.</param>
+        /// <returns>Whether an available vase accepted a new hammer swing.</returns>
         public bool SmashAdventureVase(int row, int column)
         {
-            if (!IsAdventure || State != MatchState.Playing || Adventure.Phase != AdventurePhase.Playing || Adventure.Level.Mode != AdventureMode.Vasebreaker
+            if (!IsAdventure || ModeSession != null || State != MatchState.Playing || Adventure.Phase != AdventurePhase.Playing || Adventure.Level.Mode != AdventureMode.Vasebreaker
                 || Adventure.VaseInterludeActive && Adventure._vaseInterludePopulated)
             {
                 return false;
             }
 
-            var vase = Adventure._vases.Find(v => v.Row == row && v.Column == column);
-            if (vase == null)
+            return BeginVaseMallet(row, column);
+        }
+
+        /// <summary>Starts the single native pot-opening hammer without releasing its contents early.</summary>
+        /// <param name="row">The target vase's lawn row.</param>
+        /// <param name="column">The target vase's lawn column.</param>
+        /// <returns>Whether the target exists and no earlier hammer is still active.</returns>
+        private bool BeginVaseMallet(int row, int column)
+        {
+            if (Presentation.VaseMalletTicks > 0)
             {
                 return false;
             }
 
-            Adventure._vases.Remove(vase);
+            foreach (var vase in Adventure._vases)
+            {
+                if (vase.Row == row && vase.Column == column)
+                {
+                    // PC 0x434A50 creates one Hammer, anim_open_pot, PlayOnceAndHold at 40 FPS.
+                    Presentation.VaseMalletRow = row;
+                    Presentation.VaseMalletColumn = column;
+                    Presentation.VaseMalletTicks = AdventurePresentationState.VaseMalletDurationTicks;
+                    Presentation.VaseSwingSoundSerial++;
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>Releases the targeted pot only after the original hammer has completed one loop.</summary>
+        private void AdvanceVaseMallet()
+        {
+            if (Presentation.VaseMalletTicks == 0)
+            {
+                return;
+            }
+
+            Presentation.VaseMalletTicks--;
+            if (Presentation.VaseMalletTicks > 0)
+            {
+                return;
+            }
+
+            for (var index = 0; index < Adventure._vases.Count; index++)
+            {
+                var vase = Adventure._vases[index];
+                if (vase.Row != Presentation.VaseMalletRow || vase.Column != Presentation.VaseMalletColumn)
+                {
+                    continue;
+                }
+
+                Adventure._vases.RemoveAt(index);
+                if (ModeSession == null)
+                {
+                    OpenAdventureVase(vase);
+                }
+                else
+                {
+                    OpenModeVase(vase);
+                }
+
+                Presentation.VaseBreakSoundSerial++;
+                break;
+            }
+        }
+
+        /// <summary>Releases the plant or zombie hidden in an already removed adventure vase.</summary>
+        /// <param name="vase">The vase reached by the completed native hammer swing.</param>
+        private void OpenAdventureVase(AdventureVase vase)
+        {
             if (vase._seed.HasValue)
             {
-                AddAdventurePacket(vase._seed.Value, row, column);
+                AddAdventurePacket(vase._seed.Value, vase.Row, vase.Column);
             }
 
             if (vase._zombie.HasValue)
             {
-                SpawnAdventureBoardZombie(vase._zombie.Value, row, column + 0.5f, Adventure.VaseStage);
+                SpawnAdventureBoardZombie(vase._zombie.Value, vase.Row, vase.Column + 0.5f, Adventure.VaseStage);
             }
+        }
 
-            return true;
+        /// <summary>Starts the original half-second flash at the native puzzle-stage clearing point.</summary>
+        private void StartVaseScreenFlash()
+        {
+            Presentation.VaseScreenFlashSerial++;
+            Presentation.VaseScreenFlashTicks = 0;
         }
 
         /// <summary>Performs advance adventure specials.</summary>
@@ -7616,6 +7692,7 @@ namespace PlantsVsZombies.Simulation
                     Adventure.RakeTriggered = false;
                     Adventure.RakeAge = 0f;
                     Adventure._rakeDamageDone = false;
+                    StartVaseScreenFlash();
                     Adventure.Notice(AdventureNoticeKind.VaseInterludeStarted, message);
                     if (!Adventure.VaseInterludeDialogueEnabled)
                     {
@@ -14260,6 +14337,7 @@ namespace PlantsVsZombies.Simulation
 
             AdvanceAdventureMowers(dt);
             AdvanceAdventurePurchases(dt);
+            AdvanceVaseMallet();
             if (d.Mechanic == ModeMechanic.Bowling)
             {
                 TickModeBowling(dt);
@@ -14414,6 +14492,7 @@ namespace PlantsVsZombies.Simulation
             {
                 Plants.Clear();
                 ClearSuns();
+                StartVaseScreenFlash();
                 InitializeModeVases();
                 s.Phase = ModePhase.Playing;
             }
@@ -14936,6 +15015,7 @@ namespace PlantsVsZombies.Simulation
         /// <exception cref = "InvalidOperationException">The operation cannot satisfy its preconditions.</exception>
         private void InitializeModeVases()
         {
+            Presentation.VaseMalletTicks = 0;
             var s = RequiredModeSession;
             s._vaseSeeds.Clear();
             s._vaseSun.Clear();
@@ -15070,10 +15150,10 @@ namespace PlantsVsZombies.Simulation
             Adventure.SelectedSeeds = Array.AsReadOnly(new[] { PlantKind.CherryBomb });
         }
 
-        /// <summary>Performs smash mode vase.</summary>
-        /// <param name = "row">The row.</param>
-        /// <param name = "column">The column.</param>
-        /// <returns>The resulting smash mode vase.</returns>
+        /// <summary>Starts the original delayed hammer swing over a standalone puzzle vase.</summary>
+        /// <param name="row">The target vase's lawn row.</param>
+        /// <param name="column">The target vase's lawn column.</param>
+        /// <returns>Whether an available vase accepted a new hammer swing.</returns>
         public bool SmashModeVase(int row, int column)
         {
             var s = ModeSession;
@@ -15082,17 +15162,18 @@ namespace PlantsVsZombies.Simulation
                 return false;
             }
 
-            var vase = Adventure._vases.Find(v => v.Row == row && v.Column == column);
-            if (vase == null)
-            {
-                return false;
-            }
+            return BeginVaseMallet(row, column);
+        }
 
-            int cell = row * 9 + column, seed, value;
-            Adventure._vases.Remove(vase);
-            if (s._vaseSeeds.TryGetValue(cell, out seed))
+        /// <summary>Releases the original standalone recipe contents after the target vase has been removed.</summary>
+        /// <param name="vase">The vase reached by the completed native hammer swing.</param>
+        private void OpenModeVase(AdventureVase vase)
+        {
+            var s = RequiredModeSession;
+            var cell = vase.Row * 9 + vase.Column;
+            if (s._vaseSeeds.TryGetValue(cell, out var seed))
             {
-                var packet = AddAdventurePacket(seed == 52 ? PlantKind.Repeater : (PlantKind)seed, row, column);
+                var packet = AddAdventurePacket(seed == 52 ? PlantKind.Repeater : (PlantKind)seed, vase.Row, vase.Column);
                 if (seed == 52)
                 {
                     s._backwardPackets.Add(packet.Id);
@@ -15100,21 +15181,19 @@ namespace PlantsVsZombies.Simulation
 
                 s._vaseSeeds.Remove(cell);
             }
-            else if (s._vaseSun.TryGetValue(cell, out value))
+            else if (s._vaseSun.TryGetValue(cell, out var value))
             {
                 for (var i = 0; i < value / 25; i++)
                 {
-                    Suns.Add(CreateAdventurePresentationSunFromPoint(40f + column * 80f + i * 15f, 80f + row * 100f, 25));
+                    Suns.Add(CreateAdventurePresentationSunFromPoint(40f + vase.Column * 80f + i * 15f, 80f + vase.Row * 100f, 25));
                 }
 
                 s._vaseSun.Remove(cell);
             }
             else if (vase._zombie.HasValue)
             {
-                SpawnAdventureBoardZombie(vase._zombie.Value, row, column + 0.5f, s.Stage - 1);
+                SpawnAdventureBoardZombie(vase._zombie.Value, vase.Row, vase.Column + 0.5f, s.Stage - 1);
             }
-
-            return true;
         }
 
         // PC 0x435B40 fixed and randomly placed plants. Coordinates differ from the mobile .NET port.

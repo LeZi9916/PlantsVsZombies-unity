@@ -653,6 +653,18 @@ namespace PlantsVsZombies.Modes
                 return true;
             }
 
+            if (m == ModeMechanic.Vases && !_owner._shovel
+                && _owner.AdventureBoard._selectedAdventurePacket < 0 && _owner._selected < 0)
+            {
+                var vase = _owner.AdventureBoard.VaseAtPoint(point);
+                if (vase != null)
+                {
+                    s.SmashVase(vase.Row, vase.Column);
+                }
+
+                return true;
+            }
+
             var col = Mathf.FloorToInt((point.x - BoardLayout.AdventureGridX) / BoardLayout.CellWidth);
             var row = Mathf.FloorToInt((point.y - BoardLayout.AdventureGridY - _owner.Layout.AdventureSlope(col)) / _owner.Layout.AdventurePitch);
             if (col < 0 || col > 8 || row < 0 || row >= _owner.RequiredGame.RowCount)
@@ -741,12 +753,6 @@ namespace PlantsVsZombies.Modes
 
             if (_owner.RequiredGame.TryAimAdventureCobCannon(row, col))
             {
-                return true;
-            }
-
-            if (m == ModeMechanic.Vases)
-            {
-                s.SmashVase(row, col);
                 return true;
             }
 

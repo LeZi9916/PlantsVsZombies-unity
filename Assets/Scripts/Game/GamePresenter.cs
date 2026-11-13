@@ -1279,6 +1279,63 @@ namespace PlantsVsZombies.Game
             }
         }
 
+        /// <summary>Draws the original vase foreground and its additive mouse selection.</summary>
+        /// <param name="vase">The unopened vase whose original grid and color select the atlas cell.</param>
+        private void DrawAdventureVase(AdventureVase vase)
+        {
+            // PC GridItem::DrawScaryPot 0x459120: grid(-5,-15), 80x101 foreground cel in row one.
+            var center = new Vector2(BoardLayout.AdventureGridX + vase.Column * BoardLayout.CellWidth + 35f,
+                _owner.Layout.AdventureCellY(vase.Row, vase.Column) + 35.5f);
+            var column = vase.ShowsPlant ? 1 : 0;
+            _owner.RequiredAnimations.DrawResourceSprite("IMAGE_SCARY_POT", center, 1f, frame: column, columns: 3, rows: 2, imageRow: 1);
+            if (!ReferenceEquals(_owner.AdventureBoard.HighlightedVase, vase))
+            {
+                return;
+            }
+
+            var previous = SpriteDrawState.Color;
+            try
+            {
+                SpriteDrawState.Color = new Color(previous.r, previous.g, previous.b, previous.a * (196f / 255f));
+                _owner.RequiredAnimations.DrawResourceSprite("IMAGE_SCARY_POT", center, 1f, frame: column,
+                    columns: 3, rows: 2, additive: true, imageRow: 1);
+            }
+            finally
+            {
+                SpriteDrawState.Color = previous;
+            }
+        }
+
+        /// <summary>Draws the original one-shot hammer at the vase being opened.</summary>
+        private void DrawAdventureVaseHammer()
+        {
+            var state = _owner.RequiredGame.Presentation;
+            if (state.VaseMalletTicks <= 0)
+            {
+                return;
+            }
+
+            // PC Challenge::ScaryPotterMalletPot 0x434A50 uses a fixed grid origin, not the cursor.
+            _owner.RequiredAnimations.DrawNativePlayback("Hammer",
+                new Vector2(BoardLayout.AdventureGridX + state.VaseMalletColumn * BoardLayout.CellWidth,
+                    _owner.Layout.AdventureCellY(state.VaseMalletRow, state.VaseMalletColumn)),
+                1f, state.VaseMalletAge + AdventureRenderRemainder, "anim_open_pot", false, 40f);
+        }
+
+        /// <summary>Draws the original fifty-tick flash when the next vase stage clears the board.</summary>
+        private void DrawAdventureVaseScreenFlash()
+        {
+            var state = _owner.RequiredGame.Presentation;
+            if (state.VaseScreenFlashSerial == 0 || state.VaseScreenFlashAge >= .5f)
+            {
+                return;
+            }
+
+            RequiredAdventureParticles.Draw(_presentationKeys.Get("vase-stage-flash-", state.VaseScreenFlashSerial),
+                "ScreenFlash", state.VaseScreenFlashAge + AdventureRenderRemainder, new Vector2(400f, 300f),
+                state.VaseScreenFlashSerial, fullScreenMatrix: ViewportMatrix());
+        }
+
         /// <summary>Draws the original hammer attached to the logical pointer in Whack-a-Zombie boards.</summary>
         private void DrawAdventureHammerCursor()
         {
@@ -2092,11 +2149,7 @@ namespace PlantsVsZombies.Game
                             continue;
                         }
 
-                        var image = _owner.Textures.LoadImage("Scary_Pot.png");
-                        if (image != null)
-                        {
-                            DrawTextureWithSource(new Rect(BoardLayout.AdventureGridX + vase.Column * BoardLayout.CellWidth, _owner.Layout.AdventureCellY(row, vase.Column) - 6, 80, 101), image, new Rect(vase.ShowsPlant ? 1f / 3f : 0, 0, 1f / 3f, 0.5f));
-                        }
+                        DrawAdventureVase(vase);
                     }
 
                     DrawAdventureDetachedZombieParts(row, true);
@@ -2207,6 +2260,8 @@ namespace PlantsVsZombies.Game
 
                 DrawAdventurePlantingEffects();
                 DrawAdventureExplosionOverlay();
+                DrawAdventureVaseHammer();
+                DrawAdventureVaseScreenFlash();
                 // PC preview zombies use layers 200000..301000, below fog at 500000 and pickups at 600001.
                 if (_owner.RequiredGame.AdventureHasFog)
                 {
@@ -4984,11 +5039,7 @@ namespace PlantsVsZombies.Game
             {
                 DrawAdventureConveyorBackground();
             }
-            else if (packets)
-            {
-                DrawImage("ConveyorBelt_backdrop.png", new Rect(0, 0, 516, 87));
-            }
-            else
+            else if (!packets)
             {
                 DrawAdventureSeedBankBackground(_owner.Layout.AdventureSeedBankOrigin, _owner.Layout.SeedBankCapacity);
             }
@@ -5382,7 +5433,7 @@ namespace PlantsVsZombies.Game
                 DrawAdventureSeedBankBackground(_owner.Layout.AdventureSeedBankOrigin, _owner.Layout.SeedBankCapacity);
                 DrawAdventureSunAmount(_owner.Layout.AdventureSeedBankOrigin);
             }
-            else
+            else if (d.Mechanic != ModeMechanic.Vases)
             {
                 Fill(new Rect(0, 0, 800, 80), new Color(0.25f, 0.19f, 0.08f, 0.95f));
                 Label(new Rect(0, 5, 78, 30), "阳光", 17, Color.yellow, TextAnchor.MiddleCenter, true);

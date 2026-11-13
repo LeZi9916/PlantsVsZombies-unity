@@ -69,6 +69,58 @@ namespace PlantsVsZombies.Adventure
         internal bool _choosingImitater;
         /// <summary>Stores adventure pointer.</summary>
         internal Vector2 _adventurePointer;
+        /// <summary>Gets the original grid-selected vase beneath the normal cursor.</summary>
+        internal AdventureVase? HighlightedVase => VaseAtPoint(_adventurePointer);
+
+        /// <summary>Resolves the original PC vase hit test after higher-priority pickups and cursor tools.</summary>
+        /// <param name="point">The pointer in the original 800 by 600 board coordinates.</param>
+        /// <returns>The eligible vase, or null while the board or normal cursor cannot interact.</returns>
+        internal AdventureVase? VaseAtPoint(Vector2 point)
+        {
+            var game = _owner._game;
+            if (game == null || !game.IsAdventure || game.Adventure.Level.Mode != AdventureMode.Vasebreaker
+                || game.State != MatchState.Playing || game.Adventure.Phase != AdventurePhase.Playing
+                || game.Adventure.VaseInterludeActive || game.Presentation.VaseMalletTicks > 0
+                || _owner._shovel || _owner._selected >= 0 || _selectedAdventurePacket >= 0
+                || _owner._choosingSeeds || _owner.Opening.AdventureIntroActive
+                || _owner.RequiredOptionsView.IsOpen || _owner._confirmingQuit || _owner._unavailableFeature != null
+                || !new Rect(0f, 0f, 800f, 600f).Contains(point)
+                || point.x < BoardLayout.AdventureGridX || point.y < BoardLayout.AdventureGridY)
+            {
+                return null;
+            }
+
+            for (var index = 0; index < game.Adventure.Coins.Count; index++)
+            {
+                if (_owner.Layout.AdventureCoinRect(game.Adventure.Coins[index]).Contains(point))
+                {
+                    return null;
+                }
+            }
+
+            for (var index = 0; index < game.Suns.Count; index++)
+            {
+                if (_owner.Layout.AdventureSunRect(game.Suns[index]).Contains(point))
+                {
+                    return null;
+                }
+            }
+
+            // PC PixelToGridX/Y clamp the final column and row to the board edge.
+            var column = Mathf.Min(8, (int)((point.x - BoardLayout.AdventureGridX) / BoardLayout.CellWidth));
+            var row = Mathf.Min(4, (int)((point.y - BoardLayout.AdventureGridY) / 100f));
+            for (var index = 0; index < game.Adventure.Vases.Count; index++)
+            {
+                var vase = game.Adventure.Vases[index];
+                if (vase.Row == row && vase.Column == column)
+                {
+                    return vase;
+                }
+            }
+
+            return null;
+        }
+
         /// <summary>Stores the current native Whack-a-Zombie hammer animation age.</summary>
         internal float _hammerAnimationAge = 1f;
         /// <summary>The board that received the most recent insufficient-sun click.</summary>
@@ -379,6 +431,18 @@ namespace PlantsVsZombies.Adventure
                 return;
             }
 
+            if (board.Level.Mode == AdventureMode.Vasebreaker && !_owner._shovel
+                && _selectedAdventurePacket < 0 && _owner._selected < 0)
+            {
+                var vase = VaseAtPoint(point);
+                if (vase != null)
+                {
+                    _owner.RequiredGame.SmashAdventureVase(vase.Row, vase.Column);
+                }
+
+                return;
+            }
+
             var col = Mathf.FloorToInt((point.x - BoardLayout.AdventureGridX) / BoardLayout.CellWidth);
             var row = Mathf.FloorToInt((point.y - BoardLayout.AdventureGridY - _owner.Layout.AdventureSlope(col)) / _owner.Layout.AdventurePitch);
             if (col < 0 || col > 8 || row < 0 || row >= _owner.RequiredGame.RowCount)
@@ -433,12 +497,6 @@ namespace PlantsVsZombies.Adventure
 
             if (_owner.RequiredGame.TryAimAdventureCobCannon(row, col))
             {
-                return;
-            }
-
-            if (board.Level.Mode == AdventureMode.Vasebreaker)
-            {
-                _owner.RequiredGame.SmashAdventureVase(row, col);
                 return;
             }
 
