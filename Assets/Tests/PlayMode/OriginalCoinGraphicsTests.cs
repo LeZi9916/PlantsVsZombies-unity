@@ -156,6 +156,135 @@ namespace PlantsVsZombies.Tests.PlayMode
             }
         }
 
+        /// <summary>Checks native airborne dollar faces switch to the original animated coin attachment only after landing.</summary>
+        /// <returns>A graphics initialization frame before submitting the production board.</returns>
+        [UnityTest]
+        public IEnumerator DroppedSilverAndGoldUseAirborneFacesThenAnimatedGroundArtwork()
+        {
+            var root = Environment.GetEnvironmentVariable("PVZ_BOARD_STRESS_ASSETS") ?? "";
+            if (!Directory.Exists(Path.Combine(root, "reanim")))
+            {
+                Assert.Ignore("Set PVZ_BOARD_STRESS_ASSETS to the read-only original runtime resource directory.");
+            }
+
+            yield return null;
+            var host = new GameObject("Inactive original falling coin graphics fixture");
+            host.SetActive(false);
+            var owner = host.AddComponent<PvZGame>();
+            using var animations = new ReanimationRenderer(root);
+            var presenter = new GamePresenter(owner);
+            var flags = BindingFlags.Instance | BindingFlags.NonPublic;
+            try
+            {
+                owner._root = root;
+                owner._animations = animations;
+                owner._choosingSeeds = true;
+                owner.AdventureBoard._adventurePointer = new Vector2(-1000f, -1000f);
+                typeof(GamePresenter).GetField("_renderingBoardObjects", flags)!.SetValue(presenter, true);
+                var draw = typeof(GamePresenter).GetMethod("DrawAdventureBoard", flags)!;
+                foreach (var kind in new[] { AdventureCoinKind.Silver, AdventureCoinKind.Gold })
+                {
+                    owner._game = new GameSimulation(new GameRules { AdventureLevel = 8 }, 7529);
+                    Assert.That(owner._game.ChooseDefaultAdventureSeeds(), Is.True);
+                    owner._game.ResetAdventureWaveSchedule(100000, false, false);
+                    owner._game.Mowers.Clear();
+                    var coin = owner._game.RequiredSpawnAdventureCoin(kind, 5f, 2f);
+                    Assert.That(coin.HitGround, Is.False);
+                    var airborne = DrawMoneySnapshot(animations, presenter, draw);
+                    Assert.That(airborne.Count, Is.EqualTo(2), "PC 43CC10 hides the rotating attachment until landing.");
+                    var face = kind == AdventureCoinKind.Gold ? "Coin_gold_dollar.png" : "Coin_silver_dollar.png";
+                    Assert.That(airborne.Exists(sprite => sprite.Texture.SourceIdentity.EndsWith(face, StringComparison.OrdinalIgnoreCase)), Is.True);
+                    Assert.That(airborne.Exists(sprite => sprite.Texture.SourceIdentity.EndsWith("CoinGlow.png", StringComparison.OrdinalIgnoreCase)), Is.True);
+
+                    for (var tick = 0; tick < 100 && !coin.HitGround; tick++)
+                    {
+                        owner._game.Update(.01f);
+                    }
+
+                    Assert.That(coin.HitGround, Is.True);
+                    coin.PresentationPreviousX = coin.PresentationX;
+                    coin.PresentationPreviousY = coin.PresentationY;
+                    var grounded = DrawMoneySnapshot(animations, presenter, draw);
+                    Assert.That(grounded.Count, Is.GreaterThan(0));
+                    coin.Age += .17f;
+                    var animated = DrawMoneySnapshot(animations, presenter, draw);
+                    Assert.That(SameMoneyPose(grounded, animated), Is.False, "A landed original coin must keep rotating while its physical position stays fixed.");
+                    Assert.That(coin.PresentationX, Is.EqualTo(coin.PresentationPreviousX));
+                    Assert.That(coin.PresentationY, Is.EqualTo(coin.GroundY));
+                }
+            }
+            finally
+            {
+                presenter.Dispose();
+                owner.Textures.ReleaseAll();
+                UnityEngine.Object.Destroy(host);
+            }
+        }
+
+        /// <summary>Captures only the original currency commands submitted through the complete production board presenter.</summary>
+        /// <param name="animations">The renderer retaining original currency images and scene commands.</param>
+        /// <param name="presenter">The production board presenter.</param>
+        /// <param name="draw">The production board draw entry point.</param>
+        /// <returns>Independent money source images, transformed vertices, and tint values.</returns>
+        private static List<(SpriteImage Texture, Vector3[] Vertices, Color[] Colors)> DrawMoneySnapshot(ReanimationRenderer animations, GamePresenter presenter, MethodInfo draw)
+        {
+            BeginFrame(animations);
+            try
+            {
+                draw.Invoke(presenter, null);
+            }
+            finally
+            {
+                animations.EndObjectFrame();
+                CanvasUI.EndFrame();
+            }
+
+            var flags = BindingFlags.Instance | BindingFlags.NonPublic;
+            var pool = (ObjectSpriteRenderer)typeof(ReanimationRenderer).GetField("_objectRenderer", flags)!.GetValue(animations)!;
+            var textures = (Dictionary<string, SpriteImage>)typeof(ReanimationRenderer).GetField("_texturesById", flags)!.GetValue(animations)!;
+            var artwork = new HashSet<SpriteImage>();
+            foreach (var entry in textures)
+            {
+                if (entry.Key.StartsWith("IMAGE_REANIM_COIN", StringComparison.Ordinal))
+                {
+                    artwork.Add(entry.Value);
+                }
+            }
+
+            return Snapshot(pool, artwork);
+        }
+
+        /// <summary>Compares submitted money sources and geometry independently of unrelated board artwork.</summary>
+        /// <param name="first">The first production money frame.</param>
+        /// <param name="second">The later production money frame at the same physical position.</param>
+        /// <returns>Whether every money image and transformed corner stayed unchanged.</returns>
+        private static bool SameMoneyPose(List<(SpriteImage Texture, Vector3[] Vertices, Color[] Colors)> first,
+            List<(SpriteImage Texture, Vector3[] Vertices, Color[] Colors)> second)
+        {
+            if (first.Count != second.Count)
+            {
+                return false;
+            }
+
+            for (var index = 0; index < first.Count; index++)
+            {
+                if (!ReferenceEquals(first[index].Texture, second[index].Texture))
+                {
+                    return false;
+                }
+
+                for (var corner = 0; corner < 4; corner++)
+                {
+                    if (Vector3.Distance(first[index].Vertices[corner], second[index].Vertices[corner]) > .0001f)
+                    {
+                        return false;
+                    }
+                }
+            }
+
+            return true;
+        }
+
         /// <summary>Starts a production scene-object frame using original logical board coordinates.</summary>
         /// <param name="animations">The renderer receiving the original artwork.</param>
         private static void BeginFrame(ReanimationRenderer animations)

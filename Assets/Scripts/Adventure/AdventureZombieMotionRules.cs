@@ -87,7 +87,8 @@ namespace PlantsVsZombies.Adventure
         internal static bool PlaysOnce(Zombie zombie)
         {
             var phase = zombie.PresentationNativePhase;
-            return zombie.Kind == ZombieKind.Zomboni && zombie.ZomboniState?.FlatTires == true
+            return zombie.Kind == ZombieKind.JackInTheBox && phase == 16
+                || zombie.Kind == ZombieKind.Zomboni && zombie.ZomboniState?.FlatTires == true
                 || zombie.Kind == ZombieKind.PoleVaulter && phase == 12
                 || zombie.Kind == ZombieKind.DolphinRider && (phase == 52 || phase == 54)
                 || zombie.Kind == ZombieKind.Snorkel && (phase == 58 || phase == 60 || phase == 62);

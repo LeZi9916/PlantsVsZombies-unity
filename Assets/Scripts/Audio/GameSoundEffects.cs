@@ -41,6 +41,10 @@ namespace PlantsVsZombies.Audio
         {
             _soundVolume = volume;
             RequiredAudioSource.volume = volume;
+            if (_jackInTheBoxMusic != null)
+            {
+                _jackInTheBoxMusic.volume = volume;
+            }
         }
 
         /// <summary>Destroys the loaded legacy effect clips.</summary>
@@ -242,6 +246,12 @@ namespace PlantsVsZombies.Audio
         internal void DisposeAdventureCherryBombAudio()
         {
             _soundVoices?.Dispose();
+            if (_jackInTheBoxMusic != null)
+            {
+                _jackInTheBoxMusic.Stop();
+                UnityEngine.Object.Destroy(_jackInTheBoxMusic);
+                _jackInTheBoxMusic = null;
+            }
         }
 
         /// <summary>Stores potato mine audio game.</summary>
@@ -428,6 +438,80 @@ namespace PlantsVsZombies.Audio
             return evt == GameEvent.ZombieHit;
         }
 
+        /// <summary>Owns the single original looping box tune shared by all headed running box zombies.</summary>
+        private AudioSource? _jackInTheBoxMusic;
+        /// <summary>Tracks whether the box tune is suspended by the board pause.</summary>
+        private bool _jackInTheBoxMusicPaused;
+
+        /// <summary>Synchronizes the original reference-counted box music with live actors and the active board.</summary>
+        private void UpdateJackInTheBoxMusic()
+        {
+            var game = _owner._game;
+            var active = false;
+            if (_owner._currentView == PvZGame.ScreenView.Board && game != null && game.IsAdventure && (game.State == MatchState.Playing || game.State == MatchState.Paused))
+            {
+                foreach (var zombie in game.Zombies)
+                {
+                    if (zombie.Kind == ZombieKind.JackInTheBox && zombie.PresentationNativePhase == 15
+                        && !zombie.Headless && zombie.Health > 0f)
+                    {
+                        active = true;
+                        break;
+                    }
+                }
+            }
+
+            if (!active)
+            {
+                if (_jackInTheBoxMusic != null)
+                {
+                    _jackInTheBoxMusic.Stop();
+                }
+
+                _jackInTheBoxMusicPaused = false;
+                return;
+            }
+
+            if (_audioSource == null || !_presentationSounds.TryGetValue("jackinthebox", out var clip) || clip == null)
+            {
+                return;
+            }
+
+            if (_jackInTheBoxMusic == null)
+            {
+                _jackInTheBoxMusic = _audioSource.gameObject.AddComponent<AudioSource>();
+                _jackInTheBoxMusic.playOnAwake = false;
+                _jackInTheBoxMusic.loop = true;
+                _jackInTheBoxMusic.spatialBlend = 0f;
+                _jackInTheBoxMusic.clip = clip;
+                _jackInTheBoxMusic.outputAudioMixerGroup = _audioSource.outputAudioMixerGroup;
+                _jackInTheBoxMusic.ignoreListenerPause = _audioSource.ignoreListenerPause;
+            }
+
+            _jackInTheBoxMusic.volume = _soundVolume;
+            if (game!.State == MatchState.Paused)
+            {
+                if (!_jackInTheBoxMusicPaused)
+                {
+                    _jackInTheBoxMusic.Pause();
+                    _jackInTheBoxMusicPaused = true;
+                }
+            }
+            else
+            {
+                if (_jackInTheBoxMusicPaused)
+                {
+                    _jackInTheBoxMusic.UnPause();
+                    _jackInTheBoxMusicPaused = false;
+                }
+
+                if (!_jackInTheBoxMusic.isPlaying)
+                {
+                    _jackInTheBoxMusic.Play();
+                }
+            }
+        }
+
         /// <summary>Stores zombie part audio game.</summary>
         private GameSimulation? _zombiePartAudioGame;
         /// <summary>Stores zombie part audio serial, rise sound serial, and zombie sound read index.</summary>
@@ -449,6 +533,8 @@ namespace PlantsVsZombies.Audio
                 _zombieRiseSoundSerial = 0;
                 _zombieSoundReadIndex = 0;
                 _zombieFoleyLastTick.Clear();
+                _jackInTheBoxMusic?.Stop();
+                _jackInTheBoxMusicPaused = false;
             }
 
             if (!_zombiePartAudioLoading)
@@ -477,6 +563,7 @@ namespace PlantsVsZombies.Audio
                 return;
             }
 
+            UpdateJackInTheBoxMusic();
             while (_zombieSoundReadIndex < _owner._game.Presentation.ZombieSounds.Count)
             {
                 var evt = _owner._game.Presentation.ZombieSounds[_zombieSoundReadIndex++];
@@ -500,6 +587,7 @@ namespace PlantsVsZombies.Audio
                 -3 => "plantern",
                 -4 => "zombiesplash",
                 -5 => "mindcontrolled",
+                -6 => "boing",
                 _ => null
             };
             if (directSample != null)
@@ -561,7 +649,9 @@ namespace PlantsVsZombies.Audio
                 "blover",
                 "plantern",
                 "zombiesplash",
-                "mindcontrolled"
+                "mindcontrolled",
+                "jackinthebox",
+                "boing"
             };
             foreach (var definition in AdventureZombieFoleyData.Definitions.Values)
             {

@@ -7,6 +7,8 @@ namespace PlantsVsZombies.Simulation
     {
         /// <summary>Retains the original dolphin jump counter independently of animation playback.</summary>
         public global::PlantsVsZombies.Adventure.AdventureDolphinState? DolphinState;
+        /// <summary>Retains the original linked sled team's member position and native phase countdown.</summary>
+        public global::PlantsVsZombies.Adventure.AdventureBobsledState? BobsledState;
         /// <summary>Retains the original ice vehicle's smoke and punctured-tire death state.</summary>
         public global::PlantsVsZombies.Adventure.AdventureZomboniState? ZomboniState;
         /// <summary>Retains the original kelp attachment selected by a living Tangle Kelp.</summary>
@@ -19,6 +21,8 @@ namespace PlantsVsZombies.Simulation
         public bool PresentationWalk2;
         /// <summary>Stores presentation animation.</summary>
         public string PresentationAnimation = string.Empty;
+        /// <summary>Stores the original pole-vault transition blend, including the zero-tick landing handoff.</summary>
+        internal int PresentationPoleVaultBlendTicks = 20;
         /// <summary>Stores presentation death.</summary>
         public global::PlantsVsZombies.Adventure.AdventureZombieDeathPresentation PresentationDeath;
         /// <summary>Stores presentation initialized.</summary>
@@ -49,6 +53,8 @@ namespace PlantsVsZombies.Simulation
         public float PresentationVaultPositionY;
         /// <summary>Stores the native horizontal velocity retained throughout a pole vault.</summary>
         internal float _poleVaultVelocity;
+        /// <summary>Retains the original jack-in-the-box phase countdown in native ticks.</summary>
+        public int JackInTheBoxTicks;
         /// <summary>Stores ability timer.</summary>
         public float AbilityTimer;
         /// <summary>The original flying attachment health, included in wave health until the balloon is destroyed.</summary>

@@ -52,6 +52,20 @@ namespace PlantsVsZombies.Game
         internal void ShowWalletUntil(float until)
         {
             _walletVisibleUntil = until;
+            _walletGame = _owner._game;
+        }
+
+        /// <summary>Identifies the board whose last pickup displayed the temporary money counter.</summary>
+        private GameSimulation? _walletGame;
+
+        /// <summary>Gets the original wallet opacity, fading through its final fifteen native ticks.</summary>
+        internal float WalletAlpha
+        {
+            get
+            {
+                return _walletGame != null && ReferenceEquals(_walletGame, _owner._game)
+                    ? Mathf.Clamp01((_walletVisibleUntil - _walletGame.Elapsed) / .15f) : 0f;
+            }
         }
 
         /// <summary>Releases retained interface objects when the game lifetime ends.</summary>
@@ -1467,7 +1481,7 @@ namespace PlantsVsZombies.Game
         /// <param name="particles">The particle renderer owning this effect's native draw layer.</param>
         private void DrawAdventureExplosion(AdventureExplosion explosion, OriginalParticleRenderer particles)
         {
-            var point = explosion.Effect == AdventureExplosionEffect.Pow
+            var point = explosion.Effect == AdventureExplosionEffect.Pow || explosion.Effect == AdventureExplosionEffect.JackExplode
                 ? new Vector2(explosion.NativeX, explosion.NativeY)
                 : new Vector2(BoardLayout.AdventureGridX + explosion.X * BoardLayout.CellWidth, _owner.Layout.AdventureCellY(explosion.Row, explosion.X - .5f) + 40f);
             particles.Draw(_presentationKeys.Get("native-explosion-", explosion.Id), explosion.Particle, explosion.Ticks * .01f + AdventureRenderRemainder,
@@ -2092,7 +2106,7 @@ namespace PlantsVsZombies.Game
                     {
                         if (zombie.Row == row)
                         {
-                            DrawAdventureZombie(zombie);
+                            DrawAdventureZombieTeam(zombie);
                         }
                     }
 
@@ -2193,6 +2207,8 @@ namespace PlantsVsZombies.Game
 
                 DrawAdventurePlantingEffects();
                 DrawAdventureExplosionOverlay();
+                // PC Board::Draw sorts Fog at 500000, before ordinary suns, money and gifts at 600001.
+                DrawAdventureFog();
                 foreach (global::PlantsVsZombies.Simulation.Sun sun in _owner.RequiredGame.Suns)
                 {
                     if (!sun.PresentationNative || !sun.PresentationPickup.Collecting)
@@ -2223,7 +2239,7 @@ namespace PlantsVsZombies.Game
                     var diamond = coin.Kind == AdventureCoinKind.Diamond;
                     var tint = CanvasUI.Color;
                     CanvasUI.Color = new Color(tint.r, tint.g, tint.b, tint.a * coin.PresentationAlpha);
-                    if (!diamond && coin.IsBeingCollected)
+                    if (!diamond && (coin.IsBeingCollected || !coin.HitGround))
                     {
                         // PC 0x43CC10/0x43CEE0 hides rotating money during collection and draws its dollar face.
                         _owner.RequiredAnimations.DrawResourceSprite("IMAGE_REANIM_COINGLOW", new Vector2(x + 26f, y + 28f), coin.PresentationScale);
@@ -2237,7 +2253,7 @@ namespace PlantsVsZombies.Game
                         var origin = diamond
                             ? new Vector2(x + 15f - 18f * coin.PresentationScale, y + 17f - 13f * coin.PresentationScale)
                             : new Vector2(x + 9f, y + 9f);
-                        _owner.RequiredAnimations.DrawNative(diamond ? "Diamond" : coin.Kind == AdventureCoinKind.Gold ? "Coin_gold" : "Coin_silver", origin, coin.PresentationScale, coin.Age);
+                        _owner.RequiredAnimations.DrawNative(diamond ? "Diamond" : coin.Kind == AdventureCoinKind.Gold ? "Coin_gold" : "Coin_silver", origin, coin.PresentationScale, diamond ? coin.Age : coin.Age * coin.AnimationRate + coin.AnimationOffset);
                     }
 
                     CanvasUI.Color = tint;
@@ -2254,24 +2270,6 @@ namespace PlantsVsZombies.Game
                     _owner.RequiredAnimations.DrawResourceSprite("IMAGE_REANIM_COBCANNON_COB", new Vector2(BoardLayout.AdventureGridX + x * BoardLayout.CellWidth, BoardLayout.AdventureGridY + row * _owner.Layout.AdventurePitch + _owner.Layout.AdventureSlope(x) + z), 1f, rising ? 90 : -90);
                 }
 
-                if (level.Terrain == AdventureTerrain.Fog && _owner.RequiredGame.Adventure.FogBlownRemaining <= 0)
-                {
-                    for (var row = 0; row < _owner.RequiredGame.RowCount; row++)
-                    {
-                        for (var col = 0; col < 9; col++)
-                        {
-                            if (!_owner.RequiredGame.IsAdventureCellVisible(row, col))
-                            {
-                                var fog = _owner.Textures.LoadImage("fog.png");
-                                if (fog != null)
-                                {
-                                    DrawTextureWithSource(new Rect(BoardLayout.AdventureGridX + col * BoardLayout.CellWidth - 55, _owner.Layout.AdventureCellY(row, col) - 35, 190, 170), fog, new Rect((col % 8) / 8f, 0, 1f / 8f, 1));
-                                }
-                            }
-                        }
-                    }
-                }
-
                 if (level.Mode == AdventureMode.Storm && !_owner.RequiredGame.Adventure.StormFlash)
                 {
                     Fill(new Rect(0, 80, 800, 520), new Color(0.01f, 0.02f, 0.08f, 0.72f));
@@ -2284,6 +2282,69 @@ namespace PlantsVsZombies.Game
                 CanvasUI.Matrix = openingMatrix;
                 EndAdventurePresentation();
             }
+        }
+
+        /// <summary>Draws the original seven overlapping fog rows, their cell tint waves and the right edge extension.</summary>
+        private void DrawAdventureFog()
+        {
+            var game = _owner.RequiredGame;
+            if (!game.AdventureHasFog || _owner._choosingSeeds && !_owner.Opening.AdventureIntroActive)
+            {
+                return;
+            }
+
+            if (_owner.Opening.AdventureIntroActive)
+            {
+                var intro = _owner.Opening.RequiredAdventureIntro;
+                var plan = intro.Plan;
+                if (intro.NativeTime <= 5950 + plan.DaveTime + plan.SodTime + plan.GraveStoneTime)
+                {
+                    return;
+                }
+            }
+
+            var image = _owner.Textures.LoadImage("fog.png");
+            if (image == null)
+            {
+                return;
+            }
+
+            var fog = game.Adventure.Fog;
+            var previous = CanvasUI.Color;
+            var time = game.Adventure._ticks;
+            // PC DrawFog 0x426210 uses its stored float-derived two-pi constant.
+            const double tau = 6.2831854820251465d;
+            var phaseX = (float)(time * tau / 500d);
+            var phaseY = (float)(time * tau / 900d);
+            for (var column = game.AdventureFogLeftColumn; column < 9; column++)
+            {
+                for (var row = 0; row < 7; row++)
+                {
+                    var opacity = fog.Opacity(column, row);
+                    if (opacity == 0)
+                    {
+                        continue;
+                    }
+
+                    var look = fog.Look(column, row);
+                    var wave = (float)(13d + 4d * Math.Sin((float)(3d * row * tau / 7d) + phaseY)
+                        + 8d * Math.Sin((float)(3d * column * tau / 9d) + phaseX));
+                    var grey = (int)((int)(255f - look * 1.5f) - wave * 1.5f) / 255f;
+                    var blue = (int)(255f - look - wave) / 255f;
+                    CanvasUI.Color = new Color(previous.r * grey, previous.g * grey, previous.b * blue, previous.a * opacity / 255f);
+                    var x = (int)(column * 80f + fog.Offset - 15f);
+                    var y = row * 85 + 20;
+                    var source = new Rect((look % 8) / 8f, 0f, 1f / 8f, 1f);
+                    DrawTextureWithSource(new Rect(x, y, image.Width / 8f, image.Height), image, source);
+                    if (column == 8)
+                    {
+                        // PC 0x426483 extends the ninth fog column by 80 pixels.
+                        DrawTextureWithSource(new Rect(x + 80f, y, image.Width / 8f, image.Height), image, source);
+                    }
+                }
+            }
+
+            CanvasUI.Color = previous;
         }
 
         /// <summary>Performs draw adventure reanim image.</summary>
@@ -2568,6 +2629,12 @@ namespace PlantsVsZombies.Game
             {
                 // PC UpdateReanim (0x548204..0x548225) preserves the small football body's ground alignment.
                 origin.y += 20f * (1f - scale);
+            }
+
+            if (AdventureZomboniRules.HasCriticalDamage(zombie))
+            {
+                // PC UpdateReanim 0x547FF0 shakes only the body overlay by independent unscaled pixel offsets.
+                origin += new Vector2(UnityEngine.Random.Range(-1f, 1f), UnityEngine.Random.Range(-1f, 1f));
             }
 
             return origin;
@@ -3207,6 +3274,134 @@ namespace PlantsVsZombies.Game
             return _owner.RequiredAnimations.TryGetNativeAnimationInfo(name, clip, out info) ? info.SourceRate : 12f;
         }
 
+        /// <summary>Submits linked riders at PC initialization's render offsets zero, one, two, and three.</summary>
+        /// <param name="zombie">The ordinary actor or front member responsible for drawing its complete team.</param>
+        private void DrawAdventureZombieTeam(Zombie zombie)
+        {
+            var state = zombie.BobsledState;
+            if (state == null)
+            {
+                DrawAdventureZombie(zombie);
+                return;
+            }
+
+            if (state.Position != 0)
+            {
+                return;
+            }
+
+            for (var order = 0; order < 4; order++)
+            {
+                var position = AdventureBobsledRules.PositionAtRenderOrder(order);
+                foreach (var member in _owner.RequiredGame.Zombies)
+                {
+                    if (member.BobsledState?.LeaderId == zombie.Id && member.BobsledState.Position == position)
+                    {
+                        DrawAdventureZombie(member);
+                        break;
+                    }
+                }
+            }
+        }
+
+        /// <summary>Draws PC 5483C0's original sled shell and inside around the four authored bodies.</summary>
+        /// <param name="zombie">The member whose painter layer may contain one part of the shared vehicle.</param>
+        /// <param name="beforeBody">Whether to submit the portion behind this member's body.</param>
+        private void DrawAdventureBobsled(Zombie zombie, bool beforeBody)
+        {
+            var state = zombie.BobsledState;
+            if (state == null)
+            {
+                return;
+            }
+
+            var progress = AdventureBobsledRules.BoardingProgress(zombie.PresentationAnimationAge + AdventureRenderRemainder);
+            var layers = AdventureBobsledRules.DrawLayers(state.Position, zombie.PresentationNativePhase, progress, beforeBody);
+            if (layers == 0)
+            {
+                return;
+            }
+
+            Zombie? leader = null;
+            foreach (var member in _owner.RequiredGame.Zombies)
+            {
+                if (member.Id == state.LeaderId)
+                {
+                    leader = member;
+                    break;
+                }
+            }
+
+            if (leader == null)
+            {
+                return;
+            }
+
+            var nativeX = AdventureZombieNativeRules.NativePositionX(AdventureRenderX(leader), AdventureDancerRules.Scale(leader));
+            var point = new Vector2(nativeX - 76f, AdventureFloorYAtPixel(zombie.Row, nativeX + 40f) - 15f);
+            var crashing = zombie.PresentationNativePhase == 19;
+            var stage = crashing ? 3 : AdventureZombieEquipmentRules.DamageIndex(leader.ArmorHealth, 300);
+            var alpha = crashing ? AdventureBobsledRules.CrashOpacity(state.PhaseTicks) : 1f;
+            if (crashing)
+            {
+                point.x += AdventureBobsledRules.CrashOffsetX(state.PhaseTicks, zombie.PresentationNativeVelocity);
+                point.y += AdventureBobsledRules.CrashOffsetY(state.PhaseTicks);
+            }
+
+            var previous = SpriteDrawState.Color;
+            try
+            {
+                SpriteDrawState.Color = new Color(1f, 1f, 1f, alpha);
+                if ((layers & 2) != 0)
+                {
+                    DrawAdventureBobsledImage("Zombie_bobsled_inside.png", "IMAGE_ZOMBIE_BOBSLED_INSIDE", point, false);
+                }
+
+                var image = stage == 0 ? "Zombie_bobsled1.png" : stage == 1 ? "Zombie_bobsled2.png"
+                    : stage == 2 ? "Zombie_bobsled3.png" : "Zombie_bobsled4.png";
+                var resource = stage == 0 ? "IMAGE_ZOMBIE_BOBSLED1" : stage == 1 ? "IMAGE_ZOMBIE_BOBSLED2"
+                    : stage == 2 ? "IMAGE_ZOMBIE_BOBSLED3" : "IMAGE_ZOMBIE_BOBSLED4";
+                if ((layers & 1) != 0)
+                {
+                    DrawAdventureBobsledImage(image, resource, point, false);
+                }
+
+                if (leader.PresentationFlash > 0f)
+                {
+                    var flash = AdventureZombieFeedbackRules.FlashChannel(leader.PresentationFlash) / 255f;
+                    SpriteDrawState.Color = new Color(flash, flash, flash, 1f);
+                    if ((layers & 2) != 0)
+                    {
+                        DrawAdventureBobsledImage("Zombie_bobsled_inside.png", "IMAGE_ZOMBIE_BOBSLED_INSIDE", point, true);
+                    }
+
+                    if ((layers & 1) != 0)
+                    {
+                        DrawAdventureBobsledImage(image, resource, point, true);
+                    }
+                }
+            }
+            finally
+            {
+                SpriteDrawState.Color = previous;
+            }
+        }
+
+        /// <summary>Places an unchanged original sled image from its native top-left corner.</summary>
+        /// <param name="imageName">The original image filename used for its source dimensions.</param>
+        /// <param name="resource">The corresponding original image resource identifier.</param>
+        /// <param name="point">The original top-left image coordinate.</param>
+        /// <param name="additive">Whether this is the original sled-only hit-flash pass.</param>
+        private void DrawAdventureBobsledImage(string imageName, string resource, Vector2 point, bool additive)
+        {
+            var image = _owner.Textures.LoadImage(imageName);
+            if (image != null)
+            {
+                _owner.RequiredAnimations.DrawResourceSprite(resource, point + new Vector2(image.Width * .5f, image.Height * .5f), 1f,
+                    additive: additive);
+            }
+        }
+
         /// <summary>Performs draw adventure zombie.</summary>
         /// <param name = "zombie">The zombie.</param>
         private void DrawAdventureZombie(Zombie zombie)
@@ -3249,9 +3444,11 @@ namespace PlantsVsZombies.Game
                 DrawAdventureDancerSpotlight(zombie, x, false);
             }
 
+            DrawAdventureBobsled(zombie, true);
             DrawAdventureZombiePose(zombie, name, clip, origin, size, age, rate,
                 zombie.PresentationNewspaperGaspRemaining <= 0f && !AdventureZombieMotionRules.PlaysOnce(zombie)
-                && !AdventureDancerRules.HoldsPoint(zombie));
+                && zombie.PresentationNativePhase != 18 && !AdventureDancerRules.HoldsPoint(zombie));
+            DrawAdventureBobsled(zombie, false);
             DrawAdventurePoolZombieEffects(zombie);
             if (spotlight)
             {
@@ -4845,13 +5042,17 @@ namespace PlantsVsZombies.Game
             DrawOriginalUiButton(AdventureBoardController.s_adventureMenuButton, "菜单");
             DrawAdventureProgressAndName();
 
-            if (board.MoneyCollectedUnits > 0 || _owner.RequiredGame.Elapsed < _walletVisibleUntil)
+            if (WalletAlpha > 0f)
             {
                 var wallet = ReadDisplayAccount();
                 if (wallet != null)
                 {
+                    var walletTint = CanvasUI.Color;
+                    var alpha = WalletAlpha;
+                    CanvasUI.Color = new Color(walletTint.r, walletTint.g, walletTint.b, walletTint.a * alpha);
                     DrawImage("coinbank.png", new Rect(16, 559, 128, 31));
-                    Label(new Rect(22, 561, 112, 26), "$" + wallet.DisplayCoins.ToString("N0", System.Globalization.CultureInfo.InvariantCulture), 17, new Color(.7f, 1f, .35f), TextAnchor.MiddleRight, true);
+                    Label(new Rect(22, 561, 112, 26), "$" + wallet.DisplayCoins.ToString("N0", System.Globalization.CultureInfo.InvariantCulture), 17, new Color(.7f, 1f, .35f, alpha), TextAnchor.MiddleRight, true);
+                    CanvasUI.Color = walletTint;
                 }
             }
 

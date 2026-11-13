@@ -7,6 +7,16 @@ namespace PlantsVsZombies.Adventure
     /// <summary>Shares the original PC ice vehicle damage artwork and projectile collision intervals.</summary>
     public static class AdventureZomboniRules
     {
+        /// <summary>Checks the original living vehicle threshold shared by body shaking and automatic health loss.</summary>
+        /// <param name="zombie">The vehicle whose native phase and body health are inspected.</param>
+        /// <returns>Whether a living ice vehicle or catapult has strictly fewer than two hundred body health points.</returns>
+        internal static bool HasCriticalDamage(Zombie zombie)
+        {
+            return (zombie.Kind == ZombieKind.Zomboni || zombie.Kind == ZombieKind.Catapult)
+                && (zombie.PresentationNativePhase < 1 || zombie.PresentationNativePhase > 3)
+                && zombie.Health < 200f;
+        }
+
         /// <summary>Resolves the two original damaged body images at strict integer-third thresholds.</summary>
         /// <param name="zombie">The vehicle whose body health and puncture state select its artwork.</param>
         /// <param name="track">The original body track being drawn.</param>

@@ -3212,6 +3212,45 @@ namespace PlantsVsZombies.Simulation
             }
         }
 
+        /// <summary>Gets whether the original stage uses fog, excluding Stormy Night and Invisighoul.</summary>
+        internal bool AdventureHasFog => IsAdventure && Adventure.Level.Terrain == AdventureTerrain.Fog
+            && Adventure.Level.Mode != AdventureMode.Storm && (ModeSession == null || ModeSession.Definition.Id != 21);
+
+        /// <summary>Gets the original stage-dependent first fog column.</summary>
+        internal int AdventureFogLeftColumn => AdventureFogState.LeftColumn(Adventure.Level.Number,
+            ModeSession != null, ModeSession != null && ModeSession.Definition.Id == 41);
+
+        /// <summary>Starts the original off-lawn fog state before the street preview and seed chooser.</summary>
+        internal void BeginAdventureFogIntro()
+        {
+            if (AdventureHasFog)
+            {
+                Adventure.FogBlownRemaining = 2f;
+                Adventure.Fog.BeginIntro(AdventureFogLeftColumn);
+            }
+        }
+
+        /// <summary>Advances one original Board fog update and its playing or opening countdown.</summary>
+        /// <param name="intro">Whether the level opening owns the countdown instead of gameplay.</param>
+        /// <param name="rollIn">Whether the opening has reached TimeFogRollIn.</param>
+        internal void AdvanceAdventureFog(bool intro = false, bool rollIn = false)
+        {
+            if (!AdventureHasFog)
+            {
+                return;
+            }
+
+            Adventure.Fog.Advance(AdventureFogLeftColumn, Adventure.FogBlownRemaining, intro, Plants);
+            if (!intro || rollIn)
+            {
+                if (Adventure.FogBlownRemaining < 100f)
+                {
+                    var ticks = (int)Math.Round(Adventure.FogBlownRemaining * 100f);
+                    Adventure.FogBlownRemaining = Math.Max(0, ticks - 1) * .01f;
+                }
+            }
+        }
+
         /// <summary>Performs is adventure cell visible.</summary>
         /// <param name = "row">The row.</param>
         /// <param name = "column">The column.</param>
@@ -3228,14 +3267,17 @@ namespace PlantsVsZombies.Simulation
                 return column < 2;
             }
 
-            if (Adventure.Level.Terrain != AdventureTerrain.Fog || Adventure.FogBlownRemaining > 0f || column < 4)
+            if (!AdventureHasFog || Adventure.FogBlownRemaining > 0f || column < AdventureFogLeftColumn)
             {
                 return true;
             }
 
             foreach (var plant in Plants)
             {
-                if (plant.Kind == PlantKind.Plantern && Math.Abs(plant.Row - row) <= 1 && Math.Abs(plant.Column - column) <= 2)
+                var dx = Math.Abs(plant.Column - column);
+                var dy = Math.Abs(plant.Row - row);
+                if (plant.Health > 0f && (plant.Kind == PlantKind.Plantern && dx <= 3 && dy <= 2 && dx + dy != 5
+                    || plant.Kind == PlantKind.Torchwood && dx + dy <= 1))
                 {
                     return true;
                 }
@@ -3479,7 +3521,8 @@ namespace PlantsVsZombies.Simulation
                                 }
                             }
 
-                            Adventure.FogBlownRemaining = 24f;
+                            // PC Plant::BlowAwayFliers 0x474AAE sets 4000 ticks, including the twenty-second return.
+                            Adventure.FogBlownRemaining = 40f;
                             RemoveAdventurePlantAndStack(p);
                             break;
                         case PlantKind.PotatoMine:
@@ -3517,7 +3560,7 @@ namespace PlantsVsZombies.Simulation
                             Zombie? metal = null;
                             foreach (var zombie in Zombies)
                             {
-                                if (!zombie.Hypnotized && Math.Abs(zombie.Row - p.Row) <= 2 && Math.Abs(zombie.X - x) <= 3f && (zombie.ArmorHealth > 0f && (zombie.Kind == ZombieKind.Buckethead || zombie.Kind == ZombieKind.Football || zombie.Kind == ZombieKind.Digger) || (zombie.Kind == ZombieKind.ScreenDoor || zombie.Kind == ZombieKind.Ladder) && zombie.ShieldHealth > 0f || (zombie.Kind == ZombieKind.Pogo || zombie.Kind == ZombieKind.Ladder || zombie.Kind == ZombieKind.Digger || zombie.Kind == ZombieKind.JackInTheBox) && !zombie.UsedAbility))
+                                if (!zombie.Hypnotized && Math.Abs(zombie.Row - p.Row) <= 2 && Math.Abs(zombie.X - x) <= 3f && (zombie.ArmorHealth > 0f && (zombie.Kind == ZombieKind.Buckethead || zombie.Kind == ZombieKind.Football || zombie.Kind == ZombieKind.Digger) || (zombie.Kind == ZombieKind.ScreenDoor || zombie.Kind == ZombieKind.Ladder) && zombie.ShieldHealth > 0f || (zombie.Kind == ZombieKind.Pogo || zombie.Kind == ZombieKind.Ladder || zombie.Kind == ZombieKind.Digger || zombie.Kind == ZombieKind.JackInTheBox && zombie.PresentationNativePhase == 15) && !zombie.UsedAbility))
                                 {
                                     metal = zombie;
                                     break;
@@ -3539,6 +3582,8 @@ namespace PlantsVsZombies.Simulation
                                 if (metal.Kind == ZombieKind.JackInTheBox)
                                 {
                                     metal.AbilityTimer = float.MaxValue;
+                                    metal.PresentationNativePhase = 0;
+                                    metal.JackInTheBoxTicks = 0;
                                 }
 
                                 p.ActionTimer = 15f;
@@ -3939,10 +3984,11 @@ namespace PlantsVsZombies.Simulation
         private bool CanTakeAdventureAshDamage(Zombie zombie, uint targetFlags)
         {
             var phase = AdventureZombieFeedbackPhase(zombie);
-            if (zombie.Hypnotized || zombie.Health <= 0f || (targetFlags & 0x20) == 0 && phase >= 1 && phase <= 3
+            if (zombie.Hypnotized != ((targetFlags & 0x80) != 0) || zombie.Health <= 0f || (targetFlags & 0x20) == 0 && phase >= 1 && phase <= 3
                 || zombie.PresentationNativeHeight == 9
                 || zombie.Kind == ZombieKind.Bungee && phase != 6 && phase != 7
-                || zombie.Kind == ZombieKind.Boss && !Adventure.BossHeadVulnerable)
+                || zombie.Kind == ZombieKind.Boss && !Adventure.BossHeadVulnerable
+                || zombie.BobsledState?.Position > 0)
             {
                 return false;
             }
@@ -4167,7 +4213,7 @@ namespace PlantsVsZombies.Simulation
         {
             if (!Zombies.Contains(z) || z.GraveRiseTicks > 0
                 || z.PresentationNativePhase == 50 && (damageFlags & 0x10) == 0
-                || z.ZomboniState?.FlatTires == true)
+                || z.ZomboniState?.FlatTires == true || z.BobsledState?.Position > 0)
             {
                 return;
             }
@@ -4283,6 +4329,36 @@ namespace PlantsVsZombies.Simulation
             if (!Zombies.Remove(z))
             {
                 return;
+            }
+
+            if (z.BobsledState != null)
+            {
+                var leaderId = z.BobsledState.LeaderId;
+                z.BobsledState = null;
+                foreach (var member in new PooledSnapshot<Zombie>(Zombies))
+                {
+                    if (member.BobsledState?.LeaderId != leaderId)
+                    {
+                        continue;
+                    }
+
+                    member.BobsledState = null;
+                    if (z.PresentationDeath == AdventureZombieDeathPresentation.Burned)
+                    {
+                        // PC BobsledBurn preserves every rider's burned pose without another loot roll.
+                        member.PresentationDeath = AdventureZombieDeathPresentation.Burned;
+                        member.PresentationHealthBeforeHit = member.Health;
+                        member.Health = 0f;
+                        Zombies.Remove(member);
+                        AdventurePresentationZombieDeath(member, damageFlags);
+                        Raise(GameEvent.ZombieDied);
+                    }
+                    else
+                    {
+                        member.PresentationDeath = AdventureZombieDeathPresentation.Removed;
+                        KillAdventureZombie(member, damageFlags);
+                    }
+                }
             }
 
             if (ModeSession == null)
@@ -6303,6 +6379,10 @@ namespace PlantsVsZombies.Simulation
                 _bossTimer = 12f
             };
             Array.Copy(enabledZombieTypes, Adventure.EnabledZombieTypes, enabledZombieTypes.Length);
+            if (level.Terrain == AdventureTerrain.Fog)
+            {
+                Adventure.Fog.InitializeLooks(_gravePresentationRandom);
+            }
             Adventure._whackSeedBankY = level.Mode == AdventureMode.WhackAZombie ? -87f : 0f;
             InitializeAdventureSeedAccess();
             InitializeReplaySeedChoices();
@@ -6584,7 +6664,7 @@ namespace PlantsVsZombies.Simulation
                 }
             }
 
-            Adventure.FogBlownRemaining = Math.Max(0f, Adventure.FogBlownRemaining - dt);
+            AdvanceAdventureFog();
             TickCellTimers(Adventure._craters, dt);
             AdvanceAdventureIceTrails();
             AdvanceAdventureEconomy(dt);
@@ -8311,6 +8391,24 @@ namespace PlantsVsZombies.Simulation
             var slope = Adventure.Level.HasRoof ? Math.Max(0f, 5f - x) * 20f - 10f : 0f;
             coin.PresentationX = coin.PresentationPreviousX = 40f + x * 80f - 20f;
             coin.PresentationY = coin.PresentationPreviousY = 80f + (int)row * pitch + slope + 36f;
+            if (coin.ValueUnits > 0)
+            {
+                if (kind == AdventureCoinKind.Silver || kind == AdventureCoinKind.Gold)
+                {
+                    coin.PresentationX -= 10f;
+                    coin.PresentationY -= 8f;
+                    // Original silver/gold reanimations have 21 frames at 30 fps.
+                    coin.AnimationOffset = (float)_random.NextDouble() * .99f * 21f / 30f;
+                    coin.AnimationRate = .6f + (float)_random.NextDouble() * .4f;
+                }
+
+                coin.FallVelocityY = -3f - (float)_random.NextDouble() * 2f;
+                coin.FallVelocityX = -.5f + (float)_random.NextDouble();
+                coin.GroundY = Math.Max(80, Math.Min(521, (int)coin.PresentationY + 45 + _random.Next(20)));
+                coin.PresentationPreviousX = coin.PresentationX;
+                coin.PresentationPreviousY = coin.PresentationY;
+            }
+
             Adventure._coins.Add(coin);
             Adventure.Notice(AdventureNoticeKind.CoinCreated, coin.Id, (int)row, (int)x);
             return coin;
@@ -8416,9 +8514,24 @@ namespace PlantsVsZombies.Simulation
                         }
                     }
                 }
-                else if (coin.Age >= 30f && !coin.PersistencePending)
+                else
                 {
-                    Adventure._coins.RemoveAt(i);
+                    coin.TickFall();
+                    if (coin.PresentationX > 740f)
+                    {
+                        coin.PresentationX = 740f;
+                        coin.FallVelocityX = -.4f - (float)_random.NextDouble() * .4f;
+                    }
+                    else if (coin.PresentationX < 0f)
+                    {
+                        coin.PresentationX = 0f;
+                        coin.FallVelocityX = .4f + (float)_random.NextDouble() * .4f;
+                    }
+
+                    if (coin.Age >= 30f && !coin.PersistencePending)
+                    {
+                        Adventure._coins.RemoveAt(i);
+                    }
                 }
             }
         }
@@ -8921,6 +9034,13 @@ namespace PlantsVsZombies.Simulation
                 return;
             }
 
+            if (z.Kind == ZombieKind.Bobsled && z.BobsledState?.Position == 0
+                && z.PresentationNativePhase != 19 && z._presentationArmorBeforeHit > 0f
+                && z.ArmorHealth <= 0f && (flags & 16U) == 0)
+            {
+                CrashAdventureBobsled(z);
+            }
+
             var suppressParts = (flags & 16U) != 0;
             var kind = z.ModeHead >= 26 ? z.ModeHead : (int)z.Kind;
             if (!suppressParts && z._presentationArmorBeforeHit > 0 && z.ArmorHealth <= 0)
@@ -9048,6 +9168,10 @@ namespace PlantsVsZombies.Simulation
             // These assignments occur after the initial PickRandomSpeed in PC Init.
             if (z.Kind == ZombieKind.Bobsled && !z.UsedAbility)
             {
+                z.BobsledState = new AdventureBobsledState { LeaderId = z.Id };
+                z.PresentationNativePhase = 17;
+                z.PresentationHasSled = true;
+                z.PresentationAltitude = AdventureBobsledRules.InitialAltitude(0);
                 z.PresentationNativeVelocity = .6f;
                 z.Speed = global::PlantsVsZombies.Adventure.AdventureZombieNativeRules.GridSpeed(.6f);
             }
@@ -9071,6 +9195,14 @@ namespace PlantsVsZombies.Simulation
 
             var phase = AdventureZombieFeedbackPhase(z);
             var kind = z.ModeHead >= 26 ? z.ModeHead : (int)z.Kind;
+            if (z.Kind == ZombieKind.Bobsled && z.BobsledState != null && !z.UsedAbility)
+            {
+                z._presentationSpeedPhase = phase;
+                z._presentationSpeedKind = kind;
+                z.Speed = AdventureZombieNativeRules.GridSpeed(z.PresentationNativeVelocity);
+                return;
+            }
+
             if (z.Kind == ZombieKind.DolphinRider && (phase == 52 || phase == 53 || phase == 54))
             {
                 // PC 541C70 changes these clips without PickRandomSpeed; takeoff and landing set velocity explicitly.
@@ -9299,7 +9431,7 @@ namespace PlantsVsZombies.Simulation
                 // PC UpdateAnimSpeed returns on the flat ground track before applying chill to these one-shots.
                 z._presentationTickSlow = 1f;
             }
-            if (z.FrozenRemaining > 0f || (AdventureDancerRules.IsDancer(z) || z.Kind == ZombieKind.DolphinRider) && z.PresentationButter > 0f)
+            if (z.FrozenRemaining > 0f || (AdventureDancerRules.IsDancer(z) || z.Kind == ZombieKind.DolphinRider || z.Kind == ZombieKind.JackInTheBox) && z.PresentationButter > 0f)
             {
                 return;
             }
@@ -9425,7 +9557,11 @@ namespace PlantsVsZombies.Simulation
 
             string asset = AdventureZombiePresentationAsset(z), clip;
             var motionClip = AdventureZombieMotionRules.Animation(z);
-            if (motionClip != null)
+            if (z.Kind == ZombieKind.JackInTheBox && z.PresentationNativePhase == 16)
+            {
+                clip = "anim_pop";
+            }
+            else if (motionClip != null)
             {
                 clip = motionClip;
             }
@@ -9485,7 +9621,11 @@ namespace PlantsVsZombies.Simulation
             {
                 clip = "anim_idle";
             }
-            else if (z.Kind == ZombieKind.Bobsled && !z.UsedAbility)
+            else if (z.Kind == ZombieKind.Bobsled && z.PresentationNativePhase == 18)
+            {
+                clip = "anim_jump";
+            }
+            else if (z.Kind == ZombieKind.Bobsled && !z.UsedAbility && z.PresentationNativePhase != 19)
             {
                 clip = "anim_push";
             }
@@ -9510,6 +9650,11 @@ namespace PlantsVsZombies.Simulation
 
             if (!string.Equals(z.PresentationAnimation, clip, StringComparison.Ordinal))
             {
+                if (z.Kind == ZombieKind.PoleVaulter && z.PresentationAnimation.Length > 0)
+                {
+                    z.PresentationPoleVaultBlendTicks = 20;
+                }
+
                 if (z.Kind == ZombieKind.DolphinRider
                     && (z.Eating || string.Equals(z.PresentationAnimation, "anim_eat", StringComparison.Ordinal)))
                 {
@@ -9545,6 +9690,11 @@ namespace PlantsVsZombies.Simulation
             }
 
             var clip = AdventurePresentationZombieAnimation(z);
+            if (z.Kind == ZombieKind.JackInTheBox && z.PresentationNativePhase == 16)
+            {
+                return 28f;
+            }
+
             if (AdventureDancerRules.IsDancer(z))
             {
                 var fixedRate = AdventureDancerRules.FixedRate(z);
@@ -9615,7 +9765,12 @@ namespace PlantsVsZombies.Simulation
                 return 5.5f;
             }
 
-            if (z.Kind == ZombieKind.Bobsled && !z.UsedAbility)
+            if (z.Kind == ZombieKind.Bobsled && z.PresentationNativePhase == 18)
+            {
+                return 20f;
+            }
+
+            if (z.Kind == ZombieKind.Bobsled && !z.UsedAbility && z.PresentationNativePhase != 19)
             {
                 return 30f;
             }
@@ -9918,7 +10073,7 @@ namespace PlantsVsZombies.Simulation
                 Airborne = kind == ZombieKind.Balloon,
                 FlyingHealth = kind == ZombieKind.Balloon ? 20 : 0,
                 Submerged = kind == ZombieKind.Digger,
-                AbilityTimer = kind == ZombieKind.JackInTheBox ? 10f + (float)_random.NextDouble() * 15f : kind == ZombieKind.Dancing ? 4f : kind == ZombieKind.Bungee ? 4f : 5f
+                AbilityTimer = kind == ZombieKind.Dancing ? 4f : kind == ZombieKind.Bungee ? 4f : 5f
             };
             if (kind == ZombieKind.Bungee)
             {
@@ -9939,6 +10094,20 @@ namespace PlantsVsZombies.Simulation
             }
 
             InitializeAdventureZombieNative(z, x >= 9.5f && kind != ZombieKind.Bungee);
+            if (kind == ZombieKind.JackInTheBox)
+            {
+                // PC 53E808..53E895: distance tickets, rare early pop, then integer division by velocity and doubling.
+                var distance = 450 + _random.Next(300);
+                if (_random.Next(20) == 0)
+                {
+                    distance /= 3;
+                }
+
+                z.JackInTheBoxTicks = Adventure.Level.Mode == AdventureMode.Vasebreaker
+                    ? 10 : (int)(distance / (double)z.PresentationNativeVelocity) * 2;
+                z.PresentationNativePhase = 15;
+                z._presentationSpeedPhase = 15;
+            }
             if (Adventure.Level.IsWaterRow(row) && (AdventureZombiePoolRules.UsesPlainBody(kind) || kind == ZombieKind.Balloon)
                 || kind == ZombieKind.DuckyTube)
             {
@@ -10046,6 +10215,11 @@ namespace PlantsVsZombies.Simulation
         private void SetAdventureZombieMotionPhase(Zombie z, int phase)
         {
             z.PresentationNativePhase = phase;
+            if (z.Kind == ZombieKind.PoleVaulter)
+            {
+                z.PresentationPoleVaultBlendTicks = phase == 13 ? 0 : 20;
+            }
+
             z.PresentationAnimation = string.Empty;
             AdventurePresentationZombieAnimation(z);
             RefreshAdventureZombieNativeSpeed(z);
@@ -10114,6 +10288,8 @@ namespace PlantsVsZombies.Simulation
             {
                 // The native jump artwork has moved 150 pixels relative to the walking origin.
                 z.X -= 150f / 80f;
+                // The authored jump displacement becomes the walking origin, including its interpolation history.
+                z.PresentationPreviousX -= 150f / 80f;
                 z.PresentationVaultPositionY = 0f;
                 SetAdventureZombieMotionPhase(z, 13);
                 return true;
@@ -10499,6 +10675,162 @@ namespace PlantsVsZombies.Simulation
             }
         }
 
+        /// <summary>Advances the original running and stopped box-opening phases without chilling the phase clock.</summary>
+        /// <param name="zombie">The live zombie whose native action is being updated.</param>
+        /// <returns>Whether box opening or detonation consumes this zombie's movement update.</returns>
+        private bool AdvanceAdventureJackInTheBox(Zombie zombie)
+        {
+            if (zombie.Kind != ZombieKind.JackInTheBox || zombie.PresentationNativePhase != 15 && zombie.PresentationNativePhase != 16)
+            {
+                return false;
+            }
+
+            if (zombie.JackInTheBoxTicks > 0)
+            {
+                zombie.JackInTheBoxTicks--;
+            }
+
+            // PC UpdateZombieJackInTheBox 542560: only a headed running zombie can start opening its box.
+            if (zombie.PresentationNativePhase == 15)
+            {
+                if (zombie.JackInTheBoxTicks <= 0 && !zombie.Headless)
+                {
+                    zombie.PresentationNativePhase = 16;
+                    zombie._presentationSpeedPhase = 16;
+                    zombie.JackInTheBoxTicks = 110;
+                    zombie.Eating = false;
+                    RequestAdventureZombieFoley(-6);
+                    AdventurePresentationZombieAnimation(zombie);
+                    return true;
+                }
+
+                return false;
+            }
+
+            if (zombie.JackInTheBoxTicks == 80)
+            {
+                RequestAdventureZombieFoley(34);
+            }
+
+            if (zombie.JackInTheBoxTicks <= 0)
+            {
+                var x = (int)AdventureZombieNativeRules.NativePositionX(zombie.X, AdventureDancerRules.Scale(zombie)) + 60;
+                var y = (int)AdventureBiteNativeY(zombie, x - 60) + 60;
+                BlastAdventureRadius(x, y, zombie.Row, 115, 1, zombie.Hypnotized ? 0x7FU : 0xFFU);
+                if (!zombie.Hypnotized)
+                {
+                    foreach (var plant in new PooledSnapshot<Plant>(Plants))
+                    {
+                        var rect = AdventureZombieBiteRules.PlantRect((int)plant.Kind, 40 + plant.Column * 80,
+                            AdventureSquashCellY(plant.Row, plant.Column), plant.Kind == PlantKind.Pumpkin ? 120 : 80);
+                        var dx = Math.Max(0, Math.Max(rect.X - x, x - rect.X - rect.Width));
+                        var dy = Math.Max(0, Math.Max(rect.Y - y, y - rect.Y - rect.Height));
+                        if (dx * dx + dy * dy <= 90 * 90)
+                        {
+                            RemoveAdventurePlantAndStack(plant);
+                        }
+                    }
+                }
+
+                Presentation.Explosions.Add(new AdventureExplosion
+                {
+                    Id = ++Presentation._effectId, Seed = _random.Next(), Row = zombie.Row,
+                    NativeX = x, NativeY = y, Effect = AdventureExplosionEffect.JackExplode
+                });
+                Presentation.ScreenShake.Start(4, -6);
+                RequestAdventureZombieFoley(23);
+                zombie.PresentationDeath = AdventureZombieDeathPresentation.Removed;
+                KillAdventureZombie(zombie);
+            }
+
+            return true;
+        }
+
+        /// <summary>Updates PC 543AD0's sled push, authored boarding, ice damage, and crash detachment.</summary>
+        /// <param name="zombie">The member whose independent native phase counter advances this update.</param>
+        private void AdvanceAdventureBobsled(Zombie zombie)
+        {
+            var state = zombie.BobsledState;
+            if (state == null || zombie.UsedAbility)
+            {
+                return;
+            }
+
+            if (zombie.PresentationNativePhase == 19)
+            {
+                if (--state.PhaseTicks <= 0)
+                {
+                    zombie.UsedAbility = true;
+                    zombie.PresentationHasSled = false;
+                    zombie.PresentationNativePhase = 0;
+                    zombie.LinkedZombieId = 0;
+                    zombie.BobsledState = null;
+                    RefreshAdventureZombieNativeSpeed(zombie);
+                }
+
+                return;
+            }
+
+            if (zombie.PresentationNativePhase == 17 && --state.PhaseTicks <= 0)
+            {
+                SetAdventureZombieMotionPhase(zombie, 18);
+            }
+            else if (zombie.PresentationNativePhase == 18)
+            {
+                var age = (int)(AdventureBobsledRules.BoardingProgress(zombie.PresentationAnimationAge) * 50f);
+                var start = state.Position == 1 || state.Position == 3 ? 8f : -9f;
+                zombie.PresentationAltitude = start + (18f - start) * age / 50f;
+            }
+
+            // PC retains an eight-hundred-pixel edge when a Jalapeno has completely removed the row's ice.
+            var iceEdge = 800;
+            foreach (var ice in Adventure._ice)
+            {
+                if (ice.Row != zombie.Row)
+                {
+                    continue;
+                }
+
+                ice.RemainingTicks = Math.Max(500, ice.RemainingTicks);
+                iceEdge = ice.MinX;
+                break;
+            }
+
+            if (state.Position == 0 && AdventureZombieNativeRules.NativePositionX(zombie.X,
+                AdventureDancerRules.Scale(zombie)) + 10f < iceEdge)
+            {
+                HitAdventureZombie(zombie, 6f, false, 8U);
+            }
+        }
+
+        /// <summary>Starts PC 5439A0's shared sled break without removing its four living riders.</summary>
+        /// <param name="leader">The front zombie whose three-hundred-point sled helmet was destroyed.</param>
+        private void CrashAdventureBobsled(Zombie leader)
+        {
+            foreach (var member in Zombies)
+            {
+                if (member.BobsledState?.LeaderId != leader.Id)
+                {
+                    continue;
+                }
+
+                member.BobsledState.PhaseTicks = 150;
+                member.PresentationNativePhase = 19;
+                member.PresentationAltitude = 0f;
+                member.Eating = false;
+                member.PresentationAnimation = string.Empty;
+                var animation = AdventurePresentationZombieAnimation(member);
+                member._presentationWalkLoops = 0;
+                member._presentationWalkPhase = member == leader ? 0f : (float)_random.NextDouble();
+                member.PresentationNativeVelocity = leader.PresentationNativeVelocity;
+                member.Speed = leader.Speed;
+                if (AdventureZombieGroundData.TryGet(AdventureZombiePresentationAsset(member), animation, out var clip))
+                {
+                    member.PresentationAnimationAge = member._presentationWalkPhase * clip.Count / AdventurePresentationZombieRate(member);
+                }
+            }
+        }
+
         /// <summary>Performs advance adventure zombies.</summary>
         /// <param name = "dt">The dt.</param>
         private void AdvanceAdventureZombies(float dt)
@@ -10534,6 +10866,16 @@ namespace PlantsVsZombies.Simulation
                     if (z.PoolState.SeaweedAge >= 0f)
                     {
                         z.PoolState.SeaweedAge += dt;
+                    }
+                }
+
+                if (z.Wave != -4 && AdventureZomboniRules.HasCriticalDamage(z) && _random.Next(5) == 0)
+                {
+                    // PC 5471DD..547221 applies silent body damage with a one-in-five chance per native tick.
+                    HitAdventureZombie(z, z.StartingHealth >= 500f ? 3f : 1f, true, 9U);
+                    if (!Zombies.Contains(z))
+                    {
+                        continue;
                     }
                 }
 
@@ -10588,7 +10930,7 @@ namespace PlantsVsZombies.Simulation
                     continue;
                 }
 
-                if (z.Kind == ZombieKind.DolphinRider && z.PresentationButter > 0f)
+                if ((z.Kind == ZombieKind.DolphinRider || z.Kind == ZombieKind.JackInTheBox) && z.PresentationButter > 0f)
                 {
                     continue;
                 }
@@ -10602,6 +10944,11 @@ namespace PlantsVsZombies.Simulation
                 }
 
                 z.ChillRemaining = Math.Max(0, z.ChillRemaining - dt);
+                if (AdvanceAdventureJackInTheBox(z))
+                {
+                    continue;
+                }
+
                 if (AdvanceAdventureGarlicBite(z, dt))
                 {
                     continue;
@@ -10623,6 +10970,7 @@ namespace PlantsVsZombies.Simulation
                     continue;
                 }
 
+                AdvanceAdventureBobsled(z);
                 z.AbilityTimer -= dt * slow;
                 if (z.Kind == ZombieKind.Bungee)
                 {
@@ -10664,21 +11012,6 @@ namespace PlantsVsZombies.Simulation
                         KillAdventureZombie(z);
                     }
 
-                    continue;
-                }
-
-                if (z.Kind == ZombieKind.JackInTheBox && z.AbilityTimer <= 0)
-                {
-                    foreach (Plant p in new PooledSnapshot<Plant>(Plants))
-                    {
-                        if (Math.Abs(p.Row - z.Row) <= 1 && Math.Abs(p.Column + 0.5f - z.X) < 1.5f)
-                        {
-                            RemoveAdventurePlantAndStack(p);
-                        }
-                    }
-
-                    KillAdventureZombie(z);
-                    Raise(GameEvent.Explosion);
                     continue;
                 }
 
@@ -13525,7 +13858,7 @@ namespace PlantsVsZombies.Simulation
                 }
             }
 
-            Adventure.FogBlownRemaining = Math.Max(0f, Adventure.FogBlownRemaining - dt);
+            AdvanceAdventureFog();
             TickCellTimers(Adventure._craters, dt);
             AdvanceAdventureIceTrails();
             if (d.Mechanic == ModeMechanic.Aquarium)
@@ -15530,9 +15863,14 @@ namespace PlantsVsZombies.Simulation
                 {
                     for (var follower = 1; follower < 4; follower++)
                     {
-                        var sled = SpawnAdventureZombie(kind, row, x + follower * 0.2f, wave.Index);
+                        var sled = SpawnAdventureZombie(kind, row, x, wave.Index);
+                        sled.X = leader.X + follower * 50f / 80f;
+                        sled.PresentationPreviousX = sled.X;
                         sled.LinkedZombieId = leader.Id;
+                        sled.BobsledState = new AdventureBobsledState { LeaderId = leader.Id, Position = follower };
+                        sled.PresentationAltitude = AdventureBobsledRules.InitialAltitude(follower);
                         sled.ArmorHealth = 0f;
+                        sled.PresentationMaxArmor = 0f;
                     }
                 }
             }

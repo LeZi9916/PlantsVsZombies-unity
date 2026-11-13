@@ -9,6 +9,10 @@ namespace PlantsVsZombies.Adventure
         /// <summary>Stores definitions.</summary>
         public static readonly Dictionary<int, AdventureZombieFoleyDefinition> Definitions = new Dictionary<int, AdventureZombieFoleyDefinition>
         {
+            {
+                34,
+                new AdventureZombieFoleyDefinition(1f, new[] { "jack_surprise", "jack_surprise", "jack_surprise2" })
+            },
             // PC Foley table 0x74B3B8, stride 52; names resolved by resource initialization 0x4935B0.
             {
                 16,

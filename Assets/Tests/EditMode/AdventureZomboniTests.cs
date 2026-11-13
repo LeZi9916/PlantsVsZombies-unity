@@ -133,6 +133,82 @@ namespace PlantsVsZombies.Tests.EditMode
             Assert.That(game.Presentation.Corpses, Is.Empty);
         }
 
+        /// <summary>Checks only living vehicles strictly below two hundred health enter the original critical state.</summary>
+        /// <param name="kind">The original vehicle or ordinary zombie species.</param>
+        /// <param name="health">The native body health at the threshold boundary.</param>
+        /// <param name="phase">The original native phase, including punctured-tire death.</param>
+        /// <param name="critical">Whether the original body shaking and decay gate should open.</param>
+        [TestCase(ZombieKind.Zomboni, 200f, -1, false)]
+        [TestCase(ZombieKind.Zomboni, 199f, -1, true)]
+        [TestCase(ZombieKind.Catapult, 199f, -1, true)]
+        [TestCase(ZombieKind.Zomboni, 199f, 1, false)]
+        [TestCase(ZombieKind.Normal, 199f, -1, false)]
+        public void CriticalVehicleDamageUsesOriginalStrictThreshold(ZombieKind kind, float health, int phase, bool critical)
+        {
+            var zombie = new Zombie { Kind = kind, Health = health, PresentationNativePhase = phase };
+            Assert.That(AdventureZomboniRules.HasCriticalDamage(zombie), Is.EqualTo(critical));
+        }
+
+        /// <summary>Checks the original critical-state leak uses silent three-point body hits and reaches the native vehicle death.</summary>
+        /// <param name="kind">The original vehicle species that shares the critical damage behavior.</param>
+        [TestCase(ZombieKind.Zomboni)]
+        [TestCase(ZombieKind.Catapult)]
+        public void CriticalVehiclesLoseHealthWithoutIncomingAttacks(ZombieKind kind)
+        {
+            var game = Board();
+            var zombie = (Zombie)typeof(GameSimulation).GetMethod("SpawnAdventureZombie", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .Invoke(game, new object[] { kind, 1, 4f, 5 })!;
+            zombie.Health = 200f;
+            for (var tick = 0; tick < 100; tick++)
+            {
+                Invoke(game, "AdvanceAdventureZombies", .01f);
+            }
+
+            Assert.That(zombie.Health, Is.EqualTo(200f), "The exact critical threshold must not leak health.");
+            zombie.Health = 199f;
+            for (var tick = 0; tick < 100; tick++)
+            {
+                Invoke(game, "AdvanceAdventureZombies", .01f);
+            }
+
+            Assert.That(zombie.Health, Is.LessThan(199f));
+            Assert.That((199f - zombie.Health) % 3f, Is.Zero);
+            Assert.That(CountSound(game, 46), Is.Zero, "Original damage flags 9 suppress the leak's hit sound.");
+            for (var tick = 0; tick < 1000 && game.Zombies.Contains(zombie); tick++)
+            {
+                Invoke(game, "AdvanceAdventureZombies", .01f);
+            }
+
+            Assert.That(game.Zombies, Has.No.Member(zombie));
+            if (kind == ZombieKind.Zomboni)
+            {
+                Assert.That(CountSound(game, 23), Is.EqualTo(1));
+                Assert.That(game.Presentation.ZomboniParticles.Last().Particle, Is.EqualTo("ZamboniExplosion"));
+            }
+        }
+
+        /// <summary>Checks the original small vehicle loses one body point instead of the full-sized vehicle's three.</summary>
+        [Test]
+        public void SmallCriticalVehicleUsesOriginalMaximumHealthDamageBranch()
+        {
+            var game = Board();
+            var zombie = Spawn(game);
+            zombie.IsSmall = true;
+            zombie.StartingHealth = 337f;
+            zombie.Health = 199f;
+            var observedLeak = false;
+            for (var tick = 0; tick < 100; tick++)
+            {
+                var previous = zombie.Health;
+                Invoke(game, "AdvanceAdventureZombies", .01f);
+                var damage = previous - zombie.Health;
+                Assert.That(damage, Is.EqualTo(0f).Or.EqualTo(1f));
+                observedLeak |= damage > 0f;
+            }
+
+            Assert.That(observedLeak, Is.True);
+        }
+
         /// <summary>Creates a quiet daytime production board.</summary>
         /// <returns>The production simulation with automatic waves held.</returns>
         private static GameSimulation Board()

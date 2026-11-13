@@ -203,6 +203,12 @@ namespace PlantsVsZombies.Adventure
         /// <returns>The resulting track visible.</returns>
         public static bool TrackVisible(Zombie z, string track)
         {
+            if (z.Kind == ZombieKind.JackInTheBox && z.UsedAbility
+                && (Same(track, "zombie_jackbox_box") || Same(track, "zombie_jackbox_handle")))
+            {
+                return false;
+            }
+
             var helm = HelmType(z);
             string? h = HelmTrack(helm), shield = ShieldTrack(z);
             if (helm > 0 && helm < 8 && h != null && Same(track, h) && z.ArmorHealth <= 0)

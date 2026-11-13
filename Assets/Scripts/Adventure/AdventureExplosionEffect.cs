@@ -20,6 +20,8 @@ namespace PlantsVsZombies.Adventure
         /// <summary>Identifies the dirt burst when a Grave Buster finishes eating.</summary>
         GraveBusterDie,
         /// <summary>Identifies the original Ice-shroom's full-screen flash and snowflake burst.</summary>
-        IceTrap
+        IceTrap,
+        /// <summary>Identifies the original jack-in-the-box detonation cloud and box fragments.</summary>
+        JackExplode
     }
 }

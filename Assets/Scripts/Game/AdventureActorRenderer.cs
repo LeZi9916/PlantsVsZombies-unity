@@ -333,10 +333,12 @@ namespace PlantsVsZombies.Game
                 && _zombie.PoolState == null && _zombie.PresentationInPool != true && !_zombie.PresentationPoolRow
                 ? RequiredRenderer.DrawZombiePlayback(_origin, _scale, _seconds, _variant, _clip, _loop, _rate, true, null, _key)
                 : RequiredRenderer.DrawNativePlayback(_name, _origin, _scale, _seconds, _clip, _loop, _rate, _zombieVisible, null, null,
-                    _backwards, _key, _zombie.Kind == ZombieKind.DolphinRider ? AdventureZombieMotionRules.DolphinBlendTicks(_zombie)
+                    _backwards, _key, _zombie.Kind == ZombieKind.Bobsled && _zombie.BobsledState != null ? 0
+                        : _zombie.Kind == ZombieKind.DolphinRider ? AdventureZombieMotionRules.DolphinBlendTicks(_zombie)
                         : _clip == "anim_gasp" || _zombie.ZomboniState?.FlatTires == true ? 10
                             : _zombie.Kind == ZombieKind.Snorkel && _zombie.PresentationNativePhase != 58
-                                ? 0 : AdventureDancerRules.AnimationBlendTicks(_zombie), -1f, 90f,
+                                ? 0 : _zombie.Kind == ZombieKind.PoleVaulter ? _zombie.PresentationPoleVaultBlendTicks
+                                    : AdventureDancerRules.AnimationBlendTicks(_zombie), -1f, 90f,
                     trackAttachment: _poolParticles != null && (_zombie.PoolState?.SeaweedAge >= 0f
                         || _zombie.ZomboniState?.FlatTires == true) ? _poolTrackAttachment : null,
                     fullLastFrame: _zombie.Kind == ZombieKind.Snorkel && _zombie.PresentationNativePhase == 59

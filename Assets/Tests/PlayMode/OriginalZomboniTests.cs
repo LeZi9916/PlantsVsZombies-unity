@@ -75,6 +75,23 @@ namespace PlantsVsZombies.Tests.PlayMode
                     Save(pixels, "zamboni-health-" + health + ".png");
                 }
 
+                var getOrigin = typeof(GamePresenter).GetMethod("AdventureZombieOrigin", flags)!;
+                zombie.Health = 200f;
+                var stableOrigin = (Vector2)getOrigin.Invoke(presenter, new object[] { zombie, zombie.X })!;
+                Assert.That((Vector2)getOrigin.Invoke(presenter, new object[] { zombie, zombie.X })!, Is.EqualTo(stableOrigin));
+                zombie.Health = 199f;
+                var moved = false;
+                for (var sample = 0; sample < 16; sample++)
+                {
+                    var shakingOrigin = (Vector2)getOrigin.Invoke(presenter, new object[] { zombie, zombie.X })!;
+                    var offset = shakingOrigin - stableOrigin;
+                    Assert.That(Mathf.Abs(offset.x), Is.LessThanOrEqualTo(1f));
+                    Assert.That(Mathf.Abs(offset.y), Is.LessThanOrEqualTo(1f));
+                    moved |= offset.sqrMagnitude > .000001f;
+                }
+
+                Assert.That(moved, Is.True, "The original vehicle body must shake below two hundred health.");
+                zombie.Health = 449f;
                 zombie.Age = 1f;
                 zombie.ZomboniState!.SmokeStartAge = 0f;
                 Begin(animations, particles);

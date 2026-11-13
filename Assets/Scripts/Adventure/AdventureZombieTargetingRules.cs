@@ -20,6 +20,11 @@ namespace PlantsVsZombies.Adventure
                 return false;
             }
 
+            if (z.BobsledState?.Position > 0 || z.Kind == ZombieKind.Bobsled && z.PresentationNativePhase == 19)
+            {
+                return false;
+            }
+
             if (z.Kind == ZombieKind.DolphinRider && (z.PresentationNativePhase == 52 || z.PresentationNativePhase == 54))
             {
                 // PC EffectedByDamage 54D810 admits only range bit 0x10 while entering water or vaulting.
@@ -44,7 +49,7 @@ namespace PlantsVsZombies.Adventure
         {
             var x = (int)AdventureZombieNativeRules.NativePositionX(z.X, AdventureDancerRules.Scale(z));
             var backwards = z.PresentationWalkingBackwards ?? (z.Hypnotized || z.Kind == ZombieKind.Digger && z.AbilityPhase == 2);
-            if (z.Kind == ZombieKind.Bobsled && (z.PresentationHasSled ?? !z.UsedAbility))
+            if (z.Kind == ZombieKind.Bobsled && z.PresentationNativePhase != 19 && (z.PresentationHasSled ?? !z.UsedAbility))
             {
                 return new NativeRect(x + (backwards ? -105 : -50), 0, 275, 115);
             }
@@ -60,7 +65,7 @@ namespace PlantsVsZombies.Adventure
         {
             var x = (int)AdventureZombieNativeRules.NativePositionX(z.X, AdventureDancerRules.Scale(z));
             var backwards = z.PresentationWalkingBackwards ?? (z.Hypnotized || z.Kind == ZombieKind.Digger && z.AbilityPhase == 2);
-            if (z.Kind == ZombieKind.Bobsled && (z.PresentationHasSled ?? !z.UsedAbility))
+            if (z.Kind == ZombieKind.Bobsled && z.PresentationNativePhase != 19 && (z.PresentationHasSled ?? !z.UsedAbility))
             {
                 return new NativeRect(x + (backwards ? -105 : -50), y, 275, 115);
             }

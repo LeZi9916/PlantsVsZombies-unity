@@ -191,6 +191,9 @@ namespace PlantsVsZombies.Adventure
         internal bool _vaseInterludePopulated;
         /// <summary>Gets or sets fog blown remaining.</summary>
         public float FogBlownRemaining { get; internal set; }
+
+        /// <summary>Retains the original overlapping fog tiles and their rolling displacement.</summary>
+        internal AdventureFogState Fog { get; } = new AdventureFogState();
         /// <summary>Gets or sets storm flash.</summary>
         public bool StormFlash { get; internal set; }
         /// <summary>Gets or sets boss health.</summary>

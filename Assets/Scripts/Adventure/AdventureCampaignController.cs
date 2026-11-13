@@ -220,7 +220,6 @@ namespace PlantsVsZombies.Adventure
             {
                 _owner.IndependentModes._modeAccountSnapshot = null;
                 _owner.Accounts._displayAccountSnapshot = null;
-                _owner._presenter.ShowWalletUntil(_owner.RequiredGame.Elapsed + 10f);
             }
 
             if (notice.Kind == AdventureNoticeKind.CoinCollectionFailed)

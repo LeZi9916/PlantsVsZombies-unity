@@ -130,6 +130,74 @@ namespace PlantsVsZombies.Tests.PlayMode
             }
         }
 
+        /// <summary>Checks the first landed production pose exactly matches a fresh walk pose instead of blending the jump displacement twice.</summary>
+        /// <returns>A frame boundary for the original artwork and graphics device.</returns>
+        [UnityTest]
+        public IEnumerator PoleVaultLandingUsesWalkPoseWithoutSlidingFromJumpDisplacement()
+        {
+            var root = ResourceRoot();
+            yield return null;
+            var host = new GameObject("Inactive original pole vault landing fixture");
+            host.SetActive(false);
+            var owner = host.AddComponent<PvZGame>();
+            using var animations = new ReanimationRenderer(root);
+            var presenter = new GamePresenter(owner);
+            var target = new RenderTexture(800, 600, 24, RenderTextureFormat.ARGB32);
+            target.Create();
+            var pixels = new Texture2D(800, 600, TextureFormat.RGBA32, false);
+            try
+            {
+                owner._root = root;
+                owner._animations = animations;
+                owner._game = new GameSimulation(new GameRules { AdventureLevel = 1 }, 7529);
+                Assert.That(owner._game.Adventure.Phase, Is.EqualTo(AdventurePhase.Playing), "The opening level begins directly without a seed chooser.");
+                var flags = BindingFlags.Instance | BindingFlags.NonPublic;
+                typeof(GamePresenter).GetField("_renderingBoardObjects", flags)!.SetValue(presenter, true);
+                var draw = typeof(GamePresenter).GetMethod("DrawAdventureZombie", flags)!;
+                var begin = typeof(GameSimulation).GetMethod("BeginAdventurePoleVault", flags)!;
+                var clock = typeof(GameSimulation).GetMethod("AdvanceAdventureZombieClock", flags)!;
+                var jump = typeof(GameSimulation).GetMethod("AdvanceAdventurePoleVault", flags)!;
+                var zombie = new Zombie
+                {
+                    Id = 81, Kind = ZombieKind.PoleVaulter, Row = 2, X = 6.5f,
+                    Health = 500f, StartingHealth = 500f, PresentationInPool = false
+                };
+                owner._game.Zombies.Add(zombie);
+                begin.Invoke(owner._game, new object[] { zombie, new Plant { Kind = PlantKind.Wallnut, Row = 2, Column = 5 } });
+                for (var tick = 0; tick < 179; tick++)
+                {
+                    clock.Invoke(owner._game, new object[] { zombie, .01f });
+                    jump.Invoke(owner._game, new object[] { zombie, .01f });
+                }
+
+                Submit(animations, presenter, draw, zombie);
+                zombie.PresentationPreviousX = zombie.X;
+                clock.Invoke(owner._game, new object[] { zombie, .01f });
+                jump.Invoke(owner._game, new object[] { zombie, .01f });
+                Assert.That(zombie.PresentationNativePhase, Is.EqualTo(13));
+                Submit(animations, presenter, draw, zombie);
+                Read(animations, target, pixels);
+                var landed = pixels.GetPixels32();
+                Assert.That(VisiblePixels(landed, 0, 600), Is.GreaterThan(100));
+                Save(pixels, "pole-vault-first-landed-pose.png");
+
+                // A new actor identity has no retained jump pose and provides an independent unblended walk reference.
+                zombie.Id = 82;
+                Submit(animations, presenter, draw, zombie);
+                Read(animations, target, pixels);
+                Assert.That(pixels.GetPixels32(), Is.EqualTo(landed), "PC StartWalkAnim(0) must use the authored walk pose immediately at the landing origin.");
+            }
+            finally
+            {
+                presenter.Dispose();
+                target.Release();
+                UnityEngine.Object.Destroy(target);
+                UnityEngine.Object.Destroy(pixels);
+                owner.Textures.ReleaseAll();
+                UnityEngine.Object.Destroy(host);
+            }
+        }
+
         /// <summary>Checks real motion Foley samples decode and reach the production shared voice pool.</summary>
         /// <returns>The audio decoding and playback frame boundaries.</returns>
         [UnityTest]

@@ -80,11 +80,20 @@ namespace PlantsVsZombies.Tests.EditMode
             Assert.That(game.Presentation.ZombieSounds.Count(sound => sound.Foley == 74), Is.EqualTo(1));
             Assert.That(game.Presentation.ZombieSounds.Count(sound => sound.Foley == 78), Is.EqualTo(1));
             var beforeLanding = zombie.X;
+            zombie.PresentationPreviousX = beforeLanding;
             Invoke(game, "AdvanceAdventureZombieClock", zombie, .01f);
             Invoke(game, "AdvanceAdventurePoleVault", zombie, .01f);
             Assert.That(zombie.PresentationNativePhase, Is.EqualTo(13));
             Assert.That(beforeLanding - zombie.X, Is.EqualTo(150f / 80f).Within(.0001f));
             Assert.That(game.AdventurePresentationZombieAnimation(zombie), Is.EqualTo("anim_walk"));
+            Assert.That(zombie.PresentationPreviousX, Is.EqualTo(zombie.X).Within(.0001f), "The landing origin handoff must also rebase interpolation history.");
+            Assert.That(zombie.PresentationPoleVaultBlendTicks, Is.Zero, "PC StartWalkAnim(0) must discard the jump artwork's horizontal displacement.");
+            zombie.Eating = true;
+            Assert.That(game.AdventurePresentationZombieAnimation(zombie), Is.EqualTo("anim_eat"));
+            Assert.That(zombie.PresentationPoleVaultBlendTicks, Is.EqualTo(20));
+            zombie.Eating = false;
+            Assert.That(game.AdventurePresentationZombieAnimation(zombie), Is.EqualTo("anim_walk"));
+            Assert.That(zombie.PresentationPoleVaultBlendTicks, Is.EqualTo(20), "Later meal transitions retain the original ordinary blend.");
             Assert.That(AdventureZombieFoleyData.Definitions[78].Samples, Is.EqualTo(new[] { "polevault" }));
         }
 

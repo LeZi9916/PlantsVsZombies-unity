@@ -157,6 +157,7 @@ namespace PlantsVsZombies.Adventure
                 HasCrazyDaveDialog = _crazyDaveStartIndex >= 0
             };
             _adventureIntro = new AdventureIntroClock(AdventureIntroPresentation.CreatePlan(context));
+            _owner.RequiredGame.BeginAdventureFogIntro();
             _owner._game.Adventure.GravesEnabled = _adventureIntro.Plan.GraveStoneTime == 0
                 && !(level.Mode == AdventureMode.WhackAZombie && _crazyDaveStartIndex == 401);
             _adventureIntroFrame = _adventureIntro.Frame;
@@ -262,6 +263,9 @@ namespace PlantsVsZombies.Adventure
                 _owner.Dave.UpdateCrazyDaveAnimation(.01f);
                 _owner.RequiredGame.AdvanceAdventureGraves();
                 RequiredAdventureIntro.Tick(dialogActive: _owner.Dave._crazyDaveMessageIndex >= 0, shovelTutorialActive: _bowlingShovelLessonActive, emit: _adventureIntroEventHandler);
+                var plan = RequiredAdventureIntro.Plan;
+                _owner.RequiredGame.AdvanceAdventureFog(true,
+                    RequiredAdventureIntro.NativeTime > 5950 + plan.DaveTime + plan.SodTime + plan.GraveStoneTime);
                 if (_crazyDaveStartIndex >= 0 && RequiredAdventureIntro.NativeTime == 2000 && _owner.Dave._crazyDaveAnimation == null)
                 {
                     _owner.Dave.SetCrazyDaveAnimation("anim_enter", 24f, false);

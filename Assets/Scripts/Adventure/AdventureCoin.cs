@@ -49,6 +49,44 @@ namespace PlantsVsZombies.Adventure
         /// <summary>Gets the native pickup opacity during collection.</summary>
         public float PresentationAlpha { get; internal set; } = 1f;
 
+        /// <summary>Stores the original drop's horizontal velocity in pixels per native tick.</summary>
+        internal float FallVelocityX;
+        /// <summary>Stores the original drop's vertical velocity in pixels per native tick.</summary>
+        internal float FallVelocityY;
+        /// <summary>Stores the original drop's clamped landing height in board pixels.</summary>
+        internal float GroundY;
+        /// <summary>Gets whether this currency has reached its original landing height.</summary>
+        public bool HitGround { get; internal set; }
+        /// <summary>Gets the original silver or gold animation's randomized playback multiplier.</summary>
+        public float AnimationRate { get; internal set; } = 1f;
+        /// <summary>Gets the original silver or gold animation's randomized starting time in seconds.</summary>
+        public float AnimationOffset { get; internal set; }
+
+        /// <summary>Advances one original PC gravity tick, stopping exactly at the landing height.</summary>
+        internal void TickFall()
+        {
+            PresentationPreviousX = PresentationX;
+            PresentationPreviousY = PresentationY;
+            if (HitGround || PersistencePending || ValueUnits == 0)
+            {
+                return;
+            }
+
+            // PC Coin::UpdateFall 43C1F0 integrates position before adding 0.15 pixels of gravity.
+            if (PresentationY + FallVelocityY < GroundY)
+            {
+                PresentationX += FallVelocityX;
+                PresentationY += FallVelocityY;
+                FallVelocityY += .15f;
+            }
+            else
+            {
+                PresentationY = GroundY;
+                PresentationX = (int)(PresentationX + (PresentationX < 0f ? -.5f : .5f));
+                HitGround = true;
+            }
+        }
+
         /// <summary>Advances one original PC collection tick towards the money counter.</summary>
         /// <returns>Whether the pre-move distance is below the native twelve-pixel scoring threshold.</returns>
         internal bool TickCollection()

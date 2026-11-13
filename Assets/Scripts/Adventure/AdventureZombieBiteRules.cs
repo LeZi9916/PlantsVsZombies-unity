@@ -60,6 +60,11 @@ namespace PlantsVsZombies.Adventure
                 return new NativeRect(-5, 0, 55, 115);
             }
 
+            if (kind == 15)
+            {
+                return new NativeRect(20, 0, 50, 115);
+            }
+
             if (kind == 21)
             {
                 return new NativeRect(10, 0, 50, 115);

@@ -28,6 +28,10 @@ namespace PlantsVsZombies.Adventure
         private static Dictionary<string, Dictionary<string, AdventureZombieGroundClip>> Create()
         {
             var result = new Dictionary<string, AdventureZombieGroundClip>(StringComparer.OrdinalIgnoreCase);
+            // Original Zombie_bobsled.reanim uses frames 78..101 for its held boarding jump.
+            result["Zombie_bobsled/anim_jump"] = new AdventureZombieGroundClip(24, 12f, null);
+            // Original Zombie_jackbox.reanim holds its sixteen-frame pop at 28 fps.
+            result["Zombie_jackbox/anim_pop"] = new AdventureZombieGroundClip(16, 12f, null);
             // Original Zombie_snorkle.reanim: jumpinpool frames 59..77 and uptoeat frames 85..96.
             result["Zombie_snorkle/anim_jumpinpool"] = new AdventureZombieGroundClip(19, 12f, null);
             result["Zombie_snorkle/anim_uptoeat"] = new AdventureZombieGroundClip(12, 12f, null);
