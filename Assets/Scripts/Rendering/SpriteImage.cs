@@ -73,11 +73,22 @@ namespace PlantsVsZombies.Rendering
         /// <exception cref="ObjectDisposedException">The provider owning this baked image has been released.</exception>
         public int GetRegionCount(Rect sourceUv)
         {
+            return GetRegionCount(sourceUv, true);
+        }
+
+        /// <summary>Counts source regions with optional transparent geometry pruning for exact native composition.</summary>
+        /// <param name="sourceUv">The requested original normalized source rectangle.</param>
+        /// <param name="useTightGeometry">Whether conservative transparent cell rectangles may split the source tile.</param>
+        /// <returns>The number of source pieces required by this request.</returns>
+        /// <exception cref="InvalidOperationException">No compatible atlas layout can load the image's pages.</exception>
+        /// <exception cref="ObjectDisposedException">The provider owning this baked image has been released.</exception>
+        internal int GetRegionCount(Rect sourceUv, bool useTightGeometry)
+        {
             if (_provider == null)
             {
                 return SourceTexture != null && sourceUv.width != 0f && sourceUv.height != 0f ? 1 : 0;
             }
-            return _provider.GetRegionCount(SourceIdentity, sourceUv);
+            return _provider.GetRegionCount(SourceIdentity, sourceUv, useTightGeometry);
         }
 
         /// <summary>Reads a cropped visible region without allocating an iterator or temporary collection.</summary>
@@ -89,17 +100,31 @@ namespace PlantsVsZombies.Rendering
         /// <exception cref="ObjectDisposedException">The provider owning this baked image has been released.</exception>
         public bool TryGetRegion(Rect sourceUv, int index, out SpriteImageRegion region)
         {
+            return TryGetRegion(sourceUv, index, true, out region);
+        }
+
+        /// <summary>Reads a source region using the geometry policy selected by its rendering destination.</summary>
+        /// <param name="sourceUv">The requested original normalized rectangle.</param>
+        /// <param name="index">The requested source-piece index.</param>
+        /// <param name="useTightGeometry">Whether transparent cell pruning may subdivide the source tile.</param>
+        /// <param name="region">Receives exact source geometry and paired texture coordinates.</param>
+        /// <returns>Whether the requested piece exists.</returns>
+        /// <exception cref="InvalidOperationException">No compatible atlas layout can load the image's pages.</exception>
+        /// <exception cref="ObjectDisposedException">The provider owning this baked image has been released.</exception>
+        internal bool TryGetRegion(Rect sourceUv, int index, bool useTightGeometry, out SpriteImageRegion region)
+        {
             region = default;
             if (_provider != null)
             {
-                return _provider.TryGetRegion(SourceIdentity, sourceUv, index, out region);
+                return _provider.TryGetRegion(SourceIdentity, sourceUv, index, useTightGeometry, out region);
             }
             if (index != 0 || SourceTexture == null || sourceUv.width == 0f || sourceUv.height == 0f)
             {
                 return false;
             }
             var positive = SpriteGeometryUtility.Positive(sourceUv);
-            region = new SpriteImageRegion(SourceTexture, positive, positive);
+            region = new SpriteImageRegion(SourceTexture, positive, positive,
+                new Rect(positive.x * Width, positive.y * Height, positive.width * Width, positive.height * Height));
             return true;
         }
     }

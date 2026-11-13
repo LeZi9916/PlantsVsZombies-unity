@@ -3188,7 +3188,7 @@ namespace PlantsVsZombies.Reanimation
         {
             if (_nativeCaptureDepth == _nativeCaptureRenderers.Count)
             {
-                _nativeCaptureRenderers.Add(new ObjectSpriteRenderer(_textureOpacity));
+                _nativeCaptureRenderers.Add(new ObjectSpriteRenderer(_textureOpacity, false));
             }
 
             return _nativeCaptureRenderers[_nativeCaptureDepth];

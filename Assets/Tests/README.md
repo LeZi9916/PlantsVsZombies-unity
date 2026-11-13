@@ -155,3 +155,20 @@ be checked through `PlantsVsZombies.Editor.RuntimeAssetVerification.Verify`
 in the exact Editor. Generated atlases and original archive trees are excluded
 from the default isolated test snapshot; explicit imported-page tests generate
 small independent source fixtures instead.
+
+## Production baked almanac regressions
+
+`BakedAlmanacGraphicsTests` compares the direct-entry home page, all 49 plant
+previews and all 26 zombie previews with original loose artwork through public
+almanac navigation. It uses the actual production `Application.streamingAssetsPath`
+catalog, not the external loose provider used by older original-art fixtures.
+`BakedAlmanacResourceLifetimeTests` verifies cold Pole Vaulter portraits and frozen
+thumbnails after page eviction and menu re-entry. `SpriteCaptureBatchReuseTests`
+checks capture reuse with SRP batching on/off; `SpriteRegionGeometryPolicyTests`
+checks tight-scene/native-tile cache separation and warm zero-allocation behavior.
+
+The regression evidence in `.unity-runs/almanac-fix` includes a pre-fix 3,379-pixel
+Pole Vaulter preview failure, the cache-hit invalid-importer failure, and fixed
+whole-portrait/lifetime tests. The fixed workload retains seven draw calls and
+33.4 MiB total texture counter. macOS Metal verification does not establish
+Windows Editor D3D validation; reproduce the reported direct-entry case there.

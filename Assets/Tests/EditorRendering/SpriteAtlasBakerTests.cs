@@ -174,6 +174,57 @@ namespace PlantsVsZombies.Tests.EditorRendering
             Assert.That(cached.SourceHash, Is.EqualTo(catalog.SourceHash));
         }
 
+        /// <summary>Checks a source-hash cache hit still repairs invalid generated import settings without repacking or changing GUIDs.</summary>
+        [Test]
+        public void CachedCatalogRepairsInvalidImporterWithoutRepackingOrChangingUvs()
+        {
+            WriteSolidImage("wide.png", 500, 31);
+            var catalog = SpriteAtlasBaker.Bake(_source, _output, true);
+            var layout = catalog.Layouts[catalog.Layouts.Length - 1];
+            var tile = FindImage(layout, "images/wide.png").Tiles[0];
+            var resources = _output.Substring(0, _output.LastIndexOf("/Resources/", StringComparison.Ordinal) + "/Resources/".Length);
+            var pagePath = resources + layout.Pages[tile.Page] + ".png";
+            var catalogPath = _output + "/catalog.json";
+            var originalGuid = AssetDatabase.AssetPathToGUID(pagePath);
+            var originalPageBytes = File.ReadAllBytes(pagePath);
+            var originalCatalogBytes = File.ReadAllBytes(catalogPath);
+            var originalPageWrite = File.GetLastWriteTimeUtc(pagePath);
+            var originalCatalogWrite = File.GetLastWriteTimeUtc(catalogPath);
+            var importer = (TextureImporter)AssetImporter.GetAtPath(pagePath);
+            importer.npotScale = TextureImporterNPOTScale.ToNearest;
+            importer.maxTextureSize = 32;
+            importer.mipmapEnabled = true;
+            importer.isReadable = true;
+            importer.filterMode = FilterMode.Point;
+            importer.wrapMode = TextureWrapMode.Repeat;
+            var platform = importer.GetPlatformTextureSettings("Standalone");
+            platform.overridden = true;
+            platform.format = TextureImporterFormat.DXT5;
+            platform.maxTextureSize = 32;
+            importer.SetPlatformTextureSettings(platform);
+            // Persist metadata without importing: a preexisting or copied bad .meta must be repaired before the next texture load.
+            AssetDatabase.WriteImportSettingsIfDirty(pagePath);
+            Assert.That(((TextureImporter)AssetImporter.GetAtPath(pagePath)).npotScale, Is.EqualTo(TextureImporterNPOTScale.ToNearest));
+            var cached = SpriteAtlasBaker.Bake(_source, _output);
+            importer = (TextureImporter)AssetImporter.GetAtPath(pagePath);
+            Assert.That(importer.npotScale, Is.EqualTo(TextureImporterNPOTScale.None));
+            Assert.That(importer.maxTextureSize, Is.EqualTo(layout.MaximumPageSize));
+            Assert.That(importer.mipmapEnabled, Is.False);
+            Assert.That(importer.isReadable, Is.False);
+            Assert.That(importer.filterMode, Is.EqualTo(FilterMode.Bilinear));
+            Assert.That(importer.wrapMode, Is.EqualTo(TextureWrapMode.Clamp));
+            Assert.That(importer.GetPlatformTextureSettings("Standalone").format, Is.EqualTo(TextureImporterFormat.RGBA32));
+            Assert.That(AssetDatabase.AssetPathToGUID(pagePath), Is.EqualTo(originalGuid));
+            Assert.That(cached.SourceHash, Is.EqualTo(catalog.SourceHash));
+            Assert.That(File.ReadAllBytes(pagePath), Is.EqualTo(originalPageBytes));
+            Assert.That(File.ReadAllBytes(catalogPath), Is.EqualTo(originalCatalogBytes));
+            Assert.That(File.GetLastWriteTimeUtc(pagePath), Is.EqualTo(originalPageWrite));
+            Assert.That(File.GetLastWriteTimeUtc(catalogPath), Is.EqualTo(originalCatalogWrite));
+            var actual = AssetDatabase.LoadAssetAtPath<Texture2D>(pagePath);
+            Assert.That(actual.width, Is.EqualTo(tile.PageWidth));
+            Assert.That(actual.height, Is.EqualTo(tile.PageHeight));
+        }
+
         /// <summary>Checks related actor parts stay together instead of filling gaps left in unrelated earlier pages.</summary>
         [Test]
         public void CompleteActorFamilySharesOnePageWhenItFitsAnEmptyPage()

@@ -261,6 +261,10 @@ namespace PlantsVsZombies.UI
                 return;
             }
 
+            var sourceOriginX = uv.x * texture.Width;
+            var sourceTop = (uv.y + uv.height) * texture.Height;
+            var horizontalScale = destination.width / (uv.width * texture.Width);
+            var verticalScale = destination.height / (uv.height * texture.Height);
             var count = texture.GetRegionCount(uv);
             for (var index = 0; index < count; index++)
             {
@@ -269,12 +273,12 @@ namespace PlantsVsZombies.UI
                     continue;
                 }
 
-                var source = region.SourceUv;
+                var source = region.SourcePixels;
                 var piece = new Rect(
-                    destination.x + (source.xMin - uv.xMin) / uv.width * destination.width,
-                    destination.y + (uv.yMax - source.yMax) / uv.height * destination.height,
-                    source.width / uv.width * destination.width,
-                    source.height / uv.height * destination.height);
+                    destination.x + (source.xMin - sourceOriginX) * horizontalScale,
+                    destination.y + (sourceTop - source.yMax) * verticalScale,
+                    source.width * horizontalScale,
+                    source.height * verticalScale);
                 DrawTextureRegion(piece, region.Texture, region.TextureUv);
             }
         }

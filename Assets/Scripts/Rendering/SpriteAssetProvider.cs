@@ -22,14 +22,18 @@ namespace PlantsVsZombies.Rendering
             private readonly string _identity;
             /// <summary>The exact normalized original source request, including either reversed axis.</summary>
             private readonly Rect _sourceUv;
+            /// <summary>Whether transparent cell rectangles participate in this cached geometry.</summary>
+            private readonly bool _useTightGeometry;
 
             /// <summary>Creates a value-type cache lookup without allocating a composite string.</summary>
             /// <param name="identity">The original image identity.</param>
             /// <param name="sourceUv">The requested original normalized rectangle.</param>
-            internal RegionCacheKey(string identity, Rect sourceUv)
+            /// <param name="useTightGeometry">Whether transparent cell pruning is enabled.</param>
+            internal RegionCacheKey(string identity, Rect sourceUv, bool useTightGeometry)
             {
                 _identity = identity;
                 _sourceUv = sourceUv;
+                _useTightGeometry = useTightGeometry;
             }
 
             /// <summary>Checks exact source identity and rectangle equality.</summary>
@@ -37,7 +41,7 @@ namespace PlantsVsZombies.Rendering
             /// <returns>True when both keys represent the same source sampling request.</returns>
             public bool Equals(RegionCacheKey other)
             {
-                return string.Equals(_identity, other._identity, StringComparison.Ordinal) && _sourceUv.Equals(other._sourceUv);
+                return string.Equals(_identity, other._identity, StringComparison.Ordinal) && _sourceUv.Equals(other._sourceUv) && _useTightGeometry == other._useTightGeometry;
             }
 
             /// <summary>Checks an object for equality with this source request.</summary>
@@ -52,7 +56,7 @@ namespace PlantsVsZombies.Rendering
             /// <returns>The dictionary hash for this image/crop request.</returns>
             public override int GetHashCode()
             {
-                return unchecked((_identity.GetHashCode() * 397) ^ _sourceUv.GetHashCode());
+                return unchecked(((_identity.GetHashCode() * 397) ^ _sourceUv.GetHashCode()) * 397 ^ (_useTightGeometry ? 1 : 0));
             }
         }
 
@@ -122,6 +126,8 @@ namespace PlantsVsZombies.Rendering
         private string? _preparedIdentity;
         /// <summary>The exact requested source rectangle used to prepare the reusable regions.</summary>
         private Rect _preparedSourceUv;
+        /// <summary>The geometry policy of the currently prepared source request.</summary>
+        private bool _preparedTightGeometry;
         /// <summary>The number of valid entries in the reusable region buffer.</summary>
         private int _preparedCount;
         /// <summary>The atlas layout generation used by the reusable regions.</summary>
@@ -473,9 +479,10 @@ namespace PlantsVsZombies.Rendering
         /// <param name="identity">The original image identity.</param>
         /// <param name="sourceUv">The requested source rectangle.</param>
         /// <returns>The number of visible source intersections.</returns>
-        internal int GetRegionCount(string identity, Rect sourceUv)
+        /// <param name="useTightGeometry">Whether transparent cell rectangles may subdivide the source tiles.</param>
+        internal int GetRegionCount(string identity, Rect sourceUv, bool useTightGeometry)
         {
-            PrepareRegions(identity, sourceUv);
+            PrepareRegions(identity, sourceUv, useTightGeometry);
             return _preparedCount;
         }
 
@@ -485,14 +492,15 @@ namespace PlantsVsZombies.Rendering
         /// <param name="index">The visible intersection to return.</param>
         /// <param name="region">Receives paired positive original and texture UVs.</param>
         /// <returns>True when the requested visible intersection exists.</returns>
-        internal bool TryGetRegion(string identity, Rect sourceUv, int index, out SpriteImageRegion region)
+        /// <param name="useTightGeometry">Whether transparent cell rectangles may subdivide the source tiles.</param>
+        internal bool TryGetRegion(string identity, Rect sourceUv, int index, bool useTightGeometry, out SpriteImageRegion region)
         {
             region = default;
             if (index < 0)
             {
                 return false;
             }
-            PrepareRegions(identity, sourceUv);
+            PrepareRegions(identity, sourceUv, useTightGeometry);
             if (index >= _preparedCount)
             {
                 return false;
@@ -504,18 +512,19 @@ namespace PlantsVsZombies.Rendering
         /// <summary>Prepares a sprite's complete cropped output once so indexed region access remains constant-time.</summary>
         /// <param name="identity">The logical original image identity.</param>
         /// <param name="sourceUv">The exact requested original source rectangle.</param>
-        private void PrepareRegions(string identity, Rect sourceUv)
+        /// <param name="useTightGeometry">Whether transparent cell rectangles may subdivide the source tiles.</param>
+        private void PrepareRegions(string identity, Rect sourceUv, bool useTightGeometry)
         {
             using var profile = SpriteRenderingProfiler.Measure(SpriteRenderingProfiler.Regions);
             ThrowIfDisposed();
-            var sameSource = string.Equals(_preparedIdentity, identity, StringComparison.Ordinal) && _preparedSourceUv.Equals(sourceUv);
+            var sameSource = string.Equals(_preparedIdentity, identity, StringComparison.Ordinal) && _preparedSourceUv.Equals(sourceUv) && _preparedTightGeometry == useTightGeometry;
             if (sameSource && _preparedLayoutVersion == LayoutVersion && _preparedStorageVersion == _pageStorageVersion
                 && _preparedFrame == SpriteDrawState.FrameVersion)
             {
                 return;
             }
             var image = PrepareImageForFrame(identity);
-            var key = new RegionCacheKey(identity, sourceUv);
+            var key = new RegionCacheKey(identity, sourceUv, useTightGeometry);
             if (!_regionCache.TryGetValue(key, out var entry))
             {
                 entry = AcquireRegionCacheEntry();
@@ -523,7 +532,7 @@ namespace PlantsVsZombies.Rendering
             }
             if (entry.LayoutVersion != LayoutVersion || entry.StorageVersion != _pageStorageVersion)
             {
-                BuildRegions(image, sourceUv);
+                BuildRegions(image, sourceUv, useTightGeometry);
                 if (entry.Regions.Length < _preparedCount)
                 {
                     entry.Regions = new SpriteImageRegion[_preparedCount];
@@ -538,6 +547,7 @@ namespace PlantsVsZombies.Rendering
             _preparedCount = entry.Count;
             _preparedIdentity = identity;
             _preparedSourceUv = sourceUv;
+            _preparedTightGeometry = useTightGeometry;
             _preparedLayoutVersion = LayoutVersion;
             _preparedStorageVersion = _pageStorageVersion;
             _preparedFrame = SpriteDrawState.FrameVersion;
@@ -592,7 +602,8 @@ namespace PlantsVsZombies.Rendering
         /// <summary>Writes disjoint interior, edge, and corner zones once while preserving original Clamp sampling.</summary>
         /// <param name="image">The prepared original image metadata.</param>
         /// <param name="sourceUv">The requested original source rectangle.</param>
-        private void BuildRegions(SpriteAtlasImage image, Rect sourceUv)
+        /// <param name="useTightGeometry">Whether transparent cell rectangles may subdivide the source tiles.</param>
+        private void BuildRegions(SpriteAtlasImage image, Rect sourceUv, bool useTightGeometry)
         {
             _preparedCount = 0;
             var source = SourcePixels(image, sourceUv);
@@ -618,8 +629,10 @@ namespace PlantsVsZombies.Rendering
                         {
                             continue;
                         }
-                        foreach (var geometry in image.VisiblePixels)
+                        var geometryCount = useTightGeometry ? image.VisiblePixels.Length : 1;
+                        for (var geometryIndex = 0; geometryIndex < geometryCount; geometryIndex++)
                         {
+                            var geometry = useTightGeometry ? image.VisiblePixels[geometryIndex] : new Rect(0f, 0f, image.Width, image.Height);
                             if (!SpriteGeometryUtility.Intersect(crop, geometry, out var piece))
                             {
                                 continue;
@@ -638,7 +651,7 @@ namespace PlantsVsZombies.Rendering
                                 Array.Resize(ref _regionBuildBuffer, Math.Max(16, _preparedCount * 2));
                             }
                             _regionBuildBuffer[_preparedCount++] = new SpriteImageRegion(_pages[tile.Page], new Rect(virtualPiece.x / image.Width, virtualPiece.y / image.Height,
-                                virtualPiece.width / image.Width, virtualPiece.height / image.Height), textureUv);
+                                virtualPiece.width / image.Width, virtualPiece.height / image.Height), textureUv, virtualPiece);
                         }
                     }
                 }

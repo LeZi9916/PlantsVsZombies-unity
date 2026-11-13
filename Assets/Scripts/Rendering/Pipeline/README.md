@@ -170,3 +170,35 @@ images, pixel comparisons, full atlas-page inventories, and test XML. Actual GPU
 timing and other target devices remain unverified. On Windows, opaque `color|mask`
 resource identities are split before filesystem path operations; the full identity
 and alpha pairing are preserved.
+
+## Editor almanac portrait lifetime
+
+The production almanac uses the baked provider, cached thumbnail RenderTextures,
+and repeatedly reused native capture meshes. After an idle atlas page unloads and
+reloads, an existing material can retain a stale native texture binding even when
+its Unity texture identity still compares equal. Each texture binding is refreshed
+once per submission batch; sprites still reuse the same materials and combined
+meshes. This does not pin idle pages or add draw calls.
+
+Native capture pools are isolated at z=-100 instead of at large x/y coordinates.
+Their own camera sees the capture geometry while the display camera excludes it,
+and local x/y precision is retained. Source regions retain exact original pixel
+bounds rather than reconstructing geometry from normalized UV rectangles. World
+sprites continue to use tight transparent geometry. Native portrait composition
+keeps the source tile topology inside its bounded destination: independently
+rasterized merged transparent strips can create T-junction seams in rotated or
+skewed one-pixel detail, so the native surface path preserves original tile quads.
+The region cache distinguishes the two geometry policies.
+
+Editor source-hash cache hits also validate the generated TextureImporter contract.
+Copied or stale metadata is repaired before Play Mode without changing PNG bytes,
+UVs, catalog bytes or existing GUIDs. Healthy importers are left alone. The atlas
+postprocessor runs after general original-art importers and versions its policy.
+
+`BakedAlmanacGraphicsTests` drives public navigation through all 49 plants and 26
+zombies and compares the complete preview with original loose artwork.
+`BakedAlmanacResourceLifetimeTests` records fresh cold portraits, retires every page,
+re-enters the almanac and checks previews and frozen thumbnails. Capture reuse tests
+cover SRP batching on/off and multiple native portraits in one and successive
+frames. These production-baked tests supplement the existing loose-source fixtures.
+Windows D3D Editor execution requires verification on the affected device.

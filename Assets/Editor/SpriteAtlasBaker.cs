@@ -126,6 +126,8 @@ namespace PlantsVsZombies.Editor
                 if (cached != null && cached.Version == SpriteAtlasCatalog.CurrentVersion && cached.SourceHash == hash
                     && CompleteOutputExists(outputRoot, cached))
                 {
+                    // Source bytes and import artifacts have separate lifecycles; copied or old metadata must not bypass repair.
+                    ConfigureTextureImports(cached, outputRoot);
                     return cached;
                 }
             }
@@ -977,19 +979,48 @@ namespace PlantsVsZombies.Editor
         /// <param name="outputRoot">The generated Resources directory.</param>
         private static void ConfigureTextureImports(SpriteAtlasCatalog catalog, string outputRoot)
         {
+            var repaired = 0;
+            var report = new StringBuilder();
             foreach (var layout in catalog.Layouts)
             {
                 foreach (var page in layout.Pages)
                 {
                     var path = AssetPath(outputRoot, page) + ".png";
                     var importer = AssetImporter.GetAtPath(path) as TextureImporter;
+                    var initiallyMissing = importer == null;
                     if (importer == null)
                     {
-                        throw new InvalidOperationException("Generated atlas page was not imported: " + path);
+                        AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceUpdate | ImportAssetOptions.ForceSynchronousImport);
+                        importer = AssetImporter.GetAtPath(path) as TextureImporter;
+                        if (importer == null)
+                        {
+                            throw new InvalidOperationException("Generated atlas page was not imported: " + path);
+                        }
                     }
-                    SpriteAtlasTextureImport.Configure(importer, layout.MaximumPageSize);
-                    importer.SaveAndReimport();
+                    var configured = SpriteAtlasTextureImport.IsConfigured(importer, layout.MaximumPageSize, out var differences);
+                    if (!configured)
+                    {
+                        SpriteAtlasTextureImport.Configure(importer, layout.MaximumPageSize);
+                        importer.SaveAndReimport();
+                        importer = (TextureImporter)AssetImporter.GetAtPath(path);
+                        if (!SpriteAtlasTextureImport.IsConfigured(importer, layout.MaximumPageSize, out var remaining))
+                        {
+                            throw new InvalidOperationException("Generated atlas import settings were overridden after repair: " + path + " (" + remaining + ")");
+                        }
+                    }
+                    if (!configured || initiallyMissing)
+                    {
+                        repaired++;
+                        if (report.Length < 2048)
+                        {
+                            report.Append(" ").Append(path).Append(" [").Append(initiallyMissing ? "unimported" : differences).Append(']');
+                        }
+                    }
                 }
+            }
+            if (repaired > 0)
+            {
+                Debug.LogWarning($"{nameof(SpriteAtlasBaker)}: Repaired {repaired} generated atlas importer(s) without repacking images:{report}");
             }
         }
 

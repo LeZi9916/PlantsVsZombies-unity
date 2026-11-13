@@ -10,8 +10,8 @@ namespace PlantsVsZombies.Rendering
     /// <remarks>Call on Unity's main thread. Layer 31 is reserved for sprite cameras and interface canvases.</remarks>
     public sealed class ObjectSpriteRenderer : IDisposable
     {
-        /// <summary>The horizontal and vertical offset separating the pool from gameplay objects.</summary>
-        private const float PoolOffset = 100000f;
+        /// <summary>The depth separating local captures from scene sprites without reducing destination-pixel XY precision.</summary>
+        private const float CaptureDepth = -100f;
         /// <summary>The screen pools whose published objects must be retired before the next presentation.</summary>
         private static readonly List<ObjectSpriteRenderer> s_scenePools = new List<ObjectSpriteRenderer>();
         /// <summary>The shared camera that renders scene sprites and Canvas graphics directly to the display.</summary>
@@ -20,8 +20,10 @@ namespace PlantsVsZombies.Rendering
         private readonly List<ObjectSprite> _sprites = new List<ObjectSprite>();
         /// <summary>The explicitly combined geometry retained independently of source-level diagnostics.</summary>
         private readonly List<SpriteMeshBatch> _batches = new List<SpriteMeshBatch>();
-        /// <summary>The immutable texture and blend bindings shared by compatible batches.</summary>
-        private readonly Dictionary<Texture, Material[]> _materials = new Dictionary<Texture, Material[]>();
+        /// <summary>The shared blend materials whose native texture bindings are refreshed per submission batch.</summary>
+        private readonly Dictionary<Texture, SpriteMaterialBinding> _materials = new Dictionary<Texture, SpriteMaterialBinding>();
+        /// <summary>The monotonically increasing batch identity used to refresh native sampler bindings once per active texture.</summary>
+        private ulong _batchVersion;
         /// <summary>The reused list of destroyed texture bindings awaiting safe batch-boundary retirement.</summary>
         private readonly List<Texture> _retiredTextures = new List<Texture>();
         /// <summary>The number of clipped vertices appended in the current batch.</summary>
@@ -60,6 +62,8 @@ namespace PlantsVsZombies.Rendering
         private bool _hasCachedRasterClip;
         /// <summary>The number of combined GPU batches used by the current frame.</summary>
         private int _batchUsed;
+        /// <summary>Whether source geometry uses disjoint transparent-cell pieces rather than stable native-composition tile quads.</summary>
+        private readonly bool _useTightGeometry;
         /// <summary>The source opacity classifications shared with related animation surface pools.</summary>
         private readonly TextureOpacityCache _textureOpacity;
         /// <summary>The scene root owning this pool.</summary>
@@ -145,10 +149,12 @@ namespace PlantsVsZombies.Rendering
 
         /// <summary>Creates a sprite pool sharing the source texture classifications of its owner.</summary>
         /// <param name="textureOpacity">The cache shared by related screen and native surface pools.</param>
+        /// <param name="useTightGeometry">Whether to use tight source pieces; native composition can retain tile quads to avoid rasterized T-junction seams.</param>
         /// <exception cref="InvalidOperationException">The required rendering shaders are missing.</exception>
-        internal ObjectSpriteRenderer(TextureOpacityCache textureOpacity)
+        internal ObjectSpriteRenderer(TextureOpacityCache textureOpacity, bool useTightGeometry = true)
         {
             _textureOpacity = textureOpacity;
+            _useTightGeometry = useTightGeometry;
             _shader = Resources.Load<Shader>("Shaders/PvZSpriteBatch");
             if (_shader == null)
             {
@@ -160,7 +166,7 @@ namespace PlantsVsZombies.Rendering
                 hideFlags = HideFlags.DontSave,
                 layer = 31
             };
-            _capturePosition = new Vector3(PoolOffset, PoolOffset, 0f);
+            _capturePosition = new Vector3(0f, 0f, CaptureDepth);
             _root.transform.position = _capturePosition;
             var cameraObject = new GameObject("PvZ Sprite Camera")
             {
@@ -230,6 +236,7 @@ namespace PlantsVsZombies.Rendering
             _materialSplits = 0;
             _painterSplits = 0;
             _capacitySplits = 0;
+            _batchVersion++;
             RetireDestroyedTextureBindings();
         }
 
@@ -299,18 +306,25 @@ namespace PlantsVsZombies.Rendering
             }
 
             var order = -1;
-            var regionCount = image.GetRegionCount(uv);
+            var scaleX = width / (uv.width * image.Width);
+            var scaleY = height / (uv.height * image.Height);
+            var originX = uv.x * image.Width;
+            var sourceTop = (uv.y + uv.height) * image.Height;
+            var regionCount = image.GetRegionCount(uv, _useTightGeometry);
             for (var regionIndex = 0; regionIndex < regionCount; regionIndex++)
             {
-                if (!image.TryGetRegion(uv, regionIndex, out var region))
+                if (!image.TryGetRegion(uv, regionIndex, _useTightGeometry, out var region))
                 {
                     continue;
                 }
 
-                var left = (region.SourceUv.xMin - uv.xMin) / uv.width * width;
-                var right = (region.SourceUv.xMax - uv.xMin) / uv.width * width;
-                var top = (uv.yMax - region.SourceUv.yMax) / uv.height * height;
-                var bottom = (uv.yMax - region.SourceUv.yMin) / uv.height * height;
+                // Keep shared source-pixel edges identical between tight pieces. Reconstructing
+                // geometry from separately rounded normalized rectangles can create one-pixel seams.
+                var sourcePixels = region.SourcePixels;
+                var left = (sourcePixels.xMin - originX) * scaleX;
+                var right = (sourcePixels.xMax - originX) * scaleX;
+                var top = (sourceTop - sourcePixels.yMax) * scaleY;
+                var bottom = (sourceTop - sourcePixels.yMin) * scaleY;
                 SetClipCorner(0, matrix, left, top, region.TextureUv.xMin, region.TextureUv.yMax);
                 SetClipCorner(1, matrix, right, top, region.TextureUv.xMax, region.TextureUv.yMax);
                 SetClipCorner(2, matrix, right, bottom, region.TextureUv.xMax, region.TextureUv.yMin);
@@ -404,9 +418,9 @@ namespace PlantsVsZombies.Rendering
                 DestroyResource(batch.Mesh);
             }
 
-            foreach (var materials in _materials.Values)
+            foreach (var binding in _materials.Values)
             {
-                foreach (var material in materials)
+                foreach (var material in binding.Materials)
                 {
                     DestroyResource(material);
                 }
@@ -490,7 +504,7 @@ namespace PlantsVsZombies.Rendering
 
             foreach (var texture in _retiredTextures)
             {
-                foreach (var material in _materials[texture])
+                foreach (var material in _materials[texture].Materials)
                 {
                     DestroyResource(material);
                 }
@@ -507,9 +521,9 @@ namespace PlantsVsZombies.Rendering
         /// <returns>The shared material for this texture and blend state.</returns>
         private Material GetMaterial(Texture texture, int blend)
         {
-            if (!_materials.TryGetValue(texture, out var materials))
+            if (!_materials.TryGetValue(texture, out var binding))
             {
-                materials = new Material[3];
+                var materials = new Material[3];
                 for (var index = 0; index < materials.Length; index++)
                 {
                     var material = new Material(_shader)
@@ -532,10 +546,22 @@ namespace PlantsVsZombies.Rendering
                     materials[index] = material;
                 }
 
-                _materials.Add(texture, materials);
+                binding = new SpriteMaterialBinding(materials, _batchVersion);
+                _materials.Add(texture, binding);
+            }
+            else if (binding.LastBatchVersion != _batchVersion)
+            {
+                // Resources.UnloadAsset can clear a native material texture while the logical
+                // cache key survives. Always use the current sampled asset, including reloaded wrappers.
+                foreach (var material in binding.Materials)
+                {
+                    material.mainTexture = texture;
+                }
+
+                binding.LastBatchVersion = _batchVersion;
             }
 
-            return materials[blend];
+            return binding.Materials[blend];
         }
 
         /// <summary>Gets a compatible contiguous batch, splitting on material, sorting barriers, or index limits.</summary>
