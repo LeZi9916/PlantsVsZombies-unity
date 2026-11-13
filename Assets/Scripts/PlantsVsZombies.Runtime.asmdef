@@ -2,7 +2,8 @@
     "name": "PlantsVsZombies.Runtime",
     "rootNamespace": "PlantsVsZombies",
     "references": [
-        "UnityEngine.UI"
+        "UnityEngine.UI",
+        "Unity.Burst"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

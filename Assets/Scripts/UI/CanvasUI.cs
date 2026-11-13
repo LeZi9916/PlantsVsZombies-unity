@@ -265,13 +265,10 @@ namespace PlantsVsZombies.UI
             var sourceTop = (uv.y + uv.height) * texture.Height;
             var horizontalScale = destination.width / (uv.width * texture.Width);
             var verticalScale = destination.height / (uv.height * texture.Height);
-            var count = texture.GetRegionCount(uv);
-            for (var index = 0; index < count; index++)
+            var regions = texture.GetRegions(uv);
+            for (var index = 0; index < regions.Count; index++)
             {
-                if (!texture.TryGetRegion(uv, index, out var region))
-                {
-                    continue;
-                }
+                var region = regions[index];
 
                 var source = region.SourcePixels;
                 var piece = new Rect(

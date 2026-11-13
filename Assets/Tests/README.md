@@ -195,3 +195,62 @@ and after dynamic font atlas growth. Run both layout and graphics coverage:
 The `.unity-runs/almanac-text` evidence records the macOS Metal zero-height
 failure and fixed card/scroll screenshots using Unity 6000.3.17f1. Windows Editor
 and target-platform Players remain unverified for this text-layout change.
+
+## Deferred geometry and adventure allocation regressions
+
+`SpriteGeometryBatchTests` compares the original immediate renderer with the managed
+and Burst deferred executors. It checks exact vertex/UV/index streams, polygon areas,
+painter order and GPU pixels, including mirrored crops, half-pixel clipping,
+noninteger destination grids, multi-page tight geometry, provider cache reuse,
+1024-region chunks, oversized-sprite fallback, portable index/sorting limits,
+capture interleaving, resource retirement and disposal. The production presenter
+opens the deferred scope explicitly; public `DrawQuad` remains immediate. When
+Burst is disabled or unsupported, production uses the faster original managed
+path; the managed batch executor remains available for differential measurements.
+
+`AdventureBoardViewTests` checks stable live read-only views, bounded presentation
+keys and native ground-clip lookup. `GamePresentationPerformanceTests` warms and
+measures the real adventure Update/Present traversal for ordinary combat, pause,
+conveyors, detached arms, snow trails, explosions and three corpse paths. These
+scoped allocation checks use Unity's current-thread `GC.Alloc` recorder with a
+positive control: the macOS Mono runtime can return zero from
+`GC.GetAllocatedBytesForCurrentThread` even for an allocated byte array. Zero
+observed allocation events establishes zero managed bytes in the measured scope;
+a nonzero event count does not supply the unavailable byte sizes. Event frames,
+new resources, changed labels and entity creation are measured separately.
+
+The original-artwork `RenderingBenchmarkTests` fixture accepts:
+
+- `PVZ_BOARD_STRESS_ASSETS`: read-only original runtime resource directory.
+- `PVZ_RENDER_BENCHMARK_OUTPUT`: an ignored output directory (required to enable it).
+- `PVZ_RENDER_USE_BAKED=1`: use the isolated project's production StreamingAssets
+  and generated Resources atlas snapshot, rather than the external loose provider.
+- `PVZ_RENDER_BENCHMARK_PLANT_COUNT` and `PVZ_RENDER_BENCHMARK_ZOMBIE_COUNT`:
+  deterministic initial populations (defaults 30 and 50).
+- `PVZ_RENDER_BENCHMARK_ADVANCE=1`: advance simulation by 0.01 seconds per sample.
+- `PVZ_RENDER_GEOMETRY_MODE`: `Immediate`, `Managed` or `Burst`.
+- `PVZ_RENDER_BENCHMARK_STATES=1`: restrict the fixture to the ordinary combat state.
+- `PVZ_RENDER_PROFILE=1`: collect the optional phase markers.
+
+Each selected state warms 120 frames, then records 900 frames with average/P95
+complete Present time, simulation-plus-Present time, scoped allocation events,
+retained native capacities, active populations and actual atlas-page diagnostics.
+Present includes deferred geometry, commit and uploads; nested marker durations
+must not be added together. Run before/after workloads sequentially with the same
+seed, resolution and source snapshot, Deep Profile disabled and all resources and
+Burst compilation warm. Raw per-frame CPU and allocation-event arrays are saved
+alongside steady/event-frame average and P95 values. For a baseline that allocates
+continuously, set `PVZ_RENDER_BENCHMARK_EVENT_REFERENCE` to its paired optimized
+`state-0.json`: this applies identical event indices instead of classifying every
+baseline frame as an event. The fixture checks that the workload and final
+simulation state match before accepting that reference mask.
+
+The default isolation script excludes StreamingAssets and Generated: explicitly copy those resources into a dedicated ignored test
+project for production-atlas evidence. Never reuse another running test project.
+
+Relevant filters are `AdventureBoardViewTests;ReanimationHotPathTests;ReanimationPoseBlendTests`
+for EditMode and `SpriteGeometryBatchTests;GamePresentationPerformanceTests;ObjectSpriteRendererTests;CanvasPresentationTests;SpriteCaptureBatchReuseTests`
+for PlayMode. The real-source atlas and original artwork regressions remain required
+when changing source mapping, clipping or capture boundaries. Editor graphics
+checks and the isolated synthetic Mono/IL2CPP Player smoke do not establish
+complete game behavior or performance on other target platforms.

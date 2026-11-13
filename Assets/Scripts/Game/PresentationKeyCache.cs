@@ -20,6 +20,13 @@ namespace PlantsVsZombies.Game
             _current.Clear();
         }
 
+        /// <summary>Releases all retained identities when their presentation lifetime ends.</summary>
+        internal void Clear()
+        {
+            _current.Clear();
+            _previous.Clear();
+        }
+
         /// <summary>Gets a stable string for a live actor or effect without formatting it again.</summary>
         /// <param name="prefix">The renderer's existing identity prefix.</param>
         /// <param name="id">The simulation identity.</param>

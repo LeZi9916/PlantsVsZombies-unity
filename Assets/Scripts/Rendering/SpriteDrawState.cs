@@ -25,6 +25,7 @@ namespace PlantsVsZombies.Rendering
         /// <summary>Resets painter order and inherited drawing state before presenting a complete frame.</summary>
         public static void BeginFrame()
         {
+            ObjectSpriteRenderer.FlushPending();
             SpriteRenderingProfiler.BeginFrame();
             FrameVersion++;
             SpriteAssetProvider.OnSceneFrameStarted();
@@ -39,6 +40,7 @@ namespace PlantsVsZombies.Rendering
         /// <exception cref="InvalidOperationException">The frame exceeds Unity's signed sorting-order range.</exception>
         public static int NextOrder()
         {
+            ObjectSpriteRenderer.FlushPending();
             if (s_order >= short.MaxValue)
             {
                 throw new InvalidOperationException("The PvZ presentation exceeds Unity's sorting-order range.");

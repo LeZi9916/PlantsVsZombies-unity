@@ -37,6 +37,7 @@ namespace PlantsVsZombies.Game
             _textureLookup = owner.Textures.LoadImage;
             _drawPacketMask = DrawAdventurePacketMask;
             _doomTrackOffset = DoomShroomTrackOffset;
+            _burnedCorpseTrackVisible = BurnedCorpseTrackVisible;
         }
 
         /// <summary>Updates the logical pointer used by hover artwork and cursor presentation.</summary>
@@ -73,6 +74,18 @@ namespace PlantsVsZombies.Game
         private readonly Dictionary<CanvasBitmapFont, Dictionary<string, BitmapTextLayout>> _bitmapLayouts = new Dictionary<CanvasBitmapFont, Dictionary<string, BitmapTextLayout>>();
         /// <summary>Reuses live actor and effect identities across presentation frames.</summary>
         private readonly PresentationKeyCache _presentationKeys = new PresentationKeyCache();
+        /// <summary>Reuses immutable catalog resource names for the finite set of burned corpse definitions.</summary>
+        private readonly Dictionary<int, string> _burnAnimationNames = new Dictionary<int, string>();
+        /// <summary>Reuses the synchronous frozen corpse visibility callback.</summary>
+        private readonly Func<string, bool> _burnedCorpseTrackVisible;
+        /// <summary>Provides the zombie consumed immediately by the retained corpse visibility callback.</summary>
+        private Zombie? _burnedCorpseZombie;
+        /// <summary>Provides the immutable resource name consumed by the retained corpse visibility callback.</summary>
+        private string? _burnedCorpseAnimation;
+        /// <summary>Provides the default variant consumed by the retained corpse visibility callback.</summary>
+        private ZombieVariant _burnedCorpseVariant;
+        /// <summary>Indicates whether the synchronous frozen corpse draw substitutes a plant head.</summary>
+        private bool _burnedCorpsePlantHead;
         /// <summary>Reuses numeric labels with a fixed upper bound on retained values.</summary>
         private readonly Dictionary<int, string> _numberLabels = new Dictionary<int, string>();
         /// <summary>Reuses native draw callbacks for all actors in this synchronous presenter.</summary>
@@ -85,6 +98,8 @@ namespace PlantsVsZombies.Game
         private readonly List<Zombie> _openingZombiePoses = new List<Zombie>();
         /// <summary>Reuses the positional probe used by detached zombie parts.</summary>
         private readonly Zombie _detachedPartProbe = new Zombie();
+        /// <summary>Reuses an independent coordinate-only probe for detached arms without sharing actor state.</summary>
+        private readonly Zombie _detachedArmProbe = new Zombie();
         /// <summary>Reuses the probe used to calculate cursor placement.</summary>
         private readonly Plant _placementProbe = new Plant();
         /// <summary>Reuses attached head buffers for each supported head count.</summary>
@@ -155,6 +170,8 @@ namespace PlantsVsZombies.Game
         /// <summary>Submits the scene and Canvas presentation once after simulation.</summary>
         internal void Present()
         {
+            using var presentation = SpriteRenderingProfiler.Measure(SpriteRenderingProfiler.Present);
+            using var deferred = ObjectSpriteRenderer.BeginDeferred();
             _poolRenderer?.Hide();
             _presentationKeys.BeginFrame();
             BeginHierarchyFrame();
@@ -1160,8 +1177,9 @@ namespace PlantsVsZombies.Game
 
             if (_owner.AdventureBoard._selectedAdventurePacket >= 0)
             {
-                foreach (AdventurePacket packet in _owner._game.Adventure.Packets)
+                for (var packetIndex = 0; packetIndex < _owner._game.Adventure.Packets.Count; packetIndex++)
                 {
+                    var packet = _owner._game.Adventure.Packets[packetIndex];
                     if (packet.Id == _owner.AdventureBoard._selectedAdventurePacket)
                     {
                         kind = packet.Kind;
@@ -1452,7 +1470,7 @@ namespace PlantsVsZombies.Game
             var point = explosion.Effect == AdventureExplosionEffect.Pow
                 ? new Vector2(explosion.NativeX, explosion.NativeY)
                 : new Vector2(BoardLayout.AdventureGridX + explosion.X * BoardLayout.CellWidth, _owner.Layout.AdventureCellY(explosion.Row, explosion.X - .5f) + 40f);
-            particles.Draw("native-explosion-" + explosion.Id, explosion.Particle, explosion.Ticks * .01f + AdventureRenderRemainder,
+            particles.Draw(_presentationKeys.Get("native-explosion-", explosion.Id), explosion.Particle, explosion.Ticks * .01f + AdventureRenderRemainder,
                 point, explosion.Seed, fullScreenMatrix: ViewportMatrix());
         }
 
@@ -1506,7 +1524,7 @@ namespace PlantsVsZombies.Game
 
                 var fraction = Mathf.Clamp01(AdventureRenderRemainder * 100f);
                 var origin = trail.Stopped ? new Vector2(trail.X, trail.Y) : new Vector2(Mathf.Lerp(trail.PreviousX, trail.X, fraction), Mathf.Lerp(trail.PreviousY, trail.Y, fraction));
-                RequiredAdventureParticles.Draw("snow-trail-" + trail.Id, "SnowPeaTrail", trail.Age + AdventureRenderRemainder, origin, trail.Seed, 1f, trail.StopAge);
+                RequiredAdventureParticles.Draw(_presentationKeys.Get("snow-trail-", trail.Id), "SnowPeaTrail", trail.Age + AdventureRenderRemainder, origin, trail.Seed, 1f, trail.StopAge);
             }
         }
 
@@ -1984,8 +2002,9 @@ namespace PlantsVsZombies.Game
                 // PC Board::DrawBottomUI 0x425B40 includes the shovel at layer 100001 during play.
                 DrawAdventureShovelBank();
 
-                foreach (var crater in _owner.RequiredGame.Adventure.Craters)
+                for (var craterIndex = 0; craterIndex < _owner.RequiredGame.Adventure.Craters.Count; craterIndex++)
                 {
+                    var crater = _owner.RequiredGame.Adventure.Craters[craterIndex];
                     DrawAdventureCrater(crater);
                 }
 
@@ -2001,8 +2020,9 @@ namespace PlantsVsZombies.Game
 
                 for (var row = 0; row < _owner.RequiredGame.RowCount; row++)
                 {
-                    foreach (var ice in _owner.RequiredGame.Adventure.IceTrails)
+                    for (var iceIndex = 0; iceIndex < _owner.RequiredGame.Adventure.IceTrails.Count; iceIndex++)
                     {
+                        var ice = _owner.RequiredGame.Adventure.IceTrails[iceIndex];
                         if (ice.Row == row)
                         {
                             // PC ice layer is 200000 + row * 10000 + 2, before this row's actors.
@@ -2050,8 +2070,9 @@ namespace PlantsVsZombies.Game
                     }
 
                     DrawAdventurePlantPreview(row);
-                    foreach (var vase in _owner.RequiredGame.Adventure.Vases)
+                    for (var vaseIndex = 0; vaseIndex < _owner.RequiredGame.Adventure.Vases.Count; vaseIndex++)
                     {
+                        var vase = _owner.RequiredGame.Adventure.Vases[vaseIndex];
                         if (vase.Row != row)
                         {
                             continue;
@@ -2128,8 +2149,9 @@ namespace PlantsVsZombies.Game
                     }
 
                     DrawAdventureSnowTrails(row);
-                    foreach (var nut in _owner.RequiredGame.Adventure.BowlingNuts)
+                    for (var nutIndex = 0; nutIndex < _owner.RequiredGame.Adventure.BowlingNuts.Count; nutIndex++)
                     {
+                        var nut = _owner.RequiredGame.Adventure.BowlingNuts[nutIndex];
                         if (nut.Row != row)
                         {
                             continue;
@@ -2148,8 +2170,9 @@ namespace PlantsVsZombies.Game
                         CanvasUI.Color = previous;
                     }
 
-                    foreach (var ball in _owner.RequiredGame.Adventure.BossBalls)
+                    for (var ballIndex = 0; ballIndex < _owner.RequiredGame.Adventure.BossBalls.Count; ballIndex++)
                     {
+                        var ball = _owner.RequiredGame.Adventure.BossBalls[ballIndex];
                         if (ball.Row == row)
                         {
                             _owner.RequiredAnimations.Draw(ball.IsIce ? "Zombie_boss_iceball" : "Zombie_boss_fireball", new Rect(BoardLayout.AdventureGridX + ball.X * BoardLayout.CellWidth - 40, _owner.Layout.AdventureCellY(row, ball.X) - 2, 80, 80), _owner.RequiredGame.Elapsed, "anim_role");
@@ -2178,8 +2201,9 @@ namespace PlantsVsZombies.Game
                     }
                 }
 
-                foreach (var coin in _owner.RequiredGame.Adventure.Coins)
+                for (var coinIndex = 0; coinIndex < _owner.RequiredGame.Adventure.Coins.Count; coinIndex++)
                 {
+                    var coin = _owner.RequiredGame.Adventure.Coins[coinIndex];
                     var coinRect = _owner.Layout.AdventureCoinRect(coin);
                     if (coin.Kind == AdventureCoinKind.PlantGift || coin.Kind == AdventureCoinKind.Chocolate || coin.Kind == AdventureCoinKind.MinigameUnlock || coin.Kind == AdventureCoinKind.PuzzleUnlock)
                     {
@@ -2219,8 +2243,9 @@ namespace PlantsVsZombies.Game
                     CanvasUI.Color = tint;
                 }
 
-                foreach (var shell in _owner.RequiredGame.Adventure.CobShells)
+                for (var shellIndex = 0; shellIndex < _owner.RequiredGame.Adventure.CobShells.Count; shellIndex++)
                 {
+                    var shell = _owner.RequiredGame.Adventure.CobShells[shellIndex];
                     var ticks = Math.Max(0, GameSimulation.AdventureCobFlightSeconds - shell.FlightRemaining + AdventureRenderRemainder) * 100f;
                     var rising = ticks < 88f;
                     var x = rising ? shell.LaunchX : shell.TargetX;
@@ -2832,8 +2857,9 @@ namespace PlantsVsZombies.Game
             var previous = SpriteDrawState.Color;
             try
             {
-                foreach (var trail in _owner.RequiredGame.Adventure.IceTrails)
+                for (var trailIndex = 0; trailIndex < _owner.RequiredGame.Adventure.IceTrails.Count; trailIndex++)
                 {
+                    var trail = _owner.RequiredGame.Adventure.IceTrails[trailIndex];
                     if (trail.Row == row && trail.AgeTicks > 0)
                     {
                         SpriteDrawState.Color = new Color(previous.r, previous.g, previous.b, previous.a * trail.Opacity);
@@ -3507,14 +3533,12 @@ namespace PlantsVsZombies.Game
                     continue;
                 }
 
-                var pose = new Zombie
-                {
-                    Kind = (ZombieKind)arm.NativeKind,
-                    Row = row,
-                    X = arm.X,
-                    IsSmall = arm.Scale < 1f,
-                    UsedAbility = arm.Animation != "anim_pogo" && arm.Animation != "anim_run" && arm.Animation != "anim_walkdolphin"
-                };
+                var pose = _detachedArmProbe;
+                pose.Kind = (ZombieKind)arm.NativeKind;
+                pose.Row = row;
+                pose.X = arm.X;
+                pose.IsSmall = arm.Scale < 1f;
+                pose.UsedAbility = arm.Animation != "anim_pogo" && arm.Animation != "anim_run" && arm.Animation != "anim_walkdolphin";
                 pose.PresentationNativePhase = pose.Kind == ZombieKind.DolphinRider ? arm.NativePhase : -1;
                 pose.PresentationAltitude = pose.Kind == ZombieKind.DolphinRider ? arm.NativeAltitude : 0f;
                 _owner.RequiredAnimations.DrawNativeZombieArmDrop(_adventureParticles, arm, AdventureZombieOrigin(pose, arm.X), AdventureRenderRemainder);
@@ -3637,6 +3661,45 @@ namespace PlantsVsZombies.Game
             }
         }
 
+        /// <summary>Evaluates the unchanged frozen corpse track rules using the current synchronous draw context.</summary>
+        /// <param name="track">The original reanimation track name.</param>
+        /// <returns>Whether the frozen corpse retains the original track.</returns>
+        private bool BurnedCorpseTrackVisible(string track)
+        {
+            var zombie = _burnedCorpseZombie ?? throw new InvalidOperationException("A frozen corpse draw is not active.");
+            return IsBurnedCorpseTrackVisible(zombie, _burnedCorpseAnimation, _burnedCorpseVariant, _burnedCorpsePlantHead, track);
+        }
+
+        /// <summary>Preserves the original frozen silhouette's head, equipment, and duck tube visibility.</summary>
+        /// <param name="zombie">The corpse's original zombie state.</param>
+        /// <param name="animation">The resolved resource name.</param>
+        /// <param name="variant">The equipped default zombie variant.</param>
+        /// <param name="plantHead">Whether the corpse uses an attached plant head.</param>
+        /// <param name="track">The original reanimation track name.</param>
+        /// <returns>Whether the frozen silhouette includes this track.</returns>
+        internal static bool IsBurnedCorpseTrackVisible(Zombie zombie, string? animation, ZombieVariant variant, bool plantHead, string track)
+        {
+            if (plantHead && (track.StartsWith("anim_head", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(track, "anim_hair", StringComparison.OrdinalIgnoreCase)
+                || zombie.ModeHead != 26 && zombie.ModeHead != 29 && zombie.ModeHead != 30
+                    && string.Equals(track, "Zombie_tie", StringComparison.OrdinalIgnoreCase)))
+            {
+                return false;
+            }
+
+            if (zombie.Headless && (track.IndexOf("head", StringComparison.OrdinalIgnoreCase) >= 0
+                || track.IndexOf("hair", StringComparison.OrdinalIgnoreCase) >= 0
+                || string.Equals(track, "anim_cone", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(track, "anim_bucket", StringComparison.OrdinalIgnoreCase)))
+            {
+                return false;
+            }
+
+            return !string.Equals(animation, "Zombie", StringComparison.OrdinalIgnoreCase)
+                || zombie.Kind == ZombieKind.DuckyTube && string.Equals(track, "Zombie_duckytube", StringComparison.OrdinalIgnoreCase)
+                || ReanimationRenderer.IsZombieTrackVisible(track, variant);
+        }
+
         /// <summary>Performs draw adventure burned corpse.</summary>
         /// <param name = "corpse">The corpse.</param>
         private void DrawAdventureBurnedCorpse(AdventureZombieCorpse corpse)
@@ -3659,7 +3722,14 @@ namespace PlantsVsZombies.Game
 
                 var variant = zombie.Kind == ZombieKind.Flag ? ZombieVariant.Flag : zombie.Kind == ZombieKind.Conehead && zombie.ArmorHealth > 0 ? ZombieVariant.Conehead : zombie.Kind == ZombieKind.Buckethead && zombie.ArmorHealth > 0 ? ZombieVariant.Buckethead : zombie.Kind == ZombieKind.ScreenDoor && zombie.ShieldHealth > 0 ? ZombieVariant.ScreenDoor : ZombieVariant.Normal;
                 var plantHead = zombie.ModeHead >= 26 && zombie.ModeHead <= 31;
-                Func<string, bool> visible = track => (!plantHead || !track.StartsWith("anim_head", StringComparison.OrdinalIgnoreCase) && !string.Equals(track, "anim_hair", StringComparison.OrdinalIgnoreCase) && (zombie.ModeHead == 26 || zombie.ModeHead == 29 || zombie.ModeHead == 30 || !string.Equals(track, "Zombie_tie", StringComparison.OrdinalIgnoreCase))) && (!zombie.Headless || track.IndexOf("head", StringComparison.OrdinalIgnoreCase) < 0 && track.IndexOf("hair", StringComparison.OrdinalIgnoreCase) < 0 && !string.Equals(track, "anim_cone", StringComparison.OrdinalIgnoreCase) && !string.Equals(track, "anim_bucket", StringComparison.OrdinalIgnoreCase)) && (!string.Equals(name, "Zombie", StringComparison.OrdinalIgnoreCase) || zombie.Kind == ZombieKind.DuckyTube && string.Equals(track, "Zombie_duckytube", StringComparison.OrdinalIgnoreCase) || ReanimationRenderer.IsZombieTrackVisible(track, variant));
+                var previousZombie = _burnedCorpseZombie;
+                var previousAnimation = _burnedCorpseAnimation;
+                var previousVariant = _burnedCorpseVariant;
+                var previousPlantHead = _burnedCorpsePlantHead;
+                _burnedCorpseZombie = zombie;
+                _burnedCorpseAnimation = name;
+                _burnedCorpseVariant = variant;
+                _burnedCorpsePlantHead = plantHead;
                 var previous = CanvasUI.Color;
                 CanvasUI.Color = new Color(0, 0, 0, previous.a);
                 var origin = AdventureZombieOrigin(zombie, zombie.X);
@@ -3671,7 +3741,7 @@ namespace PlantsVsZombies.Game
                     }
                     else
                     {
-                        _owner.RequiredAnimations.DrawNativePlayback(name, origin, burn.Scale, corpse.FrozenSeconds, clip, true, corpse.FrozenRate, visible, facingLeft: burn.FacingLeft, mirrorWidth: 60f);
+                        _owner.RequiredAnimations.DrawNativePlayback(name, origin, burn.Scale, corpse.FrozenSeconds, clip, true, corpse.FrozenRate, _burnedCorpseTrackVisible, facingLeft: burn.FacingLeft, mirrorWidth: 60f);
                     }
 
                     if (plantHead && !zombie.Headless)
@@ -3682,6 +3752,10 @@ namespace PlantsVsZombies.Game
                 finally
                 {
                     CanvasUI.Color = previous;
+                    _burnedCorpseZombie = previousZombie;
+                    _burnedCorpseAnimation = previousAnimation;
+                    _burnedCorpseVariant = previousVariant;
+                    _burnedCorpsePlantHead = previousPlantHead;
                 }
 
                 return;
@@ -3699,7 +3773,12 @@ namespace PlantsVsZombies.Game
                 return;
             }
 
-            var asset = Path.GetFileNameWithoutExtension(definition.Path.Replace('\\', '/'));
+            if (!_burnAnimationNames.TryGetValue(burn.ReanimationId, out var asset))
+            {
+                asset = Path.GetFileNameWithoutExtension(definition.Path.Replace('\\', '/'));
+                _burnAnimationNames.Add(burn.ReanimationId, asset);
+            }
+
             global::PlantsVsZombies.Reanimation.NativeAnimationInfo info;
             var full = burn.Animation == null;
             var found = full ? _owner.RequiredAnimations.TryGetNativeDefinitionInfo(asset, out info) : _owner.RequiredAnimations.TryGetNativeAnimationInfo(asset, burn.Animation, out info);
@@ -5263,8 +5342,9 @@ namespace PlantsVsZombies.Game
             var m = s.Definition.Mechanic;
             if (m == ModeMechanic.Vases)
             {
-                foreach (var vase in _owner.RequiredGame.Adventure.Vases)
+                for (var vaseIndex = 0; vaseIndex < _owner.RequiredGame.Adventure.Vases.Count; vaseIndex++)
                 {
+                    var vase = _owner.RequiredGame.Adventure.Vases[vaseIndex];
                     var lantern = _owner.RequiredGame.Plants.Exists(p => p.Kind == PlantKind.Plantern && Math.Max(Math.Abs(p.Row - vase.Row), Math.Abs(p.Column - vase.Column)) <= 1);
                     if (!lantern && !vase.ShowsPlant)
                     {
@@ -5344,8 +5424,9 @@ namespace PlantsVsZombies.Game
                 foreach (var rain in s.RainPackets)
                 {
                     AdventurePacket? packet = null;
-                    foreach (var p in _owner.RequiredGame.Adventure.Packets)
+                    for (var pIndex = 0; pIndex < _owner.RequiredGame.Adventure.Packets.Count; pIndex++)
                     {
+                        var p = _owner.RequiredGame.Adventure.Packets[pIndex];
                         if (p.Id == rain.PacketId)
                         {
                             packet = p;
@@ -6100,8 +6181,9 @@ namespace PlantsVsZombies.Game
 
             if (_owner.Opening.AdventureIntroAwaitingSeeds)
             {
-                foreach (PlantKind kind in _owner._game.Adventure.AvailableSeeds)
+                for (var kindIndex = 0; kindIndex < _owner._game.Adventure.AvailableSeeds.Count; kindIndex++)
                 {
+                    var kind = _owner._game.Adventure.AvailableSeeds[kindIndex];
                     var rect = _owner.Opening.AdventureCampaignChooserRect(kind);
                     if (rect.Contains(_owner.AdventureBoard._adventurePointer))
                     {

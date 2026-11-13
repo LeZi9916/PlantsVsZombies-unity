@@ -10,6 +10,7 @@ using PlantsVsZombies.Reanimation;
 using PlantsVsZombies.Rendering;
 using PlantsVsZombies.Simulation;
 using PlantsVsZombies.UI;
+using Unity.Profiling;
 using UnityEngine;
 using UnityEngine.TestTools;
 using PlantsVsZombies.Diagnostics;
@@ -526,13 +527,14 @@ namespace PlantsVsZombies.Tests.PlayMode
 
             var screenRenderer = ScreenRenderer();
             var retained = screenRenderer.PooledObjectCount;
-            var before = GC.GetAllocatedBytesForCurrentThread();
+            using var allocationRecorder = StartAllocationRecorder();
             for (var i = 0; i < 100; i++)
             {
                 PresentPlants();
             }
 
-            var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+            allocationRecorder.Stop();
+            var allocated = allocationRecorder.Count;
             Assert.That(allocated, Is.Zero);
             Assert.That(screenRenderer.PooledObjectCount, Is.EqualTo(retained));
             Assert.That(_renderer.LastError, Is.Null);
@@ -549,13 +551,14 @@ namespace PlantsVsZombies.Tests.PlayMode
 
             var screenRenderer = ScreenRenderer();
             var retained = screenRenderer.PooledObjectCount;
-            var before = GC.GetAllocatedBytesForCurrentThread();
+            using var allocationRecorder = StartAllocationRecorder();
             for (var i = 0; i < 100; i++)
             {
                 PresentZombie();
             }
 
-            var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+            allocationRecorder.Stop();
+            var allocated = allocationRecorder.Count;
             Assert.That(allocated, Is.Zero);
             Assert.That(screenRenderer.PooledObjectCount, Is.EqualTo(retained));
             Assert.That(_renderer.LastError, Is.Null);
@@ -738,13 +741,14 @@ namespace PlantsVsZombies.Tests.PlayMode
                 }
 
                 var elapsed = owner._game.Elapsed;
-                var before = GC.GetAllocatedBytesForCurrentThread();
+                using var allocationRecorder = StartAllocationRecorder();
                 for (var i = 0; i < 100; i++)
                 {
                     update();
                 }
 
-                var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+                allocationRecorder.Stop();
+                var allocated = allocationRecorder.Count;
                 Assert.That(allocated, Is.Zero);
                 Assert.That(owner._game.Elapsed, Is.GreaterThan(elapsed));
             }
@@ -754,6 +758,217 @@ namespace PlantsVsZombies.Tests.PlayMode
                 options?.Dispose();
                 selector?.Dispose();
                 UnityEngine.Object.Destroy(ownerObject);
+            }
+        }
+
+        /// <summary>Starts Unity's current-thread allocation event counter without trusting unsupported Mono byte counters.</summary>
+        /// <returns>A native recorder the caller must stop and dispose after the measured block.</returns>
+        private static ProfilerRecorder StartAllocationRecorder()
+        {
+            var recorder = new ProfilerRecorder(ProfilerCategory.Internal, "GC.Alloc", 32768,
+                ProfilerRecorderOptions.CollectOnlyOnCurrentThread);
+            recorder.Start();
+            return recorder;
+        }
+
+        /// <summary>Checks that the runtime allocation counter can detect the garbage guarded by these regressions.</summary>
+        [Test]
+        public void AllocationCounterDetectsDeliberateAllocation()
+        {
+            using var recorder = ProfilerRecorder.StartNew(ProfilerCategory.Internal, "GC.Alloc", 4096,
+                ProfilerRecorderOptions.CollectOnlyOnCurrentThread);
+            recorder.Stop();
+            recorder.Reset();
+            using var bytes = new ProfilerRecorder(ProfilerCategory.Memory, "GC Allocated In Frame", 0);
+            var beforeBytes = bytes.CurrentValue;
+            recorder.Start();
+            var sentinel = new byte[1024];
+            var allocatedBytes = bytes.CurrentValue - beforeBytes;
+            recorder.Stop();
+            GC.KeepAlive(sentinel);
+            Assert.That(recorder.Valid, Is.True);
+            Assert.That(recorder.Count, Is.GreaterThan(0), "The Unity recorder must observe the deliberate allocation.");
+            UnityEngine.Debug.Log("Allocation positive control: samples=" + recorder.Count + ", memoryCounterBytes=" + allocatedBytes
+                + ", memoryCounterValid=" + bytes.Valid + ", markerUnit=" + recorder.UnitType + ".");
+        }
+
+        /// <summary>Measures the full adventure input, simulation, audio, and presentation traversal after resources stabilize.</summary>
+        /// <param name="scenario">The stable board or original feedback path kept alive throughout measurement.</param>
+        [TestCase("Combat")]
+        [TestCase("Paused")]
+        [TestCase("Conveyor")]
+        [TestCase("DetachedArm")]
+        [TestCase("SnowTrail")]
+        [TestCase("Explosion")]
+        [TestCase("Corpse")]
+        [TestCase("FrozenCorpse")]
+        [TestCase("CharredCorpse")]
+        public void WarmAdventureUpdateAndPresentDoesNotAllocateManagedMemory(string scenario)
+        {
+            WriteOptionsFixture();
+            WriteAdventureFeedbackFixture();
+            var ownerObject = new GameObject("Inactive adventure allocation regression");
+            ownerObject.SetActive(false);
+            OptionsView? options = null;
+            SelectorView? selector = null;
+            GamePresenter? presenter = null;
+            PvZGame? owner = null;
+            try
+            {
+                owner = ownerObject.AddComponent<PvZGame>();
+                owner._root = _root;
+                owner._game = new GameSimulation(new GameRules { AdventureLevel = scenario == "Conveyor" ? 10 : 9 }, randomSeed: 12345);
+                var game = owner._game;
+                game.ChooseDefaultAdventureSeeds();
+                game.Adventure.Phase = AdventurePhase.Playing;
+                game.ResetAdventureWaveSchedule(1000000, false, false);
+                game.Adventure._nextSkySun = float.MaxValue;
+                game.Adventure._nextPacket = float.MaxValue;
+                options = new OptionsView(_root);
+                owner._optionsView = options;
+                selector = new SelectorView(_root);
+                owner._selectorView = selector;
+                owner._animations = _renderer;
+                owner._currentView = PvZGame.ScreenView.Board;
+                owner._smokeMode = true;
+                owner._deck.Clear();
+                owner.AdventureBoard._adventurePointer = new Vector2(-1000f, -1000f);
+                GameMemberReflection.SetField(owner, "_smokePointer", new Vector2(-1000f, -1000f));
+                GameMemberReflection.SetField(owner, "_zombiePartAudioLoading", true);
+                presenter = new GamePresenter(owner);
+                owner._presenter = presenter;
+                var actor = new Zombie
+                {
+                    Id = 700, Kind = ZombieKind.Normal, Row = 2, X = 6f, Health = 270f,
+                    StartingHealth = 270f, PresentationAnimation = "anim_walk", PresentationAnimationAge = .1f
+                };
+                game.Zombies.Add(actor);
+                ConfigureAdventureAllocationScenario(game, scenario);
+                if (scenario != "Combat" && scenario != "Conveyor")
+                {
+                    game.TogglePause();
+                }
+                var update = (Action)Delegate.CreateDelegate(typeof(Action), owner,
+                    typeof(PvZGame).GetMethod("Update", BindingFlags.Instance | BindingFlags.NonPublic)!);
+                for (var frame = 0; frame < 120; frame++)
+                {
+                    update();
+                    presenter.Present();
+                }
+                Assert.That(_renderer.TryGetNativeAnimationInfo("Zombie", actor.PresentationAnimation, out _), Is.True,
+                    "The measured zombie must use an available synthetic clip.");
+                Assert.That(_renderer.TryGetNativeAnimationInfo("LawnMower", "anim_normal", out _), Is.True,
+                    "The measured ready mowers must use an available synthetic clip.");
+                var elapsed = game.Elapsed;
+                using var recorder = ProfilerRecorder.StartNew(ProfilerCategory.Internal, "GC.Alloc", 32768,
+                    ProfilerRecorderOptions.CollectOnlyOnCurrentThread);
+                recorder.Stop();
+                recorder.Reset();
+                recorder.Start();
+                for (var frame = 0; frame < 100; frame++)
+                {
+                    update();
+                    presenter.Present();
+                }
+                recorder.Stop();
+                var allocationEvents = recorder.Count;
+                Assert.That(recorder.Valid, Is.True);
+                if (allocationEvents > 0)
+                {
+                    recorder.Reset();
+                    recorder.Start();
+                    for (var frame = 0; frame < 100; frame++)
+                    {
+                        update();
+                    }
+                    recorder.Stop();
+                    var updateEvents = recorder.Count;
+                    recorder.Reset();
+                    recorder.Start();
+                    for (var frame = 0; frame < 100; frame++)
+                    {
+                        presenter.Present();
+                    }
+                    recorder.Stop();
+                    UnityEngine.Debug.Log("Adventure allocation stages for " + scenario + ": Update=" + updateEvents
+                        + ", Present=" + recorder.Count + " events per 100 traversals.");
+                }
+                Assert.That(allocationEvents, Is.Zero, scenario + " must produce no GC.Alloc events once assets, identities, and buffers are warm.");
+                if (game.State == MatchState.Playing)
+                {
+                    Assert.That(game.Elapsed, Is.GreaterThan(elapsed), "The adventure simulation must actually advance.");
+                }
+            }
+            finally
+            {
+                presenter?.Dispose();
+                options?.Dispose();
+                selector?.Dispose();
+                owner?.Textures.ReleaseAll();
+                UnityEngine.Object.Destroy(ownerObject);
+            }
+        }
+
+        /// <summary>Adds small original-format resources for each measured feedback path.</summary>
+        private void WriteAdventureFeedbackFixture()
+        {
+            var particle = "<Emitter><Image>IMAGE_REANIM_green</Image><SpawnMinActive>1</SpawnMinActive>"
+                + "<ParticleDuration>100</ParticleDuration><SystemDuration>100</SystemDuration></Emitter>";
+            foreach (var name in new[] { "ZombieArm", "SnowPeaTrail", "Powie" })
+            {
+                File.WriteAllText(Path.Combine(_root, "particles", name + ".xml"), particle);
+            }
+            File.WriteAllText(Path.Combine(_root, "reanim", "Zombie_charred.reanim"),
+                "<fps>12</fps>" + ImageTrack("body", "blue", 0, 0));
+            File.WriteAllText(Path.Combine(_root, "reanim", "LawnMower.reanim"),
+                "<fps>12</fps>" + Marker("anim_normal") + ImageTrack("body", "green", 0, 0));
+            File.AppendAllText(Path.Combine(_root, "reanim", "Zombie.reanim"), Marker("anim_walk2"));
+            File.Copy(Path.Combine(_root, "reanim", "PeaShooter.reanim"), Path.Combine(_root, "reanim", "PeaShooterSingle.reanim"));
+        }
+
+        /// <summary>Keeps one selected effect or conveyor card present without creating events during measurement.</summary>
+        /// <param name="game">The real adventure simulation receiving the stable fixture state.</param>
+        /// <param name="scenario">The scenario selecting the original presentation branch.</param>
+        private static void ConfigureAdventureAllocationScenario(GameSimulation game, string scenario)
+        {
+            switch (scenario)
+            {
+                case "Conveyor":
+                    game.Adventure._packets.Add(new AdventurePacket { Id = 801, Kind = PlantKind.Peashooter });
+                    break;
+                case "DetachedArm":
+                    game.Presentation.ArmDrops.Add(new AdventureZombieArmDrop
+                    {
+                        Id = 802, NativeKind = 0, Row = 2, X = 4f, Scale = 1f, Asset = "Zombie",
+                        Animation = "anim_walk", Anchor = "Zombie_body", Image = "IMAGE_REANIM_green", Rate = 12f, Age = .1f
+                    });
+                    break;
+                case "SnowTrail":
+                    game.Presentation.SnowTrails.Add(new AdventureSnowTrail
+                    {
+                        Id = 803, Row = 2, Age = .1f, X = 450f, Y = 250f, PreviousX = 450f, PreviousY = 250f
+                    });
+                    break;
+                case "Explosion":
+                    game.Presentation.Explosions.Add(new AdventureExplosion
+                    {
+                        Id = 804, Row = 2, X = 4f, Effect = AdventureExplosionEffect.Powie, Ticks = 10
+                    });
+                    break;
+                case "Corpse":
+                case "FrozenCorpse":
+                case "CharredCorpse":
+                    game.Presentation.Corpses.Add(new AdventureZombieCorpse
+                    {
+                        Zombie = new Zombie { Id = 805, Kind = ZombieKind.Normal, Row = 2, X = 4f, Headless = true },
+                        Animation = "anim_walk", Age = .01f, Rate = 12f, FrozenRate = 12f, AnimationDuration = 1f, FadeDuration = 1f,
+                        Burn = scenario == "Corpse" ? null : new AdventureBurnPose
+                        {
+                            Visual = scenario == "FrozenCorpse" ? AdventureBurnVisual.FrozenOriginal : AdventureBurnVisual.CharredDefinition,
+                            ReanimationId = 36, FacingLeft = true
+                        }
+                    });
+                    break;
             }
         }
 

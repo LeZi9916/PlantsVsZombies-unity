@@ -9,8 +9,8 @@ namespace PlantsVsZombies.Adventure
     /// <summary>Defines adventure zombie ground data.</summary>
     public static class AdventureZombieGroundData
     {
-        /// <summary>Stores clips.</summary>
-        private static readonly Dictionary<string, AdventureZombieGroundClip> s_clips = Create();
+        /// <summary>Indexes immutable native ground clips by asset and animation without formatting query keys.</summary>
+        private static readonly Dictionary<string, Dictionary<string, AdventureZombieGroundClip>> s_clips = Create();
         /// <summary>Performs try get.</summary>
         /// <param name = "asset">The asset.</param>
         /// <param name = "clip">The clip.</param>
@@ -18,12 +18,14 @@ namespace PlantsVsZombies.Adventure
         /// <returns>The resulting try get.</returns>
         public static bool TryGet(string asset, string clip, [NotNullWhen(true)] out AdventureZombieGroundClip? result)
         {
-            return s_clips.TryGetValue(asset + "/" + clip, out result);
+            result = null;
+            return !string.IsNullOrEmpty(asset) && !string.IsNullOrEmpty(clip)
+                && s_clips.TryGetValue(asset, out var clips) && clips.TryGetValue(clip, out result);
         }
 
         /// <summary>Performs create.</summary>
         /// <returns>The resulting create.</returns>
-        private static Dictionary<string, AdventureZombieGroundClip> Create()
+        private static Dictionary<string, Dictionary<string, AdventureZombieGroundClip>> Create()
         {
             var result = new Dictionary<string, AdventureZombieGroundClip>(StringComparer.OrdinalIgnoreCase);
             // Original Zombie_snorkle.reanim: jumpinpool frames 59..77 and uptoeat frames 85..96.
@@ -2167,6 +2169,27 @@ namespace PlantsVsZombies.Adventure
                 1.5f
             });
             result["Zombie_paper/anim_gasp"] = new AdventureZombieGroundClip(13, 12f, null);
+            return IndexClips(result);
+        }
+
+        /// <summary>Splits the unchanged authored table's compound keys once during static initialization.</summary>
+        /// <param name="source">The original asset/animation entries in authored order.</param>
+        /// <returns>Case-insensitive asset and animation lookups sharing each original ground clip instance.</returns>
+        private static Dictionary<string, Dictionary<string, AdventureZombieGroundClip>> IndexClips(Dictionary<string, AdventureZombieGroundClip> source)
+        {
+            var result = new Dictionary<string, Dictionary<string, AdventureZombieGroundClip>>(StringComparer.OrdinalIgnoreCase);
+            foreach (var entry in source)
+            {
+                var separator = entry.Key.IndexOf('/');
+                var asset = entry.Key.Substring(0, separator);
+                var animation = entry.Key.Substring(separator + 1);
+                if (!result.TryGetValue(asset, out var clips))
+                {
+                    clips = new Dictionary<string, AdventureZombieGroundClip>(StringComparer.OrdinalIgnoreCase);
+                    result.Add(asset, clips);
+                }
+                clips.Add(animation, entry.Value);
+            }
             return result;
         }
     }

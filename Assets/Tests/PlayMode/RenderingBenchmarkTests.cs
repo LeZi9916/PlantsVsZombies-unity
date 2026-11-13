@@ -20,7 +20,7 @@ namespace PlantsVsZombies.Tests.PlayMode
     /// <summary>Captures repeatable visible-board rendering measurements using read-only original artwork.</summary>
     public sealed class RenderingBenchmarkTests
     {
-        /// <summary>Measures three fixed board states without advancing gameplay or animation clocks.</summary>
+        /// <summary>Measures deterministic board workloads with optional fixed-step simulation advancement.</summary>
         /// <returns>Frame boundaries required to measure actual camera rendering.</returns>
         [UnityTest]
         public IEnumerator RecordsVisibleBoardBaseline()
@@ -38,6 +38,16 @@ namespace PlantsVsZombies.Tests.PlayMode
             }
             var plantKinds = ReadEnvironmentKinds("PVZ_RENDER_BENCHMARK_PLANTS", new[] { PlantKind.Sunflower, PlantKind.Peashooter, PlantKind.Peashooter });
             var zombieKinds = ReadEnvironmentKinds("PVZ_RENDER_BENCHMARK_ZOMBIES", new[] { ZombieKind.Normal });
+            var execution = Environment.GetEnvironmentVariable("PVZ_RENDER_GEOMETRY_MODE");
+            var executionProperty = typeof(ObjectSpriteRenderer).GetProperty("GeometryExecution", BindingFlags.Static | BindingFlags.NonPublic);
+            var previousExecution = executionProperty?.GetValue(null);
+            if (!string.IsNullOrEmpty(execution) && executionProperty != null)
+            {
+                executionProperty.SetValue(null, Enum.Parse(executionProperty.PropertyType, execution, true));
+            }
+            var plantCount = ReadEnvironmentCount("PVZ_RENDER_BENCHMARK_PLANT_COUNT", 30, 45);
+            var zombieCount = ReadEnvironmentCount("PVZ_RENDER_BENCHMARK_ZOMBIE_COUNT", 50, 250);
+            var advancing = Environment.GetEnvironmentVariable("PVZ_RENDER_BENCHMARK_ADVANCE") == "1";
             yield return null;
             Directory.CreateDirectory(output!);
             var host = new GameObject("Inactive rendering benchmark");
@@ -55,8 +65,12 @@ namespace PlantsVsZombies.Tests.PlayMode
             using var passes = ProfilerRecorder.StartNew(ProfilerCategory.Render, "SetPass Calls Count");
             SpriteRenderingProfiler.Initialize();
             SpriteRenderingProfiler.ForceEnabled = Environment.GetEnvironmentVariable("PVZ_RENDER_PROFILE") == "1";
-            var profiles = new ProfilerRecorder[5];
-            var profileNames = new[] { "PvZ.Atlas.Regions", "PvZ.Sprite.Submit", "PvZ.Sprite.Upload", "PvZ.Hierarchy.Refresh", "PvZ.Animation.Sample" };
+            var profileNames = new[]
+            {
+                "PvZ.Atlas.Regions", "PvZ.Sprite.Submit", "PvZ.Sprite.Upload", "PvZ.Hierarchy.Refresh", "PvZ.Animation.Sample",
+                "PvZ.Sprite.Prepare", "PvZ.Sprite.Geometry", "PvZ.Sprite.Commit", "PvZ.Present", "PvZ.Update", "PvZ.Update.Input", "PvZ.Update.Simulation", "PvZ.Update.Audio"
+            };
+            var profiles = new ProfilerRecorder[profileNames.Length];
             if (Environment.GetEnvironmentVariable("PVZ_RENDER_PROFILE") == "1")
             {
                 for (var index = 0; index < profiles.Length; index++)
@@ -65,6 +79,12 @@ namespace PlantsVsZombies.Tests.PlayMode
                 }
             }
             var timings = new FrameTiming[1];
+            using var simulationAllocations = new ProfilerRecorder(ProfilerCategory.Internal, "GC.Alloc", 32768,
+                ProfilerRecorderOptions.CollectOnlyOnCurrentThread);
+            using var presentationAllocations = new ProfilerRecorder(ProfilerCategory.Internal, "GC.Alloc", 32768,
+                ProfilerRecorderOptions.CollectOnlyOnCurrentThread);
+            Assert.That(simulationAllocations.Valid && presentationAllocations.Valid, Is.True,
+                "The scoped native GC.Alloc recorder must be available for allocation evidence.");
             try
             {
                 owner._root = root!;
@@ -77,15 +97,15 @@ namespace PlantsVsZombies.Tests.PlayMode
                 owner._game.ResetAdventureWaveSchedule(1000000, false, false);
                 owner._deck.Clear();
                 owner.AdventureBoard._adventurePointer = new Vector2(-1000f, -1000f);
-                for (var index = 0; index < 30; index++)
+                for (var index = 0; index < plantCount; index++)
                 {
                     owner._game.Plants.Add(new Plant
                     {
                         Id = index + 1,
                         Kind = plantKinds[index % plantKinds.Length],
                         Layer = PlantLayer.Main,
-                        Row = index / 6,
-                        Column = index % 6,
+                        Row = index % 5,
+                        Column = index / 5,
                         Health = 4000f,
                         Age = .5f,
                         PresentationRate = 12f,
@@ -93,7 +113,7 @@ namespace PlantsVsZombies.Tests.PlayMode
                     });
                 }
 
-                for (var index = 0; index < 50; index++)
+                for (var index = 0; index < zombieCount; index++)
                 {
                     var kind = zombieKinds[index % zombieKinds.Length];
                     var armor = kind == ZombieKind.Buckethead ? 1100f : kind == ZombieKind.Conehead ? 370f : 0f;
@@ -126,25 +146,90 @@ namespace PlantsVsZombies.Tests.PlayMode
                         zombie.ChillRemaining = state == 2 ? 1f : 0f;
                     }
 
-                    for (var warm = 0; warm < 60; warm++)
+                    for (var warm = 0; warm < 120; warm++)
                     {
+                        if (advancing)
+                        {
+                            owner._game.Update(.01f);
+                        }
                         presenter.Present();
                         yield return null;
                     }
 
                     var result = new Measurement { State = state, Width = target.width, Height = target.height,
-                        PlantKinds = string.Join(",", plantKinds), ZombieKinds = string.Join(",", zombieKinds) };
+                        PlantKinds = string.Join(",", plantKinds), ZombieKinds = string.Join(",", zombieKinds),
+                        PlantCount = plantCount, ZombieCount = zombieCount, AdvancesSimulation = advancing,
+                        ProfileNames = profileNames, UnityVersion = Application.unityVersion,
+                        OperatingSystem = SystemInfo.operatingSystem, Processor = SystemInfo.processorType,
+                        ScreenWidth = Screen.width, ScreenHeight = Screen.height, GraphicsApi = SystemInfo.graphicsDeviceType.ToString(),
+                        GraphicsDevice = SystemInfo.graphicsDeviceName, GeometryExecution = execution ?? "Default", UsesBakedAssets = Environment.GetEnvironmentVariable("PVZ_RENDER_USE_BAKED") == "1" };
+                    var totalSamples = new double[900];
                     var cpuSamples = new double[900];
+                    var eventReferencePath = Environment.GetEnvironmentVariable("PVZ_RENDER_BENCHMARK_EVENT_REFERENCE");
+                    var reference = string.IsNullOrEmpty(eventReferencePath) ? null
+                        : JsonUtility.FromJson<Measurement>(File.ReadAllText(eventReferencePath));
+                    var referenceFlags = reference?.AllocationEventFrameFlags;
+                    if (referenceFlags != null)
+                    {
+                        Assert.That(referenceFlags.Length, Is.EqualTo(900));
+                        Assert.That(reference!.PlantCount, Is.EqualTo(plantCount));
+                        Assert.That(reference.ZombieCount, Is.EqualTo(zombieCount));
+                        Assert.That(reference.AdvancesSimulation, Is.EqualTo(advancing));
+                        result.EventFrameClassification = "Fixed frame indices from paired optimized workload";
+                    }
+                    result.AllocationEventFrameFlags = new bool[900];
+                    result.SimulationAllocationEventSamples = new int[900];
+                    result.PresentationAllocationEventSamples = new int[900];
+                    var eventCpuSamples = new double[900];
+                    var steadyCpuSamples = new double[900];
+                    var eventTotalSamples = new double[900];
+                    var steadyTotalSamples = new double[900];
                     var gpuSamples = new double[900];
                     var profileTotals = new long[profiles.Length];
                     for (var round = 0; round < 3; round++)
                     {
                         for (var frame = 0; frame < 300; frame++)
                         {
+                            simulationAllocations.Reset();
+                            simulationAllocations.Start();
+                            var updateStart = Stopwatch.GetTimestamp();
+                            if (advancing)
+                            {
+                                owner._game.Update(.01f);
+                            }
+                            var updateEnd = Stopwatch.GetTimestamp();
+                            simulationAllocations.Stop();
+                            presentationAllocations.Reset();
+                            presentationAllocations.Start();
                             var start = Stopwatch.GetTimestamp();
                             presenter.Present();
-                            cpuSamples[result.Frames] = (Stopwatch.GetTimestamp() - start) * 1000.0 / Stopwatch.Frequency;
+                            var end = Stopwatch.GetTimestamp();
+                            presentationAllocations.Stop();
+                            var allocations = simulationAllocations.Count + presentationAllocations.Count;
+                            result.SimulationAllocationEvents += simulationAllocations.Count;
+                            result.PresentationAllocationEvents += presentationAllocations.Count;
+                            result.PeakFrameAllocationEvents = Math.Max(result.PeakFrameAllocationEvents, allocations);
+                            result.AllocatingFrames += allocations > 0 ? 1 : 0;
+                            result.AllocationEventFrameFlags[result.Frames] = allocations > 0;
+                            result.SimulationAllocationEventSamples[result.Frames] = simulationAllocations.Count;
+                            result.PresentationAllocationEventSamples[result.Frames] = presentationAllocations.Count;
+                            cpuSamples[result.Frames] = (end - start) * 1000.0 / Stopwatch.Frequency;
+                            totalSamples[result.Frames] = cpuSamples[result.Frames] + (updateEnd - updateStart) * 1000.0 / Stopwatch.Frequency;
                             result.PresentationMilliseconds += cpuSamples[result.Frames];
+                            result.UpdateAndPresentationMilliseconds += totalSamples[result.Frames];
+                            var eventFrame = referenceFlags == null ? allocations > 0 : referenceFlags[result.Frames];
+                            if (eventFrame)
+                            {
+                                eventCpuSamples[result.EventFrames] = cpuSamples[result.Frames];
+                                eventTotalSamples[result.EventFrames++] = totalSamples[result.Frames];
+                                result.EventFrameAllocationEvents += allocations;
+                            }
+                            else
+                            {
+                                steadyCpuSamples[result.SteadyFrames] = cpuSamples[result.Frames];
+                                steadyTotalSamples[result.SteadyFrames++] = totalSamples[result.Frames];
+                                result.SteadyFrameAllocationEvents += allocations;
+                            }
                             FrameTimingManager.CaptureFrameTimings();
                             yield return null;
                             result.DrawCalls += draws.Valid ? draws.LastValue : 0;
@@ -166,13 +251,36 @@ namespace PlantsVsZombies.Tests.PlayMode
                     }
 
                     result.PresentationMilliseconds /= result.Frames;
+                    result.UpdateAndPresentationMilliseconds /= result.Frames;
+                    result.FinalPlantCount = owner._game.Plants.Count;
+                    result.FinalZombieCount = owner._game.Zombies.Count;
+                    result.FinalSimulationSeconds = owner._game.Elapsed;
+                    result.FinalMatchState = owner._game.State.ToString();
+                    result.PresentationSamples = (double[])cpuSamples.Clone();
+                    result.UpdateAndPresentationSamples = (double[])totalSamples.Clone();
+                    SummarizeSamples(steadyCpuSamples, result.SteadyFrames, out result.SteadyPresentationMilliseconds,
+                        out result.SteadyPresentationP95Milliseconds);
+                    SummarizeSamples(eventCpuSamples, result.EventFrames, out result.EventPresentationMilliseconds,
+                        out result.EventPresentationP95Milliseconds);
+                    SummarizeSamples(steadyTotalSamples, result.SteadyFrames, out result.SteadyUpdateAndPresentationMilliseconds,
+                        out result.SteadyUpdateAndPresentationP95Milliseconds);
+                    SummarizeSamples(eventTotalSamples, result.EventFrames, out result.EventUpdateAndPresentationMilliseconds,
+                        out result.EventUpdateAndPresentationP95Milliseconds);
+                    if (reference != null)
+                    {
+                        Assert.That(result.FinalPlantCount, Is.EqualTo(reference.FinalPlantCount));
+                        Assert.That(result.FinalZombieCount, Is.EqualTo(reference.FinalZombieCount));
+                        Assert.That(result.FinalSimulationSeconds, Is.EqualTo(reference.FinalSimulationSeconds));
+                    }
                     result.GpuTimingAvailable = result.GpuTimingSamples >= result.Frames / 2;
                     result.GpuMilliseconds = result.GpuTimingSamples > 0 ? result.GpuMilliseconds / result.GpuTimingSamples : 0d;
                     result.DrawCalls /= result.Frames;
                     result.SetPassCalls /= result.Frames;
                     Array.Sort(cpuSamples);
+                    Array.Sort(totalSamples);
                     Array.Sort(gpuSamples, 0, result.GpuTimingSamples);
                     result.PresentationP95Milliseconds = cpuSamples[854];
+                    result.UpdateAndPresentationP95Milliseconds = totalSamples[854];
                     result.GpuP95Milliseconds = result.GpuTimingSamples > 0 ? gpuSamples[(int)((result.GpuTimingSamples - 1) * .95)] : 0d;
                     result.ProfileMilliseconds = new double[profiles.Length];
                     for (var index = 0; index < profiles.Length; index++)
@@ -208,6 +316,10 @@ namespace PlantsVsZombies.Tests.PlayMode
             }
             finally
             {
+                if (executionProperty != null)
+                {
+                    executionProperty.SetValue(null, previousExecution);
+                }
                 SpriteRenderingProfiler.ForceEnabled = false;
                 foreach (var profile in profiles)
                 {
@@ -223,6 +335,48 @@ namespace PlantsVsZombies.Tests.PlayMode
                 UnityEngine.Object.Destroy(pixels);
                 UnityEngine.Object.Destroy(host);
             }
+        }
+
+        /// <summary>Summarizes a populated CPU sample prefix without including unused buffer capacity.</summary>
+        /// <param name="samples">The reusable event or steady-state sample buffer, sorted in place.</param>
+        /// <param name="count">The number of valid observations.</param>
+        /// <param name="average">Receives the arithmetic mean, or zero for an empty class.</param>
+        /// <param name="percentile95">Receives the 95th percentile, or zero for an empty class.</param>
+        private static void SummarizeSamples(double[] samples, int count, out double average, out double percentile95)
+        {
+            average = 0d;
+            percentile95 = 0d;
+            if (count == 0)
+            {
+                return;
+            }
+            for (var index = 0; index < count; index++)
+            {
+                average += samples[index];
+            }
+            average /= count;
+            Array.Sort(samples, 0, count);
+            percentile95 = samples[(int)Math.Floor((count - 1) * .95d)];
+        }
+
+        /// <summary>Reads an optional deterministic workload size while keeping the historical defaults.</summary>
+        /// <param name="variable">The optional integer workload setting.</param>
+        /// <param name="fallback">The default entity count.</param>
+        /// <param name="maximum">The largest supported fixture workload.</param>
+        /// <returns>The selected nonnegative entity count.</returns>
+        /// <exception cref="InvalidOperationException">The setting is not an integer within the supported range.</exception>
+        private static int ReadEnvironmentCount(string variable, int fallback, int maximum)
+        {
+            var value = Environment.GetEnvironmentVariable(variable);
+            if (string.IsNullOrEmpty(value))
+            {
+                return fallback;
+            }
+            if (!int.TryParse(value, out var result) || result < 0 || result > maximum)
+            {
+                throw new InvalidOperationException(variable + " must be between 0 and " + maximum + ".");
+            }
+            return result;
         }
 
         /// <summary>Reads an optional deterministic benchmark species list without changing the default board.</summary>
@@ -260,13 +414,18 @@ namespace PlantsVsZombies.Tests.PlayMode
         /// <param name="measurement">Receives the source and actual mesh workload.</param>
         private static void ReadBatchStatistics(ReanimationRenderer animations, Measurement measurement)
         {
-            var flags = BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public;
+            var flags = BindingFlags.Instance | BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public;
             var renderer = typeof(ReanimationRenderer).GetField("_objectRenderer", flags)?.GetValue(animations);
             var assets = typeof(ReanimationRenderer).GetField("_assets", flags)?.GetValue(animations);
             if (assets != null)
             {
                 measurement.LoadedAtlasPages = Convert.ToInt32(assets.GetType().GetProperty("LoadedPageCount", flags)!.GetValue(assets));
                 measurement.AtlasPageLimit = Convert.ToInt32(assets.GetType().GetProperty("MaxPageSize", flags)!.GetValue(assets));
+            }
+            if (renderer != null)
+            {
+                measurement.NativeRegionCapacity = ReadOptionalInt(renderer, "NativeRegionCapacity", flags);
+                measurement.NativeVertexCapacity = ReadOptionalInt(renderer, "NativeVertexCapacity", flags);
             }
             var statistics = renderer?.GetType().GetProperty("LastFrameStatistics", flags)?.GetValue(renderer);
             if (statistics == null)
@@ -283,6 +442,17 @@ namespace PlantsVsZombies.Tests.PlayMode
             measurement.CapacitySplits = Convert.ToInt32(statistics.GetType().GetProperty("CapacitySplitCount", flags)!.GetValue(statistics));
         }
 
+        /// <summary>Reads a capacity counter when the measured implementation exposes it.</summary>
+        /// <param name="owner">The renderer containing optional native arena diagnostics.</param>
+        /// <param name="name">The capacity property name.</param>
+        /// <param name="flags">The member visibility required by the fixture.</param>
+        /// <returns>The retained capacity, or zero for the pre-batching implementation.</returns>
+        private static int ReadOptionalInt(object owner, string name, BindingFlags flags)
+        {
+            var value = owner.GetType().GetProperty(name, flags)?.GetValue(owner);
+            return value == null ? 0 : Convert.ToInt32(value);
+        }
+
         /// <summary>Records resident texture objects before allocating diagnostic heatmaps, keeping each memory counter's meaning explicit.</summary>
         /// <param name="output">The ignored benchmark output directory.</param>
         /// <param name="state">The fixed feedback state being measured.</param>
@@ -290,7 +460,7 @@ namespace PlantsVsZombies.Tests.PlayMode
         /// <param name="measurement">Receives separate logical texel and native-object totals without replacing the engine texture counter.</param>
         private static void SaveTextureMemory(string output, int state, ReanimationRenderer animations, Measurement measurement)
         {
-            var flags = BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public;
+            var flags = BindingFlags.Instance | BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public;
             var provider = typeof(ReanimationRenderer).GetField("_assets", flags)?.GetValue(animations);
             var pages = provider?.GetType().GetField("_pages", flags)?.GetValue(provider) as IDictionary;
             var atlas = new System.Collections.Generic.HashSet<Texture2D>();
@@ -510,6 +680,98 @@ namespace PlantsVsZombies.Tests.PlayMode
             public string PlantKinds = "";
             /// <summary>The deterministic zombie species cycle used by this fixed board.</summary>
             public string ZombieKinds = "";
+            /// <summary>The initial plant workload.</summary>
+            public int PlantCount;
+            /// <summary>The initial zombie workload.</summary>
+            public int ZombieCount;
+            /// <summary>Whether each sample includes one deterministic 100 Hz simulation step.</summary>
+            public bool AdvancesSimulation;
+            /// <summary>The plant count remaining after measurement.</summary>
+            public int FinalPlantCount;
+            /// <summary>The zombie count remaining after measurement.</summary>
+            public int FinalZombieCount;
+            /// <summary>The final simulation clock, allowing equivalent runs to be checked.</summary>
+            public float FinalSimulationSeconds;
+            /// <summary>The terminal match state for the deterministic workload.</summary>
+            public string FinalMatchState = "";
+            /// <summary>The exact Editor version used by this run.</summary>
+            public string UnityVersion = "";
+            /// <summary>The measured host operating system.</summary>
+            public string OperatingSystem = "";
+            /// <summary>The host processor reported by Unity.</summary>
+            public string Processor = "";
+            /// <summary>The logical screen width used by the presenter viewport transform.</summary>
+            public int ScreenWidth;
+            /// <summary>The logical screen height used by the presenter viewport transform.</summary>
+            public int ScreenHeight;
+            /// <summary>The active graphics backend.</summary>
+            public string GraphicsApi = "";
+            /// <summary>The active graphics adapter.</summary>
+            public string GraphicsDevice = "";
+            /// <summary>The requested immediate, managed batch, or Burst batch geometry execution.</summary>
+            public string GeometryExecution = "";
+            /// <summary>Whether the real production streaming asset path and generated atlas were selected.</summary>
+            public bool UsesBakedAssets;
+            /// <summary>The optional marker names corresponding to the measured marker averages.</summary>
+            public string[] ProfileNames = Array.Empty<string>();
+            /// <summary>The current-thread GC.Alloc events in all measured simulation steps.</summary>
+            public long SimulationAllocationEvents;
+            /// <summary>The current-thread GC.Alloc events in all measured complete presentation traversals.</summary>
+            public long PresentationAllocationEvents;
+            /// <summary>The most current-thread GC.Alloc events in one measured traversal.</summary>
+            public int PeakFrameAllocationEvents;
+            /// <summary>Explains why allocation events are reported instead of unsupported managed-byte counters.</summary>
+            public string AllocationCounter = "Unity GC.Alloc events (current thread); zero events proves zero bytes; event byte sizes unavailable";
+            /// <summary>The measured traversals that allocated at least one managed byte.</summary>
+            public int AllocatingFrames;
+            /// <summary>The retained native input region capacity, zero before native batching exists.</summary>
+            public int NativeRegionCapacity;
+            /// <summary>The retained native output vertex capacity, zero before native batching exists.</summary>
+            public int NativeVertexCapacity;
+            /// <summary>The average complete simulation and presentation CPU time.</summary>
+            public double UpdateAndPresentationMilliseconds;
+            /// <summary>The 95th percentile complete simulation and presentation CPU time.</summary>
+            public double UpdateAndPresentationP95Milliseconds;
+            /// <summary>The fixed premeasurement resource and compilation warmup.</summary>
+            public int WarmupFrames = 120;
+            /// <summary>The simulation random seed shared by every benchmark execution.</summary>
+            public int RandomSeed = 7529;
+            /// <summary>The event classification rule; paired baselines may reuse optimized frame indices.</summary>
+            public string EventFrameClassification = "Current-thread allocation events in this workload";
+            /// <summary>The CPU samples in original deterministic frame order.</summary>
+            public double[] PresentationSamples = Array.Empty<double>();
+            /// <summary>The fixed-step simulation and presentation CPU samples in original frame order.</summary>
+            public double[] UpdateAndPresentationSamples = Array.Empty<double>();
+            /// <summary>The frames that allocated during this execution, before optional paired classification.</summary>
+            public bool[] AllocationEventFrameFlags = Array.Empty<bool>();
+            /// <summary>The scoped simulation allocation counts in original frame order.</summary>
+            public int[] SimulationAllocationEventSamples = Array.Empty<int>();
+            /// <summary>The scoped presentation allocation counts in original frame order.</summary>
+            public int[] PresentationAllocationEventSamples = Array.Empty<int>();
+            /// <summary>The event-free or paired steady-state observation count.</summary>
+            public int SteadyFrames;
+            /// <summary>The resource or event observation count.</summary>
+            public int EventFrames;
+            /// <summary>The allocation events in frames classified as steady state.</summary>
+            public long SteadyFrameAllocationEvents;
+            /// <summary>The allocation events in frames classified as event frames.</summary>
+            public long EventFrameAllocationEvents;
+            /// <summary>The mean presentation CPU time in steady-state frames.</summary>
+            public double SteadyPresentationMilliseconds;
+            /// <summary>The 95th percentile presentation CPU time in steady-state frames.</summary>
+            public double SteadyPresentationP95Milliseconds;
+            /// <summary>The mean presentation CPU time in resource or event frames.</summary>
+            public double EventPresentationMilliseconds;
+            /// <summary>The 95th percentile presentation CPU time in resource or event frames.</summary>
+            public double EventPresentationP95Milliseconds;
+            /// <summary>The mean simulation and presentation CPU time in steady-state frames.</summary>
+            public double SteadyUpdateAndPresentationMilliseconds;
+            /// <summary>The 95th percentile simulation and presentation CPU time in steady-state frames.</summary>
+            public double SteadyUpdateAndPresentationP95Milliseconds;
+            /// <summary>The mean simulation and presentation CPU time in resource or event frames.</summary>
+            public double EventUpdateAndPresentationMilliseconds;
+            /// <summary>The 95th percentile simulation and presentation CPU time in resource or event frames.</summary>
+            public double EventUpdateAndPresentationP95Milliseconds;
             /// <summary>The number of measured frames.</summary>
             public int Frames;
             /// <summary>The target width in pixels.</summary>

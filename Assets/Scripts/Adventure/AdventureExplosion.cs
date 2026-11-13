@@ -28,7 +28,27 @@ namespace PlantsVsZombies.Adventure
         {
             get
             {
-                return Effect.ToString();
+                switch (Effect)
+                {
+                    case AdventureExplosionEffect.Powie:
+                        return nameof(AdventureExplosionEffect.Powie);
+                    case AdventureExplosionEffect.Doom:
+                        return nameof(AdventureExplosionEffect.Doom);
+                    case AdventureExplosionEffect.PotatoMine:
+                        return nameof(AdventureExplosionEffect.PotatoMine);
+                    case AdventureExplosionEffect.PotatoMineRise:
+                        return nameof(AdventureExplosionEffect.PotatoMineRise);
+                    case AdventureExplosionEffect.Pow:
+                        return nameof(AdventureExplosionEffect.Pow);
+                    case AdventureExplosionEffect.GraveBuster:
+                        return nameof(AdventureExplosionEffect.GraveBuster);
+                    case AdventureExplosionEffect.GraveBusterDie:
+                        return nameof(AdventureExplosionEffect.GraveBusterDie);
+                    case AdventureExplosionEffect.IceTrap:
+                        return nameof(AdventureExplosionEffect.IceTrap);
+                    default:
+                        return Effect.ToString();
+                }
             }
         }
 

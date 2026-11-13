@@ -15,6 +15,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using Unity.Profiling;
 
 namespace PlantsVsZombies.Game
 {
@@ -25,6 +26,15 @@ namespace PlantsVsZombies.Game
     [UnityEngine.Scripting.APIUpdating.MovedFrom(true, "PvZReplica", "Assembly-CSharp", "PvZGame")]
     public sealed class PvZGame : MonoBehaviour
     {
+        /// <summary>Measures the complete input, simulation, and audio update independently of presentation.</summary>
+        private static readonly ProfilerMarker s_updateMarker = new ProfilerMarker(ProfilerCategory.Scripts, "PvZ.Update");
+        /// <summary>Measures input capture and routing before simulation.</summary>
+        private static readonly ProfilerMarker s_updateInputMarker = new ProfilerMarker(ProfilerCategory.Scripts, "PvZ.Update.Input");
+        /// <summary>Measures the mode or adventure simulation update.</summary>
+        private static readonly ProfilerMarker s_updateSimulationMarker = new ProfilerMarker(ProfilerCategory.Scripts, "PvZ.Update.Simulation");
+        /// <summary>Measures sound event presentation and dynamic music updates.</summary>
+        private static readonly ProfilerMarker s_updateAudioMarker = new ProfilerMarker(ProfilerCategory.Scripts, "PvZ.Update.Audio");
+
         /// <summary>Defines screen view.</summary>
         internal enum ScreenView
         {
@@ -382,17 +392,24 @@ namespace PlantsVsZombies.Game
         /// <summary>Performs update.</summary>
         private void Update()
         {
-            GameInput.Capture();
-            var pendingAction = _pendingUiAction;
-            _pendingUiAction = null;
-            pendingAction?.Invoke();
-            AdventureBoard.AdvanceHammerAnimation(Time.unscaledDeltaTime);
-            Router.HandleInput();
+            using var update = s_updateMarker.Auto();
+            using (s_updateInputMarker.Auto())
+            {
+                GameInput.Capture();
+                var pendingAction = _pendingUiAction;
+                _pendingUiAction = null;
+                pendingAction?.Invoke();
+                AdventureBoard.AdvanceHammerAnimation(Time.unscaledDeltaTime);
+                Router.HandleInput();
+            }
             AdventureBoard.PreserveAdventureFeedbackDuringPause(Time.unscaledDeltaTime);
             if (Loading.UpdateOriginalLoading(Time.unscaledDeltaTime))
             {
                 UpdateCursorVisibility();
-                Music.UpdateDynamicAudio();
+                using (s_updateAudioMarker.Auto())
+                {
+                    Music.UpdateDynamicAudio();
+                }
                 return;
             }
 
@@ -409,19 +426,28 @@ namespace PlantsVsZombies.Game
             Opening.UpdateVaseInterlude(Time.deltaTime);
             if (!openingBlocksSimulation && _currentView == ScreenView.Board && !_choosingSeeds && !RequiredOptionsView.IsOpen && (_profileDialog == null || !_profileDialog.IsOpen))
             {
-                if (!IndependentModes.TickModes(Time.deltaTime))
+                using (s_updateSimulationMarker.Auto())
                 {
-                    RequiredGame.Update(Time.deltaTime);
+                    if (!IndependentModes.TickModes(Time.deltaTime))
+                    {
+                        RequiredGame.Update(Time.deltaTime);
+                    }
                 }
             }
 
             AdventureBoard.NormalizeAdventureSelection();
-            Sounds.UpdateAdventureZombiePartAudio();
+            using (s_updateAudioMarker.Auto())
+            {
+                Sounds.UpdateAdventureZombiePartAudio();
+            }
             Rewards.UpdateAdventureRewardContinuation();
             Router.HandleEscape();
 
             UpdateCursorVisibility();
-            Music.UpdateDynamicAudio();
+            using (s_updateAudioMarker.Auto())
+            {
+                Music.UpdateDynamicAudio();
+            }
         }
 
         /// <summary>Synchronizes the system cursor with the original adventure board presentation.</summary>

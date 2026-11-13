@@ -16,6 +16,14 @@ namespace PlantsVsZombies.Adventure
         {
             Level = level;
             _iceView = _ice.AsReadOnly();
+            _packetsView = _packets.AsReadOnly();
+            _vasesView = _vases.AsReadOnly();
+            _gravesView = _graves.AsReadOnly();
+            _cratersView = _craters.AsReadOnly();
+            _ballsView = _balls.AsReadOnly();
+            _nutsView = _nuts.AsReadOnly();
+            _coinsView = _coins.AsReadOnly();
+            _cobShellsView = _cobShells.AsReadOnly();
         }
 
         /// <summary>Gets the independent PC PoolEffect counter advanced before board objects update.</summary>
@@ -74,28 +82,40 @@ namespace PlantsVsZombies.Adventure
 
         /// <summary>Stores packets.</summary>
         internal readonly List<AdventurePacket> _packets = new List<AdventurePacket>();
+        /// <summary>Retains the live read-only view of packets for allocation-free repeated access.</summary>
+        private readonly IReadOnlyList<AdventurePacket> _packetsView;
         /// <summary>Stores vases.</summary>
         internal readonly List<AdventureVase> _vases = new List<AdventureVase>();
+        /// <summary>Retains the live read-only view of vases for allocation-free repeated access.</summary>
+        private readonly IReadOnlyList<AdventureVase> _vasesView;
         /// <summary>Stores graves.</summary>
         internal readonly List<AdventureCellTimer> _graves = new List<AdventureCellTimer>();
+        /// <summary>Retains the live read-only view of graves for allocation-free repeated access.</summary>
+        private readonly IReadOnlyList<AdventureCellTimer> _gravesView;
         /// <summary>Gets whether the original introduction has enabled gravestone emergence.</summary>
         public bool GravesEnabled { get; internal set; } = true;
         /// <summary>Stores craters.</summary>
         internal readonly List<AdventureCellTimer> _craters = new List<AdventureCellTimer>();
+        /// <summary>Retains the live read-only view of craters for allocation-free repeated access.</summary>
+        private readonly IReadOnlyList<AdventureCellTimer> _cratersView;
         /// <summary>Stores ice.</summary>
         internal readonly List<AdventureIceTrail> _ice = new List<AdventureIceTrail>();
         /// <summary>Retains one read-only ice view for every row's repeated presentation queries.</summary>
         private readonly IReadOnlyList<AdventureIceTrail> _iceView;
         /// <summary>Stores balls.</summary>
         internal readonly List<AdventureBossBall> _balls = new List<AdventureBossBall>();
+        /// <summary>Retains the live read-only view of balls for allocation-free repeated access.</summary>
+        private readonly IReadOnlyList<AdventureBossBall> _ballsView;
         /// <summary>Stores nuts.</summary>
         internal readonly List<AdventureBowlingNut> _nuts = new List<AdventureBowlingNut>();
+        /// <summary>Retains the live read-only view of nuts for allocation-free repeated access.</summary>
+        private readonly IReadOnlyList<AdventureBowlingNut> _nutsView;
         /// <summary>Gets or sets packets.</summary>
         public IReadOnlyList<AdventurePacket> Packets
         {
             get
             {
-                return _packets.AsReadOnly();
+                return _packetsView;
             }
         }
 
@@ -104,7 +124,7 @@ namespace PlantsVsZombies.Adventure
         {
             get
             {
-                return _vases.AsReadOnly();
+                return _vasesView;
             }
         }
 
@@ -113,7 +133,7 @@ namespace PlantsVsZombies.Adventure
         {
             get
             {
-                return _graves.AsReadOnly();
+                return _gravesView;
             }
         }
 
@@ -122,7 +142,7 @@ namespace PlantsVsZombies.Adventure
         {
             get
             {
-                return _craters.AsReadOnly();
+                return _cratersView;
             }
         }
 
@@ -140,7 +160,7 @@ namespace PlantsVsZombies.Adventure
         {
             get
             {
-                return _balls.AsReadOnly();
+                return _ballsView;
             }
         }
 
@@ -149,7 +169,7 @@ namespace PlantsVsZombies.Adventure
         {
             get
             {
-                return _nuts.AsReadOnly();
+                return _nutsView;
             }
         }
 
@@ -301,14 +321,18 @@ namespace PlantsVsZombies.Adventure
         internal int _coinId;
         /// <summary>Stores coins.</summary>
         internal readonly List<AdventureCoin> _coins = new List<AdventureCoin>();
+        /// <summary>Retains the live read-only view of coins for allocation-free repeated access.</summary>
+        private readonly IReadOnlyList<AdventureCoin> _coinsView;
         /// <summary>Stores cob shells.</summary>
         internal readonly List<AdventureCobShell> _cobShells = new List<AdventureCobShell>();
+        /// <summary>Retains the live read-only view of cobShells for allocation-free repeated access.</summary>
+        private readonly IReadOnlyList<AdventureCobShell> _cobShellsView;
         /// <summary>Gets or sets coins.</summary>
         public IReadOnlyList<AdventureCoin> Coins
         {
             get
             {
-                return _coins.AsReadOnly();
+                return _coinsView;
             }
         }
 
@@ -317,7 +341,7 @@ namespace PlantsVsZombies.Adventure
         {
             get
             {
-                return _cobShells.AsReadOnly();
+                return _cobShellsView;
             }
         }
     }

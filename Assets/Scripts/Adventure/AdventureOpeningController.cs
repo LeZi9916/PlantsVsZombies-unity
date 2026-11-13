@@ -432,8 +432,9 @@ namespace PlantsVsZombies.Adventure
             if (item == AdventureIntroEvent.GraveStonesEnabled)
             {
                 _owner.RequiredGame.Adventure.GravesEnabled = true;
-                foreach (var grave in _owner.RequiredGame.Adventure.Graves)
+                for (var graveIndex = 0; graveIndex < _owner.RequiredGame.Adventure.Graves.Count; graveIndex++)
                 {
+                    var grave = _owner.RequiredGame.Adventure.Graves[graveIndex];
                     _owner.Sounds.PlayPresentationSound("dirt_rise");
                 }
             }

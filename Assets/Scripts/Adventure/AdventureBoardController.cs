@@ -43,8 +43,9 @@ namespace PlantsVsZombies.Adventure
             if (_selectedAdventurePacket >= 0)
             {
                 var exists = false;
-                foreach (var packet in board.Packets)
+                for (var packetIndex = 0; packetIndex < board.Packets.Count; packetIndex++)
                 {
+                    var packet = board.Packets[packetIndex];
                     if (packet.Id == _selectedAdventurePacket)
                     {
                         exists = true;
@@ -141,8 +142,9 @@ namespace PlantsVsZombies.Adventure
         /// <returns>The resulting contains required seed.</returns>
         internal bool ContainsRequiredSeed(PlantKind kind)
         {
-            foreach (var seed in _owner.RequiredGame.Adventure.RequiredSeeds)
+            for (var seedIndex = 0; seedIndex < _owner.RequiredGame.Adventure.RequiredSeeds.Count; seedIndex++)
             {
+                var seed = _owner.RequiredGame.Adventure.RequiredSeeds[seedIndex];
                 if (seed == kind)
                 {
                     return true;
@@ -507,8 +509,9 @@ namespace PlantsVsZombies.Adventure
             }
 
             var kind = _owner._selected >= 0 && _owner._selected < _owner._deck.Count ? _owner._deck[_owner._selected] : PlantKind.Peashooter;
-            foreach (var packet in _owner.RequiredGame.Adventure.Packets)
+            for (var packetIndex = 0; packetIndex < _owner.RequiredGame.Adventure.Packets.Count; packetIndex++)
             {
+                var packet = _owner.RequiredGame.Adventure.Packets[packetIndex];
                 if (packet.Id == _selectedAdventurePacket)
                 {
                     kind = packet.Kind;

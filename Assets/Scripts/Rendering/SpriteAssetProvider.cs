@@ -224,6 +224,7 @@ namespace PlantsVsZombies.Rendering
         /// <summary>Evicts inactive imported pages after their published scene frames have safely retired.</summary>
         internal static void OnSceneFrameStarted()
         {
+            ObjectSpriteRenderer.FlushPending();
             foreach (var provider in s_providers.Values)
             {
                 provider.CollectRetiredPages();
@@ -473,6 +474,17 @@ namespace PlantsVsZombies.Rendering
                     yield return path;
                 }
             }
+        }
+
+        /// <summary>Prepares and borrows the complete cropped region list for synchronous consumption.</summary>
+        /// <param name="identity">The original image identity.</param>
+        /// <param name="sourceUv">The requested original source rectangle.</param>
+        /// <param name="useTightGeometry">Whether transparent source pieces may be pruned.</param>
+        /// <returns>A borrowed view invalidated by subsequent provider queries.</returns>
+        internal SpriteRegionView GetRegions(string identity, Rect sourceUv, bool useTightGeometry)
+        {
+            PrepareRegions(identity, sourceUv, useTightGeometry);
+            return new SpriteRegionView(_preparedRegions, _preparedCount);
         }
 
         /// <summary>Counts the cropped geometry pieces after preparing every page used by the logical image.</summary>
@@ -993,6 +1005,7 @@ namespace PlantsVsZombies.Rendering
         /// <summary>Releases one acquisition and unloads pages when the final caller releases the provider.</summary>
         public void Dispose()
         {
+            ObjectSpriteRenderer.FlushPending();
             if (_disposed || --_references > 0)
             {
                 return;

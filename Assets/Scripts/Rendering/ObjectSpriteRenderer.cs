@@ -1,6 +1,7 @@
 #nullable enable
 using System;
 using System.Collections.Generic;
+using Unity.Burst;
 using UnityEngine;
 using UnityEngine.Rendering;
 
@@ -82,19 +83,77 @@ namespace PlantsVsZombies.Rendering
         private int _used;
         /// <summary>Whether this pool has released its Unity resources.</summary>
         private bool _disposed;
-        /// <summary>Gets the number of retained logical source commands, without per-source GPU renderers.</summary>
-        public int PooledObjectCount => _sprites.Count;
-        /// <summary>Gets the number of actual combined mesh draws submitted by this pool.</summary>
-        public int BatchCount => _batchUsed;
-        /// <summary>Gets the logical workload and actual batch-fragmentation counters for the latest submission.</summary>
-        internal SpriteBatchStatistics LastFrameStatistics => new SpriteBatchStatistics(_used, _batchUsed,
-            _vertexCount, _triangleCount, _culledCount, _coveredPixelArea, _materialSplits, _painterSplits, _capacitySplits);
-        /// <summary>Gets the number of live texture and blend-state material bindings owned by this pool.</summary>
-        internal int CachedMaterialCount => _materials.Count * 3;
-        /// <summary>Gets the retained logical source commands for source-level diagnostics.</summary>
-        internal IReadOnlyList<ObjectSprite> SubmittedSprites => _sprites;
-        /// <summary>Gets the number of quads submitted in the current batch.</summary>
-        public int SubmittedObjectCount => _used;
+        /// <summary>Snapshots the current managed runtime's float expression precision for the native numeric executor.</summary>
+        private static readonly bool s_expandedPrecision = ProbeExpandedPrecision(3.2f, 2.7f, 22f) != 0f;
+        /// <summary>The lazily allocated numeric arena shared by this presentation session.</summary>
+        private static SpriteGeometryArena? s_geometry;
+        /// <summary>The number of explicitly nested deferred presentation scopes.</summary>
+        private static int s_deferredDepth;
+        /// <summary>Whether Burst was enabled when the outer presentation scope began.</summary>
+        private static bool s_burstAvailable;
+        /// <summary>The live renderers sharing ownership of the arena.</summary>
+        private static int s_rendererCount;
+        /// <summary>Gets or sets the executor used by internal deferred submissions.</summary>
+        internal static SpriteGeometryExecution GeometryExecution { get; set; } = SpriteGeometryExecution.Burst;
+        /// <summary>Gets the retained numeric input capacity for performance diagnostics.</summary>
+        internal static int NativeRegionCapacity => s_geometry == null ? 0 : SpriteGeometryArena.Capacity;
+        /// <summary>Gets the retained polygon vertex capacity for performance diagnostics.</summary>
+        internal static int NativeVertexCapacity => s_geometry == null ? 0 : SpriteGeometryArena.Capacity * 12;
+        /// <summary>Gets the retained logical source command capacity after synchronizing pending work.</summary>
+        public int PooledObjectCount
+        {
+            get
+            {
+                FlushPending();
+                return _sprites.Count;
+            }
+        }
+        /// <summary>Gets the actual combined mesh draw count after synchronizing pending work.</summary>
+        public int BatchCount
+        {
+            get
+            {
+                FlushPending();
+                return _batchUsed;
+            }
+        }
+        /// <summary>Gets the completed logical workload and batch fragmentation counters.</summary>
+        internal SpriteBatchStatistics LastFrameStatistics
+        {
+            get
+            {
+                FlushPending();
+                return new SpriteBatchStatistics(_used, _batchUsed, _vertexCount, _triangleCount,
+                    _culledCount, _coveredPixelArea, _materialSplits, _painterSplits, _capacitySplits);
+            }
+        }
+        /// <summary>Gets the number of live texture and blend bindings after completing submissions.</summary>
+        internal int CachedMaterialCount
+        {
+            get
+            {
+                FlushPending();
+                return _materials.Count * 3;
+            }
+        }
+        /// <summary>Gets the synchronized retained logical commands for source diagnostics.</summary>
+        internal IReadOnlyList<ObjectSprite> SubmittedSprites
+        {
+            get
+            {
+                FlushPending();
+                return _sprites;
+            }
+        }
+        /// <summary>Gets the completed source command count after synchronizing pending work.</summary>
+        public int SubmittedObjectCount
+        {
+            get
+            {
+                FlushPending();
+                return _used;
+            }
+        }
         /// <summary>Gets whether a screen drawing scope is active.</summary>
         public bool IsFrameActive => _scopeDepth > 0;
 
@@ -175,6 +234,7 @@ namespace PlantsVsZombies.Rendering
             };
             cameraObject.transform.SetParent(_root.transform, false);
             _camera = CreateCamera(cameraObject);
+            s_rendererCount++;
         }
 
         /// <summary>Begins or nests a batch of objects displayed directly by the scene camera.</summary>
@@ -184,6 +244,10 @@ namespace PlantsVsZombies.Rendering
         public ObjectRenderScope BeginFrame()
         {
             ThrowIfDisposed();
+            if (_scopeDepth == 0)
+            {
+                FlushPending();
+            }
             if (_scopeDepth++ == 0)
             {
                 if (!_scenePool)
@@ -209,9 +273,22 @@ namespace PlantsVsZombies.Rendering
         /// <summary>Publishes the completed objects for the scene camera after the outermost scope ends.</summary>
         public void EndFrame()
         {
-            if (_scopeDepth == 0 || --_scopeDepth > 0)
+            if (_scopeDepth == 0)
             {
                 return;
+            }
+            if (_scopeDepth > 1)
+            {
+                _scopeDepth--;
+                return;
+            }
+            try
+            {
+                FlushPending();
+            }
+            finally
+            {
+                _scopeDepth--;
             }
 
             PublishBatches();
@@ -224,6 +301,7 @@ namespace PlantsVsZombies.Rendering
         public void BeginBatch()
         {
             ThrowIfDisposed();
+            FlushPending();
             SetRenderersEnabled(false);
             _used = 0;
             _batchUsed = 0;
@@ -258,6 +336,7 @@ namespace PlantsVsZombies.Rendering
         /// <exception cref = "ArgumentOutOfRangeException">The blending mode is unsupported or the frame exceeds Unity's sorting-order range.</exception>
         public void DrawQuad(Texture texture, float width, float height, Rect uv, Matrix4x4 matrix, Color color, int mode, float grayscale = 0f, float producerAdditive = 0f, float additive = 0f, Color addColor = default, Rect? clipOverride = null, bool combineHit = false)
         {
+            FlushPending();
             ThrowIfDisposed();
             DrawQuad(SpriteImage.FromTexture(texture), width, height, uv, matrix, color, mode, grayscale,
                 producerAdditive, additive, addColor, clipOverride, combineHit);
@@ -281,6 +360,7 @@ namespace PlantsVsZombies.Rendering
         /// <exception cref="ArgumentOutOfRangeException">The blending mode or painter order is unsupported.</exception>
         public void DrawQuad(SpriteImage image, float width, float height, Rect uv, Matrix4x4 matrix, Color color, int mode, float grayscale = 0f, float producerAdditive = 0f, float additive = 0f, Color addColor = default, Rect? clipOverride = null, bool combineHit = false)
         {
+            FlushPending();
             using var submission = SpriteRenderingProfiler.Measure(SpriteRenderingProfiler.Submit);
             ThrowIfDisposed();
             if (mode < 0 || mode > 3 || _used >= short.MaxValue)
@@ -305,18 +385,262 @@ namespace PlantsVsZombies.Rendering
                 return;
             }
 
+            var regions = image.GetRegions(uv, _useTightGeometry);
+            DrawPreparedQuad(image, width, height, uv, matrix, color, mode, grayscale, producerAdditive,
+                additive, addColor, clip, clipEnabled, combineHit, node, regions);
+        }
+
+        /// <summary>Detects expanded float expressions without depending on operating system, CPU, or scripting backend.</summary>
+        /// <param name="x">A nonintegral repeated horizontal position.</param>
+        /// <param name="top">A nonintegral upper edge.</param>
+        /// <param name="bottom">A separated lower edge.</param>
+        /// <returns>Zero for float intermediates, or the managed expanded-expression rounding residual.</returns>
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+        private static float ProbeExpandedPrecision(float x, float top, float bottom)
+        {
+            var area = 0f;
+            for (var index = 0; index < 4; index++)
+            {
+                var previous = index == 0 || index == 3 ? bottom : top;
+                var current = index < 2 ? top : bottom;
+                area += x * current - x * previous;
+            }
+            return area;
+        }
+
+        /// <summary>Enables bounded cross-sprite deferral for one explicit presentation call.</summary>
+        /// <returns>A stack-only scope completing pending work on disposal.</returns>
+        internal static DeferredSpriteScope BeginDeferred()
+        {
+            if (s_deferredDepth == 0)
+            {
+                s_burstAvailable = BurstCompiler.IsEnabled;
+            }
+            s_deferredDepth++;
+            return new DeferredSpriteScope(true);
+        }
+
+        /// <summary>Completes all work before leaving an explicitly nested deferred scope.</summary>
+        internal static void EndDeferred()
+        {
+            if (s_deferredDepth == 0)
+            {
+                return;
+            }
+            try
+            {
+                FlushPending();
+            }
+            finally
+            {
+                s_deferredDepth--;
+            }
+        }
+
+        /// <summary>Submits an internal quad, buffering numeric geometry only inside an explicit deferred scope.</summary>
+        /// <param name="image">The logical source image prepared on the main thread.</param>
+        /// <param name="width">The local source width.</param>
+        /// <param name="height">The local source height.</param>
+        /// <param name="uv">The original normalized source crop.</param>
+        /// <param name="matrix">The source-to-destination affine transform.</param>
+        /// <param name="color">The source tint.</param>
+        /// <param name="mode">The original blend operation.</param>
+        /// <param name="grayscale">The source grayscale weight.</param>
+        /// <param name="producerAdditive">The source brightness.</param>
+        /// <param name="additive">The white source highlight.</param>
+        /// <param name="addColor">The colored source highlight.</param>
+        /// <param name="clipOverride">The optional destination clip.</param>
+        /// <param name="combineHit">Whether to fuse an adjacent source-color hit.</param>
+        /// <exception cref="ObjectDisposedException">The renderer is disposed.</exception>
+        /// <exception cref="ArgumentOutOfRangeException">The blend operation or source sorting range is invalid.</exception>
+        internal void EnqueueQuad(SpriteImage image, float width, float height, Rect uv, Matrix4x4 matrix, Color color,
+            int mode, float grayscale = 0f, float producerAdditive = 0f, float additive = 0f,
+            Color addColor = default, Rect? clipOverride = null, bool combineHit = false)
+        {
+            if (s_deferredDepth == 0 || GeometryExecution == SpriteGeometryExecution.Immediate
+                || GeometryExecution == SpriteGeometryExecution.Burst && !s_burstAvailable)
+            {
+                DrawQuad(image, width, height, uv, matrix, color, mode, grayscale, producerAdditive,
+                    additive, addColor, clipOverride, combineHit);
+                return;
+            }
+            using var submission = SpriteRenderingProfiler.Measure(SpriteRenderingProfiler.Submit);
+            using var preparation = SpriteRenderingProfiler.Measure(SpriteRenderingProfiler.Prepare);
+            ThrowIfDisposed();
+            if (s_geometry?.Owner != null && !ReferenceEquals(s_geometry.Owner, this))
+            {
+                FlushPending();
+            }
+            if (mode < 0 || mode > 3 || _used >= short.MaxValue)
+            {
+                throw new ArgumentOutOfRangeException(nameof(mode), "The sprite mode or frame sorting range is invalid.");
+            }
+            SpriteHierarchy.RecordCurrentSprite(image, width, height, uv, matrix, color, mode);
+            var node = SpriteHierarchy.CurrentSpriteObject;
+            var clipEnabled = clipOverride.HasValue || _scenePool && IsFrameActive;
+            var clip = clipOverride ?? SpriteDrawState.Clip;
+            if (width == 0f || height == 0f || uv.width == 0f || uv.height == 0f || mode != 3 && color.a <= 0f
+                || node != null && !node.activeInHierarchy || clipEnabled && (clip.width <= 0f || clip.height <= 0f))
+            {
+                _culledCount++;
+                return;
+            }
+            var regions = image.GetRegions(uv, _useTightGeometry);
+            if (regions.Count > SpriteGeometryArena.Capacity)
+            {
+                // Never split one source command across chunks. The original path remains the oversized oracle.
+                FlushPending();
+                if (_used >= short.MaxValue)
+                {
+                    throw new ArgumentOutOfRangeException(nameof(mode), "The sprite frame sorting range is invalid.");
+                }
+                DrawPreparedQuad(image, width, height, uv, matrix, color, mode, grayscale, producerAdditive,
+                    additive, addColor, clip, clipEnabled, combineHit, node, regions);
+                return;
+            }
+            if (regions.Count == 0)
+            {
+                _culledCount++;
+                return;
+            }
+            var arena = s_geometry ??= new SpriteGeometryArena();
+            if (arena.RegionCount + regions.Count > SpriteGeometryArena.Capacity)
+            {
+                FlushPending();
+            }
+            var command = new DeferredSpriteCommand
+            {
+                Image = image, Node = node, Width = width, Height = height, Uv = uv, Matrix = matrix,
+                Color = color, Mode = mode, Grayscale = grayscale, ProducerAdditive = producerAdditive,
+                Additive = additive, AddColor = addColor, Clip = clip, ClipEnabled = clipEnabled,
+                Scene = _scenePool && IsFrameActive, CombineHit = combineHit,
+                FirstRegion = arena.RegionCount, RegionCount = regions.Count
+            };
+            for (var index = 0; index < regions.Count; index++)
+            {
+                var region = regions[index];
+                var target = arena.RegionCount++;
+                arena.Inputs[target] = new SpriteRegionInput
+                {
+                    Matrix = matrix, SourcePixels = region.SourcePixels, TextureUv = region.TextureUv,
+                    SourceUv = uv, ImageSize = new Vector2(image.Width, image.Height), Size = new Vector2(width, height),
+                    Clip = clip, ClipEnabled = clipEnabled, PixelStepX = _pixelStepX, PixelStepY = _pixelStepY,
+                    ExpandedPrecision = s_expandedPrecision
+                };
+                arena.Textures[target] = region.Texture;
+                arena.Opaque[target] = !_scenePool && mode == 0 && color.a >= 1f && _textureOpacity.IsOpaque(region.Texture);
+            }
+            arena.Commands[arena.CommandCount++] = command;
+            arena.Owner = this;
+        }
+
+        /// <summary>Completes the sole pending renderer without introducing an extra GPU batch boundary.</summary>
+        internal static void FlushPending()
+        {
+            var arena = s_geometry;
+            var owner = arena?.Owner;
+            if (arena == null || owner == null)
+            {
+                return;
+            }
+            // Detach before requesting painter order, which is itself an external synchronization barrier.
+            arena.Owner = null;
+            try
+            {
+                using (SpriteRenderingProfiler.Measure(SpriteRenderingProfiler.Geometry))
+                {
+                    arena.Execute(GeometryExecution);
+                }
+                using var commit = SpriteRenderingProfiler.Measure(SpriteRenderingProfiler.Commit);
+                for (var index = 0; index < arena.CommandCount; index++)
+                {
+                    owner.CommitDeferred(arena, arena.Commands[index]);
+                }
+            }
+            finally
+            {
+                arena.Clear();
+            }
+        }
+
+        /// <summary>Appends one command's computed polygons in their original region order.</summary>
+        /// <param name="arena">The shared completed numeric buffers and managed texture snapshots.</param>
+        /// <param name="command">The immutable logical source state recorded at submission.</param>
+        private void CommitDeferred(SpriteGeometryArena arena, DeferredSpriteCommand command)
+        {
+            if (_used >= short.MaxValue)
+            {
+                throw new ArgumentOutOfRangeException(nameof(command), "The sprite frame sorting range is invalid.");
+            }
+            var order = -1;
+            var effects = new Vector4(command.Grayscale, command.ProducerAdditive, command.Mode, command.CombineHit ? 1f : 0f);
+            var highlight = new Vector4(command.AddColor.r + command.Additive, command.AddColor.g + command.Additive,
+                command.AddColor.b + command.Additive, 0f);
+            for (var index = command.FirstRegion; index < command.FirstRegion + command.RegionCount; index++)
+            {
+                var result = arena.Results[index];
+                if (result.Count < 3 || result.Area == 0f)
+                {
+                    continue;
+                }
+                if (order < 0)
+                {
+                    order = command.Scene ? SpriteDrawState.NextOrder() : _used;
+                    RecordSource(command.Image, command.Width, command.Height, command.Uv, command.Matrix,
+                        command.Color, command.Mode, command.Grayscale, command.ProducerAdditive, command.Additive,
+                        command.AddColor, command.Clip, command.ClipEnabled, order, command.Node);
+                }
+                var opaque = arena.Opaque[index];
+                var material = GetMaterial(arena.Textures[index]!, opaque ? 2 : command.Mode == 1 || command.Mode == 2 ? 1 : 0);
+                var batch = GetBatch(material, order, result.Count, opaque);
+                var firstVertex = batch.VertexCount;
+                var depth = -order / 32768f;
+                for (var vertexIndex = 0; vertexIndex < result.Count; vertexIndex++)
+                {
+                    var vertex = arena.Vertices[result.Offset + vertexIndex];
+                    batch.AddVertex(new Vector3(vertex.Position.x, -vertex.Position.y, depth), vertex.Coordinates,
+                        command.Color, effects, highlight);
+                }
+                batch.CompletePolygon(firstVertex, result.Count, order);
+                _vertexCount += result.Count;
+                _triangleCount += result.Count - 2;
+                _coveredPixelArea += result.Area;
+            }
+            if (order < 0)
+            {
+                _culledCount++;
+            }
+        }
+
+        /// <summary>Executes the original managed geometry path on a synchronously prepared source view.</summary>
+        /// <param name="image">The original image.</param>
+        /// <param name="width">The local width.</param>
+        /// <param name="height">The local height.</param>
+        /// <param name="uv">The source crop.</param>
+        /// <param name="matrix">The affine destination transform.</param>
+        /// <param name="color">The source tint.</param>
+        /// <param name="mode">The blend operation.</param>
+        /// <param name="grayscale">The grayscale amount.</param>
+        /// <param name="producerAdditive">The producer brightness.</param>
+        /// <param name="additive">The white highlight.</param>
+        /// <param name="addColor">The colored highlight.</param>
+        /// <param name="clip">The original clipping bounds.</param>
+        /// <param name="clipEnabled">Whether destination clipping is enabled.</param>
+        /// <param name="combineHit">Whether a source-color hit is fused.</param>
+        /// <param name="node">The original hierarchy object.</param>
+        /// <param name="regions">The borrowed prepared regions, consumed synchronously.</param>
+        private void DrawPreparedQuad(SpriteImage image, float width, float height, Rect uv, Matrix4x4 matrix,
+            Color color, int mode, float grayscale, float producerAdditive, float additive, Color addColor,
+            Rect clip, bool clipEnabled, bool combineHit, GameObject? node, SpriteRegionView regions)
+        {
             var order = -1;
             var scaleX = width / (uv.width * image.Width);
             var scaleY = height / (uv.height * image.Height);
             var originX = uv.x * image.Width;
             var sourceTop = (uv.y + uv.height) * image.Height;
-            var regionCount = image.GetRegionCount(uv, _useTightGeometry);
-            for (var regionIndex = 0; regionIndex < regionCount; regionIndex++)
+            for (var regionIndex = 0; regionIndex < regions.Count; regionIndex++)
             {
-                if (!image.TryGetRegion(uv, regionIndex, _useTightGeometry, out var region))
-                {
-                    continue;
-                }
+                var region = regions[regionIndex];
 
                 // Keep shared source-pixel edges identical between tight pieces. Reconstructing
                 // geometry from separately rounded normalized rectangles can create one-pixel seams.
@@ -376,6 +700,7 @@ namespace PlantsVsZombies.Rendering
         public void RenderTo(RenderTexture destination)
         {
             ThrowIfDisposed();
+            FlushPending();
             var previousPosition = _root.transform.position;
             var previousVisibility = _batchUsed > 0 && _batches[0].Renderer.enabled;
             _camera.transform.localPosition = new Vector3(destination.width * 0.5f, -destination.height * 0.5f, -10f);
@@ -412,6 +737,7 @@ namespace PlantsVsZombies.Rendering
                 return;
             }
 
+            FlushPending();
             SetRenderersEnabled(false);
             foreach (var batch in _batches)
             {
@@ -443,6 +769,11 @@ namespace PlantsVsZombies.Rendering
             DestroyResource(_root);
             _sprites.Clear();
             _disposed = true;
+            if (--s_rendererCount == 0)
+            {
+                s_geometry?.Dispose();
+                s_geometry = null;
+            }
         }
 
         /// <summary>Retains one original quad for source-level inspection without owning a GPU renderer.</summary>

@@ -5049,8 +5049,10 @@ namespace PlantsVsZombies.Simulation
                 Presentation.MowerTimes[mower] = mower.Active ? time + dt : 0f;
             }
 
-            foreach (var nut in Adventure.BowlingNuts)
+            var nuts = Adventure.BowlingNuts;
+            for (var nutIndex = 0; nutIndex < nuts.Count; nutIndex++)
             {
+                var nut = nuts[nutIndex];
                 global::PlantsVsZombies.Adventure.AdventureBowlingPresentation? pose;
                 if (!Presentation.Bowling.TryGetValue(nut, out pose))
                 {

@@ -66,6 +66,19 @@ namespace PlantsVsZombies.Rendering
             return new SpriteImage(texture, texture.name);
         }
 
+        /// <summary>Prepares all regions once for immediate indexed consumption.</summary>
+        /// <param name="sourceUv">The original normalized source crop.</param>
+        /// <param name="useTightGeometry">Whether transparent source pieces may be pruned.</param>
+        /// <returns>A borrowed view valid until the next provider query.</returns>
+        internal SpriteRegionView GetRegions(Rect sourceUv, bool useTightGeometry = true)
+        {
+            if (_provider != null)
+            {
+                return _provider.GetRegions(SourceIdentity, sourceUv, useTightGeometry);
+            }
+            return TryGetRegion(sourceUv, 0, useTightGeometry, out var region) ? new SpriteRegionView(region) : default;
+        }
+
         /// <summary>Counts visible regions after cropping, preparing all image pages before returning.</summary>
         /// <param name="sourceUv">The requested normalized original source rectangle; either axis may be reversed.</param>
         /// <returns>The number of nonoverlapping visible pieces intersecting the source rectangle.</returns>

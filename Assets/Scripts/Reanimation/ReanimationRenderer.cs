@@ -1,5 +1,6 @@
 #nullable enable
 using PlantsVsZombies.Adventure;
+using PlantsVsZombies.Game;
 using PlantsVsZombies.Rendering;
 using PlantsVsZombies.Simulation;
 using System;
@@ -44,6 +45,10 @@ namespace PlantsVsZombies.Reanimation
         {
             /// <summary>Stores name.</summary>
             public string Name = string.Empty;
+            /// <summary>Caches immutable default visibility for every variant and equipment state.</summary>
+            public int VariantVisibility;
+            /// <summary>Identifies tracks whose default visibility follows the ground-zombie variant rules.</summary>
+            public bool GroundZombie;
             /// <summary>Stores frames.</summary>
             public Frame[] Frames = System.Array.Empty<Frame>();
         }
@@ -117,6 +122,8 @@ namespace PlantsVsZombies.Reanimation
             public int FrameCount;
             /// <summary>Stores tracks.</summary>
             public readonly List<Track> Tracks = new List<Track>();
+            /// <summary>Preserves original track indices within each native shield type's ordered render groups.</summary>
+            public int[][][] NativeTrackGroups = Array.Empty<int[][]>();
             /// <summary>Indexes the first track with each original case-insensitive name.</summary>
             public readonly Dictionary<string, Track> TracksByName = new Dictionary<string, Track>(StringComparer.OrdinalIgnoreCase);
             /// <summary>Stores clips.</summary>
@@ -234,6 +241,10 @@ namespace PlantsVsZombies.Reanimation
         /// <summary>Gets the native portrait material, which must already exist wherever it is used.</summary>
         /// <exception cref="System.InvalidOperationException">The member is not available.</exception>
         private Material RequiredNativePortraitMaterial => _nativePortraitMaterial ?? throw new System.InvalidOperationException("The member '_nativePortraitMaterial' is not available.");
+        /// <summary>Reuses live detached-part particle identities without retaining expired presentation frames.</summary>
+        private readonly PresentationKeyCache _particleKeys = new PresentationKeyCache();
+        /// <summary>The shared scene frame most recently associated with detached-part identities.</summary>
+        private int _particleKeyFrame = -1;
         /// <summary>Stores indexed.</summary>
         private bool _indexed;
         /// <summary>Stores disposed.</summary>
@@ -255,6 +266,8 @@ namespace PlantsVsZombies.Reanimation
                 if (_objectFrameDepth++ == 0)
                 {
                     _nativeBlendFrame++;
+                    _particleKeys.BeginFrame();
+                    _particleKeyFrame = SpriteDrawState.FrameVersion;
                 }
             }
         }
@@ -633,6 +646,7 @@ namespace PlantsVsZombies.Reanimation
             var current = clip.Start + relativeFrame;
             var next = relativeFrame + 1 < clip.Count ? current + 1 : (loop ? clip.Start : current);
             var originalMatrix = SpriteMatrix;
+            var parentMatrix = originalMatrix * layout;
             var originalColor = SpriteDrawState.Color;
             var previousSpriteClip = _nativeSpriteClip;
             var drawn = false;
@@ -647,23 +661,20 @@ namespace PlantsVsZombies.Reanimation
                     }
 
                     using var hierarchyAttachment = Hierarchy.BeginAttachment(10);
-                    drawn |= DrawAttachment(flag, flagClip, 0f, originalMatrix * layout, originalColor, 1f);
+                    drawn |= DrawAttachment(flag, flagClip, 0f, parentMatrix, originalColor, 1f);
                 }
 
                 // PC shield groups and part overrides must also run on the common DrawInternal path.
                 // DrawNativePlayback/DrawZombiePlayback both enter here, including corpse playback.
-                var groupCount = _nativeCombatZombie == null || _nativeCombatShieldType == 0 ? 1 : 3;
-                for (var group = 0; group < groupCount; group++)
+                var trackGroups = NativeZombieTrackGroups(asset);
+                for (var group = 0; group < trackGroups.Length; group++)
                 {
-                    for (var trackIndex = 0; trackIndex < asset.Tracks.Count; trackIndex++)
+                    var indices = trackGroups[group];
+                    for (var position = 0; position < indices.Length; position++)
                     {
+                        var trackIndex = indices[position];
                         var track = asset.Tracks[trackIndex];
-                        if (_nativeCombatZombie != null && NativeZombieGroup(asset, track.Name) != group)
-                        {
-                            continue;
-                        }
-
-                        if (!IsTrackVisible(asset, track.Name, variant, equipmentIntact, trackVisible) || !NativeZombieTrackVisible(asset, track.Name))
+                        if (!IsTrackVisible(track, variant, equipmentIntact, trackVisible) || !NativeZombieTrackVisible(asset, track.Name))
                         {
                             continue;
                         }
@@ -694,7 +705,7 @@ namespace PlantsVsZombies.Reanimation
 
                         if (from.Texture != null)
                         {
-                            var sprite = NativeZombieTrackMatrix(originalMatrix * layout * part, group);
+                            var sprite = NativeZombieTrackMatrix(parentMatrix * part, group);
                             if (!HasDrawableArea(sprite))
                             {
                                 continue;
@@ -720,7 +731,7 @@ namespace PlantsVsZombies.Reanimation
 
                             // PC Zombie::Initialize (0x53DD90) attaches the flag to Zombie_flaghand.
                             // Reanimation::DrawRenderGroup draws that attachment immediately after its hand track.
-                            var attachment = originalMatrix * layout * part * flagBaseInverse;
+                            var attachment = parentMatrix * part * flagBaseInverse;
                             using var hierarchyAttachment = Hierarchy.BeginAttachment(10);
                             if (combatFlag)
                             {
@@ -742,7 +753,7 @@ namespace PlantsVsZombies.Reanimation
                                 : heldMoneyBag ? Matrix4x4.Translate(new Vector3(90f, 405f, 0f))
                                 : heldTreeFood || heldFertilizer ? Matrix4x4.Translate(new Vector3(102f, 412f, 0f))
                                 : Matrix4x4.Translate(new Vector3(100f, 393f, 0f)) * Matrix4x4.Scale(new Vector3(1.2f, 1.2f, 1f));
-                            var placement = originalMatrix * layout * part * heldItemBaseInverse * offset;
+                            var placement = parentMatrix * part * heldItemBaseInverse * offset;
                             using var hierarchyAttachment = Hierarchy.BeginAttachment(11);
                             if (heldItemClip == null)
                             {
@@ -1315,20 +1326,25 @@ namespace PlantsVsZombies.Reanimation
         }
 
         /// <summary>Performs is track visible.</summary>
-        /// <param name = "asset">The asset.</param>
-        /// <param name = "track">The track.</param>
-        /// <param name = "variant">The variant.</param>
-        /// <param name = "equipmentIntact">The equipment intact.</param>
-        /// <param name = "custom">The custom.</param>
-        /// <returns>The resulting is track visible.</returns>
-        private static bool IsTrackVisible(Reanimation asset, string track, ZombieVariant variant, bool equipmentIntact, Func<string, bool>? custom)
+        /// <param name = "track">The immutable parsed track and its cached default visibility.</param>
+        /// <param name = "variant">The current ground-zombie variant.</param>
+        /// <param name = "equipmentIntact">Whether the variant's equipment is currently intact.</param>
+        /// <param name = "custom">An optional live visibility callback overriding the defaults.</param>
+        /// <returns>Whether the track is visible under the current caller's rules.</returns>
+        private static bool IsTrackVisible(Track track, ZombieVariant variant, bool equipmentIntact, Func<string, bool>? custom)
         {
             if (custom != null)
             {
-                return custom(track);
+                return custom(track.Name);
             }
 
-            return !IsZombie(asset) || IsZombieTrackVisible(track, variant, equipmentIntact);
+            if (variant < ZombieVariant.Normal || variant > ZombieVariant.ScreenDoor)
+            {
+                return !track.GroundZombie || IsZombieTrackVisible(track.Name, variant, equipmentIntact);
+            }
+
+            var bit = (int)variant * 2 + (equipmentIntact ? 1 : 0);
+            return (track.VariantVisibility & (1 << bit)) != 0;
         }
 
         /// <summary>Performs try get bounds.</summary>
@@ -1616,6 +1632,7 @@ namespace PlantsVsZombies.Reanimation
             _expiredNativePoseBlends.Clear();
             _headInstanceKeys.Clear();
             _expiredHeadInstanceKeys.Clear();
+            _particleKeys.Clear();
             _disposed = true;
         }
 
@@ -1876,17 +1893,14 @@ namespace PlantsVsZombies.Reanimation
 
             var time = SampleFrame(clip, seconds, fps, loop);
             var drawn = false;
-            var groupCount = _nativeCombatZombie == null || _nativeCombatShieldType == 0 ? 1 : 3;
-            for (var group = 0; group < groupCount; group++)
+            var trackGroups = NativeZombieTrackGroups(asset);
+            for (var group = 0; group < trackGroups.Length; group++)
             {
-                for (var trackIndex = 0; trackIndex < asset.Tracks.Count; trackIndex++)
+                var indices = trackGroups[group];
+                for (var position = 0; position < indices.Length; position++)
                 {
+                    var trackIndex = indices[position];
                     var track = asset.Tracks[trackIndex];
-                    if (_nativeCombatZombie != null && NativeZombieGroup(asset, track.Name) != group)
-                    {
-                        continue;
-                    }
-
                     if (trackVisible != null && !trackVisible(track.Name) || !NativeZombieTrackVisible(asset, track.Name))
                     {
                         continue;
@@ -2100,7 +2114,56 @@ namespace PlantsVsZombies.Reanimation
                 throw new FormatException("No animation frames were found.");
             }
 
+            CacheTrackRules(asset);
             return asset;
+        }
+
+        /// <summary>Caches the immutable track classification while retaining every original source index.</summary>
+        /// <param name="asset">The completely parsed animation whose track definitions will not change.</param>
+        private static void CacheTrackRules(Reanimation asset)
+        {
+            var zombie = IsZombie(asset);
+            for (var trackIndex = 0; trackIndex < asset.Tracks.Count; trackIndex++)
+            {
+                var track = asset.Tracks[trackIndex];
+                track.GroundZombie = zombie;
+                for (var variant = ZombieVariant.Normal; variant <= ZombieVariant.ScreenDoor; variant++)
+                {
+                    for (var intact = 0; intact < 2; intact++)
+                    {
+                        if (!zombie || IsZombieTrackVisible(track.Name, variant, intact != 0))
+                        {
+                            track.VariantVisibility |= 1 << ((int)variant * 2 + intact);
+                        }
+                    }
+                }
+            }
+
+            asset.NativeTrackGroups = new int[4][][];
+            for (var shield = 0; shield < asset.NativeTrackGroups.Length; shield++)
+            {
+                var groupCount = shield == 0 ? 1 : 3;
+                var groups = new int[groupCount][];
+                var counts = new int[groupCount];
+                for (var trackIndex = 0; trackIndex < asset.Tracks.Count; trackIndex++)
+                {
+                    counts[AdventureZombieFeedbackRules.RenderGroup(shield, asset.Tracks[trackIndex].Name)]++;
+                }
+
+                for (var group = 0; group < groups.Length; group++)
+                {
+                    groups[group] = new int[counts[group]];
+                    counts[group] = 0;
+                }
+
+                for (var trackIndex = 0; trackIndex < asset.Tracks.Count; trackIndex++)
+                {
+                    var group = AdventureZombieFeedbackRules.RenderGroup(shield, asset.Tracks[trackIndex].Name);
+                    groups[group][counts[group]++] = trackIndex;
+                }
+
+                asset.NativeTrackGroups[shield] = groups;
+            }
         }
 
         /// <summary>Performs load texture.</summary>
@@ -2227,7 +2290,7 @@ namespace PlantsVsZombies.Reanimation
             float maxX = float.NegativeInfinity, maxY = float.NegativeInfinity;
             foreach (Track track in asset.Tracks)
             {
-                if (filterTracks && !IsTrackVisible(asset, track.Name, variant, equipmentIntact, custom))
+                if (filterTracks && !IsTrackVisible(track, variant, equipmentIntact, custom))
                 {
                     continue;
                 }
@@ -3134,6 +3197,7 @@ namespace PlantsVsZombies.Reanimation
 
             _nativePoseBlends.Clear();
             _headInstanceKeys.Clear();
+            _particleKeys.Clear();
             _expiredNativePoseBlends.Clear();
             _expiredHeadInstanceKeys.Clear();
             foreach (var surface in _nativeSurfaces.Values)
@@ -3598,13 +3662,14 @@ namespace PlantsVsZombies.Reanimation
                 && matrix.m00 > 0f && matrix.m11 > 0f && matrix.m01 == 0f && matrix.m10 == 0f;
         }
 
-        /// <summary>Performs native zombie group.</summary>
-        /// <param name = "asset">The asset.</param>
-        /// <param name = "track">The track.</param>
-        /// <returns>The resulting native zombie group.</returns>
-        private int NativeZombieGroup(Reanimation asset, string track)
+        /// <summary>Selects cached render groups using the live shield state only for its owning body asset.</summary>
+        /// <param name="asset">The source body or attachment being sampled.</param>
+        /// <returns>Original source indices in native group order, or the unchanged full track order for attachments.</returns>
+        private int[][] NativeZombieTrackGroups(Reanimation asset)
         {
-            return _nativeCombatZombie != null && AdventureZombieFeedbackRules.Same(asset.Name, _nativeCombatBody) ? AdventureZombieFeedbackRules.RenderGroup(_nativeCombatShieldType, track) : 0;
+            var shield = _nativeCombatZombie != null && AdventureZombieFeedbackRules.Same(asset.Name, _nativeCombatBody)
+                ? _nativeCombatShieldType : 0;
+            return asset.NativeTrackGroups[shield];
         }
 
         /// <summary>Performs native zombie track visible.</summary>
@@ -3787,13 +3852,28 @@ namespace PlantsVsZombies.Reanimation
                     SpriteDrawState.Color = new Color(75f / 255f, 75f / 255f, 1f, previousColor.a);
                 }
 
-                return particles.Draw("native-arm-" + drop.Id, drop.Mowed ? "MoweredZombieArm" : "ZombieArm", drop.Age + renderRemainder, origin, drop.Seed, drop.Scale);
+                return particles.Draw(ParticleKey("native-arm-", drop.Id), drop.Mowed ? "MoweredZombieArm" : "ZombieArm", drop.Age + renderRemainder, origin, drop.Seed, drop.Scale);
             }
             finally
             {
                 _nativeResourceImageOverride = previousImage;
                 SpriteDrawState.Color = previousColor;
             }
+        }
+
+        /// <summary>Reuses detached-part identities while also supporting callers without an explicit object frame.</summary>
+        /// <param name="prefix">The existing native particle identity prefix.</param>
+        /// <param name="id">The live detached part's simulation identity.</param>
+        /// <returns>A stable identity retained only for the current and preceding presentation frames.</returns>
+        private string ParticleKey(string prefix, int id)
+        {
+            if (_particleKeyFrame != SpriteDrawState.FrameVersion)
+            {
+                _particleKeys.BeginFrame();
+                _particleKeyFrame = SpriteDrawState.FrameVersion;
+            }
+
+            return _particleKeys.Get(prefix, id);
         }
 
         /// <summary>Performs draw native zombie part drop.</summary>
@@ -3852,7 +3932,7 @@ namespace PlantsVsZombies.Reanimation
 
                 // Backup dancer's 1.05 is an absolute particle scale in PC, after ApplyZombieScale.
                 var scale = drop.NativeKind == 9 && drop.ParticleId != 11 ? 1.05f : drop.Scale;
-                return particles.Draw("native-zombie-part-" + drop.Id, AdventureZombiePartsRules.ParticleName(drop.ParticleId), drop.Age + renderRemainder, origin, drop.Seed, scale);
+                return particles.Draw(ParticleKey("native-zombie-part-", drop.Id), AdventureZombiePartsRules.ParticleName(drop.ParticleId), drop.Age + renderRemainder, origin, drop.Seed, scale);
             }
             finally
             {
@@ -3920,7 +4000,7 @@ namespace PlantsVsZombies.Reanimation
                 throw new System.InvalidOperationException("The value 'renderer' is not available.");
             }
 
-            renderer.DrawQuad(texture, width, height, uv, matrix, SpriteDrawState.Color, pass, _nativeGrayscale, _nativeProducerAdditive, _nativeCombatZombie == null ? _nativeSurfaceAdditive : 0f, _nativeCombatZombie == null ? Color.clear : _nativeTrackAdditive, _nativeSpriteClip, combineHit);
+            renderer.EnqueueQuad(texture, width, height, uv, matrix, SpriteDrawState.Color, pass, _nativeGrayscale, _nativeProducerAdditive, _nativeCombatZombie == null ? _nativeSurfaceAdditive : 0f, _nativeCombatZombie == null ? Color.clear : _nativeTrackAdditive, _nativeSpriteClip, combineHit);
         }
 
         /// <summary>Performs draw native surface composite.</summary>

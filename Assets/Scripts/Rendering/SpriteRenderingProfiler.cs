@@ -12,6 +12,14 @@ namespace PlantsVsZombies.Rendering
         internal static readonly ProfilerMarker Regions = new ProfilerMarker(ProfilerCategory.Scripts, "PvZ.Atlas.Regions");
         /// <summary>Measures logical source submission, clipping, and combined mesh assembly.</summary>
         internal static readonly ProfilerMarker Submit = new ProfilerMarker(ProfilerCategory.Scripts, "PvZ.Sprite.Submit");
+        /// <summary>Measures the complete production presentation, including deferred work and uploads.</summary>
+        internal static readonly ProfilerMarker Present = new ProfilerMarker(ProfilerCategory.Scripts, "PvZ.Present");
+        /// <summary>Measures source preparation and draw-state snapshots.</summary>
+        internal static readonly ProfilerMarker Prepare = new ProfilerMarker(ProfilerCategory.Scripts, "PvZ.Sprite.Prepare");
+        /// <summary>Measures the complete synchronous numeric geometry segment.</summary>
+        internal static readonly ProfilerMarker Geometry = new ProfilerMarker(ProfilerCategory.Scripts, "PvZ.Sprite.Geometry");
+        /// <summary>Measures ordered material lookup and managed mesh assembly.</summary>
+        internal static readonly ProfilerMarker Commit = new ProfilerMarker(ProfilerCategory.Scripts, "PvZ.Sprite.Commit");
         /// <summary>Measures the completed mesh uploads.</summary>
         internal static readonly ProfilerMarker Upload = new ProfilerMarker(ProfilerCategory.Scripts, "PvZ.Sprite.Upload");
         /// <summary>Measures hierarchy visibility refresh and actor retirement.</summary>
