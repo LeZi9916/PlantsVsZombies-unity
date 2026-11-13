@@ -42,6 +42,23 @@ namespace PlantsVsZombies.Tests.EditorRendering
             }
         }
 
+        /// <summary>Checks packing families use the color filename independently of identity syntax and host path rules.</summary>
+        /// <param name="identity">The original source path or explicit color/mask identity.</param>
+        /// <param name="expected">The native family derived from the original color filename.</param>
+        [TestCase("images/Peashooter_head.jpg|images/mask.png", "Peashooter")]
+        [TestCase("images\\Peashooter_head.JPG|images\\other_mask.PNG", "Peashooter")]
+        [TestCase("reanim/Zombie_football_head.jpeg|images/alpha.png", "Zombie_football")]
+        [TestCase("C:\\Original.assets\\reanim\\Zombie_paper_head.JPEG", "Zombie_paper")]
+        [TestCase("reanim/Zombie_head.png", "Zombie")]
+        [TestCase("images/SeedBank.png", "SeedBank")]
+        [TestCase("images/file.name.png", "file.name")]
+        [TestCase("images/file.name.jpg|images/mask.png", "file.name")]
+        [TestCase("Peashooter_head", "Peashooter")]
+        public void SourceFamilyUsesOriginalColorFilename(string identity, string expected)
+        {
+            Assert.That(SpriteAtlasBaker.SourceFamily(identity), Is.EqualTo(expected));
+        }
+
         /// <summary>Checks oversized original artwork is tiled without scaling and internal halos sample neighboring original pixels.</summary>
         [Test]
         public void OversizedImageKeepsEveryTexelAndNeighboringTileHalo()
@@ -114,6 +131,15 @@ namespace PlantsVsZombies.Tests.EditorRendering
             const string strings = "[GREETING]\nHello 世界\n";
             File.WriteAllText(Path.Combine(_source, "properties", "LawnStrings.txt"), strings);
             var catalog = SpriteAtlasBaker.Bake(_source, _output, true);
+            foreach (var layout in catalog.Layouts)
+            {
+                var pair = FindImage(layout, "images/ink.png|images/mask.png");
+                Assert.That(pair.Aliases, Is.EquivalentTo(new[] { "IMAGE_NOTE" }));
+                Assert.That(FindImage(layout, "images/ink.png").Aliases,
+                    Is.EquivalentTo(new[] { "IMAGE_ink", "images/ink" }));
+                Assert.That(FindImage(layout, "images/mask.png").Aliases,
+                    Is.EquivalentTo(new[] { "IMAGE_mask", "images/mask" }));
+            }
             var image = FindImage(catalog.Layouts[0], "images/ink.png|images/mask.png");
             Assert.That(image.Aliases, Does.Contain("IMAGE_NOTE"));
             var tile = image.Tiles[0];

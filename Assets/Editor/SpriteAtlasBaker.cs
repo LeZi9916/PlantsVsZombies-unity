@@ -217,7 +217,7 @@ namespace PlantsVsZombies.Editor
         private static string Fingerprint(string root, List<string> paths)
         {
             using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
-            hash.AppendData(Encoding.UTF8.GetBytes("PvZAtlasBakeV4;256,512,1024,2048;RGBA32;Pad2;Grid8;Halo1;Pieces32;AtomicFamiliesLargestFirst;BattleUiAndMowers;DedicatedBoardBackgrounds;ExactFirstImport;AtomicCatalog"));
+            hash.AppendData(Encoding.UTF8.GetBytes("PvZAtlasBakeV4;256,512,1024,2048;RGBA32;Pad2;Grid8;Halo1;Pieces32;AtomicFamiliesLargestFirst;BattleUiAndMowers;DedicatedBoardBackgrounds;ExactFirstImport;AtomicCatalog;ColorSourceFamilies"));
             foreach (var path in paths)
             {
                 hash.AppendData(Encoding.UTF8.GetBytes(path));
@@ -615,12 +615,14 @@ namespace PlantsVsZombies.Editor
             return area;
         }
 
-        /// <summary>Groups the native filename families that are normally sampled together within one actor.</summary>
-        /// <param name="identity">The original relative source identity.</param>
+        /// <summary>Groups the original color filename families that are normally sampled together within one actor.</summary>
+        /// <param name="identity">The original source path or explicit color/mask identity.</param>
         /// <returns>A stable native artwork-family key.</returns>
-        private static string SourceFamily(string identity)
+        internal static string SourceFamily(string identity)
         {
-            var name = Path.GetFileNameWithoutExtension(identity);
+            var alphaSeparator = identity.IndexOf('|');
+            var colorPath = (alphaSeparator < 0 ? identity : identity.Substring(0, alphaSeparator)).Replace('\\', '/');
+            var name = Path.GetFileNameWithoutExtension(colorPath);
             var separator = name.IndexOf('_');
             if (separator < 0)
             {
