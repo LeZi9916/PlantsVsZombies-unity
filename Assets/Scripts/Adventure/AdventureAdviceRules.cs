@@ -45,6 +45,8 @@ namespace PlantsVsZombies.Adventure
             {
                 case AdventurePlantingFailure.NeedsLilyPad:
                     return kind == PlantKind.PotatoMine ? "ADVICE_CANT_PLANT_THERE" : "ADVICE_PLANT_NOT_ON_WATER";
+                case AdventurePlantingFailure.PotatoMineOnLilyPad:
+                    return "ADVICE_POTATO_MINE_ON_LILY";
                 case AdventurePlantingFailure.NeedsFlowerPot:
                     return firstRoofLevel ? "ADVICE_PLANT_NEED_POT1" : "ADVICE_PLANT_NEED_POT2";
                 case AdventurePlantingFailure.NeedsWater:

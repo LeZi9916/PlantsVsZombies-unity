@@ -5,6 +5,8 @@ namespace PlantsVsZombies.Simulation
     /// <summary>Defines zombie.</summary>
     public sealed class Zombie
     {
+        /// <summary>Retains the original water-body altitude, duck-tube initialization, and pool emergence effects.</summary>
+        public global::PlantsVsZombies.Adventure.AdventureZombiePoolState? PoolState;
         /// <summary>Stores presentation animation age, presentation plant head age, presentation flash, presentation armor flash, presentation butter, presentation previous x.</summary>
         public float PresentationAnimationAge, PresentationPlantHeadAge, PresentationFlash, PresentationArmorFlash, PresentationButter, PresentationPreviousX;
         /// <summary>Stores presentation walk2.</summary>

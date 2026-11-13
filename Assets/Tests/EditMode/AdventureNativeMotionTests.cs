@@ -39,18 +39,23 @@ namespace PlantsVsZombies.Tests.EditMode
             Assert.That(zombie.PresentationInPool, Is.True);
             Assert.That(zombie.PresentationNativeHeight, Is.EqualTo(1));
             Assert.That(game.AdventurePresentationZombieAnimation(zombie), Does.StartWith("anim_walk"));
-            Assert.That(game.Presentation.ZombieSplashes.Count, Is.EqualTo(1));
-            Assert.That(game.Presentation.ZombieSplashes[0].X, Is.EqualTo(702f));
+            Assert.That(game.Presentation.ZombieSplashes, Is.Empty, "Plain swimmers must use one actor-local splash, without a second global effect.");
+            Assert.That(zombie.PoolState!.SplashAge, Is.Zero);
+            Assert.That(zombie.PoolState.SplashNativeX, Is.EqualTo(702f));
+            Assert.That(AdventureZombieFoleyData.Definitions[19].Samples,
+                Is.EqualTo(new[] { "plant_water", "zombie_entering_water" }));
             Assert.That(game.Presentation.ZombieSounds.Last().Foley, Is.EqualTo(19));
             for (var tick = 0; tick < 40; tick++)
             {
                 Invoke(game, "AdvanceAdventureZombiePool", zombie, .01f);
+                Assert.That(zombie.PoolState!.Altitude, Is.EqualTo(-(tick + 1)), "Pool state must advance exactly once per native tick.");
             }
 
-            Assert.That(zombie.PresentationAltitude, Is.EqualTo(-40f));
+            Assert.That(AdventureZombiePoolRules.BodyAltitude(zombie), Is.EqualTo(-40f));
             Assert.That(zombie.PresentationNativeHeight, Is.Zero);
             Assert.That(game.AdventurePresentationZombieAnimation(zombie), Is.EqualTo("anim_swim"));
-            Assert.That(game.Presentation.ZombieSplashes.Count, Is.EqualTo(1));
+            Assert.That(game.Presentation.ZombieSplashes, Is.Empty);
+            Assert.That(game.Presentation.ZombieSounds.Count(sound => sound.Foley == 19), Is.EqualTo(1));
         }
 
         /// <summary>Checks continuous vault movement, the two timed sounds, and the original landing displacement.</summary>

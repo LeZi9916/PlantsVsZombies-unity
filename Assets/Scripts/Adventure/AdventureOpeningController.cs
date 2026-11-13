@@ -232,6 +232,14 @@ namespace PlantsVsZombies.Adventure
         {
             if (!AdventureIntroActive || _owner._currentView != PvZGame.ScreenView.Board)
             {
+                if (_owner._currentView == PvZGame.ScreenView.Board && _owner._choosingSeeds
+                    && !_owner.RequiredOptionsView.IsOpen && !_owner._confirmingQuit && _owner._unavailableFeature == null)
+                {
+                    var session = _owner.RequiredGame.ModeSession;
+                    var repick = session != null && session.Definition.Survival && session.Stage > 1;
+                    _owner.RequiredGame.AdvanceAdventurePoolPresentation(dt, repick);
+                }
+
                 return false;
             }
 
@@ -250,6 +258,7 @@ namespace PlantsVsZombies.Adventure
             {
                 _adventureIntroRemainder -= (double).01f;
                 _adventureIntroVisualAge += .01f;
+                _owner.RequiredGame.AdvanceAdventurePoolEffect(RequiredAdventureIntro.Plan.RequiredContext.SurvivalRepick);
                 _owner.Dave.UpdateCrazyDaveAnimation(.01f);
                 _owner.RequiredGame.AdvanceAdventureGraves();
                 RequiredAdventureIntro.Tick(dialogActive: _owner.Dave._crazyDaveMessageIndex >= 0, shovelTutorialActive: _bowlingShovelLessonActive, emit: _adventureIntroEventHandler);

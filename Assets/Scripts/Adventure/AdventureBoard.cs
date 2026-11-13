@@ -17,6 +17,11 @@ namespace PlantsVsZombies.Adventure
             Level = level;
         }
 
+        /// <summary>Gets the independent PC PoolEffect counter advanced before board objects update.</summary>
+        public int PoolEffectTicks { get; internal set; }
+        /// <summary>Gets the native board ice-trap countdown shared by water animation and final pool ambushes.</summary>
+        public int IceTrapTicks { get; internal set; }
+
         /// <summary>Gets or sets conveyor ticks.</summary>
         public int ConveyorTicks { get; internal set; }
         /// <summary>Gets or sets total waves spawned.</summary>

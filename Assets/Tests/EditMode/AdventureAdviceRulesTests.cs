@@ -69,6 +69,33 @@ namespace PlantsVsZombies.Tests.EditMode
             Assert.That(AdventureAdviceRules.PlantingKey(failure, plant, firstRoof), Is.EqualTo(expected));
         }
 
+        /// <summary>Checks the public planting rejection distinguishes bare water from an existing Lily Pad using original advice.</summary>
+        /// <param name="level">The original day or fog pool board.</param>
+        /// <param name="lilyPad">Whether the attempted cell already has a Lily Pad.</param>
+        [TestCase(29, false)]
+        [TestCase(29, true)]
+        [TestCase(39, false)]
+        [TestCase(39, true)]
+        public void PotatoMineWaterPlacementUsesItsOwnOriginalAdvice(int level, bool lilyPad)
+        {
+            var game = new GameSimulation(new GameRules { AdventureLevel = level }, 7529);
+            Assert.That(game.ChooseAdventureSeeds(new[]
+            {
+                PlantKind.PotatoMine, PlantKind.LilyPad, PlantKind.Sunflower,
+                PlantKind.Peashooter, PlantKind.Wallnut, PlantKind.SnowPea
+            }), Is.True);
+            if (lilyPad)
+            {
+                game.Plants.Add(new Plant { Kind = PlantKind.LilyPad, Row = 2, Column = 3, Layer = PlantLayer.Support });
+            }
+
+            var failure = game.CanPlantAdventure(PlantKind.PotatoMine, 2, 3);
+            Assert.That(failure, Is.EqualTo(lilyPad ? AdventurePlantingFailure.PotatoMineOnLilyPad : AdventurePlantingFailure.NeedsLilyPad));
+            Assert.That(AdventureAdviceRules.PlantingKey(failure, PlantKind.PotatoMine, false),
+                Is.EqualTo(lilyPad ? "ADVICE_POTATO_MINE_ON_LILY" : "ADVICE_CANT_PLANT_THERE"));
+            Assert.That(game.TryPlant(PlantKind.PotatoMine, 2, 3), Is.False);
+        }
+
         /// <summary>Checks the original prerequisite advice for each upgrade plant.</summary>
         /// <param name="plant">The upgrade being placed.</param>
         /// <param name="expected">The original prerequisite resource key.</param>

@@ -165,6 +165,11 @@ namespace PlantsVsZombies.BoardUI
             Plant? main = null, support = null, pumpkin = null;
             foreach (var plant in _owner.RequiredGame.Plants)
             {
+                if (plant.Kind == PlantKind.Squash && plant.PresentationBiteNotOnGround)
+                {
+                    continue;
+                }
+
                 var x = AdventureGridX + plant.Column * CellWidth;
                 var y = AdventureCellY(plant.Row, plant.Column);
                 if (plant.Kind == PlantKind.Pumpkin)
@@ -172,7 +177,8 @@ namespace PlantsVsZombies.BoardUI
                     var hasMain = false;
                     foreach (var other in _owner.RequiredGame.Plants)
                     {
-                        if (other.Row == plant.Row && other.Layer == PlantLayer.Main && other.Column <= plant.Column && plant.Column < other.Column + other.ColumnSpan)
+                        if (other.Row == plant.Row && other.Layer == PlantLayer.Main && other.Column <= plant.Column && plant.Column < other.Column + other.ColumnSpan
+                            && !(other.Kind == PlantKind.Squash && other.PresentationBiteNotOnGround))
                         {
                             hasMain = true;
                             break;

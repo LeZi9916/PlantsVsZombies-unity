@@ -201,6 +201,10 @@ namespace PlantsVsZombies.Reanimation
         private bool _renderingNativeSurface;
         /// <summary>Stores native surface matrix.</summary>
         private Matrix4x4 _nativeSurfaceMatrix;
+        /// <summary>Bounds the current offscreen capture in its own destination pixels.</summary>
+        private Rect _nativeCaptureClip;
+        /// <summary>Overrides clipping for one native body track and its particle attachments.</summary>
+        private Rect? _nativeSpriteClip;
         /// <summary>Gets or sets sprite matrix.</summary>
         private Matrix4x4 SpriteMatrix
         {
@@ -510,8 +514,9 @@ namespace PlantsVsZombies.Reanimation
         /// <param name="crazyDaveHeldItem">The item attached to Dave's hand, if any.</param>
         /// <param name="crazyDaveHeldItemAge">The elapsed time of the held item's animation.</param>
         /// <param name="trackOffset">Optional native pixel offsets applied to individual animation tracks.</param>
+        /// <param name="trackAttachment">Optional original attachments receiving the track, native pose, outer transform, and opacity.</param>
         /// <returns>The resulting draw internal.</returns>
-        private bool DrawInternal(string? name, Rect destination, float seconds, string? animation, bool loop, ZombieVariant variant, bool equipmentIntact, Func<string, bool>? trackVisible, string? overrideTrack = null, Texture2D? imageOverride = null, Matrix4x4? nativePlacement = null, bool cachedFlag = false, NativePoseBlend? blend = null, string? crazyDaveHeldItem = null, float crazyDaveHeldItemAge = 0f, Func<string, Vector2>? trackOffset = null)
+        private bool DrawInternal(string? name, Rect destination, float seconds, string? animation, bool loop, ZombieVariant variant, bool equipmentIntact, Func<string, bool>? trackVisible, string? overrideTrack = null, Texture2D? imageOverride = null, Matrix4x4? nativePlacement = null, bool cachedFlag = false, NativePoseBlend? blend = null, string? crazyDaveHeldItem = null, float crazyDaveHeldItemAge = 0f, Func<string, Vector2>? trackOffset = null, Action<string, Matrix4x4, Matrix4x4, float>? trackAttachment = null)
         {
             LastError = null;
             if (!IsFinite(seconds) || !IsFinite(destination.x) || !IsFinite(destination.y) || !IsFinite(destination.width) || !IsFinite(destination.height) || destination.width <= 0f || destination.height <= 0f)
@@ -608,6 +613,7 @@ namespace PlantsVsZombies.Reanimation
             var next = relativeFrame + 1 < clip.Count ? current + 1 : (loop ? clip.Start : current);
             var originalMatrix = SpriteMatrix;
             var originalColor = SpriteDrawState.Color;
+            var previousSpriteClip = _nativeSpriteClip;
             var drawn = false;
             try
             {
@@ -639,6 +645,7 @@ namespace PlantsVsZombies.Reanimation
                             continue;
                         }
 
+                        _nativeSpriteClip = NativePoolTrackClip(asset, track.Name, originalMatrix, previousSpriteClip);
                         var from = GetFrame(track, current);
                         var flagHand = flag != null && !cachedFlag && TrackIs(track.Name, "Zombie_flaghand");
                         if (from.Visibility < 0f || from.Texture == null && !flagHand)
@@ -676,6 +683,8 @@ namespace PlantsVsZombies.Reanimation
                             DrawTexturePart(nativeImage, nativeImage == image ? from.Texture.width : nativeImage.width, nativeImage == image ? from.Texture.height : nativeImage.height);
                             drawn = true;
                         }
+
+                        trackAttachment?.Invoke(track.Name, layout * part, originalMatrix, frame.Alpha);
 
                         if (flagHand)
                         {
@@ -729,6 +738,7 @@ namespace PlantsVsZombies.Reanimation
             {
                 SpriteMatrix = originalMatrix;
                 SpriteDrawState.Color = originalColor;
+                _nativeSpriteClip = previousSpriteClip;
             }
 
             if (!drawn)
@@ -908,6 +918,7 @@ namespace PlantsVsZombies.Reanimation
                 var color = SpriteDrawState.Color;
                 var previousCapture = _renderingNativeSurface;
                 var previousSurfaceMatrix = _nativeSurfaceMatrix;
+                var previousCaptureClip = _nativeCaptureClip;
                 var previousAdditive = _nativeSurfaceAdditive;
                 var previousGrayscale = _nativePortraitMaterial.GetFloat("_Grayscale");
                 var previousProducer = _nativePortraitMaterial.GetFloat("_ProducerAdditive");
@@ -919,6 +930,7 @@ namespace PlantsVsZombies.Reanimation
                 {
                     SpriteDrawState.Matrix = Matrix4x4.identity;
                     _nativeSurfaceMatrix = NativeMatrix(new Vector2(-viewport.x, -viewport.y), 1f);
+                    _nativeCaptureClip = new Rect(0f, 0f, width, height);
                     _renderingNativeSurface = true;
                     _nativeObjectRenderer = captureRenderer;
                     _nativePortraitMaterial.SetFloat("_Grayscale", grayscale ? 1f : 0f);
@@ -932,6 +944,7 @@ namespace PlantsVsZombies.Reanimation
                     _nativeCaptureDepth--;
                     _renderingNativeSurface = previousCapture;
                     _nativeSurfaceMatrix = previousSurfaceMatrix;
+                    _nativeCaptureClip = previousCaptureClip;
                     _nativeSurfaceAdditive = previousAdditive;
                     _nativeObjectRenderer = previousRenderer;
                     _nativePortraitMaterial.SetFloat("_Grayscale", previousGrayscale);
@@ -2595,9 +2608,10 @@ namespace PlantsVsZombies.Reanimation
         /// <param name="crazyDaveHeldItem">The item attached to Dave's hand, if any.</param>
         /// <param name="crazyDaveHeldItemAge">The elapsed time of the held item's animation.</param>
         /// <param name="trackOffset">Optional native pixel offsets applied before each track's placement and scaling.</param>
-        /// <returns>The resulting draw native playback.</returns>
+        /// <param name="trackAttachment">Optional original particles attached after each sampled and blended body track.</param>
         /// <param name="fullLastFrame">Whether the native loop displays the full final source frame.</param>
-        public bool DrawNativePlayback(string? name, Vector2 origin, float scale, float seconds, string? animation, bool loop, float framesPerSecond = -1f, Func<string, bool>? visible = null, string? overrideTrack = null, string? overrideImage = null, bool facingLeft = false, string? instanceKey = null, int blendTicks = 20, float verticalScale = -1f, float mirrorWidth = 80f, string? crazyDaveHeldItem = null, float crazyDaveHeldItemAge = 0f, Func<string, Vector2>? trackOffset = null, bool fullLastFrame = false)
+        /// <returns>The resulting draw native playback.</returns>
+        public bool DrawNativePlayback(string? name, Vector2 origin, float scale, float seconds, string? animation, bool loop, float framesPerSecond = -1f, Func<string, bool>? visible = null, string? overrideTrack = null, string? overrideImage = null, bool facingLeft = false, string? instanceKey = null, int blendTicks = 20, float verticalScale = -1f, float mirrorWidth = 80f, string? crazyDaveHeldItem = null, float crazyDaveHeldItemAge = 0f, Func<string, Vector2>? trackOffset = null, Action<string, Matrix4x4, Matrix4x4, float>? trackAttachment = null, bool fullLastFrame = false)
         {
             using var objectScope = BeginObjectScope();
             Reanimation? asset;
@@ -2615,7 +2629,7 @@ namespace PlantsVsZombies.Reanimation
                 placement.m11 = verticalScale;
             }
 
-            return DrawInternal(name, new Rect(0, 0, 1, 1), NativeSeconds(clip, seconds, rate, asset.Fps, loop, fullLastFrame), animation, false, ZombieVariant.Normal, false, visible, overrideTrack, image, placement, false, PrepareNativeBlend(instanceKey, animation, seconds, blendTicks), crazyDaveHeldItem, crazyDaveHeldItemAge, trackOffset);
+            return DrawInternal(name, new Rect(0, 0, 1, 1), NativeSeconds(clip, seconds, rate, asset.Fps, loop, fullLastFrame), animation, false, ZombieVariant.Normal, false, visible, overrideTrack, image, placement, false, PrepareNativeBlend(instanceKey, animation, seconds, blendTicks), crazyDaveHeldItem, crazyDaveHeldItemAge, trackOffset, trackAttachment);
         }
 
         /// <summary>Draws Dave's original blink attached to the current head pose.</summary>
@@ -2967,8 +2981,12 @@ namespace PlantsVsZombies.Reanimation
             offset.m13 = y;
             var previous = SpriteMatrix;
             var color = SpriteDrawState.Color;
+            var previousClip = _nativeSpriteClip;
             try
             {
+                // This attachment is submitted after the body traversal restored its track clip.
+                // Reapply its original parent track's waterline in the current scene or capture coordinates.
+                _nativeSpriteClip = NativePoolTrackClip(parent, anchor, previous, previousClip);
                 var placement = previous * CombatPlacement(origin, scale, facingLeft, 60) * PartMatrix(pose) * inverse * offset;
                 return DrawClipPose(child, head, NativeSeconds(head, headSeconds, 15f, child.Fps, true), child.Fps, false, placement, color);
             }
@@ -2976,6 +2994,7 @@ namespace PlantsVsZombies.Reanimation
             {
                 SpriteMatrix = previous;
                 SpriteDrawState.Color = color;
+                _nativeSpriteClip = previousClip;
             }
         }
 
@@ -3483,6 +3502,8 @@ namespace PlantsVsZombies.Reanimation
         private float _nativeSurfaceAdditive;
         /// <summary>Stores native sprite additive.</summary>
         private bool _nativeSpriteAdditive;
+        /// <summary>Stores the original pool body's board-space waterline, independently of ignored-clip tracks.</summary>
+        private float? _nativeCombatBodyClipBottom;
         /// <summary>Stores native resource image override.</summary>
         private string? _nativeResourceImageOverride;
         // PC 0x548D40..0x54942E. A single original sprite pass plus its textured ADD pass.
@@ -3492,8 +3513,9 @@ namespace PlantsVsZombies.Reanimation
         /// <param name = "viewport">The viewport.</param>
         /// <param name = "draw">The draw.</param>
         /// <param name="surfaceKey">The cached full surface identity used when combat feedback requires capture.</param>
+        /// <param name="bodyClipBottom">Optional native pool waterline; the original ignored-clip tracks retain their full bounds.</param>
         /// <returns>The resulting draw native zombie combat.</returns>
-        public bool DrawNativeZombieCombat(Zombie zombie, Rect viewport, Func<bool> draw, string? surfaceKey = null)
+        public bool DrawNativeZombieCombat(Zombie zombie, Rect viewport, Func<bool> draw, string? surfaceKey = null, float? bodyClipBottom = null)
         {
             using var objectScope = BeginObjectScope();
             if (zombie == null || draw == null)
@@ -3504,12 +3526,14 @@ namespace PlantsVsZombies.Reanimation
             var previous = _nativeCombatZombie;
             var previousBody = _nativeCombatBody;
             var previousShield = _nativeCombatShieldType;
+            var previousBodyClip = _nativeCombatBodyClipBottom;
             Color previousTint = _nativeCombatTint, previousAdd = _nativeTrackAdditive, color = SpriteDrawState.Color;
             try
             {
                 _nativeCombatZombie = zombie;
                 _nativeCombatBody = GameSimulation.AdventureZombiePresentationAsset(zombie);
                 _nativeCombatShieldType = AdventureZombieFeedbackRules.ShieldType(zombie);
+                _nativeCombatBodyClipBottom = bodyClipBottom;
                 _nativeCombatTint = color;
                 SpriteDrawState.Color = Color.white;
                 if (CanDrawZombieDirect(zombie, color, viewport))
@@ -3538,9 +3562,71 @@ namespace PlantsVsZombies.Reanimation
                 _nativeCombatZombie = previous;
                 _nativeCombatBody = previousBody;
                 _nativeCombatShieldType = previousShield;
+                _nativeCombatBodyClipBottom = previousBodyClip;
                 _nativeCombatTint = previousTint;
                 _nativeTrackAdditive = previousAdd;
                 SpriteDrawState.Color = color;
+            }
+        }
+
+        /// <summary>Clips original pool body tracks in either scene or local-capture destination pixels.</summary>
+        /// <param name="asset">The animation supplying this track.</param>
+        /// <param name="track">The original sampled track name.</param>
+        /// <param name="boardTransform">The transform from logical board pixels into the current render target.</param>
+        /// <param name="inherited">The parent attachment's clip, if any.</param>
+        /// <returns>The track's water clip, or its inherited clip when PC ReanimIgnoreClipRect permits drawing outside it.</returns>
+        private Rect? NativePoolTrackClip(Reanimation asset, string track, Matrix4x4 boardTransform, Rect? inherited)
+        {
+            if (_nativeCombatZombie == null || !_nativeCombatBodyClipBottom.HasValue
+                || !AdventureZombieFeedbackRules.Same(asset.Name, _nativeCombatBody))
+            {
+                return inherited;
+            }
+
+            // PC SetupWaterTrack 0x552CC0 sets whitewater2's ignore-clip byte before emergence.
+            // RiseFromGrave toggles only the four exact names below, leaving whitewater2 untouched.
+            if (TrackIs(track, "Zombie_snorkle_whitewater") || TrackIs(track, "Zombie_snorkle_whitewater2")
+                || TrackIs(track, "Zombie_whitewater2") || _nativeCombatZombie.PresentationNativePhase != 14
+                && (TrackIs(track, "Zombie_duckytube") && _nativeCombatZombie.PresentationNativePhase != 1
+                    || TrackIs(track, "Zombie_whitewater") || TrackIs(track, "Zombie_outerarm_hand") || TrackIs(track, "Zombie_innerarm3")))
+            {
+                return inherited;
+            }
+
+            var clip = _renderingNativeSurface ? _nativeCaptureClip : SpriteDrawState.Clip;
+            var bottom = boardTransform.m11 * _nativeCombatBodyClipBottom.Value + boardTransform.m13;
+            var height = Math.Max(0f, Math.Min(clip.yMax, bottom) - clip.yMin);
+            return new Rect(clip.x, clip.y, clip.width, height);
+        }
+
+        /// <summary>Draws an original particle attachment at its transformed position without inheriting track rotation or scale.</summary>
+        /// <param name="particles">The retained original particle systems.</param>
+        /// <param name="key">The cached identity of this attachment.</param>
+        /// <param name="age">The original particle system age in seconds.</param>
+        /// <param name="origin">The transformed attachment position in native board pixels.</param>
+        /// <param name="seed">The original deterministic particle seed.</param>
+        /// <param name="scale">The zombie's native particle scale override.</param>
+        /// <param name="boardTransform">The outer board-to-target transform before sampling this track.</param>
+        /// <param name="alpha">The sampled track's attachment opacity.</param>
+        /// <returns>Whether the original seaweed system submitted artwork.</returns>
+        internal bool DrawNativePoolParticleAttachment(OriginalParticleRenderer particles, string key, float age, Vector2 origin,
+            int seed, float scale, Matrix4x4 boardTransform, float alpha)
+        {
+            var previousMatrix = SpriteMatrix;
+            var previousColor = SpriteDrawState.Color;
+            try
+            {
+                // PC Attachment::SetMatrix uses only the transformed translation for particle systems.
+                SpriteMatrix = boardTransform;
+                SpriteDrawState.Color = _nativeCombatZombie == null
+                    ? new Color(previousColor.r, previousColor.g, previousColor.b, previousColor.a * alpha)
+                    : NativeZombieTrackColor(0, alpha);
+                return particles.Draw(key, "Zombie_seaweed", age, origin, seed, scale);
+            }
+            finally
+            {
+                SpriteMatrix = previousMatrix;
+                SpriteDrawState.Color = previousColor;
             }
         }
 
@@ -3859,7 +3945,7 @@ namespace PlantsVsZombies.Reanimation
                 throw new System.InvalidOperationException("The value 'renderer' is not available.");
             }
 
-            renderer.DrawQuad(texture, width, height, uv, matrix, SpriteDrawState.Color, pass, _renderingNativeSurface ? RequiredNativePortraitMaterial.GetFloat("_Grayscale") : 0f, RequiredNativePortraitMaterial.GetFloat("_ProducerAdditive"), _nativeCombatZombie == null ? _nativeSurfaceAdditive : 0f, _nativeCombatZombie == null ? Color.clear : _nativeTrackAdditive);
+            renderer.DrawQuad(texture, width, height, uv, matrix, SpriteDrawState.Color, pass, _renderingNativeSurface ? RequiredNativePortraitMaterial.GetFloat("_Grayscale") : 0f, RequiredNativePortraitMaterial.GetFloat("_ProducerAdditive"), _nativeCombatZombie == null ? _nativeSurfaceAdditive : 0f, _nativeCombatZombie == null ? Color.clear : _nativeTrackAdditive, _nativeSpriteClip);
         }
 
         /// <summary>Performs draw native surface composite.</summary>

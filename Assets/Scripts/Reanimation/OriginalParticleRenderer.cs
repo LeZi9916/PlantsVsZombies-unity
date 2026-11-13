@@ -23,6 +23,8 @@ namespace PlantsVsZombies.Reanimation
             public float Time, Minimum, Maximum;
             /// <summary>Stores shape.</summary>
             public string Shape = "Linear";
+            /// <summary>Shapes the original random interpolation between this node's minimum and maximum.</summary>
+            public string RandomShape = "Linear";
         }
 
         /// <summary>Defines curve.</summary>
@@ -43,13 +45,13 @@ namespace PlantsVsZombies.Reanimation
                     if (time <= right.Time)
                     {
                         var t = right.Time <= left.Time ? 0f : Mathf.Clamp01((time - left.Time) / (right.Time - left.Time));
-                        return Mathf.Lerp(Mathf.Lerp(left.Minimum, left.Maximum, random), Mathf.Lerp(right.Minimum, right.Maximum, random), ApplyShape(t, left.Shape));
+                        return Mathf.Lerp(Mathf.Lerp(left.Minimum, left.Maximum, ApplyShape(random, left.RandomShape)), Mathf.Lerp(right.Minimum, right.Maximum, ApplyShape(random, right.RandomShape)), ApplyShape(t, left.Shape));
                     }
 
                     left = right;
                 }
 
-                return Mathf.Lerp(left.Minimum, left.Maximum, random);
+                return Mathf.Lerp(left.Minimum, left.Maximum, ApplyShape(random, left.RandomShape));
             }
 
             /// <summary>Performs apply shape.</summary>
@@ -66,6 +68,10 @@ namespace PlantsVsZombies.Reanimation
                         return t * t;
                     case "EaseOut":
                         return 2 * t - t * t;
+                    case "FastInOutWeak":
+                        // PC 0x526C90 curve 7 calls 0x526BD0, also inside random range brackets.
+                        var half = t <= .5f ? t * 2f : (t - .5f) * 2f;
+                        return t <= .5f ? (2f * half - half * half) * .5f : half * half * .5f + .5f;
                     case "EaseInOutWeak":
                         return 3 * t * t - 2 * t * t * t;
                     case "EaseInOut":
@@ -91,13 +97,14 @@ namespace PlantsVsZombies.Reanimation
                 }
 
                 const string number = @"[-+]?(?:\d*\.\d+|\d+\.?\d*)(?:[eE][-+]?\d+)?";
-                var values = Regex.Matches(source, @"(?:\[\s*(" + number + @")(?:\s+(" + number + @"))?\s*\]|(" + number + @"))(?:\s*,\s*(" + number + @"))?");
+                var values = Regex.Matches(source, @"(?:\[\s*(" + number + @")(?:\s+(?:(?<randomShape>[A-Za-z]+)\s+)?(" + number + @"))?\s*\]|(" + number + @"))(?:\s*,\s*(" + number + @"))?");
                 foreach (Match value in values)
                 {
                     var minimum = Number(value.Groups[1].Success ? value.Groups[1].Value : value.Groups[3].Value);
                     curve.Nodes.Add(new Node {
                         Minimum = minimum,
                         Maximum = value.Groups[2].Success ? Number(value.Groups[2].Value) : minimum,
+                        RandomShape = value.Groups["randomShape"].Success ? value.Groups["randomShape"].Value : "Linear",
                         Time = value.Groups[4].Success ? Number(value.Groups[4].Value) * .01f : float.NaN
                     });
                 }
@@ -697,6 +704,15 @@ namespace PlantsVsZombies.Reanimation
             else
             {
                 particle.Position = new Vector2(definition.Track("EmitterBoxX").Value(systemTime, Random01(system)), definition.Track("EmitterBoxY").Value(systemTime, Random01(system)));
+            }
+
+            if (definition.Tracks.ContainsKey("EmitterSkewX") || definition.Tracks.ContainsKey("EmitterSkewY"))
+            {
+                // PC SpawnParticle 0x52BBF6..0x52BC30 applies both skews to the original unskewed box position.
+                var box = particle.Position;
+                var skewX = definition.Track("EmitterSkewX").Value(systemTime, Random01(system));
+                var skewY = definition.Track("EmitterSkewY").Value(systemTime, Random01(system));
+                particle.Position = new Vector2(box.x + box.y * skewX, box.y + box.x * skewY);
             }
 
             // Original SodRoll.xml moves the emitter's system centre; already spawned dirt stays behind.

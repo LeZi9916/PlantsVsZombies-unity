@@ -12,7 +12,7 @@ namespace PlantsVsZombies.Adventure
         public readonly AdventureProgressMeterState ProgressMeter = new AdventureProgressMeterState();
         /// <summary>Retains the native board widget displacement shared by board artwork and its interface.</summary>
         public readonly AdventureScreenShakeState ScreenShake = new AdventureScreenShakeState();
-        /// <summary>Retains the five native ticks between each Squash's damage and ground or water impact.</summary>
+        /// <summary>Retains original dust and splash effects after a Squash's actual ground impact.</summary>
         internal readonly List<AdventureSquashLanding> _squashLandings = new List<AdventureSquashLanding>();
         /// <summary>Retains original delayed sound milestones for plant actions resolved atomically by the simulation.</summary>
         internal readonly List<AdventurePlantSoundCue> _plantSoundCues = new List<AdventurePlantSoundCue>();
@@ -28,6 +28,8 @@ namespace PlantsVsZombies.Adventure
         internal int _nativeShootSuppressions;
         /// <summary>Suppresses generic Cherry Bomb samples for impacts that use their own native Foley.</summary>
         internal int _nativeExplosionSuppressions;
+        /// <summary>Marks the synchronous player planting event whose sound is supplied by native planting Foley.</summary>
+        internal bool _nativePlantingEffects;
         /// <summary>Retains original planting bursts above the board actors for their authored lifetime.</summary>
         public readonly List<AdventurePlantingEffect> PlantingEffects = new List<AdventurePlantingEffect>();
         /// <summary>Stores plant bite effects.</summary>

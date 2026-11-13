@@ -172,6 +172,12 @@ namespace PlantsVsZombies.Audio
                 return;
             }
 
+            if (gameEvent == GameEvent.Planted && _owner._game?.Presentation._nativePlantingEffects == true)
+            {
+                // Board::DoPlantingEffects supplies the square-specific Foley; keep any separate Cherry fuse above.
+                return;
+            }
+
             AudioClip clip;
             if (_sounds.TryGetValue(gameEvent, out clip) && clip != null)
             {
