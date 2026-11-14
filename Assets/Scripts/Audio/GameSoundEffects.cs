@@ -81,9 +81,24 @@ namespace PlantsVsZombies.Audio
         /// <returns>The resulting load sounds.</returns>
         internal IEnumerator LoadSounds()
         {
+            var loadCombatFoley = !_zombiePartAudioLoading;
+            _zombiePartAudioLoading = true;
             try
             {
                 yield return LoadSoundsCore();
+                if (loadCombatFoley)
+                {
+                    // LoadingSounds includes Balloon/Pogo Foley in the original resource group.
+                    // Do not admit the first normal wave while its entry recordings are still unavailable.
+                    yield return LoadAdventureZombiePartAudio();
+                }
+                else
+                {
+                    while (!_zombieFoleyReady)
+                    {
+                        yield return null;
+                    }
+                }
             }
             finally
             {

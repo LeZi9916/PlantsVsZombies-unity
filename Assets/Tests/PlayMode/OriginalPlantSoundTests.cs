@@ -54,8 +54,6 @@ namespace PlantsVsZombies.Tests.PlayMode
                 effects._audioSource = source;
                 effects._soundVolume = .7f;
                 effects._soundVoices = voices;
-                typeof(GameSoundEffects).GetField("_zombiePartAudioLoading", BindingFlags.Instance | BindingFlags.NonPublic)!
-                    .SetValue(effects, true);
                 yield return effects.LoadSounds();
                 yield return (IEnumerator)typeof(GameSoundEffects)
                     .GetMethod("LoadAdventureZombiePartAudio", BindingFlags.Instance | BindingFlags.NonPublic)!
@@ -151,8 +149,6 @@ namespace PlantsVsZombies.Tests.PlayMode
                 effects._audioSource = source;
                 effects._soundVolume = .7f;
                 effects._soundVoices = voices;
-                typeof(GameSoundEffects).GetField("_zombiePartAudioLoading", BindingFlags.Instance | BindingFlags.NonPublic)!
-                    .SetValue(effects, true);
                 yield return effects.LoadSounds();
                 yield return (IEnumerator)typeof(GameSoundEffects)
                     .GetMethod("LoadAdventureZombiePartAudio", BindingFlags.Instance | BindingFlags.NonPublic)!

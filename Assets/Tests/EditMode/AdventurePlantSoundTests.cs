@@ -337,7 +337,7 @@ namespace PlantsVsZombies.Tests.EditMode
         /// <returns>The live target stored in the simulation.</returns>
         private static Zombie Target(GameSimulation game, ZombieKind kind, int row, float x)
         {
-            var zombie = new Zombie { Id = 1000, Kind = kind, Row = row, X = x, Health = 270f, StartingHealth = 270f };
+            var zombie = new Zombie { Id = 1000, Kind = kind, Row = row, X = x, Health = 270f, StartingHealth = 270f, PresentationNativeHeight = 0 };
             game.Zombies.Add(zombie);
             return zombie;
         }

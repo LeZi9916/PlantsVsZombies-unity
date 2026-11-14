@@ -3535,6 +3535,12 @@ namespace PlantsVsZombies.Simulation
                         continue;
                     }
 
+                    if (p.Kind == PlantKind.MagnetShroom)
+                    {
+                        AdvanceAdventureMagnetShroom(p);
+                        continue;
+                    }
+
                     if (p.Kind == PlantKind.Torchwood)
                     {
                         UpdateAdventureTorchwood(p);
@@ -3666,51 +3672,6 @@ namespace PlantsVsZombies.Simulation
 
                             p.ActionTimer = 1f;
                             break;
-                        case PlantKind.MagnetShroom:
-                            Zombie? metal = null;
-                            foreach (var zombie in Zombies)
-                            {
-                                var inRange = zombie.Kind == ZombieKind.Digger || zombie.Kind == ZombieKind.Pogo
-                                    ? AdventureZombieEquipmentRules.InMagnetRange(zombie, 40 + p.Column * 80, AdventurePlantEatingRectangle(p).Y,
-                                        (int)(AdventureBiteNativeY(zombie, AdventureZombieNativeRules.NativePositionX(zombie.X, AdventureDancerRules.Scale(zombie)))
-                                            - (zombie.Kind == ZombieKind.Pogo ? zombie.PresentationAltitude : 0f)))
-                                    : Math.Abs(zombie.X - x) <= 3f;
-                                if (!zombie.Hypnotized && Math.Abs(zombie.Row - p.Row) <= 2 && inRange && (zombie.ArmorHealth > 0f && (zombie.Kind == ZombieKind.Buckethead || zombie.Kind == ZombieKind.Football) || (zombie.Kind == ZombieKind.ScreenDoor || zombie.Kind == ZombieKind.Ladder) && zombie.ShieldHealth > 0f || (zombie.Kind == ZombieKind.Ladder || zombie.Kind == ZombieKind.JackInTheBox && zombie.PresentationNativePhase == 15) && !zombie.UsedAbility || zombie.Kind == ZombieKind.Pogo && AdventurePogoRules.CanLoseStick(zombie) || zombie.Kind == ZombieKind.Digger && AdventureDiggerState.CanLoseAxe(zombie)))
-                                {
-                                    metal = zombie;
-                                    break;
-                                }
-                            }
-                            if (metal != null)
-                            {
-                                RequestAdventureZombieFoley(42);
-                                if (metal.Kind == ZombieKind.Digger)
-                                {
-                                    LoseAdventureDiggerAxe(metal);
-                                }
-                                else if (metal.Kind == ZombieKind.Pogo)
-                                {
-                                    BreakAdventurePogo(metal, 16U);
-                                }
-                                else
-                                {
-                                    metal.ArmorHealth = 0;
-                                    metal.ShieldHealth = 0;
-                                    metal.UsedAbility = true;
-                                    metal.Submerged = false;
-                                    metal.AbilityPhase = 2;
-                                }
-                                if (metal.Kind == ZombieKind.JackInTheBox)
-                                {
-                                    metal.AbilityTimer = float.MaxValue;
-                                    metal.PresentationNativePhase = 0;
-                                    metal.JackInTheBoxTicks = 0;
-                                }
-
-                                p.ActionTimer = 15f;
-                            }
-
-                            break;
                         case PlantKind.Peashooter:
                         case PlantKind.SnowPea:
                         case PlantKind.Repeater:
@@ -3808,6 +3769,303 @@ namespace PlantsVsZombies.Simulation
                     }
                 }
             }
+        }
+
+        /// <summary>Gets the original body rectangle used by the magnet's circular reach and nearest-target priority.</summary>
+        /// <param name="zombie">The potential magnetic target.</param>
+        /// <returns>The body rectangle after native altitude and clipping.</returns>
+        private NativeRect AdventureMagnetBodyRectangle(Zombie zombie)
+        {
+            var scale = AdventureDancerRules.Scale(zombie);
+            var x = AdventureZombieNativeRules.NativePositionX(zombie.X, scale);
+            var altitude = zombie.PoolState != null ? AdventureZombiePoolRules.BodyAltitude(zombie) : zombie.PresentationAltitude;
+            var y = (int)AdventureBiteNativeY(zombie, x) + (int)-altitude;
+            var body = AdventureZombieTargetingRules.BodyRectangle(zombie, y);
+            var clip = zombie.PoolState != null ? zombie.PresentationBiteClipHeight : (int)AdventureZombieMotionRules.ClipHeight(zombie, scale);
+            return new NativeRect(body.X, body.Y, body.Width, Math.Max(0, body.Height - (clip > -100 ? clip : 0)));
+        }
+
+        /// <summary>Runs PC UpdateMagnetShroom 470170, including the original independent body and cooldown clocks.</summary>
+        /// <param name="plant">The awake Magnet-shroom updated at one hundred hertz.</param>
+        private void AdvanceAdventureMagnetShroom(Plant plant)
+        {
+            var state = plant.MagnetPresentation ??= new AdventureMagnetState
+            {
+                AnimationRate = plant.PresentationRate > 0f ? plant.PresentationRate : 12f
+            };
+            state.AnimationSeconds += .01f;
+            if (state.Item != null)
+            {
+                state.Item.AgeTicks++;
+            }
+
+            if (state.CooldownTicks > 0)
+            {
+                state.CooldownTicks--;
+            }
+
+            plant.ActionTimer = state.CooldownTicks * .01f;
+            plant.PresentationBiteNativeState = state.NativePhase;
+            if (state.NativePhase == 27)
+            {
+                if (state.CooldownTicks == 0)
+                {
+                    state.NativePhase = 1;
+                    plant.PresentationBiteNativeState = 1;
+                    state.AnimationSeconds = 0f;
+                    state.AnimationRate = AdventureZombieIsIZombie ? 0f : 10f + (float)_random.NextDouble() * 5f;
+                    state.BlendTicks = 30;
+                    state.Item = null;
+                }
+
+                return;
+            }
+
+            if (state.NativePhase == 26)
+            {
+                if (state.AnimationSeconds * 12f / AdventureMagnetRules.SuckingFrames >= 1f)
+                {
+                    state.NativePhase = 27;
+                    plant.PresentationBiteNativeState = 27;
+                    state.AnimationSeconds = 0f;
+                    state.AnimationRate = AdventureZombieIsIZombie ? 0f : 2f;
+                    state.BlendTicks = 20;
+                }
+
+                return;
+            }
+
+            var plantX = 40 + plant.Column * 80;
+            var plantY = AdventurePlantEatingRectangle(plant).Y;
+            Zombie? target = null;
+            var nearest = float.MaxValue;
+            foreach (var zombie in Zombies)
+            {
+                var body = AdventureMagnetBodyRectangle(zombie);
+                if (!AdventureMagnetRules.CanTarget(zombie, body, plant.Row)
+                    || !AdventureMagnetRules.InRange(plantX, plantY, body, zombie.Eating))
+                {
+                    continue;
+                }
+
+                var distance = AdventureMagnetRules.TargetDistance(plantX, plantY, body, Math.Abs(zombie.Row - plant.Row));
+                if (distance < nearest)
+                {
+                    nearest = distance;
+                    target = zombie;
+                }
+            }
+
+            if (target != null)
+            {
+                AttractAdventureMagnetMetal(plant, target);
+                return;
+            }
+
+            Plant? ladder = null;
+            var ladderScore = float.MaxValue;
+            foreach (var other in Plants)
+            {
+                if (!other.HasLadder || other.Health <= 0f)
+                {
+                    continue;
+                }
+
+                var dx = Math.Abs(other.Column - plant.Column);
+                var dy = Math.Abs(other.Row - plant.Row);
+                var distance = Math.Max(dx, dy);
+                var score = distance + dy * .05f;
+                if (distance <= 2 && score < ladderScore)
+                {
+                    ladder = other;
+                    ladderScore = score;
+                }
+            }
+
+            if (ladder != null)
+            {
+                foreach (var other in Plants)
+                {
+                    if (other.Row == ladder.Row && other.Column == ladder.Column)
+                    {
+                        other.HasLadder = false;
+                    }
+                }
+
+                BeginAdventureMagnetAttraction(plant, new AdventureMagnetItem
+                {
+                    NativeKind = 20,
+                    X = 40 + ladder.Column * 80 + 40,
+                    Y = AdventurePlantEatingRectangle(ladder).Y,
+                    PositionResolved = true,
+                    DestinationX = 10f + RandomAdventureMagnetOffset(),
+                    DestinationY = RandomAdventureMagnetOffset()
+                });
+            }
+        }
+
+        /// <summary>Gets the original uniform destination jitter for a magnetic item.</summary>
+        /// <returns>A native pixel offset in minus ten through plus ten.</returns>
+        private float RandomAdventureMagnetOffset()
+        {
+            return -10f + (float)_random.NextDouble() * 20f;
+        }
+
+        /// <summary>Starts PC 46F9C0's original shooting clip, metal item and single attraction Foley.</summary>
+        /// <param name="plant">The ready Magnet-shroom.</param>
+        /// <param name="item">The original removed metal item.</param>
+        private void BeginAdventureMagnetAttraction(Plant plant, AdventureMagnetItem item)
+        {
+            var state = plant.MagnetPresentation!;
+            state.NativePhase = 26;
+            state.CooldownTicks = AdventureMagnetRules.CooldownTicks;
+            state.AnimationSeconds = 0f;
+            state.AnimationRate = 12f;
+            state.BlendTicks = 20;
+            state.Item = item;
+            plant.PresentationBiteNativeState = 26;
+            plant.ActionTimer = 15f;
+            RequestAdventureZombieFoley(42);
+        }
+
+        /// <summary>Captures the original GetTrackPosition input after its species-specific magnetic disarming operation.</summary>
+        /// <param name="zombie">The disarmed actor whose original artwork supplies the source point.</param>
+        /// <param name="track">The original retained metal track.</param>
+        /// <returns>A source-pose snapshot which cannot follow later target movement or death.</returns>
+        private AdventureZombiePartDrop CaptureAdventureMagnetSource(Zombie zombie, string track)
+        {
+            var animation = AdventurePresentationZombieAnimation(zombie);
+            var rate = AdventurePresentationZombieRate(zombie);
+            var age = zombie.PresentationAnimationAge;
+            if (zombie.Kind == ZombieKind.Digger && zombie.PresentationNativePhase == 34 && zombie.DiggerState != null)
+            {
+                rate = 12f;
+                age = zombie.DiggerState.PausedDigSeconds;
+            }
+
+            return new AdventureZombiePartDrop
+            {
+                NativeKind = (int)zombie.Kind,
+                NativePhase = zombie.PresentationNativePhase,
+                NativeAltitude = zombie.PoolState != null ? AdventureZombiePoolRules.BodyAltitude(zombie) : zombie.PresentationAltitude,
+                Row = zombie.Row,
+                X = zombie.X,
+                Scale = AdventureDancerRules.Scale(zombie),
+                Asset = AdventureZombiePresentationAsset(zombie),
+                Animation = animation,
+                AnimationAge = age,
+                Rate = rate,
+                Anchor = track,
+                Backwards = zombie.PresentationWalkingBackwards ?? (zombie.Hypnotized
+                    || zombie.Kind == ZombieKind.Digger && AdventureDiggerState.WalksBackwards(zombie))
+            };
+        }
+
+        /// <summary>Applies PC 46F9C0's per-item removal without damaging unrelated equipment or creating duplicate debris.</summary>
+        /// <param name="plant">The Magnet-shroom taking the selected nearest metal.</param>
+        /// <param name="zombie">The original eligible source zombie.</param>
+        private void AttractAdventureMagnetMetal(Plant plant, Zombie zombie)
+        {
+            EnsureAdventureZombieEquipment(zombie);
+            var nativeX = AdventureZombieNativeRules.NativePositionX(zombie.X, AdventureDancerRules.Scale(zombie));
+            var nativeY = AdventureBiteNativeY(zombie, nativeX);
+            var item = new AdventureMagnetItem { X = nativeX, Y = nativeY };
+            var helm = AdventureZombieEquipmentRules.HelmType(zombie);
+            if (zombie.ArmorHealth > 0f && (helm == 2 || helm == 3))
+            {
+                var stage = AdventureZombieEquipmentRules.DamageIndex(zombie.ArmorHealth, (int)zombie.PresentationMaxArmor);
+                zombie.ArmorHealth = 0f;
+                item.NativeKind = (helm == 2 ? 1 : 4) + stage;
+                if (helm == 2)
+                {
+                    item.Source = CaptureAdventureMagnetSource(zombie, "anim_bucket");
+                    item.AnchorImage = "IMAGE_REANIM_ZOMBIE_BUCKET1";
+                    item.DestinationX = 25f;
+                }
+                else
+                {
+                    item.X = nativeX + 37f;
+                    item.Y = nativeY - 60f;
+                    item.PositionResolved = true;
+                    item.DestinationX = 20f;
+                }
+
+                item.DestinationY = 20f;
+            }
+            else if (zombie.ShieldHealth > 0f && (zombie.Kind == ZombieKind.ScreenDoor || zombie.Kind == ZombieKind.Ladder))
+            {
+                var stage = AdventureZombieEquipmentRules.DamageIndex(zombie.ShieldHealth, (int)zombie.PresentationMaxShield);
+                zombie.ShieldHealth = 0f;
+                zombie.PresentationNativePhase = 0;
+                if (!zombie.Eating)
+                {
+                    // PC 54EEA0/46F9C0 uses StartWalkAnim(0) after either held shield is removed.
+                    zombie.PresentationAnimation = string.Empty;
+                    zombie.PresentationBodyBlendTicks = 0;
+                    PickAdventureZombieNativeSpeed(zombie, 0);
+                }
+                else
+                {
+                    // A latched meal keeps its native velocity until the later StopEating walk reset.
+                    zombie._presentationSpeedPhase = 0;
+                    zombie._presentationSpeedKind = zombie.ModeHead >= 26 ? zombie.ModeHead : (int)zombie.Kind;
+                }
+
+                if (zombie.Kind == ZombieKind.ScreenDoor)
+                {
+                    item.NativeKind = 7 + stage;
+                    item.Source = CaptureAdventureMagnetSource(zombie, "anim_screendoor");
+                    item.AnchorImage = "IMAGE_REANIM_ZOMBIE_SCREENDOOR1";
+                }
+                else
+                {
+                    zombie.UsedAbility = true;
+                    item.NativeKind = 14 + stage;
+                    item.X = nativeX + 31f;
+                    item.Y = nativeY + 20f;
+                    item.PositionResolved = true;
+                    item.AnchorImage = "IMAGE_REANIM_ZOMBIE_LADDER_5";
+                }
+
+                item.DestinationX = 30f;
+            }
+            else if (zombie.Kind == ZombieKind.Pogo)
+            {
+                BreakAdventurePogo(zombie, 16U);
+                item.NativeKind = zombie.PresentationArmLost ? 12 : 10;
+                item.Source = CaptureAdventureMagnetSource(zombie, "Zombie_pogo_stick");
+                item.AnchorImage = "IMAGE_REANIM_ZOMBIE_POGO_STICKDAMAGE1";
+                item.SourceOffsetX = 40f;
+                item.SourceOffsetY = 84f;
+                item.DestinationX = 44f;
+                item.DestinationY = 10f;
+            }
+            else if (zombie.Kind == ZombieKind.JackInTheBox && zombie.PresentationNativePhase == 15)
+            {
+                zombie.UsedAbility = true;
+                zombie.AbilityTimer = float.MaxValue;
+                PickAdventureZombieNativeSpeed(zombie, 15);
+                zombie.PresentationNativePhase = 0;
+                zombie.JackInTheBoxTicks = 0;
+                item.NativeKind = 13;
+                item.Source = CaptureAdventureMagnetSource(zombie, "Zombie_jackbox_box");
+                item.AnchorImage = "IMAGE_REANIM_ZOMBIE_JACKBOX_BOX";
+                item.DestinationX = 20f;
+                item.DestinationY = 15f;
+            }
+            else if (zombie.Kind == ZombieKind.Digger)
+            {
+                LoseAdventureDiggerAxe(zombie);
+                item.NativeKind = 21;
+                item.Source = CaptureAdventureMagnetSource(zombie, "Zombie_digger_pickaxe");
+                item.AnchorImage = "IMAGE_REANIM_ZOMBIE_DIGGER_PICKAXE";
+                item.DestinationX = 45f;
+                item.DestinationY = 15f;
+            }
+
+            item.DestinationX += RandomAdventureMagnetOffset();
+            item.DestinationY += RandomAdventureMagnetOffset();
+            BeginAdventureMagnetAttraction(plant, item);
         }
 
         /// <summary>Performs fire adventure pea.</summary>
@@ -9390,6 +9648,10 @@ namespace PlantsVsZombies.Simulation
             // PC PlayDeathAnim replaces every live phase, stops eating, and retains the current pool altitude.
             corpse.RequiredZombie.PresentationNativePhase = 1;
             corpse.RequiredZombie.Eating = false;
+            if (corpse.RequiredZombie.PresentationBodyBlendTicks >= 0)
+            {
+                corpse.RequiredZombie.PresentationBodyBlendTicks = 20;
+            }
             if (corpse.RequiredZombie.Kind == ZombieKind.Pogo)
             {
                 corpse.RequiredZombie.PresentationAltitude = 0f;
@@ -10189,6 +10451,11 @@ namespace PlantsVsZombies.Simulation
                     z.DiggerState.AnimationBlendTicks = 20;
                 }
 
+                if (z.PresentationBodyBlendTicks >= 0 && (z.Eating || z.PresentationAnimation == "anim_eat"))
+                {
+                    z.PresentationBodyBlendTicks = 20;
+                }
+
                 z.PresentationAnimation = clip;
                 z.PresentationAnimationAge = 0f;
                 z._presentationWalkPhase = 0f;
@@ -10645,6 +10912,7 @@ namespace PlantsVsZombies.Simulation
                 ShieldHealth = shield,
                 Airborne = kind == ZombieKind.Balloon,
                 FlyingHealth = kind == ZombieKind.Balloon ? 20 : 0,
+                PresentationNativeHeight = 0,
                 Submerged = kind == ZombieKind.Digger,
                 AbilityTimer = kind == ZombieKind.Dancing ? 4f : kind == ZombieKind.Bungee ? 4f : 5f
             };
@@ -10666,6 +10934,8 @@ namespace PlantsVsZombies.Simulation
                 z.StartingHealth = z.Health;
             }
 
+            z.PresentationMaxArmor = z.ArmorHealth;
+            z.PresentationMaxShield = z.ShieldHealth;
             InitializeAdventureZombieNative(z, x >= 9.5f && kind != ZombieKind.Bungee);
             if (kind == ZombieKind.JackInTheBox)
             {

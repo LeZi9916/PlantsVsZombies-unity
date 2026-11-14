@@ -23,6 +23,8 @@ namespace PlantsVsZombies.Simulation
         public float PresentationAnimationAge, PresentationPlantHeadAge, PresentationFlash, PresentationArmorFlash, PresentationButter, PresentationPreviousX;
         /// <summary>Stores presentation walk2.</summary>
         public bool PresentationWalk2;
+        /// <summary>Overrides native body transition blending after magnetic shield detachment, or minus one for species defaults.</summary>
+        internal int PresentationBodyBlendTicks = -1;
         /// <summary>Stores presentation animation.</summary>
         public string PresentationAnimation = string.Empty;
         /// <summary>Stores the original pole-vault transition blend, including the zero-tick landing handoff.</summary>

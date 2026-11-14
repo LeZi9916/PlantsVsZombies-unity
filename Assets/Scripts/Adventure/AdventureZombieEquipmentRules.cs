@@ -151,12 +151,8 @@ namespace PlantsVsZombies.Adventure
         /// <returns>Whether the zombie body touches the original 270-pixel or eating 320-pixel circle.</returns>
         public static bool InMagnetRange(Zombie zombie, int plantX, int plantY, int zombieY)
         {
-            var body = AdventureZombieTargetingRules.BodyRectangle(zombie, zombieY);
-            var centerY = plantY + 20;
-            var dx = Math.Max(body.X - plantX, Math.Max(0, plantX - body.X - body.Width));
-            var dy = Math.Max(body.Y - centerY, Math.Max(0, centerY - body.Y - body.Height));
-            var radius = zombie.Eating ? 320 : 270;
-            return dx * dx + dy * dy <= radius * radius;
+            return AdventureMagnetRules.InRange(plantX, plantY,
+                AdventureZombieTargetingRules.BodyRectangle(zombie, zombieY), zombie.Eating);
         }
 
         /// <summary>Gets the original particle emitted when a held shield is detached.</summary>

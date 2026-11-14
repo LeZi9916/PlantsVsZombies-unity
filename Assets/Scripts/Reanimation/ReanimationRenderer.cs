@@ -3062,6 +3062,64 @@ namespace PlantsVsZombies.Reanimation
             return true;
         }
 
+        /// <summary>Samples the original GetTrackMatrix image-center point before the zombie's body overlay.</summary>
+        /// <param name="name">The original source reanimation asset.</param>
+        /// <param name="animation">The retained source animation.</param>
+        /// <param name="trackName">The original metal track.</param>
+        /// <param name="seconds">The frozen source clock.</param>
+        /// <param name="rate">The retained original source frame rate.</param>
+        /// <param name="position">Receives the transformed original image center, or the marker translation when invisible.</param>
+        /// <returns>Whether the retained source track is available.</returns>
+        public bool TryGetNativeTrackCenter(string name, string animation, string trackName, float seconds, float rate, out Vector2 position)
+        {
+            position = default;
+            if (!TryGetClip(name, animation, out var asset, out var clip))
+            {
+                return false;
+            }
+
+            var track = FindTrack(asset, trackName);
+            if (track == null)
+            {
+                return false;
+            }
+
+            var time = SampleFrame(clip, NativeSeconds(clip, seconds, rate, asset.Fps, true), asset.Fps, false);
+            var pose = Interpolate(GetFrame(track, time.Current), GetFrame(track, time.Next), time.Fraction);
+            var center = pose.Texture != null && pose.Visibility >= 0f
+                ? new Vector3(pose.Texture.Width * .5f, pose.Texture.Height * .5f, 0f) : Vector3.zero;
+            var point = PartMatrix(pose).MultiplyPoint3x4(center);
+            position = new Vector2(point.x, point.y);
+            return true;
+        }
+
+        /// <summary>Gets the original unscaled cell dimensions of a native resource sprite.</summary>
+        /// <param name="resource">The original image resource identifier.</param>
+        /// <param name="size">Receives the original width and height of one atlas cell.</param>
+        /// <returns>Whether the unchanged original resource is available.</returns>
+        public bool TryGetNativeSpriteSize(string resource, out Vector2Int size)
+        {
+            EnsureIndex();
+            EnsureNativeAtlas();
+            size = default;
+            try
+            {
+                var image = LoadTexture(resource);
+                if (image == null)
+                {
+                    return false;
+                }
+
+                var cells = _nativeAtlas.TryGetValue(resource, out var atlas) ? atlas : Vector2Int.one;
+                size = new Vector2Int(image.Width / Math.Max(1, cells.x), image.Height / Math.Max(1, cells.y));
+                return true;
+            }
+            catch (FileNotFoundException)
+            {
+                return false;
+            }
+        }
+
         /// <summary>Performs draw resource sprite.</summary>
         /// <param name = "resource">The resource.</param>
         /// <param name = "center">The center.</param>

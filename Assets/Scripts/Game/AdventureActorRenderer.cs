@@ -341,7 +341,8 @@ namespace PlantsVsZombies.Game
                 && _zombie.PoolState == null && _zombie.PresentationInPool != true && !_zombie.PresentationPoolRow
                 ? RequiredRenderer.DrawZombiePlayback(_origin, _scale, _seconds, _variant, _clip, _loop, _rate, true, null, _key)
                 : RequiredRenderer.DrawNativePlayback(_name, _origin, _scale, _seconds, _clip, _loop, _rate, _zombieVisible, null, null,
-                    _backwards, _key, _zombie.Kind == ZombieKind.Balloon ? _zombie.PresentationBalloonBlendTicks
+                    _backwards, _key, _zombie.PresentationBodyBlendTicks >= 0 ? _zombie.PresentationBodyBlendTicks
+                        : _zombie.Kind == ZombieKind.Balloon ? _zombie.PresentationBalloonBlendTicks
                         : _zombie.Kind == ZombieKind.Bobsled && _zombie.BobsledState != null ? 0
                         : _zombie.Kind == ZombieKind.Pogo ? _zombie.PogoState?.AnimationBlendTicks ?? 20
                         : _zombie.Kind == ZombieKind.Digger ? _zombie.DiggerState?.AnimationBlendTicks ?? 20

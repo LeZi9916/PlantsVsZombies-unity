@@ -3214,6 +3214,15 @@ namespace PlantsVsZombies.Game
                 loop = false;
             }
 
+            var magnet = plant.Kind == PlantKind.MagnetShroom ? plant.MagnetPresentation : null;
+            if (magnet != null && !plant.Asleep)
+            {
+                clip = magnet.Animation;
+                age = magnet.AnimationSeconds + AdventureRenderRemainder;
+                rate = magnet.AnimationRate;
+                loop = magnet.NativePhase != 26;
+            }
+
             HeadPlayback[]? heads = null;
             if (AdventurePresentationRules.AttachedHead(plant.Kind) && !plant.Asleep)
             {
@@ -3245,12 +3254,25 @@ namespace PlantsVsZombies.Game
                 rate = 12f;
             }
 
+            var magnetCenter = Vector2.zero;
+            var magnetOnTop = false;
+            var magnetItemVisible = magnet?.Item != null && PrepareAdventureMagnetItem(plant, magnet.Item, drawHeight, out magnetCenter, out magnetOnTop);
+            if (magnetItemVisible && !magnetOnTop)
+            {
+                DrawAdventureMagnetItem(magnet!.Item!, magnetCenter);
+            }
+
             _doomShroomState = doom;
             ActorRenderer.DrawPlant(plant, name, origin, size, heads == null ? age : plant.Age + AdventureRenderRemainder,
                 clip, loop, rate, heads, _presentationKeys.Get("plant-", plant.Id), new Rect(x - 80, y - 160, 300, 340),
                 squash != null && squash.NativePhase != 0 ? squash.BlendTicks
-                    : doom != null || blover != null ? 0 : scaredy != null && scaredy.NativePhase != 1 || plant.Kind == PlantKind.Threepeater || plant.Kind == PlantKind.Cattail ? 10 : 20, AdventureRenderRemainder,
+                    : magnet != null ? magnet.BlendTicks : doom != null || blover != null ? 0 : scaredy != null && scaredy.NativePhase != 1 || plant.Kind == PlantKind.Threepeater || plant.Kind == PlantKind.Cattail ? 10 : 20, AdventureRenderRemainder,
                 _presentationKeys.Get("producer-plant-", plant.Id), highlighted, doom == null ? null : _doomTrackOffset);
+
+            if (magnetItemVisible && magnetOnTop)
+            {
+                DrawAdventureMagnetItem(magnet!.Item!, magnetCenter);
+            }
 
             if (plant.Kind == PlantKind.FumeShroom && plant.PresentationShotAge >= .35f && plant.PresentationShotAge < 1.35f)
             {
@@ -3299,6 +3321,83 @@ namespace PlantsVsZombies.Game
                 _adventurePresentationSurfaces.Add(key);
                 _adventurePresentationLiveSurfaces.Add(key);
             }
+        }
+
+        /// <summary>Resolves the original retained source point and samples PC magnet-item attraction in board coordinates.</summary>
+        /// <param name="plant">The Magnet-shroom whose native position supplies the destination.</param>
+        /// <param name="item">The captured original metal item and source-pose snapshot.</param>
+        /// <param name="drawHeight">The original plant draw-height offset, including pot support.</param>
+        /// <param name="center">Receives the unchanged original image cell's draw center.</param>
+        /// <param name="onTop">Receives whether the moving metal draws above the body rather than behind it.</param>
+        /// <returns>Whether original artwork is available for this metal.</returns>
+        private bool PrepareAdventureMagnetItem(Plant plant, AdventureMagnetItem item, float drawHeight, out Vector2 center, out bool onTop)
+        {
+            center = default;
+            onTop = false;
+            var resource = AdventureMagnetRules.Image(item.NativeKind);
+            if (resource.Length == 0 || !_owner.RequiredAnimations.TryGetNativeSpriteSize(resource, out var size))
+            {
+                return false;
+            }
+
+            if (!item.PositionResolved && item.Source != null)
+            {
+                var source = item.Source;
+                if (_owner.RequiredAnimations.TryGetNativeTrackCenter(source.Asset, source.Animation, source.Anchor!,
+                    source.AnimationAge, source.Rate, out var point))
+                {
+                    if (source.Backwards)
+                    {
+                        point.x = 90f - point.x;
+                    }
+
+                    var pose = _detachedPartProbe;
+                    pose.Kind = (ZombieKind)source.NativeKind;
+                    pose.Row = source.Row;
+                    pose.X = source.X;
+                    pose.IsSmall = source.Scale <= .5f;
+                    pose.UsedAbility = source.NativePhase == 0 || source.NativePhase == 38;
+                    pose.PresentationNativePhase = source.NativePhase;
+                    pose.PresentationAltitude = source.NativeAltitude;
+                    pose.PresentationVaultPositionY = 0f;
+                    var position = AdventureZombieOrigin(pose, source.X) + point * source.Scale - Vector2.one * .5f;
+                    item.X = position.x;
+                    item.Y = position.y;
+                }
+
+                item.X += item.SourceOffsetX;
+                item.Y += item.SourceOffsetY;
+                item.PositionResolved = true;
+            }
+
+            if (item.AnchorImage != null)
+            {
+                if (!_owner.RequiredAnimations.TryGetNativeSpriteSize(item.AnchorImage, out var originalSize))
+                {
+                    return false;
+                }
+
+                // PC 46F9C0 subtracts integer half dimensions before later scaling the drawn metal to eighty percent.
+                item.X -= originalSize.x / 2;
+                item.Y -= originalSize.y / 2;
+                item.AnchorImage = null;
+            }
+
+            var plantX = 40f + plant.Column * 80f;
+            var plantY = _owner.Layout.AdventureCellY(plant.Row, plant.Column);
+            onTop = AdventureMagnetRules.SampleItem(item, plantX, plantY, out var x, out var y);
+            // TodDrawImageCelScaledF retains the unscaled image center; draw height does not alter attraction physics.
+            center = new Vector2(x + size.x * .5f, y + size.y * .5f + drawHeight);
+            return true;
+        }
+
+        /// <summary>Draws the original magnetic metal at eighty percent scale without adding invented rotation or tint.</summary>
+        /// <param name="item">The original magnetic item selecting its sprite and damage cel.</param>
+        /// <param name="center">The original unscaled image-cell center after plant draw height.</param>
+        private void DrawAdventureMagnetItem(AdventureMagnetItem item, Vector2 center)
+        {
+            var frame = item.NativeKind >= 10 && item.NativeKind <= 12 ? item.NativeKind - 10 : 0;
+            _owner.RequiredAnimations.DrawResourceSprite(AdventureMagnetRules.Image(item.NativeKind), center, .8f, frame: frame);
         }
 
         /// <summary>Performs adventure zombie clip.</summary>
