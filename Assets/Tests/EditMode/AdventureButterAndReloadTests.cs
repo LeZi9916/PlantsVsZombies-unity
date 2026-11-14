@@ -11,7 +11,7 @@ using PlantKind = PlantsVsZombies.Simulation.PlantKind;
 
 namespace PlantsVsZombies.Tests.EditMode
 {
-    /// <summary>Checks original lobber body clocks and independent butter immobilization.</summary>
+    /// <summary>Checks original lobber body clocks, independent butter immobilization and contact-plant rules.</summary>
     public sealed class AdventureButterAndReloadTests
     {
         /// <summary>Checks complete native shooting playback holds its counter and restarts a fresh twelve-FPS idle.</summary>
@@ -137,6 +137,82 @@ namespace PlantsVsZombies.Tests.EditMode
             Assert.That(zombie.PresentationButter, Is.EqualTo(4f));
             Assert.That(zombie.FrozenRemaining, Is.Zero);
             Assert.That(zombie.ChillRemaining, Is.Zero);
+        }
+
+        /// <summary>Exercises an almost-eaten Squash through real ordinary zombie updates from its look into flight.</summary>
+        /// <param name="level">The original day, night or roof scene.</param>
+        /// <param name="alreadyEating">Whether the ordinary zombie has already latched its eating state.</param>
+        [TestCase(9, false)]
+        [TestCase(19, true)]
+        [TestCase(49, true)]
+        public void TriggeredSquashSurvivesOrdinaryZombieChewingUntilAirborne(int level, bool alreadyEating)
+        {
+            var game = Board(level);
+            if (game.Adventure.Level.HasRoof)
+            {
+                Place(game, PlantKind.FlowerPot, 1, 4);
+            }
+
+            var plant = Place(game, PlantKind.Squash, 1, 4);
+            plant.Health = 4f;
+            var zombie = Spawn(game, ZombieKind.Normal, 1, 350f);
+            zombie.Eating = alreadyEating;
+            for (var tick = 0; tick < 126; tick++)
+            {
+                Tick(game, 1);
+                Assert.That(game.Plants, Has.Member(plant), "Squash must survive triggered update " + tick);
+                Assert.That(plant.Health, Is.EqualTo(4f));
+            }
+
+            Assert.That(plant.SquashPresentation!.NativePhase, Is.EqualTo(5));
+        }
+
+        /// <summary>Checks a damaged roof support can be eaten without deleting its already-airborne Squash.</summary>
+        [Test]
+        public void EatenFlowerPotKeepsTheAlreadyAirborneSquashAlive()
+        {
+            var game = Board(49);
+            var pot = Place(game, PlantKind.FlowerPot, 1, 4);
+            pot.Health = 4f;
+            var squash = Place(game, PlantKind.Squash, 1, 4);
+            squash.Health = 4f;
+            var zombie = Spawn(game, ZombieKind.Normal, 1, 350f);
+            zombie.Eating = true;
+            Tick(game, 126);
+            Assert.That(squash.SquashPresentation!.NativePhase, Is.EqualTo(5));
+            Tick(game, 4);
+            Assert.That(game.Plants, Has.No.Member(pot), "The ordinary zombie can now reach the worn support.");
+            Assert.That(game.Plants, Has.Member(squash), "PC NotOnGround excludes the airborne Squash from support-stack cleanup.");
+            Assert.That(squash.Health, Is.EqualTo(4f));
+            Tick(game, 60);
+            Assert.That(game.Zombies, Has.No.Member(zombie), "The surviving Squash still completes its original impact.");
+            Assert.That(squash.SquashPresentation.NativePhase, Is.EqualTo(7));
+        }
+
+        /// <summary>Checks a Chomper finishes eating an eligible adjacent bungee before or during its grab of another plant.</summary>
+        /// <param name="grabbing">Whether the bungee starts capturing its own target while the Chomper is biting.</param>
+        [TestCase(false)]
+        [TestCase(true)]
+        public void ChomperCompletesItsBiteAgainstAnEligibleBungee(bool grabbing)
+        {
+            var game = Board();
+            var plant = Place(game, PlantKind.Chomper, 1, 4);
+            var cargo = grabbing ? Place(game, PlantKind.Wallnut, 1, 5) : null;
+            var zombie = Spawn(game, ZombieKind.Bungee, 1, 440f);
+            zombie.TargetColumn = 5;
+            zombie.PresentationNativePhase = 6;
+            zombie.PresentationAltitude = 0f;
+            zombie.BungeeState!.Enter(6, grabbing ? 20 : 300);
+            Tick(game, 1);
+            Assert.That(plant.ChomperPresentation!.NativePhase, Is.EqualTo(10));
+            Tick(game, 70);
+            Assert.That(game.Zombies, Has.No.Member(zombie));
+            Assert.That(plant.ChomperPresentation.NativePhase, Is.EqualTo(11));
+            if (cargo != null)
+            {
+                Assert.That(game.Plants, Has.Member(cargo));
+                Assert.That(cargo.BungeeState, Is.Zero, "Swallowing the grabbing bungee restores the other captured plant.");
+            }
         }
 
         /// <summary>Creates a controlled night board without scheduled waves or graves.</summary>

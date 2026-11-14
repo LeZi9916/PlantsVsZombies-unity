@@ -608,5 +608,14 @@ These PC values differ from the supplied mobile-derived source.
 ./Tools/Tests/Run-UnityTests.ps1 -Platform PlayMode -TestFilter 'OriginalButterAndReloadGraphicsTests|GamePresentationPerformanceTests.KeepsPlantTrackFiltersLocalToEachDraw|GamePresentationPerformanceTests.WarmPlantPresentationDoesNotAllocateManagedMemory|GamePresentationPerformanceTests.WarmZombiePresentationDoesNotAllocateManagedMemory|OriginalDancerGraphicsTests.RaisedArmRestartsBlendFromCurrentPoseAcrossNativeDanceSteps|OriginalZombieDeathBlendTests.SuperlongDeathKeepsOriginalLegDirectionsThroughCorpseBlend'
 ```
 
+The contact follow-up runs ordinary chewing against a four-health triggered
+Squash through its airborne transition on day, night and roof boards, including
+latched eating. The roof failure reproduces when its already-worn flower pot is
+eaten after takeoff: support-stack cleanup previously deleted the airborne Squash.
+Cleanup now preserves the original NotOnGround state so the attack can finish.
+A Chomper completes a bite against an eligible adjacent bungee at the bottom or
+while it is grabbing another plant, restoring that captured plant.
+PC `475BEE..475BF7` excludes a bungee targeting the Chomper's own column, and
+Plant::Update stops abilities while grabbed; that original restriction remains.
 These focused simulation, allocation and original-art graphics checks do not
 replace a full-level Player playthrough or other target-device validation.

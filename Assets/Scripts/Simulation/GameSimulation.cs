@@ -3322,7 +3322,9 @@ namespace PlantsVsZombies.Simulation
 
             if (p.Layer == PlantLayer.Support)
             {
-                Plants.RemoveAll(x => x.Row == p.Row && x.Column <= p.Column && p.Column < x.Column + x.ColumnSpan);
+                // PC NotOnGround keeps a rising, falling or flattened Squash independent of its former support cell.
+                Plants.RemoveAll(x => x.Row == p.Row && x.Column <= p.Column && p.Column < x.Column + x.ColumnSpan
+                    && !x.PresentationBiteNotOnGround);
             }
 
             if (AdventureAirAttackPlantAt(p.Row, p.Column) is Plant pot && pot.Kind == PlantKind.FlowerPot
