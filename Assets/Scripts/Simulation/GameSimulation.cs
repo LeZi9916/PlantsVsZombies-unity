@@ -2455,12 +2455,6 @@ namespace PlantsVsZombies.Simulation
                 {
                     shot.Range = float.MaxValue;
                 }
-
-                // Source 0x472C70 queues the shot independently of later target loss.
-                if (!plant.ModeFacesLeft && Adventure.Level.HasRoof && plant.Column < 5)
-                {
-                    shot.Range = Math.Max(.1f, 5 - plant.Column - .5f);
-                }
             }
 
             return true;
@@ -2674,11 +2668,7 @@ namespace PlantsVsZombies.Simulation
                 {
                     var row = plant.Kind == PlantKind.Threepeater ? plant.Row + 1 - head : plant.Row;
                     var back = plant.Kind == PlantKind.SplitPea && head == 1;
-                    var shot = FireAdventurePea(plant, row, back, 20f);
-                    if (!back && Adventure.Level.HasRoof && plant.Column < 5)
-                    {
-                        shot.Range = Math.Max(.1f, 5 - plant.Column - .5f);
-                    }
+                    FireAdventurePea(plant, row, back, 20f);
                 }
 
                 if ((result.StoppedHeads & mask) != 0)
@@ -3895,31 +3885,27 @@ namespace PlantsVsZombies.Simulation
                             if (shooterTarget != null || !shortPuff && CanShootAdventureBoss(p))
                             {
                                 var lob = p.Kind == PlantKind.CabbagePult || p.Kind == PlantKind.KernelPult || p.Kind == PlantKind.MelonPult;
-                                // Straight projectiles from the sloped left roof strike the slope, while lobbers clear it.
-                                if (!Adventure.Level.HasRoof || p.Column >= 5 || lob)
+                                var shot = FireAdventurePea(p, p.Row, false, lob ? p.Kind == PlantKind.MelonPult ? 80f : p.Kind == PlantKind.CabbagePult ? 40f : 20f : 20f);
+                                shot.IsSnow = p.Kind == PlantKind.SnowPea;
+                                shot.HitsAir = air;
+                                shot.Range = shortPuff ? float.MaxValue : range;
+                                shot.Lobbed = lob;
+                                shot.PiercesShield = lob;
+                                shot.Splash = p.Kind == PlantKind.MelonPult;
+                                if (p.Kind == PlantKind.KernelPult)
                                 {
-                                    var shot = FireAdventurePea(p, p.Row, false, lob ? p.Kind == PlantKind.MelonPult ? 80f : p.Kind == PlantKind.CabbagePult ? 40f : 20f : 20f);
-                                    shot.IsSnow = p.Kind == PlantKind.SnowPea;
-                                    shot.HitsAir = air;
-                                    shot.Range = shortPuff ? float.MaxValue : range;
-                                    shot.Lobbed = lob;
-                                    shot.PiercesShield = lob;
-                                    shot.Splash = p.Kind == PlantKind.MelonPult;
-                                    if (p.Kind == PlantKind.KernelPult)
+                                    shot.Butter = p._kernelWeaponPrepared ? p.PresentationButter : _random.Next(4) == 0;
+                                    p._kernelWeaponPrepared = false;
+                                    p.PresentationButter = false;
+                                    if (shot.Butter)
                                     {
-                                        shot.Butter = p._kernelWeaponPrepared ? p.PresentationButter : _random.Next(4) == 0;
-                                        p._kernelWeaponPrepared = false;
-                                        p.PresentationButter = false;
-                                        if (shot.Butter)
-                                        {
-                                            shot.Damage = 40;
-                                        }
+                                        shot.Damage = 40;
                                     }
+                                }
 
-                                    if (p.Kind == PlantKind.Repeater)
-                                    {
-                                        FireAdventurePea(p, p.Row, false, 20f).X -= 0.3f;
-                                    }
+                                if (p.Kind == PlantKind.Repeater)
+                                {
+                                    FireAdventurePea(p, p.Row, false, 20f).X -= 0.3f;
                                 }
 
                                 p.ActionTimer = lob ? 2.9f : 1.425f;
@@ -4298,14 +4284,26 @@ namespace PlantsVsZombies.Simulation
             // Preserve the existing muzzle while retaining its fixed original trajectory after launch.
             shot.PresentationLaunchY = 80f + row * (Adventure.Level.HasPool || Adventure.Level.HasRoof ? 85f : 100f)
                 + (Adventure.Level.HasRoof ? Math.Max(0f, 5f - shot.X) * 20f - 10f : 0f) + 30f;
-            if (p.Kind == PlantKind.Threepeater)
+            if (p.Kind == PlantKind.Peashooter || p.Kind == PlantKind.SnowPea
+                || p.Kind == PlantKind.Repeater || p.Kind == PlantKind.GatlingPea)
+            {
+                AdventurePeaShooterRules.HeadOffset(p.Age, p.PresentationRate > 0f ? p.PresentationRate : 12f,
+                    out var headX, out var headY);
+                shot.X = p.Column + (headX + (p.Kind == PlantKind.GatlingPea ? 34f : 24f) + 14f) / 80f;
+                var plantY = 80f + p.Row * (Adventure.Level.HasPool || Adventure.Level.HasRoof ? 85f : 100f)
+                    + (Adventure.Level.HasRoof ? Math.Max(0, 5 - p.Column) * 20f - 10f : 0f);
+                shot.PresentationLaunchY = plantY + headY - 33f + 14f
+                    - (HasPlantKindAt(PlantKind.FlowerPot, p.Row, p.Column) ? 5f : 0f);
+            }
+            else if (p.Kind == PlantKind.Threepeater)
             {
                 // PC Plant::Fire 0x4752E0 and Projectile::UpdateMotion 0x47CCB0.
                 // The logical collision row is fixed at launch; only the artwork cuts into that lane.
                 shot.X = p.Column + 59f / 80f;
                 shot.VelocityX = 3.33f * 100f / 80f;
                 shot.PresentationLaunchY = 80f + p.Row * (Adventure.Level.HasPool || Adventure.Level.HasRoof ? 85f : 100f)
-                    + (Adventure.Level.HasRoof ? Math.Max(0, 5 - p.Column) * 20f - 10f : 0f) + 24f;
+                    + (Adventure.Level.HasRoof ? Math.Max(0, 5 - p.Column) * 20f - 10f : 0f) + 24f
+                    - (HasPlantKindAt(PlantKind.FlowerPot, p.Row, p.Column) ? 5f : 0f);
                 shot.PresentationLaneVelocity = Math.Sign(row - p.Row) * 3f;
             }
             else if (p.Kind == PlantKind.SplitPea)
@@ -4455,6 +4453,17 @@ namespace PlantsVsZombies.Simulation
             var melon = plant.Kind == PlantKind.MelonPult || plant.Kind == PlantKind.WinterMelon;
             var shot = FireAdventurePea(plant, plant.Row, false, melon ? 80f : plant.Kind == PlantKind.CabbagePult ? 40f : 20f);
             shot.HitsAir = plant.Kind == PlantKind.Cactus && plant.CactusPresentation?.NativePhase == 32;
+            if (plant.Kind == PlantKind.ScaredyShroom)
+            {
+                // PC 4752E0: the spore's original top-left is plant +(29,21), then flower-pot height -5.
+                shot.X = plant.Column + 45f / 80f;
+                shot.PresentationPreviousX = shot.X;
+                shot.VelocityX = 3.33f * 100f / 80f;
+                shot.PresentationLaunchY = 80f + plant.Row * (Adventure.Level.HasPool || Adventure.Level.HasRoof ? 85f : 100f)
+                    + (Adventure.Level.HasRoof ? Math.Max(0, 5 - plant.Column) * 20f - 10f : 0f) + 34.5f
+                    - (HasPlantKindAt(PlantKind.FlowerPot, plant.Row, plant.Column) ? 5f : 0f);
+            }
+
             if (plant.Kind == PlantKind.Cactus)
             {
                 // PC Plant::Fire 0x4752E0 creates the 30x16 spike at +(93,-50) or +(70,23).
@@ -4498,10 +4507,6 @@ namespace PlantsVsZombies.Simulation
                 AdvanceAdventureProjectilePresentation(shot, 0f);
             }
 
-            if (!lob && Adventure.Level.HasRoof && plant.Column < 5)
-            {
-                shot.Range = Math.Max(.1f, 5 - plant.Column - .5f);
-            }
         }
 
         /// <summary>Fires the five original Starfruit projectiles at the scheduled tick.</summary>
@@ -4995,6 +5000,33 @@ namespace PlantsVsZombies.Simulation
                     AdventurePresentationImpact(p, null);
                     DamageAdventureBoss(p.Damage);
                     remove = true;
+                }
+
+                if (!p.Lobbed && !p.Homing && Adventure.Level.HasRoof && p.PresentationLaunchY != 0f)
+                {
+                    // PC UpdateNormalMotion resolves zombie collision and high ground before UpdateMotion rebases the shadow.
+                    var puff = AdventurePuffShroomRules.IsShortRange(p.SourceKind) || p.SourceKind == PlantKind.ScaredyShroom;
+                    var halfX = p.SourceKind == PlantKind.Cactus ? 15f : puff ? 16f : 14f;
+                    var halfY = p.SourceKind == PlantKind.Cactus ? 8f : puff ? 13.5f : 14f;
+                    var nativeX = 40f + p.X * 80f - halfX;
+                    var previousX = 40f + before * 80f - halfX;
+                    if (p.PresentationNativeAge <= dt + .000001f)
+                    {
+                        var column = Math.Max(0, Math.Min(8, ((int)previousX - 40) / 80));
+                        p.PresentationStarShadowY = 70f + p.Row * 85f + Math.Max(0, 5 - column) * 20f + 67f
+                            - (previousX < 480f ? 12f : 0f);
+                    }
+
+                    p.PresentationStarShadowY += p.PresentationLaneVelocity * dt * 100f;
+                    var topY = p.PresentationLaunchY + p.PresentationLaneOffset - halfY;
+                    if (!remove && p.PresentationStarShadowY - topY < (puff ? 0f : 28f))
+                    {
+                        AdventurePresentationImpact(p, null);
+                        remove = true;
+                    }
+
+                    p.PresentationStarShadowY += (Math.Max(0f, 440f - nativeX)
+                        - Math.Max(0f, 440f - previousX)) * .25f;
                 }
 
                 if (!remove && p.Lobbed && p.PresentationCanImpact
@@ -6585,6 +6617,22 @@ namespace PlantsVsZombies.Simulation
                     effect.NativeParticleX = shot.PresentationLobNativeX - shot.PresentationLobNativeVelocityX + 30f;
                     effect.NativeParticleY = shot.PresentationLaunchY + shot.PresentationLobFloorOffset
                         + shot.PresentationLobContactHeight - shot.PresentationLobVelocity + 30f;
+                }
+            }
+
+            if (!shot.Lobbed && zombie == null && Adventure.Level.HasRoof
+                && shot.SourceKind != PlantKind.Starfruit)
+            {
+                effect.NativeIcePoint = true;
+                var puff = AdventurePuffShroomRules.IsShortRange(shot.SourceKind) || shot.SourceKind == PlantKind.ScaredyShroom;
+                effect.NativeParticleX = 40f + shot.X * 80f - (shot.SourceKind == PlantKind.Cactus ? 15f : puff ? 16f : 14f)
+                    + (AdventureTorchwoodRules.IsPea(shot.SourceKind) ? -3f : 12f);
+                effect.NativeParticleY = shot.PresentationLaunchY + shot.PresentationLaneOffset
+                    - (shot.SourceKind == PlantKind.Cactus ? 8f : puff ? 13.5f : 14f) + 12f;
+                if (shot.Fire)
+                {
+                    effect.NativeParticleX += 3f;
+                    effect.NativeParticleY -= 12f;
                 }
             }
 
@@ -9403,10 +9451,7 @@ namespace PlantsVsZombies.Simulation
                     var tick = --p.UpgradeBurstTicks;
                     if (p.Kind == PlantKind.GatlingPea && (tick == 68 || tick == 51 || tick == 35 || tick == 18))
                     {
-                        if (!Adventure.Level.HasRoof || p.Column >= 5)
-                        {
-                            FireAdventurePea(p, p.Row, false, 20f);
-                        }
+                        FireAdventurePea(p, p.Row, false, 20f);
                     }
                     else if (p.Kind == PlantKind.GloomShroom && (tick == 126 || tick == 98 || tick == 70 || tick == 42))
                     {

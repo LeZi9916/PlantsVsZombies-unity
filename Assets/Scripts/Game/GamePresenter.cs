@@ -5015,7 +5015,7 @@ namespace PlantsVsZombies.Game
             {
                 y = pea.PresentationLaunchY + (row - pea.PresentationLaunchRow) * _owner.Layout.AdventurePitch + 19f;
             }
-            else if (shortPuff || pea.SourceKind == PlantKind.Cactus || AdventureTorchwoodRules.IsPea(pea.SourceKind) && pea.PresentationLaunchY != 0f)
+            else if (shortPuff || pea.SourceKind == PlantKind.ScaredyShroom || pea.SourceKind == PlantKind.Cactus || AdventureTorchwoodRules.IsPea(pea.SourceKind) && pea.PresentationLaunchY != 0f)
             {
                 y = pea.PresentationLaunchY;
             }

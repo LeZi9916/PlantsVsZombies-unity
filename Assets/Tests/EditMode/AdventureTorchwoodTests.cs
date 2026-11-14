@@ -147,7 +147,7 @@ namespace PlantsVsZombies.Tests.EditMode
         public void OrdinaryPeaAndFireAttachmentRetainOneLaunchHeightAboveRoofSlope()
         {
             var game = Board(41);
-            var shot = Fire(game, PlantKind.Peashooter, 2, 1, false);
+            var shot = Fire(game, PlantKind.Peashooter, 2, 4, false);
             var launchY = shot.PresentationLaunchY;
             for (var tick = 0; tick < 40; tick++)
             {
@@ -157,7 +157,7 @@ namespace PlantsVsZombies.Tests.EditMode
             var arguments = new object[] { shot, 0f, 0f };
             typeof(GameSimulation).GetMethod("AdventureIceProjectileTopLeft", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(game, arguments);
             Assert.That((float)arguments[2], Is.EqualTo(launchY - 14f));
-            Torch(game, 2, 3);
+            Torch(game, 2, 6);
             var x = shot.X;
             Invoke(game, "AdvanceAdventurePlants", .01f);
             Assert.That(shot.Fire, Is.True);

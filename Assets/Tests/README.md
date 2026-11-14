@@ -833,7 +833,7 @@ They do not constitute a full-level packaged Player playthrough, physical-speake
 listening, or other target-platform/device validation.
 
 
-## Original PC Gargantuar and squished plant pictures
+## Original PC Gargantuar, roof shooters and squished plant pictures
 
 The supplied PC executable is authoritative. `53F988..53FACB` initializes the
 normal/red-eye giant's body health, carried imp and original weapon variations.
@@ -856,6 +856,16 @@ Flying imps retain the original range-mask exclusion for ordinary projectiles.
 images, including red-eye variants. Foley table `74B3B8` supplies both Imp
 recordings at a five-semitone range and the two Squish/chomp recordings.
 
+`4752E0`/`4737D0` launch pea weapons from the animated original body anchor and
+plant cell, including the five-pixel pot correction. Threepeater, Split Pea,
+Cactus and Scaredy retain their individual source muzzles and image dimensions.
+`47C4B0` tests the original shadow-to-projectile clearance (28 pixels for peas
+and spikes, zero for spores). Zombie collision precedes that test; roof shadow
+rebasing follows it in `UpdateMotion`. Slope contact now uses the original
+DoImpact particle coordinates and Foley. The original launch path also permits
+Gatling Pea to fire on sloping roof columns. The existing Torchwood fixture now
+launches from a roof position where the native shot survives to reach its tree.
+
 `470FA0` runs the awake instant-plant specials and preserves triggered Squash
 immunity. Other crushed plants leave active lawn occupancy while retaining
 static cached pictures at row order 301008, after pre-grab bungees and before
@@ -867,10 +877,14 @@ each layer's picture, and Doom's own-cell cleanup also removes earlier crushed
 pictures. The PC picture remains opaque throughout its retained lifetime.
 
 ```powershell
-./Tools/Tests/Run-UnityTests.ps1 -Platform EditMode -TestFilter 'AdventureGargantuarTests|AdventurePumpkinTests.CrushingDestroysTheShellAndItsContainedPlantTogether|AdventureScreenEffectsTests.IceShroomCreatesOriginalIceTrapAndExpiresAtFortyTicks|AdventurePlantSoundTests.InstantSpecialRequestsItsNativeActivationSample'
+./Tools/Tests/Run-UnityTests.ps1 -Platform EditMode -TestFilter 'AdventureScreenEffectsTests.IceShroomCreatesOriginalIceTrapAndExpiresAtFortyTicks|AdventurePlantSoundTests.InstantSpecialRequestsItsNativeActivationSample|AdventureGargantuarTests|AdventureRoofShooterTests|AdventureRoofCombatTests|AdventurePumpkinTests.CrushingDestroysTheShellAndItsContainedPlantTogether|AdventureTorchwoodTests|AdventureCactusTests|AdventureScaredyShroomTests.ActiveShotCompletesBeforeLoweringWithoutFiringTwice|AdventureCatapultTests|AdventureButterAndReloadTests.EatenFlowerPotKeepsTheAlreadyAirborneSquashAlive|AdventureSquashTests.ImpactUsesOriginalShieldAndCorpseRulesInsteadOfAnExplosion|SimulationPoolingTests.ProjectileResetRestoresEveryFieldAndRetainsHitStorage'
 # Set PVZ_BOARD_STRESS_ASSETS to the read-only original runtime resources.
-./Tools/Tests/Run-UnityTests.ps1 -Platform PlayMode -TestFilter 'OriginalGargantuarGraphicsTests|OriginalGargantuarAudioTests'
+./Tools/Tests/Run-UnityTests.ps1 -Platform PlayMode -TestFilter 'OriginalGargantuarGraphicsTests|OriginalGargantuarAudioTests|OriginalCatapultGraphicsTests|OriginalRepeaterTests|OriginalTorchwoodGraphicsTests'
 ```
 
-These focused production-update and original-art checks do not establish a full-level
-packaged Player playthrough, physical-speaker listening, or other target-platform/device validation.
+Focused checks cover real production action clocks, freeze and target loss,
+throw thresholds and roof ballistics, source-backed body/weapon/damage pixels,
+flattened layers and expiry, actual roof launches/muzzles/impact particles,
+original decoded recordings and playing audio voices, and nearby existing
+vehicle/projectile behavior. They do not establish a packaged Player playthrough,
+physical-speaker listening, or Windows/Linux/mobile/IL2CPP device validation.

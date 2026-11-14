@@ -127,6 +127,65 @@ namespace PlantsVsZombies.Tests.PlayMode
             Assert.That(Array.Exists(actual, pixel => pixel.r < 200 || pixel.g < 200 || pixel.b < 200), Is.True);
         }
 
+        /// <summary>Checks actual roof projectile centers and unchanged original splat particles after a real slope collision.</summary>
+        /// <returns>Real source-backed camera comparisons of muzzle and roof-contact frames.</returns>
+        [UnityTest]
+        public IEnumerator RoofShooterMuzzlesAndSlopeSplatsMatchOriginalArtwork()
+        {
+            using var fixture = new OriginalStormGraphicsTests.StormFixture(49);
+            var game = fixture.Owner.RequiredGame;
+            var particles = new OriginalParticleRenderer(fixture.Root, fixture.Animations);
+            foreach (var kind in new[] { PlantKind.Peashooter, PlantKind.SnowPea, PlantKind.GatlingPea, PlantKind.Cactus, PlantKind.ScaredyShroom })
+            {
+                game.Plants.Clear();
+                game.Peas.Clear();
+                game.Presentation.Impacts.Clear();
+                Invoke(game, "PlaceAdventurePlant", PlantKind.FlowerPot, 1, 1);
+                var plant = (Plant)Invoke(game, "PlaceAdventurePlant", kind, 1, 1)!;
+                if (kind == PlantKind.Cactus || kind == PlantKind.ScaredyShroom)
+                {
+                    Invoke(game, "FireAdventureNativeTimedProjectile", plant);
+                }
+                else
+                {
+                    var shot = (Pea)Invoke(game, "FireAdventurePea", plant, 1, false, 20f)!;
+                    shot.IsSnow = kind == PlantKind.SnowPea;
+                }
+
+                var pea = game.Peas.Single();
+                var x = kind == PlantKind.GatlingPea ? 205f : kind == PlantKind.Cactus ? 205f
+                    : kind == PlantKind.ScaredyShroom ? 165f : 195f;
+                var y = kind == PlantKind.Cactus ? 261f : kind == PlantKind.ScaredyShroom ? 264.5f : 259f;
+                var image = kind == PlantKind.SnowPea ? "IMAGE_PROJECTILESNOWPEA" : kind == PlantKind.Cactus ? "IMAGE_PROJECTILECACTUS"
+                    : kind == PlantKind.ScaredyShroom ? "IMAGE_PUFFSHROOM_PUFF1" : "IMAGE_PROJECTILEPEA";
+                // Cell (1,1) is native Y235; these centers include the original five-pixel pot correction.
+                yield return fixture.Capture(null, () => fixture.DrawPass("DrawAdventureProjectile", pea));
+                var muzzle = fixture.Pixels.GetPixels32();
+                yield return fixture.Capture(null, () => fixture.Animations.DrawResourceSprite(image, new Vector2(x, y), 1f));
+                Assert.That(fixture.Pixels.GetPixels32(), Is.EqualTo(muzzle), "Original roof muzzle " + kind);
+                if (kind == PlantKind.Cactus || kind == PlantKind.ScaredyShroom)
+                {
+                    continue;
+                }
+
+                for (var tick = 0; tick < 100 && game.Peas.Count > 0; tick++)
+                {
+                    Invoke(game, "AdvanceAdventureProjectiles", .01f, true);
+                }
+
+                var impact = game.Presentation.Impacts.Single();
+                impact.Age = .03f;
+                yield return fixture.Capture(null, () => fixture.DrawPass("DrawAdventureImpacts", 1));
+                var actual = fixture.Pixels.GetPixels32();
+                yield return fixture.Capture(null, () => particles.Draw("original-roof-splat-" + kind,
+                    kind == PlantKind.SnowPea ? "SnowPeaSplat" : "PeaSplat", .03f,
+                    new Vector2(40f + pea.X * 80f - 17f, 257f), impact.Seed));
+                Assert.That(fixture.Pixels.GetPixels32(), Is.EqualTo(actual), "Original roof splat " + kind);
+                Assert.That(Array.Exists(actual, pixel => pixel.r < 245 || pixel.g < 245 || pixel.b < 245), Is.True,
+                    "The original roof impact must submit visible source particles for " + kind);
+            }
+        }
+
         /// <summary>Checks the near-edge roof imp's first airborne body uses its parent's retained native floor.</summary>
         /// <returns>Real original thrown and landing source-art frames following production updates.</returns>
         [UnityTest]
