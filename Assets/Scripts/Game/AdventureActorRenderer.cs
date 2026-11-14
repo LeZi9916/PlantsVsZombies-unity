@@ -325,6 +325,11 @@ namespace PlantsVsZombies.Game
                 }
             }
 
+            if (_zombie.CatapultState != null && !_zombie.CatapultState.TrackVisible(track))
+            {
+                return false;
+            }
+
             if (_plantHead && (track.IndexOf("head", StringComparison.OrdinalIgnoreCase) >= 0
                 || track.IndexOf("hair", StringComparison.OrdinalIgnoreCase) >= 0
                 || _zombie.ModeHead != 26 && _zombie.ModeHead != 29 && _zombie.ModeHead != 30 && string.Equals(track, "Zombie_tie", StringComparison.OrdinalIgnoreCase)))

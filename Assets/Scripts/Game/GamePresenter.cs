@@ -1518,7 +1518,7 @@ namespace PlantsVsZombies.Game
 
             foreach (var effect in _owner.RequiredGame.Presentation.ZomboniParticles)
             {
-                if (effect.Row == row)
+                if (effect.Row == row && !effect.Foreground)
                 {
                     _adventureParticles.Draw(_presentationKeys.Get("zamboni-particle-", effect.Id), effect.Particle,
                         effect.Age + AdventureRenderRemainder, new Vector2(effect.X, effect.Y), effect.Seed);
@@ -2355,6 +2355,15 @@ namespace PlantsVsZombies.Game
                     }
                 }
                 DrawAdventureBungeeCorpses(-1, 400001);
+                foreach (var effect in _owner.RequiredGame.Presentation.ZomboniParticles)
+                {
+                    if (effect.Foreground && _adventureParticles != null)
+                    {
+                        _adventureParticles.Draw(_presentationKeys.Get("zamboni-particle-", effect.Id), effect.Particle,
+                            effect.Age + AdventureRenderRemainder, new Vector2(effect.X, effect.Y), effect.Seed);
+                    }
+                }
+
                 DrawAdventurePlantingEffects();
                 DrawAdventureExplosionOverlay();
                 DrawAdventureVaseHammer();
@@ -2876,7 +2885,14 @@ namespace PlantsVsZombies.Game
                 origin.y += 20f * (1f - scale);
             }
 
-            if (AdventureZomboniRules.HasCriticalDamage(zombie))
+            if (zombie.CatapultState?.FlatTires == true)
+            {
+                // PC 547FF0: the held dying clip ramps unscaled body shake only over normalized .7..1.
+                var time = Mathf.Clamp01((Mathf.Min(1f, zombie.PresentationAnimationAge * 12f / 15f) - .7f) / .3f);
+                var shake = 1f - (1f - time) * (1f - time);
+                origin += new Vector2(UnityEngine.Random.Range(-shake, shake), UnityEngine.Random.Range(-shake, shake));
+            }
+            else if (AdventureZomboniRules.HasCriticalDamage(zombie))
             {
                 // PC UpdateReanim 0x547FF0 shakes only the body overlay by independent unscaled pixel offsets.
                 origin += new Vector2(UnityEngine.Random.Range(-1f, 1f), UnityEngine.Random.Range(-1f, 1f));
@@ -3650,7 +3666,11 @@ namespace PlantsVsZombies.Game
             {
                 clip = "anim_swim";
             }
-            else if (zombie.Kind == ZombieKind.Zomboni || zombie.Kind == ZombieKind.Catapult)
+            else if (zombie.Kind == ZombieKind.Catapult)
+            {
+                clip = zombie.CatapultState?.Animation(zombie.PresentationNativePhase) ?? "anim_walk";
+            }
+            else if (zombie.Kind == ZombieKind.Zomboni)
             {
                 clip = "anim_drive";
             }
@@ -4179,12 +4199,13 @@ namespace PlantsVsZombies.Game
         }
 
         /// <summary>Draws the PC damaged engine's attached smoke at its unscaled native position.</summary>
-        /// <param name="zombie">The ice vehicle retaining the original smoke attachment.</param>
+        /// <param name="zombie">The ice vehicle or catapult retaining the original smoke attachment.</param>
         /// <param name="x">The interpolated horizontal position shared with the visible body.</param>
         private void DrawAdventureZomboniSmoke(Zombie zombie, float x)
         {
             var state = zombie.ZomboniState;
-            if (_adventureParticles == null || state == null || state.SmokeStartAge < 0f)
+            var smokeAge = zombie.CatapultState?.SmokeStartAge ?? state?.SmokeStartAge ?? -1f;
+            if (_adventureParticles == null || smokeAge < 0f)
             {
                 return;
             }
@@ -4192,8 +4213,9 @@ namespace PlantsVsZombies.Game
             var nativeX = AdventureZombieNativeRules.NativePositionX(x, AdventureDancerRules.Scale(zombie));
             var nativeY = AdventureFloorYAtPixel(zombie.Row, nativeX + 40f) - 30f;
             _adventureParticles.Draw(_presentationKeys.Get("zamboni-engine-smoke-", zombie.Id), "ZamboniSmoke",
-                zombie.Age - state.SmokeStartAge + AdventureRenderRemainder,
-                new Vector2(nativeX + 27f, nativeY + 72f), zombie.Id);
+                zombie.Age - smokeAge + AdventureRenderRemainder,
+                new Vector2(nativeX + (zombie.Kind == ZombieKind.Catapult ? 47f : 27f),
+                    nativeY + (zombie.Kind == ZombieKind.Catapult ? 77f : 72f)), zombie.Id);
         }
 
         /// <summary>Draws the original once-and-hold kelp attachment after its target's complete body.</summary>
@@ -4818,6 +4840,29 @@ namespace PlantsVsZombies.Game
             CanvasUI.Color = previous;
         }
 
+        /// <summary>Draws the PC basketball's rotating 1.1-scale art and native ground shadow.</summary>
+        /// <param name="shot">The hostile projectile retaining native top-left flight coordinates.</param>
+        private void DrawAdventureBasketball(Pea shot)
+        {
+            var t = AdventureRenderRemainder * 100f;
+            var x = 40f + Mathf.Lerp(shot.PresentationPreviousX, shot.X, t) * 80f;
+            var y = shot.PresentationLaunchY + Mathf.Lerp(shot.PresentationPreviousLobHeight, shot.PresentationLobHeight, t);
+            var scale = 200f / (Mathf.Clamp(-shot.PresentationLobNativeZ, 0f, 200f) + 200f);
+            if (_owner.RequiredAnimations.TryGetNativeSpriteSize("IMAGE_PEA_SHADOWS", out var shadow))
+            {
+                _owner.RequiredAnimations.DrawResourceSprite("IMAGE_PEA_SHADOWS",
+                    new Vector2(x + shadow.x * .25f * scale, shot.PresentationStarShadowY + shadow.y * .5f * scale),
+                    scale, 0f, _owner.RequiredGame.Adventure.Level.IsNight ? 1 : 0);
+            }
+
+            if (_owner.RequiredAnimations.TryGetNativeSpriteSize("IMAGE_REANIM_ZOMBIE_CATAPULT_BASKETBALL", out var image))
+            {
+                _owner.RequiredAnimations.DrawResourceSprite("IMAGE_REANIM_ZOMBIE_CATAPULT_BASKETBALL",
+                    new Vector2(x + image.x * .5f, y + image.y * .5f), 1.1f,
+                    -(shot.PresentationRotation + shot.PresentationSpin * (shot.PresentationNativeAge + AdventureRenderRemainder) * 100f) * Mathf.Rad2Deg);
+            }
+        }
+
         /// <summary>Performs draw adventure projectile.</summary>
         /// <param name = "pea">The pea.</param>
         private void DrawAdventureProjectile(Pea pea)
@@ -4830,6 +4875,12 @@ namespace PlantsVsZombies.Game
             var x = pea.PresentationInitialized ? Mathf.Lerp(pea.PresentationPreviousX, pea.X, AdventureRenderRemainder * 100f) : pea.X;
             var row = pea.PresentationInitialized ? Mathf.Lerp(pea.PresentationPreviousRow, pea.FlightRow, AdventureRenderRemainder * 100f) : pea.FlightRow;
             var y = BoardLayout.AdventureGridY + row * _owner.Layout.AdventurePitch + _owner.Layout.AdventureSlope(x) + 30f;
+            if (pea.Basketball)
+            {
+                DrawAdventureBasketball(pea);
+                return;
+            }
+
             var shortPuff = AdventurePuffShroomRules.IsShortRange(pea.SourceKind);
             if (pea.SourceKind == PlantKind.Threepeater)
             {

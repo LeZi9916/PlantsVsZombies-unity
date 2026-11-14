@@ -657,3 +657,52 @@ the original body-X > 800 target exclusion.
 
 These focused native-update and original-art graphics checks do not establish a
 full-level Player playthrough or behavior on other target-platform devices.
+
+
+## Original PC Catapult Zombie
+
+The supplied PC executable is authoritative. `53E6CF..53E72A` initializes 850
+health, twenty shots, an on-board walk at 5.5 FPS and UI idle at eight FPS.
+`541320` chooses the leftmost eligible same-row plant at least one hundred
+pixels ahead, then applies flying/normal/pumpkin/support priority. Spikes and
+plants already off the ground are excluded from aiming.
+
+`541460` starts the 32-frame `anim_shoot` at native X <= 650, 24 FPS and initial
+blend zero. Its .545 event rechecks the target and creates a real basketball.
+The 300-update timer starts at launch initiation and continues through shooting
+and the 12-FPS idle reload. Later transitions blend for twenty updates. The shot
+counter decreases only when the clip finishes; the final four basket tracks
+are hidden in native order. Empty ammunition resumes the original walk at six
+FPS. Vehicle squashing remains active during launch and never starts an eating
+clip or resets the shooting clock. Ice/butter hold action and playback, while
+chill slows playback without slowing the independent reload timer.
+
+`5411C0` fires at mPos +(113,-44), with the original forty-pixel minimum range,
+120-update velocity divisor, -7 vertical baseline and .115 acceleration.
+The PC definition at `74A97C` gives basketball type nine **75 damage**.
+`47C880` resolves real descending plant collision, the extra pool height,
+roof floor rebasing after contact, and finite ground impacts after target loss.
+Umbrella starts its five-update block at contact, then emits Splat and the
+original `UmbrellaReflect` particle at global order 400001. `47D950`/`527B50`
+retain the source image center, 1.1-scale art, negative rotation and original
+shrinking day/night shadow.
+
+`54D080` and `547FF0` supply damaged siding, the source-frame-dependent damaged
+pole with/without a ball, engine smoke at +(47,77), critical shaking and silent
+health loss. `54A980` preserves spike puncture as the 15-frame `anim_bounce`
+at twelve FPS, blend ten, a tire particle and 280-update death timer. Existing
+ice, butter and chill counters expire independently during this retained death.
+Normal lethal damage emits the original `CatapultExplosion` immediately; ash
+retains the existing original charred vehicle definition. Launch Foley 37 now
+loads the shipped `basketball` sample with the native ten-semitone range;
+Splat, TirePop and Explosion use their existing original recordings.
+
+```powershell
+./Tools/Tests/Run-UnityTests.ps1 -Platform EditMode -TestFilter 'AdventureCatapultTests|AdventurePumpkinTests.AerialAttacksSelectTheNormalPlantBeforeTheShell|AdventureZomboniTests|SimulationPoolingTests.ProjectileResetRestoresEveryFieldAndRetainsHitStorage'
+# Set PVZ_BOARD_STRESS_ASSETS to the read-only original runtime resources.
+./Tools/Tests/Run-UnityTests.ps1 -Platform PlayMode -TestFilter 'OriginalCatapultGraphicsTests|OriginalCatapultAudioTests'
+```
+
+These focused production-update, original-art GPU and real audio-voice checks do
+not constitute a full-level packaged Player playthrough, physical-speaker
+listening, or Windows/Linux/mobile/IL2CPP device validation.

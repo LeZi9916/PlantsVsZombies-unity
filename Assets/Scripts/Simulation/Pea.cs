@@ -60,6 +60,8 @@ namespace PlantsVsZombies.Simulation
         public float StartX;
         /// <summary>Stores range.</summary>
         public float Range = 20f;
+        /// <summary>Identifies an original hostile basketball using native lob motion and plant collision.</summary>
+        public bool Basketball;
         /// <summary>Stores lobbed.</summary>
         public bool Lobbed;
         /// <summary>Stores pierces shield.</summary>
@@ -138,6 +140,7 @@ namespace PlantsVsZombies.Simulation
             FlightRow = 0f;
             StartX = 0f;
             Range = 20f;
+            Basketball = false;
             Lobbed = false;
             PiercesShield = false;
             PiercesZombies = false;

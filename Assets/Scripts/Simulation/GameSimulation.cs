@@ -3776,7 +3776,8 @@ namespace PlantsVsZombies.Simulation
                                         }
                                         else
                                         {
-                                            KillAdventureZombie(z);
+                                            // PC DoRowAreaDamage promotes vehicle spike damage to 1800 and retains puncture death.
+                                            HitAdventureZombie(z, 1800f, true, 32U);
                                         }
 
                                         RemoveAdventurePlantAndStack(p);
@@ -4801,6 +4802,16 @@ namespace PlantsVsZombies.Simulation
             for (var i = Peas.Count - 1; i >= 0; i--)
             {
                 var p = Peas[i];
+                if (p.Basketball)
+                {
+                    if (AdvanceAdventureBasketball(p, allowDamage))
+                    {
+                        RemovePeaAt(i);
+                    }
+
+                    continue;
+                }
+
                 if (p.Fire)
                 {
                     p.PresentationFireAge += dt;
@@ -4924,7 +4935,7 @@ namespace PlantsVsZombies.Simulation
         {
             if (!Zombies.Contains(z) || z.GraveRiseTicks > 0
                 || z.PresentationNativePhase == 50 && (damageFlags & 0x10) == 0
-                || z.ZomboniState?.FlatTires == true || z.BobsledState?.Position > 0)
+                || z.ZomboniState?.FlatTires == true || z.CatapultState?.FlatTires == true || z.BobsledState?.Position > 0)
             {
                 return;
             }
@@ -4977,11 +4988,270 @@ namespace PlantsVsZombies.Simulation
             {
                 BeginAdventureZomboniFlatDeath(z);
             }
+            else if (z.Kind == ZombieKind.Catapult && (damageFlags & 32U) != 0)
+            {
+                BeginAdventureCatapultFlatDeath(z);
+            }
             else if (z.Health <= 0)
             {
                 z.Health = 0f;
                 KillAdventureZombie(z, damageFlags);
             }
+        }
+
+        /// <summary>Starts PC CatapultDeath's retained bounce, tire particle and engine smoke.</summary>
+        /// <param name="zombie">The original vehicle receiving spike damage bit five.</param>
+        private void BeginAdventureCatapultFlatDeath(Zombie zombie)
+        {
+            var state = zombie.CatapultState ??= new AdventureCatapultState();
+            state.FlatTires = true;
+            state.DeathTicks = 280;
+            state.SmokeStartAge = state.SmokeStartAge < 0f ? zombie.Age : state.SmokeStartAge;
+            SetAdventureCatapultPhase(zombie, 1, 10);
+            zombie.PresentationNativeVelocity = 0f;
+            zombie.Speed = 0f;
+            RequestAdventureZombieFoley(22);
+            AddAdventureZomboniParticle(zombie, "ZamboniTire", 29f, 114f);
+        }
+
+        /// <summary>Emits the original catapult explosion once before removing its vehicle body.</summary>
+        /// <param name="zombie">The catapult whose normal or punctured death has completed.</param>
+        private void ExplodeAdventureCatapult(Zombie zombie)
+        {
+            var state = zombie.CatapultState ??= new AdventureCatapultState();
+            if (!state.Exploded)
+            {
+                state.Exploded = true;
+                AddAdventureZomboniParticle(zombie, "CatapultExplosion", 80f, 60f);
+                RequestAdventureZombieFoley(23);
+            }
+        }
+
+        /// <summary>Finds PC 541320's leftmost plant at least one hundred pixels ahead of the vehicle.</summary>
+        /// <param name="zombie">The original catapult requesting a new aim.</param>
+        /// <returns>The highest aerial-priority plant in the first eligible column, or null.</returns>
+        private Plant? FindAdventureCatapultTarget(Zombie zombie)
+        {
+            Plant? best = null;
+            var x = (int)AdventureZombieNativeRules.NativePositionX(zombie.X, AdventureDancerRules.Scale(zombie));
+            foreach (var plant in Plants)
+            {
+                if (plant.Row == zombie.Row && plant.Health > 0f && plant.BungeeState != 2
+                    && !plant.PresentationBiteNotOnGround && plant.Kind != PlantKind.Spikeweed && plant.Kind != PlantKind.Spikerock
+                    && x >= 140 + plant.Column * 80 && (best == null || plant.Column < best.Column))
+                {
+                    best = AdventureAirAttackPlantAt(plant.Row, plant.Column);
+                }
+            }
+
+            return best;
+        }
+
+        /// <summary>Changes PC catapult playback without resampling its retained walking velocity.</summary>
+        /// <param name="zombie">The catapult changing original native phase.</param>
+        /// <param name="phase">The original phase: normal, launching, reloading or dying.</param>
+        /// <param name="blend">The original transition duration in native updates.</param>
+        private void SetAdventureCatapultPhase(Zombie zombie, int phase, int blend)
+        {
+            zombie.PresentationNativePhase = phase;
+            zombie._presentationSpeedPhase = phase;
+            zombie._presentationSpeedKind = (int)ZombieKind.Catapult;
+            zombie.PresentationBodyBlendTicks = blend;
+            zombie.PresentationAnimation = string.Empty;
+            AdventurePresentationZombieAnimation(zombie);
+        }
+
+        /// <summary>Advances PC 541460's firing event, twenty shots and independent three-hundred-update cycle.</summary>
+        /// <param name="zombie">The non-immobilized catapult receiving its native action update.</param>
+        /// <returns>Whether launching or reloading prevents ordinary horizontal movement.</returns>
+        private bool AdvanceAdventureCatapult(Zombie zombie)
+        {
+            var state = zombie.CatapultState ??= new AdventureCatapultState();
+            if (state.PhaseTicks > 0)
+            {
+                state.PhaseTicks--;
+            }
+
+            var phase = zombie.PresentationNativePhase;
+            if (phase == 0)
+            {
+                if (AdventureZombieNativeRules.NativePositionX(zombie.X, AdventureDancerRules.Scale(zombie)) <= 650f
+                    && state.Ammunition > 0 && FindAdventureCatapultTarget(zombie) != null)
+                {
+                    state.Fired = false;
+                    state.PhaseTicks = 300;
+                    SetAdventureCatapultPhase(zombie, 67, 0);
+                }
+            }
+            else if (phase == 67)
+            {
+                if (!state.Fired && zombie.PresentationAnimationAge * 24f / 32f >= .545f)
+                {
+                    state.Fired = true;
+                    FireAdventureBasketball(zombie, FindAdventureCatapultTarget(zombie));
+                }
+
+                if (zombie.PresentationAnimationAge * 24f + .0001f >= 32f)
+                {
+                    state.Ammunition--;
+                    if (state.Ammunition == 0)
+                    {
+                        state.WalkingRate = 6f;
+                        SetAdventureCatapultPhase(zombie, 0, 20);
+                    }
+                    else
+                    {
+                        SetAdventureCatapultPhase(zombie, 68, 20);
+                    }
+                }
+            }
+            else if (phase == 68 && state.PhaseTicks == 0)
+            {
+                if (FindAdventureCatapultTarget(zombie) != null)
+                {
+                    state.Fired = false;
+                    state.PhaseTicks = 300;
+                    SetAdventureCatapultPhase(zombie, 67, 20);
+                }
+                else
+                {
+                    state.WalkingRate = 6f;
+                    SetAdventureCatapultPhase(zombie, 0, 20);
+                }
+            }
+
+            return zombie.PresentationNativePhase == 67 || zombie.PresentationNativePhase == 68;
+        }
+
+        /// <summary>Creates PC 5411C0's real hostile lob, retaining aim even when its target disappears.</summary>
+        /// <param name="zombie">The vehicle firing the original projectile.</param>
+        /// <param name="target">The current target, or null for the native three-hundred-pixel fallback.</param>
+        private void FireAdventureBasketball(Zombie zombie, Plant? target)
+        {
+            var nativeX = AdventureZombieNativeRules.NativePositionX(zombie.X, AdventureDancerRules.Scale(zombie));
+            var originX = nativeX + 113f;
+            var originY = AdventureBiteNativeY(zombie, nativeX) - 44f;
+            var targetX = target != null ? 40 + target.Column * 80 : (int)(nativeX - 300f);
+            var targetY = target != null ? AdventureSquashCellY(target.Row, target.Column) : 0;
+            var shot = RentPea();
+            shot.Basketball = true;
+            shot.PresentationInitialized = true;
+            shot.Lobbed = true;
+            shot.Row = zombie.Row;
+            shot.FlightRow = zombie.Row;
+            shot.Damage = 75f;
+            shot.PresentationLobNativeX = (int)originX;
+            shot.PresentationLobNativeY = (int)originY;
+            shot.PresentationLobNativeZ = 0f;
+            shot.PresentationLobNativeVelocityX = -Math.Max(40f, originX - targetX - 20f) / 120f;
+            shot.PresentationLobVelocity = -7f + (targetY - originY) / 120f;
+            shot.PresentationLaunchY = (int)originY;
+            shot.X = shot.StartX = shot.PresentationPreviousX = (shot.PresentationLobNativeX - 40f) / 80f;
+            shot.PresentationRotation = (float)_random.NextDouble() * (float)(Math.PI * 2d);
+            shot.PresentationSpin = .05f + (float)_random.NextDouble() * .05f;
+            var column = Math.Max(0, Math.Min(8, ((int)originX - 40) / 80));
+            shot.PresentationStarShadowY = AdventureSquashCellY(zombie.Row, column) + 67f;
+            Peas.Add(shot);
+            RequestAdventureZombieFoley(37);
+        }
+
+        /// <summary>Integrates PC 47C880's hostile lob and resolves original aerial plant priority on actual descent.</summary>
+        /// <param name="shot">The basketball retaining original float32 flight coordinates.</param>
+        /// <param name="allowDamage">Whether the active board allows collision damage.</param>
+        /// <returns>Whether collision, a ground impact or board bounds remove the ball.</returns>
+        private bool AdvanceAdventureBasketball(Pea shot, bool allowDamage)
+        {
+            var oldX = shot.PresentationLobNativeX;
+            shot.PresentationNativeAge += .01f;
+            shot.PresentationLobVelocity += .115f;
+            shot.PresentationLobNativeX += shot.PresentationLobNativeVelocityX;
+            shot.PresentationLobNativeZ += shot.PresentationLobVelocity;
+            var remove = false;
+            var contactHeight = Adventure.Level.IsWaterRow(shot.Row) ? 100f : 60f;
+            if (shot.PresentationLobVelocity >= 0f && shot.PresentationLobNativeZ > contactHeight)
+            {
+                Plant? target = null;
+                var left = (int)shot.PresentationLobNativeX;
+                foreach (var plant in Plants)
+                {
+                    if (plant.Row != shot.Row || plant.Health <= 0f || plant.BungeeState == 2 || plant.PresentationBiteNotOnGround)
+                    {
+                        continue;
+                    }
+
+                    var box = AdventurePlantEatingRectangle(plant);
+                    if (Math.Min(left + 40, box.X + box.Width) - Math.Max(left, box.X) > 8)
+                    {
+                        target = AdventureAirAttackPlantAt(plant.Row, plant.Column);
+                        break;
+                    }
+                }
+
+                if (target != null && allowDamage)
+                {
+                    Plant? umbrella = null;
+                    foreach (var plant in Plants)
+                    {
+                        if (plant.Kind == PlantKind.UmbrellaLeaf && plant.Health > 0f && !plant.Asleep && plant.BungeeState != 2
+                            && Math.Abs(plant.Row - target.Row) <= 1 && Math.Abs(plant.Column - target.Column) <= 1)
+                        {
+                            umbrella = plant;
+                            break;
+                        }
+                    }
+
+                    if (umbrella == null)
+                    {
+                        target.Health -= shot.Damage;
+                        RecordAdventurePlantHit(target);
+                        if (target.Health <= 0f)
+                        {
+                            RemoveAdventurePlantAndStack(target);
+                        }
+
+                        RequestAdventureZombieFoley(1);
+                        remove = true;
+                    }
+                    else if (umbrella.PresentationUmbrellaAge >= .05f)
+                    {
+                        RequestAdventureZombieFoley(1);
+                        AddAdventureBasketballReflect(shot);
+                        remove = true;
+                    }
+                    else if (umbrella.PresentationUmbrellaAge < 0f)
+                    {
+                        umbrella.PresentationUmbrellaAge = 0f;
+                        RequestAdventureZombieFoley(73);
+                    }
+                }
+                else if (shot.PresentationLobNativeZ > 80f)
+                {
+                    // Original DoImpact emits Splat Foley without a basketball splat particle.
+                    RequestAdventureZombieFoley(1);
+                    remove = true;
+                }
+            }
+
+            // PC UpdateMotion rebases roof floor only after UpdateLobMotion's contact check.
+            var slope = Adventure.Level.HasRoof ? (Math.Max(0f, 440f - shot.PresentationLobNativeX)
+                - Math.Max(0f, 440f - oldX)) * .25f : 0f;
+            shot.PresentationLobNativeY += slope;
+            shot.PresentationLobNativeZ -= slope;
+            shot.PresentationStarShadowY += slope;
+            shot.X = (shot.PresentationLobNativeX - 40f) / 80f;
+            shot.PresentationLobHeight = shot.PresentationLobNativeY + shot.PresentationLobNativeZ - shot.PresentationLaunchY;
+            return remove || shot.PresentationLobNativeX > 800f || shot.PresentationLobNativeX + 40f < 0f;
+        }
+
+        /// <summary>Creates the original UmbrellaReflect particle at the ball's native top-left plus twenty pixels.</summary>
+        /// <param name="shot">The basketball being deflected by an already-open umbrella.</param>
+        private void AddAdventureBasketballReflect(Pea shot)
+        {
+            Presentation.ZomboniParticles.Add(new AdventureZomboniParticle
+            {
+                Id = ++Presentation._effectId, Seed = _random.Next(), Row = shot.Row, Particle = "UmbrellaReflect", Foreground = true,
+                X = shot.PresentationLobNativeX + 20f, Y = shot.PresentationLobNativeY + 20f
+            });
         }
 
         /// <summary>Starts PC ZamboniDeath's authored tire puncture and 280-update wheelie.</summary>
@@ -6197,6 +6467,14 @@ namespace PlantsVsZombies.Simulation
         /// <param name="damageFlags">The original lethal hit flags passed to Zombie::DieWithLoot.</param>
         private void AdventurePresentationZombieDeath(Zombie zombie, uint damageFlags = 0)
         {
+            if (zombie.Kind == ZombieKind.Catapult
+                && (zombie.PresentationDeath == AdventureZombieDeathPresentation.Normal
+                    || zombie.PresentationDeath == AdventureZombieDeathPresentation.Mowed))
+            {
+                ExplodeAdventureCatapult(zombie);
+                return;
+            }
+
             if (zombie.Kind == ZombieKind.Zomboni
                 && (zombie.PresentationDeath == AdventureZombieDeathPresentation.Normal
                     || zombie.PresentationDeath == AdventureZombieDeathPresentation.Mowed))
@@ -9053,11 +9331,13 @@ namespace PlantsVsZombies.Simulation
                 {
                     foreach (Zombie z in new PooledSnapshot<Zombie>(Zombies))
                     {
-                        if (!z.Hypnotized && !z.Airborne && !z.Submerged && z.DropRemaining <= 0 && z.Kind != ZombieKind.Bungee && z.Row == p.Row && Math.Abs(z.X - (p.Column + 0.5f)) < 0.6f)
+                        if (!z.Hypnotized && !z.Airborne && !z.Submerged && z.DropRemaining <= 0 && z.Kind != ZombieKind.Bungee
+                            && z.CatapultState?.FlatTires != true && z.ZomboniState?.FlatTires != true
+                            && z.Row == p.Row && Math.Abs(z.X - (p.Column + 0.5f)) < 0.6f)
                         {
                             if (z.Kind == ZombieKind.Zomboni || z.Kind == ZombieKind.Catapult)
                             {
-                                HitAdventureZombie(z, 1800f, true, z.Kind == ZombieKind.Zomboni ? 32U : 0U);
+                                HitAdventureZombie(z, 1800f, true, 32U);
                                 RequestAdventureZombieFoley(1);
                                 p.Health -= 50f;
                                 p.VehicleHitsTaken++;
@@ -10217,6 +10497,13 @@ namespace PlantsVsZombies.Simulation
                 z.PresentationNativeHeight = 0;
             }
 
+            if (z.Kind == ZombieKind.Catapult)
+            {
+                z.CatapultState = new AdventureCatapultState();
+                z.PresentationNativePhase = 0;
+                z.PresentationBodyBlendTicks = 0;
+            }
+
             // Explicit in-lawn spawns retain their pool placement; edge spawns enter through CheckForPool.
             z.PresentationPoolRow = Adventure.Level.IsWaterRow(z.Row);
             z.PresentationInPool = !rightEdge && z.PresentationPoolRow
@@ -10276,7 +10563,7 @@ namespace PlantsVsZombies.Simulation
                 return;
             }
 
-            if (z.ZomboniState?.FlatTires == true)
+            if (z.ZomboniState?.FlatTires == true || z.CatapultState?.FlatTires == true)
             {
                 z.PresentationNativeVelocity = 0f;
                 z.Speed = 0f;
@@ -10792,7 +11079,7 @@ namespace PlantsVsZombies.Simulation
             }
             else if (z.Kind == ZombieKind.Catapult)
             {
-                clip = "anim_walk";
+                clip = z.CatapultState?.Animation(z.PresentationNativePhase) ?? "anim_walk";
             }
             else if (z.Kind == ZombieKind.Bungee && z.BungeeState != null)
             {
@@ -10999,7 +11286,7 @@ namespace PlantsVsZombies.Simulation
 
             if (z.Kind == ZombieKind.Catapult)
             {
-                return 5.5f;
+                return z.CatapultState?.Rate(z.PresentationNativePhase) ?? 5.5f;
             }
 
             if (z.Kind == ZombieKind.Bobsled && z.PresentationNativePhase == 18)
@@ -11196,6 +11483,18 @@ namespace PlantsVsZombies.Simulation
         /// <param name = "damageFlags">The damage flags.</param>
         private void AdventurePresentationZombieBodyDamaged(Zombie z, uint damageFlags = 0)
         {
+            if (z.Kind == ZombieKind.Catapult)
+            {
+                var state = z.CatapultState ??= new AdventureCatapultState();
+                if (z.Health > 0f && state.SmokeStartAge < 0f
+                    && AdventureZombieEquipmentRules.DamageIndex(z.Health, (int)z.StartingHealth) == 2)
+                {
+                    state.SmokeStartAge = z.Age;
+                }
+
+                return;
+            }
+
             if (z.Kind == ZombieKind.Zomboni)
             {
                 var state = z.ZomboniState ??= new AdventureZomboniState();
@@ -13113,6 +13412,19 @@ namespace PlantsVsZombies.Simulation
                 }
 
                 AdvanceAdventureZombieGroan(z);
+                if (z.CatapultState?.FlatTires == true)
+                {
+                    // Native dying updates still expire cold counters while their independent death timer runs.
+                    z.ChillRemaining = Math.Max(0f, z.ChillRemaining - dt);
+                    z.FrozenRemaining = Math.Max(0f, z.FrozenRemaining - dt);
+                    if (--z.CatapultState.DeathTicks <= 0)
+                    {
+                        KillAdventureZombie(z);
+                    }
+
+                    continue;
+                }
+
                 if (z.Kind == ZombieKind.Zomboni && z.ZomboniState?.FlatTires == true)
                 {
                     if (--z.ZomboniState.DeathTicks <= 0)
@@ -13284,39 +13596,7 @@ namespace PlantsVsZombies.Simulation
                     continue;
                 }
 
-                if (z.Kind == ZombieKind.Catapult && z.X <= 7.5f && z.AbilityPhase < 12 && !z.Hypnotized)
-                {
-                    if (z.AbilityTimer <= 0)
-                    {
-                        Plant? victim = null;
-                        foreach (Plant p in Plants)
-                        {
-                            if (p.Row == z.Row && (victim == null || p.Column < victim.Column))
-                            {
-                                victim = AdventureAirAttackPlantAt(p.Row, p.Column);
-                            }
-                        }
-
-                        if (victim != null && !HasUmbrellaNear(victim.Row, victim.Column))
-                        {
-                            victim.Health -= 80f;
-                            RecordAdventurePlantHit(victim);
-                            if (victim.Health <= 0)
-                            {
-                                RemoveAdventurePlantAndStack(victim);
-                            }
-                        }
-                        else if (victim != null)
-                        {
-                            RequestAdventureZombieFoley(73);
-                        }
-
-                        z.AbilityPhase++;
-                        z.AbilityTimer = 5f;
-                    }
-
-                    continue;
-                }
+                var catapultStopped = z.Kind == ZombieKind.Catapult && AdvanceAdventureCatapult(z);
 
                 if (z.Kind == ZombieKind.Zomboni)
                 {
@@ -13418,20 +13698,21 @@ namespace PlantsVsZombies.Simulation
                     target = null;
                 }
 
-                z.Eating = target != null;
+                // PC catapults crush through CheckForZombieStep without entering an eating animation.
+                z.Eating = target != null && z.Kind != ZombieKind.Catapult;
                 if (target != null)
                 {
                     if (z.Kind == ZombieKind.Zomboni || z.Kind == ZombieKind.Catapult)
                     {
                         CrushAdventurePlantCell(target.Row, target.Column, true);
-                        if (z.Kind == ZombieKind.Zomboni && target.Kind == PlantKind.Spikeweed)
+                        if (target.Kind == PlantKind.Spikeweed)
                         {
                             HitAdventureZombie(z, 20f, true, 32U);
                             RemoveAdventurePlantAndStack(target);
                         }
                         else if (target.Kind == PlantKind.Spikerock)
                         {
-                            HitAdventureZombie(z, 1800f, true, z.Kind == ZombieKind.Zomboni ? 32U : 0U);
+                            HitAdventureZombie(z, 1800f, true, 32U);
                             target.Health -= 50;
                             target.VehicleHitsTaken++;
                             if (target.Health <= 0)
@@ -13496,6 +13777,11 @@ namespace PlantsVsZombies.Simulation
                 else
                 {
                     z.BiteTimer = 0;
+                    if (catapultStopped)
+                    {
+                        continue;
+                    }
+
                     var direction = z.Hypnotized || z.PresentationNativePhase == 40
                         || z.Kind == ZombieKind.Digger && AdventureDiggerState.WalksBackwards(z) ? 1f : -1f;
                     var previousX = z.X;

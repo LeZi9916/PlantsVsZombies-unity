@@ -119,6 +119,7 @@ namespace PlantsVsZombies.Adventure
         {
             var phase = zombie.PresentationNativePhase;
             return zombie.Kind == ZombieKind.Ladder && zombie.PresentationNativePhase == 77
+                || zombie.Kind == ZombieKind.Catapult && (phase == 67 || zombie.CatapultState?.FlatTires == true)
                 || AdventurePogoRules.IsBouncing(zombie)
                 || zombie.Kind == ZombieKind.Digger && (phase == 35 || phase == 33 && zombie.DiggerState?.PhaseTicks <= 30)
                 || zombie.Kind == ZombieKind.JackInTheBox && phase == 16

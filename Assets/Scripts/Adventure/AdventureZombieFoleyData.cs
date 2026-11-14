@@ -47,6 +47,10 @@ namespace PlantsVsZombies.Adventure
                 60,
                 new AdventureZombieFoleyDefinition(10f, new[] { "ballooninflate" })
             },
+            {
+                37,
+                new AdventureZombieFoleyDefinition(10f, new[] { "basketball" })
+            },
             // PC Foley table 0x74B3B8, stride 52; names resolved by resource initialization 0x4935B0.
             {
                 16,

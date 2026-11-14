@@ -13,6 +13,8 @@ namespace PlantsVsZombies.Simulation
         public global::PlantsVsZombies.Adventure.AdventureDolphinState? DolphinState;
         /// <summary>Retains the original linked sled team's member position and native phase countdown.</summary>
         public global::PlantsVsZombies.Adventure.AdventureBobsledState? BobsledState;
+        /// <summary>Retains the original catapult ammunition, reload and puncture state.</summary>
+        public global::PlantsVsZombies.Adventure.AdventureCatapultState? CatapultState;
         /// <summary>Retains the original ice vehicle's smoke and punctured-tire death state.</summary>
         public global::PlantsVsZombies.Adventure.AdventureZomboniState? ZomboniState;
         /// <summary>Retains the original kelp attachment selected by a living Tangle Kelp.</summary>

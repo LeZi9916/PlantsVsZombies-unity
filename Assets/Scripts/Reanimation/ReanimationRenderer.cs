@@ -3858,7 +3858,11 @@ namespace PlantsVsZombies.Reanimation
                 return original;
             }
 
-            var equipment = AdventureZombieEquipmentRules.Image(_nativeCombatZombie, asset.Name, _nativeCombatBody, track);
+            var catapult = _nativeCombatZombie.CatapultState;
+            var equipment = catapult != null && AdventureZombieFeedbackRules.Same(asset.Name, _nativeCombatBody)
+                ? catapult.Image(track, original.SourceIdentity,
+                    AdventureZombieEquipmentRules.DamageIndex(_nativeCombatZombie.Health, (int)_nativeCombatZombie.StartingHealth))
+                : AdventureZombieEquipmentRules.Image(_nativeCombatZombie, asset.Name, _nativeCombatBody, track);
             if (equipment != null)
             {
                 EnsureNativeAtlas();

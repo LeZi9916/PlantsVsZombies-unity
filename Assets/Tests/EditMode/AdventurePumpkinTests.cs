@@ -93,7 +93,16 @@ namespace PlantsVsZombies.Tests.EditMode
             }
             else
             {
-                Assert.That(main.Health, Is.EqualTo(220f));
+                Assert.That(main.Health, Is.EqualTo(300f), "The catapult must launch a real ball before dealing damage.");
+                for (var tick = 0; tick < 300 && main.Health == 300f; tick++)
+                {
+                    typeof(GameSimulation).GetMethod("AdventurePresentationTick", flags)!.Invoke(game, new object[] { .01f });
+                    typeof(GameSimulation).GetMethod("AdvanceAdventureZombies", flags)!.Invoke(game, new object[] { .01f });
+                    typeof(GameSimulation).GetMethod("AdvanceAdventureProjectiles", flags)!.Invoke(game, new object[] { .01f, true });
+                }
+
+                Assert.That(main.Health, Is.EqualTo(225f));
+                Assert.That(shell.Health, Is.EqualTo(4000f));
             }
         }
 

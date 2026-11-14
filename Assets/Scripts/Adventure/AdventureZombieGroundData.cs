@@ -510,6 +510,8 @@ namespace PlantsVsZombies.Adventure
             result["Zombie_bungi/anim_idle"] = new AdventureZombieGroundClip(20, 12f, null);
             result["Zombie_catapult/anim_walk"] = new AdventureZombieGroundClip(25, 12f, null);
             result["Zombie_catapult/anim_idle"] = new AdventureZombieGroundClip(13, 12f, null);
+            result["Zombie_catapult/anim_shoot"] = new AdventureZombieGroundClip(32, 12f, null);
+            result["Zombie_catapult/anim_bounce"] = new AdventureZombieGroundClip(15, 12f, null);
             // Original Zombie_digger.reanim marker intervals 146..164 and 165..178.
             result["Zombie_digger/anim_drill"] = new AdventureZombieGroundClip(19, 16f, null);
             result["Zombie_digger/anim_landing"] = new AdventureZombieGroundClip(14, 16f, null);
