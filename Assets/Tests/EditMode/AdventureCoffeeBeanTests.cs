@@ -8,7 +8,7 @@ using PlantsVsZombies.Simulation;
 
 namespace PlantsVsZombies.Tests.EditMode
 {
-    /// <summary>Checks original independent coffee and mushroom wake lifetimes.</summary>
+    /// <summary>Checks original independent coffee/wake lifetimes and settled-bank recommendation brightness.</summary>
     public sealed class AdventureCoffeeBeanTests
     {
         /// <summary>Checks the original flying actor, hundred-update special, crumble lifetime and overlapping mushroom wake.</summary>
@@ -138,6 +138,47 @@ namespace PlantsVsZombies.Tests.EditMode
             Assert.That(AdventureCoffeeBeanState.WakeScale(35), Is.EqualTo(1f).Within(.000001f));
             Assert.That(AdventureCoffeeBeanState.WakeScale(10), Is.GreaterThan(1f));
             Assert.That(AdventureCoffeeBeanState.WakeScale(0), Is.EqualTo(1f));
+        }
+
+        /// <summary>Checks chooser warnings and brightness react only to settled coffee, with selected homes retaining grayness fifty-five.</summary>
+        [Test]
+        public void CoffeeSelectionRestoresOnlyNocturnalHomesAfterItsBankFlight()
+        {
+            var game = Board(49);
+            var state = new AdventureSeedChooserState(Array.Empty<PlantKind>());
+            Assert.That(Grayness(game, state, PlantKind.PuffShroom), Is.EqualTo(115));
+            Assert.That(Grayness(game, state, PlantKind.LilyPad), Is.EqualTo(115));
+            Assert.That(state.Choose(PlantKind.CoffeeBean, 22, 128, 8), Is.True);
+            state.Advance(.24f);
+            Assert.That(state.PickedPlantType(PlantKind.CoffeeBean, null), Is.False);
+            Assert.That(Grayness(game, state, PlantKind.PuffShroom), Is.EqualTo(115));
+            state.Advance(.01f);
+            Assert.That(state.PickedPlantType(PlantKind.CoffeeBean, null), Is.True);
+            Assert.That(Grayness(game, state, PlantKind.PuffShroom), Is.EqualTo(255));
+            Assert.That(Grayness(game, state, PlantKind.LilyPad), Is.EqualTo(115));
+            Assert.That(state.HomeGrayness(PlantKind.CoffeeBean, true), Is.EqualTo(55));
+            Assert.That(state.Return(PlantKind.CoffeeBean, 22, 128, 8), Is.True);
+            Assert.That(Grayness(game, state, PlantKind.PuffShroom), Is.EqualTo(115));
+        }
+
+        /// <summary>Checks original PickedPlantType recognizes settled Imitater coffee.</summary>
+        [Test]
+        public void SettledImitaterCoffeeAlsoRemovesOnlyTheSleepRecommendation()
+        {
+            var state = new AdventureSeedChooserState(new[] { PlantKind.Imitater });
+            Assert.That(state.PickedPlantType(PlantKind.CoffeeBean, PlantKind.CoffeeBean), Is.True);
+            Assert.That(state.PickedPlantType(PlantKind.CoffeeBean, PlantKind.PuffShroom), Is.False);
+        }
+
+        /// <summary>Combines the production recommendation decision and native chooser state grayness.</summary>
+        /// <param name="game">The original board whose terrain supplies the recommendation.</param>
+        /// <param name="state">The original chooser bank and flight state.</param>
+        /// <param name="kind">The home packet being inspected.</param>
+        /// <returns>The original home RGB brightness.</returns>
+        private static int Grayness(GameSimulation game, AdventureSeedChooserState state, PlantKind kind)
+        {
+            var warning = game.AdventureChooserWarningKey(kind, state.PickedPlantType(PlantKind.CoffeeBean, null));
+            return state.HomeGrayness(kind, warning.Length == 0);
         }
 
         /// <summary>Creates a controlled daytime production board without scheduled waves or initial occupants.</summary>

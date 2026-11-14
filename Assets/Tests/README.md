@@ -789,7 +789,7 @@ constitute a full-level packaged Player playthrough or other platform/device
 validation.
 
 
-## Original flying coffee bean and mushroom wake
+## Original flying coffee bean, mushroom wake and chooser grayness
 
 PC `46C847..46C853` gives coffee its own hundred-update special countdown.
 `474FEA..47503E` then sets the sleeping main plant's separate wake counter to
@@ -809,11 +809,25 @@ original EaseSinWave squish/stretch, preserving the eighty-pixel foot anchor.
 original Sun-shroom's ten sleeping and twelve idle frames are checked explicitly.
 Later body actions discard this initial wake phase instead of reusing it.
 
+PC chooser draw `49A500..49A769` supplies RGB grayness 115 for warned home
+packets, 55 for selected/flying homes, and 255 for ordinary available homes.
+Opacity remains unchanged. `49C7E0`/PickedPlantType requires a settled bank packet
+and recognizes Imitater coffee. Reaching the bank therefore removes only the
+nocturnal recommendation bit and restores those mushroom homes to full brightness;
+water/roof/other warnings and selected-home darkness remain independent.
+The actual campaign chooser, legacy/mode homes, simple development chooser and
+native tooltip warning use the same recommendation decision.
+
 ```powershell
-./Tools/Tests/Run-UnityTests.ps1 -Platform EditMode -TestFilter 'AdventureCoffeeBeanTests|AdventurePlantSoundTests.CoffeeAndWakeSamplesFollowIndependentFuseAndWakeCounters|AdventurePlantingEffectsTests.CoffeeBeanDoesNotCreateSoilOrWaterParticles|AdventurePlantingSoundTests.SuccessfulPacketPlacementRequestsOriginalSquareSound|AdventureMushroomTests.SleepingClockRemainsIndependentOfCapturedBodyAndCoffeeWake'
+./Tools/Tests/Run-UnityTests.ps1 -Platform EditMode -TestFilter 'AdventureCoffeeBeanTests|AdventurePlantSoundTests.CoffeeAndWakeSamplesFollowIndependentFuseAndWakeCounters|AdventurePlantingEffectsTests.CoffeeBeanDoesNotCreateSoilOrWaterParticles|AdventurePlantingSoundTests.SuccessfulPacketPlacementRequestsOriginalSquareSound|AdventureMushroomTests.SleepingClockRemainsIndependentOfCapturedBodyAndCoffeeWake|AdventureSeedChooserTests'
 # Set PVZ_BOARD_STRESS_ASSETS to the read-only original runtime resources.
-./Tools/Tests/Run-UnityTests.ps1 -Platform PlayMode -TestFilter 'OriginalCoffeeBeanGraphicsTests|OriginalPlantSoundTests.NativePlantSamplesLoadAndReachTheirCorrectProductionVoices|GamePresentationPerformanceTests.WarmPlantPresentationDoesNotAllocateManagedMemory'
+./Tools/Tests/Run-UnityTests.ps1 -Platform PlayMode -TestFilter 'OriginalCoffeeBeanGraphicsTests|OriginalMushroomGraphicsTests|OriginalPlantSoundTests.NativePlantSamplesLoadAndReachTheirCorrectProductionVoices|GamePresentationPerformanceTests.WarmPlantPresentationDoesNotAllocateManagedMemory'
 ```
 
-These focused checks do not constitute a full-level packaged Player playthrough,
-physical-speaker listening, or other target-platform/device validation.
+Focused cases cover dry/water/roof coffee, independent actor/wake lifetimes,
+coffee placement effects and sound timing, capture during idle and crumble,
+original idle/crumble pixels, wake body matrices and normalized phase, original
+card pixels and campaign submissions, coffee flights/removal/Imitater, existing
+sleep/Z and tooltip artwork, original audio voices and warmed plant allocation.
+They do not constitute a full-level packaged Player playthrough, physical-speaker
+listening, or other target-platform/device validation.

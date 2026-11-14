@@ -55,6 +55,25 @@ namespace PlantsVsZombies.Adventure
             return _seeds.Contains(kind);
         }
 
+        /// <summary>Checks PC PickedPlantType's settled-bank state, including an Imitater of the requested seed.</summary>
+        /// <param name="kind">The original plant type whose selected effect is queried.</param>
+        /// <param name="imitaterTarget">The currently selected original Imitater template, if any.</param>
+        /// <returns>Whether a matching ordinary or Imitater packet has reached the bank.</returns>
+        internal bool PickedPlantType(PlantKind kind, PlantKind? imitaterTarget)
+        {
+            return Contains(kind) && !IsMoving(kind)
+                || imitaterTarget == kind && Contains(PlantKind.Imitater) && !IsMoving(PlantKind.Imitater);
+        }
+
+        /// <summary>Resolves PC chooser home-card brightness without changing the packet's opacity.</summary>
+        /// <param name="kind">The original packet displayed at its chooser home.</param>
+        /// <param name="recommended">Whether the current board and settled bank recommend this seed.</param>
+        /// <returns>Fifty-five for selected/flying homes, 115 for warnings, or 255 for ordinary unselected homes.</returns>
+        internal int HomeGrayness(PlantKind kind, bool recommended)
+        {
+            return Contains(kind) || IsMoving(kind) ? 55 : recommended ? 255 : 115;
+        }
+
         /// <summary>Appends an initial or restored packet without duplicating a selected kind.</summary>
         /// <param name="kind">The packet to append.</param>
         public void Add(PlantKind kind)

@@ -16,7 +16,7 @@ using UnityEngine.TestTools;
 
 namespace PlantsVsZombies.Tests.PlayMode
 {
-    /// <summary>Checks original flying coffee artwork and mushroom wake matrices.</summary>
+    /// <summary>Checks original flying coffee artwork, mushroom wake matrices and native chooser home brightness.</summary>
     public sealed class OriginalCoffeeBeanGraphicsTests
     {
         /// <summary>Checks real planted coffee uses the original .8-scale idle/crumble body above the roof support and pumpkin.</summary>
@@ -108,6 +108,84 @@ namespace PlantsVsZombies.Tests.PlayMode
                     .4f + plant.Age - 2f, "anim_idle", true, 12f);
             });
             Assert.That(fixture.Pixels.GetPixels32(), Is.EqualTo(awake));
+        }
+
+        /// <summary>Checks home-card pixels use RGB115/255/55 and that coffee removes only the sleep-related tint.</summary>
+        /// <returns>Real original card image and cost-font camera frames.</returns>
+        [UnityTest]
+        public IEnumerator ChooserHomeCardsUseNativeBrightnessAndSettledCoffee()
+        {
+            using var fixture = new OriginalStormGraphicsTests.StormFixture(49);
+            foreach (var sample in new[] { (PlantKind.PuffShroom, false, false, 115),
+                (PlantKind.PuffShroom, true, false, 255), (PlantKind.LilyPad, true, false, 115),
+                (PlantKind.PuffShroom, true, true, 55) })
+            {
+                fixture.Owner._pendingSeeds = new AdventureSeedChooserState(sample.Item2
+                    ? sample.Item3 ? new[] { PlantKind.CoffeeBean, sample.Item1 } : new[] { PlantKind.CoffeeBean }
+                    : Array.Empty<PlantKind>());
+                var card = new Rect(200f, 180f, 50f, 70f);
+                yield return fixture.Capture(null, () => fixture.DrawPass("DrawChooserHome", sample.Item1, card));
+                var actual = fixture.Pixels.GetPixels32();
+                yield return fixture.Capture(null, () =>
+                {
+                    var previous = CanvasUI.Color;
+                    var value = sample.Item4 / 255f;
+                    CanvasUI.Color = new Color(value, value, value, 1f);
+                    fixture.DrawPass("DrawAdventureCard", sample.Item1, card, true);
+                    CanvasUI.Color = previous;
+                });
+                Assert.That(fixture.Pixels.GetPixels32(), Is.EqualTo(actual), "Original chooser grayness " + sample);
+            }
+        }
+
+        /// <summary>Checks the actual campaign chooser applies recommendation tint rather than only the isolated home-card helper.</summary>
+        /// <returns>Real chooser submissions before inspecting the original packet background color.</returns>
+        [UnityTest]
+        public IEnumerator CampaignChooserRestoresMushroomBrightnessAfterCoffeeLands()
+        {
+            using var fixture = new OriginalStormGraphicsTests.StormFixture(49);
+            fixture.Owner._pendingSeeds = new AdventureSeedChooserState(Array.Empty<PlantKind>());
+            fixture.Owner.Opening._adventureIntro = new AdventureIntroClock(AdventureIntroPresentation.CreatePlan(
+                new AdventureIntroContext { Level = 49, NativeBackground = 5, ChooseSeedsOverride = true }));
+            fixture.Owner.Opening._adventureIntroFrame = fixture.Owner.Opening._adventureIntro.Frame;
+            var index = fixture.Owner.RequiredGame.Adventure.AvailableSeeds.ToList().IndexOf(PlantKind.PuffShroom);
+            Assert.That(index, Is.GreaterThanOrEqualTo(0));
+            yield return fixture.Capture("DrawAdventureChooser");
+            AssertPacketGrayness(fixture.Animations, index, 115f / 255f);
+            fixture.Owner._pendingSeeds.Choose(PlantKind.CoffeeBean, 22, 128, fixture.Owner.Layout.SeedBankCapacity);
+            fixture.Owner._pendingSeeds.Advance(.24f);
+            yield return fixture.Capture("DrawAdventureChooser");
+            AssertPacketGrayness(fixture.Animations, index, 115f / 255f);
+            fixture.Owner._pendingSeeds.Advance(.01f);
+            yield return fixture.Capture("DrawAdventureChooser");
+            AssertPacketGrayness(fixture.Animations, index, 1f);
+        }
+
+        /// <summary>Finds the native chooser packet background without depending on pooled object names.</summary>
+        /// <param name="animations">The production animation renderer holding this frame.</param>
+        /// <param name="index">The original available-seed index.</param>
+        /// <param name="value">The native RGB brightness expected for this home.</param>
+        private static void AssertPacketGrayness(ReanimationRenderer animations, int index, float value)
+        {
+            var renderer = (ObjectSpriteRenderer)typeof(ReanimationRenderer).GetField("_objectRenderer", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(animations)!;
+            var seen = 0;
+            for (var sprite = 0; sprite < renderer.SubmittedObjectCount; sprite++)
+            {
+                var item = renderer.SubmittedSprites[sprite];
+                if (item.SourceImage?.SourceIdentity.EndsWith("seeds.png", StringComparison.OrdinalIgnoreCase) == true)
+                {
+                    if (seen++ == index)
+                    {
+                        Assert.That(item.Colors[0].r, Is.EqualTo(value).Within(.00001f));
+                        Assert.That(item.Colors[0].g, Is.EqualTo(value).Within(.00001f));
+                        Assert.That(item.Colors[0].b, Is.EqualTo(value).Within(.00001f));
+                        Assert.That(item.Colors[0].a, Is.EqualTo(1f));
+                        return;
+                    }
+                }
+            }
+
+            Assert.Fail("The actual campaign chooser did not submit the original packet home.");
         }
 
         /// <summary>Creates an original production actor for the artwork comparison.</summary>

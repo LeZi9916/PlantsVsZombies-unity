@@ -851,11 +851,9 @@ namespace PlantsVsZombies.Game
                 var kind = _owner._availablePlants[i];
                 var card = BoardLayout.ChooserSeedRect(i);
                 var previous = CanvasUI.Color;
-                if (_owner.RequiredPendingSeeds.Contains(kind) || _owner.RequiredPendingSeeds.IsMoving(kind))
-                {
-                    CanvasUI.Color = new Color(previous.r * 55f / 255f, previous.g * 55f / 255f, previous.b * 55f / 255f, previous.a);
-                }
-
+                var grayness = _owner._game?.IsAdventure == true ? ChooserHomeGrayness(kind)
+                    : _owner.RequiredPendingSeeds.HomeGrayness(kind, true);
+                CanvasUI.Color = new Color(previous.r * grayness / 255f, previous.g * grayness / 255f, previous.b * grayness / 255f, previous.a);
                 DrawSimpleChooserCard(kind, card);
                 CanvasUI.Color = previous;
             }
@@ -1895,17 +1893,27 @@ namespace PlantsVsZombies.Game
 
             return true;
         }
+        /// <summary>Checks the original settled-bank coffee selection, including an Imitater of coffee.</summary>
+        private bool ChooserHasCoffee => _owner._pendingSeeds?.PickedPlantType(PlantKind.CoffeeBean,
+            _owner.RequiredGame.Adventure.ImitaterTarget) == true;
+
+        /// <summary>Gets the original home-card grayness using the same recommendation as its native tooltip.</summary>
+        /// <param name="kind">The original seed packet displayed in the chooser.</param>
+        /// <returns>The original RGB brightness from fifty-five to 255.</returns>
+        private int ChooserHomeGrayness(PlantKind kind)
+        {
+            var recommended = _owner.RequiredGame.AdventureChooserWarningKey(kind, ChooserHasCoffee).Length == 0;
+            return _owner.RequiredPendingSeeds.HomeGrayness(kind, recommended);
+        }
+
         /// <summary>Draws a chooser packet's home, dimmed while its packet occupies the bank or flies.</summary>
         /// <param name="kind">The displayed packet.</param>
         /// <param name="card">The packet's chooser position.</param>
         private void DrawChooserHome(PlantKind kind, Rect card)
         {
             var previous = CanvasUI.Color;
-            if (_owner.RequiredPendingSeeds.Contains(kind) || _owner.RequiredPendingSeeds.IsMoving(kind))
-            {
-                CanvasUI.Color = new Color(previous.r * 55f / 255f, previous.g * 55f / 255f, previous.b * 55f / 255f, previous.a);
-            }
-
+            var grayness = ChooserHomeGrayness(kind) / 255f;
+            CanvasUI.Color = new Color(previous.r * grayness, previous.g * grayness, previous.b * grayness, previous.a);
             DrawAdventureCard(kind, card, true);
             CanvasUI.Color = previous;
         }
@@ -6059,9 +6067,10 @@ namespace PlantsVsZombies.Game
                 var seed = seeds[seedIndex];
                 var rect = _owner.Opening.AdventureCampaignChooserRect(seed);
                 var previous = CanvasUI.Color;
-                if (!_owner.AdventureBoard._choosingImitater && (_owner.RequiredPendingSeeds.Contains(seed) || _owner.RequiredPendingSeeds.IsMoving(seed)))
+                if (!_owner.AdventureBoard._choosingImitater)
                 {
-                    CanvasUI.Color = new Color(previous.r * 55f / 255f, previous.g * 55f / 255f, previous.b * 55f / 255f, previous.a);
+                    var grayness = ChooserHomeGrayness(seed) / 255f;
+                    CanvasUI.Color = new Color(previous.r * grayness, previous.g * grayness, previous.b * grayness, previous.a);
                 }
 
                 if (seed == PlantKind.Imitater)
@@ -7365,7 +7374,7 @@ namespace PlantsVsZombies.Game
 
             var key = VerifiedDataCatalog.Plants[(int)shown].InternalName;
             var warningKey = chooser ? _owner.RequiredGame.AdventureChooserWarningKey(kind,
-                _owner._pendingSeeds?.Contains(PlantKind.CoffeeBean) == true) : string.Empty;
+                ChooserHasCoffee) : string.Empty;
             var warning = chooser ? warningKey.Length == 0 ? "" : OriginalProgressionText(warningKey)
                 : _owner.RequiredGame.CooldownRemaining(kind) > 0 ? OriginalProgressionText("WAITING_TO_REFRESH")
                 : _owner.RequiredGame.AdventureSunAvailable < _owner.RequiredGame.AdventureSeedCost(kind) ? OriginalProgressionText("NOT_ENOUGH_SUN") : "";
