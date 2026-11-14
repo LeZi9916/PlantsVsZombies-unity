@@ -270,6 +270,12 @@ namespace PlantsVsZombies.Tests.EditMode
             Assert.That(game.Zombies[0].LinkedZombieId, Is.EqualTo(game.Zombies[1].Id));
             Assert.That(random.Bounds.Count(bound => bound == 5), Is.EqualTo(2));
             Invoke(game, "AdvanceAdventureZombies", 0.01f);
+            Assert.That(game.Zombies, Has.Count.EqualTo(2), "Original Umbrella interception occurs at altitude forty, not at creation.");
+            for (var tick = 0; tick < 500 && game.Zombies.Count > 0; tick++)
+            {
+                Invoke(game, "AdvanceAdventureZombies", .01f);
+            }
+
             Assert.That(game.Zombies, Is.Empty);
         }
 

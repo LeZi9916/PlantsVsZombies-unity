@@ -89,6 +89,10 @@ namespace PlantsVsZombies.Simulation
         public bool IsSmall;
         /// <summary>Stores headless.</summary>
         public bool Headless;
+        /// <summary>Retains the native bungee movement and stolen-plant lifecycle.</summary>
+        public global::PlantsVsZombies.Adventure.AdventureBungeeState? BungeeState;
+        /// <summary>Identifies the bungee whose body currently renders this suspended passenger.</summary>
+        public int BungeeCarrierId;
         /// <summary>Stores bungee carrier.</summary>
         public bool BungeeCarrier;
         /// <summary>Stores drop remaining.</summary>

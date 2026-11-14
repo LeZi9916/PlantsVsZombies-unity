@@ -15,6 +15,11 @@ namespace PlantsVsZombies.Adventure
         /// <returns>Whether the original separate shadow image should be drawn.</returns>
         internal static bool HasShadow(Plant plant, IReadOnlyList<Plant> plants)
         {
+            if (plant.BungeeState == 2)
+            {
+                return false;
+            }
+
             switch (plant.Kind)
             {
                 case PlantKind.LilyPad:
@@ -57,7 +62,7 @@ namespace PlantsVsZombies.Adventure
             for (var index = 0; index < plants.Count; index++)
             {
                 var support = plants[index];
-                if (plant.Kind != PlantKind.FlowerPot && support.Kind == PlantKind.FlowerPot
+                if (plant.Kind != PlantKind.FlowerPot && support.Kind == PlantKind.FlowerPot && support.BungeeState != 2
                     && support.Row == plant.Row && support.Column == plant.Column)
                 {
                     // PC 0x473340 is called with scale 1: the extra scale corrections vanish.

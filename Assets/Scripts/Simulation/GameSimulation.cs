@@ -175,7 +175,7 @@ namespace PlantsVsZombies.Simulation
             for (var i = Plants.Count - 1; i >= 0; i--)
             {
                 var plant = Plants[i];
-                if (plant.Row == row && plant.Column <= column && column < plant.Column + plant.ColumnSpan)
+                if (plant.Row == row && plant.Column <= column && column < plant.Column + plant.ColumnSpan && plant.BungeeState != 2)
                 {
                     return plant;
                 }
@@ -743,7 +743,8 @@ namespace PlantsVsZombies.Simulation
         {
             foreach (var plant in Plants)
             {
-                if (plant.Kind == PlantKind.UmbrellaLeaf && Math.Abs(plant.Row - row) <= 1 && Math.Abs(plant.Column - column) <= 1)
+                if (plant.Kind == PlantKind.UmbrellaLeaf && plant.Health > 0f && plant.BungeeState != 2
+                    && Math.Abs(plant.Row - row) <= 1 && Math.Abs(plant.Column - column) <= 1)
                 {
                     return true;
                 }
@@ -2825,7 +2826,7 @@ namespace PlantsVsZombies.Simulation
         {
             foreach (var plant in Plants)
             {
-                if (plant.Row == row && plant.Column <= column && column < plant.Column + plant.ColumnSpan && plant.Layer == layer
+                if (plant.Row == row && plant.Column <= column && column < plant.Column + plant.ColumnSpan && plant.Layer == layer && plant.BungeeState != 2
                     && !(plant.Kind == PlantKind.Squash && plant.PresentationBiteNotOnGround))
                 {
                     return plant;
@@ -3074,7 +3075,7 @@ namespace PlantsVsZombies.Simulation
 
             if (kind == PlantKind.CoffeeBean)
             {
-                return main != null && main.Asleep && main.WakeTimer <= 0 && AdventurePlantAt(row, column, PlantLayer.Effect) == null ? AdventurePlantingFailure.None : AdventurePlantingFailure.NeedsSleepingMushroom;
+                return main != null && main.BungeeState == 0 && main.Asleep && main.WakeTimer <= 0 && AdventurePlantAt(row, column, PlantLayer.Effect) == null ? AdventurePlantingFailure.None : AdventurePlantingFailure.NeedsSleepingMushroom;
             }
 
             var aquatic = kind == PlantKind.LilyPad || kind == PlantKind.TangleKelp || kind == PlantKind.SeaShroom;
@@ -3101,7 +3102,7 @@ namespace PlantsVsZombies.Simulation
                     ? AdventurePlantingFailure.PotatoMineOnLilyPad : AdventurePlantingFailure.NeedsLilyPad;
             }
 
-            if (l.IsWaterRow(row) && !aquatic && !(kind == PlantKind.Pumpkin && main != null && main.Kind == PlantKind.Cattail) && (support == null || support.Kind != PlantKind.LilyPad))
+            if (l.IsWaterRow(row) && !aquatic && !(kind == PlantKind.Pumpkin && main != null && main.Kind == PlantKind.Cattail) && (support == null || support.BungeeState != 0 || support.Kind != PlantKind.LilyPad))
             {
                 return AdventurePlantingFailure.NeedsLilyPad;
             }
@@ -3116,7 +3117,7 @@ namespace PlantsVsZombies.Simulation
                 return AdventurePlantingFailure.Occupied;
             }
 
-            if (l.HasRoof && kind != PlantKind.FlowerPot && (support == null || support.Kind != PlantKind.FlowerPot))
+            if (l.HasRoof && kind != PlantKind.FlowerPot && (support == null || support.BungeeState != 0 || support.Kind != PlantKind.FlowerPot))
             {
                 return AdventurePlantingFailure.NeedsFlowerPot;
             }
@@ -3585,7 +3586,7 @@ namespace PlantsVsZombies.Simulation
                 int producerSunCount = Suns.Count, producerActions = p.ActionCount;
                 try
                 {
-                    if (!Plants.Contains(p))
+                    if (!Plants.Contains(p) || p.BungeeState != 0)
                     {
                         continue;
                     }
@@ -4942,6 +4943,11 @@ namespace PlantsVsZombies.Simulation
                 return;
             }
 
+            if (z.Kind == ZombieKind.Bungee)
+            {
+                ReleaseAdventureBungeeCargo(z);
+            }
+
             if (z.BobsledState != null)
             {
                 var leaderId = z.BobsledState.LeaderId;
@@ -5802,6 +5808,21 @@ namespace PlantsVsZombies.Simulation
 
             foreach (Plant plant in Plants)
             {
+                if (plant.BungeeState != 0)
+                {
+                    plant.Age += dt * (plant.BungeeState == 2 ? .1f / Math.Max(1f, plant.PresentationRate) : 1f);
+                }
+
+                if (plant.PresentationUmbrellaAge >= 0f)
+                {
+                    var umbrellaTicks = (int)Math.Round(plant.PresentationUmbrellaAge * 100f) + 1;
+                    plant.PresentationUmbrellaAge = umbrellaTicks * .01f;
+                    if (umbrellaTicks >= 60)
+                    {
+                        plant.PresentationUmbrellaAge = -1f;
+                    }
+                }
+
                 if (plant._presentationKind != plant.Kind)
                 {
                     plant._presentationKind = plant.Kind;
@@ -6555,7 +6576,7 @@ namespace PlantsVsZombies.Simulation
 
             var old = AdventurePlantAt(row, column, kind == PlantKind.Pumpkin ? PlantLayer.Armor : PlantLayer.Main);
             var maximum = kind == PlantKind.TallNut ? 8000 : 4000;
-            return old != null && old.Kind == kind && old.Health < maximum * 2 / 3;
+            return old != null && old.Kind == kind && old.BungeeState == 0 && old.Health < maximum * 2 / 3;
         }
 
         /// <summary>Performs remember adventure reward position.</summary>
@@ -8606,11 +8627,11 @@ namespace PlantsVsZombies.Simulation
             if (kind == PlantKind.Cattail)
             {
                 var lily = AdventurePlantAt(row, column, PlantLayer.Support);
-                return l.IsWaterRow(row) && lily != null && lily.Kind == PlantKind.LilyPad && AdventurePlantAt(row, column, PlantLayer.Main) == null ? AdventurePlantingFailure.None : AdventurePlantingFailure.NeedsUpgrade;
+                return l.IsWaterRow(row) && lily != null && lily.BungeeState == 0 && lily.Kind == PlantKind.LilyPad && AdventurePlantAt(row, column, PlantLayer.Main) == null ? AdventurePlantingFailure.None : AdventurePlantingFailure.NeedsUpgrade;
             }
 
             var source = AdventurePlantAt(row, column, PlantLayer.Main);
-            if (source == null || source.Column != column || source.Kind != prerequisite.Value)
+            if (source == null || source.BungeeState != 0 || source.Column != column || source.Kind != prerequisite.Value)
             {
                 return AdventurePlantingFailure.NeedsUpgrade;
             }
@@ -8628,7 +8649,7 @@ namespace PlantsVsZombies.Simulation
                 }
 
                 var right = AdventurePlantAt(row, column + 1, PlantLayer.Main);
-                if (right == null || right.Kind != PlantKind.KernelPult || right.Column != column + 1 || AdventurePlantAt(row, column, PlantLayer.Armor) != null || AdventurePlantAt(row, column + 1, PlantLayer.Armor) != null)
+                if (right == null || right.BungeeState != 0 || right.Kind != PlantKind.KernelPult || right.Column != column + 1 || AdventurePlantAt(row, column, PlantLayer.Armor) != null || AdventurePlantAt(row, column + 1, PlantLayer.Armor) != null)
                 {
                     return AdventurePlantingFailure.NeedsUpgrade;
                 }
@@ -9414,7 +9435,7 @@ namespace PlantsVsZombies.Simulation
         /// <returns>The resulting adventure bite can target.</returns>
         private bool AdventureBiteCanTarget(Zombie z, Plant p, global::PlantsVsZombies.Adventure.AdventureBiteAttack attack, bool priority = true)
         {
-            if (p.Health <= 0 || p.Row != z.Row || p.Layer == global::PlantsVsZombies.Adventure.PlantLayer.Effect || p.PresentationBiteNotOnGround || p.Kind == PlantKind.TangleKelp || p.Kind == PlantKind.Squash && p.PresentationBiteNativeState >= 5 && p.PresentationBiteNativeState <= 7)
+            if (p.Health <= 0 || p.Row != z.Row || p.Layer == global::PlantsVsZombies.Adventure.PlantLayer.Effect || p.BungeeState == 2 || p.PresentationBiteNotOnGround || p.Kind == PlantKind.TangleKelp || p.Kind == PlantKind.Squash && p.PresentationBiteNativeState >= 5 && p.PresentationBiteNativeState <= 7)
             {
                 return false;
             }
@@ -10022,6 +10043,13 @@ namespace PlantsVsZombies.Simulation
         /// <param name = "z">The z.</param>
         private void RefreshAdventureZombieNativeSpeed(Zombie z)
         {
+            if (z.Kind == ZombieKind.Bungee && z.BungeeState != null)
+            {
+                z.PresentationNativeVelocity = 0f;
+                z.Speed = 0f;
+                return;
+            }
+
             if (z.ZomboniState?.FlatTires == true)
             {
                 z.PresentationNativeVelocity = 0f;
@@ -10288,6 +10316,22 @@ namespace PlantsVsZombies.Simulation
         private void AdvanceAdventureZombieClock(Zombie z, float dt)
         {
             EnsureAdventureZombieEquipment(z);
+            if (z.BungeeCarrierId != 0)
+            {
+                return;
+            }
+
+            if (z.Kind == ZombieKind.Bungee && z.BungeeState != null)
+            {
+                if (z.FrozenRemaining <= 0f && z.PresentationButter <= 0f)
+                {
+                    z.BungeeState.AnimationSeconds += dt;
+                    z.PresentationAnimationAge = z.BungeeState.AnimationSeconds;
+                }
+
+                return;
+            }
+
             RefreshAdventureZombieNativeSpeed(z);
             var clip = AdventurePresentationZombieAnimation(z);
             z._presentationPreviousWalkCycle = z._presentationWalkLoops + (double)z._presentationWalkPhase;
@@ -10433,6 +10477,11 @@ namespace PlantsVsZombies.Simulation
         /// <returns>The resulting adventure presentation zombie animation.</returns>
         public string AdventurePresentationZombieAnimation(Zombie z)
         {
+            if (z.BungeeCarrierId != 0)
+            {
+                return "anim_idle";
+            }
+
             if (z.Kind == ZombieKind.Zomboni && z.ZomboniState?.FlatTires == true)
             {
                 return z.ZomboniState.Animation;
@@ -10520,13 +10569,21 @@ namespace PlantsVsZombies.Simulation
             {
                 clip = "anim_walk";
             }
+            else if (z.Kind == ZombieKind.Bungee && z.BungeeState != null)
+            {
+                clip = z.BungeeState.Animation;
+            }
+            else if (z.BungeeCarrierId != 0)
+            {
+                clip = "anim_idle";
+            }
             else
             {
                 clip = z.PresentationWalk2 ? "anim_walk2" : "anim_walk";
             }
 
             global::PlantsVsZombies.Adventure.AdventureZombieGroundClip? data;
-            if (!global::PlantsVsZombies.Adventure.AdventureZombieGroundData.TryGet(asset, clip, out data))
+            if (z.Kind != ZombieKind.Bungee && !global::PlantsVsZombies.Adventure.AdventureZombieGroundData.TryGet(asset, clip, out data))
             {
                 clip = global::PlantsVsZombies.Adventure.AdventureZombieGroundData.TryGet(asset, "anim_walk", out data) ? "anim_walk" : "anim_idle";
             }
@@ -10589,6 +10646,16 @@ namespace PlantsVsZombies.Simulation
         /// <returns>The resulting adventure presentation zombie rate.</returns>
         public float AdventurePresentationZombieRate(Zombie z)
         {
+            if (z.BungeeCarrierId != 0)
+            {
+                return 0f;
+            }
+
+            if (z.Kind == ZombieKind.Bungee && z.BungeeState != null)
+            {
+                return z.BungeeState.AnimationRate;
+            }
+
             if (z.Kind == ZombieKind.Zomboni && z.ZomboniState?.FlatTires == true)
             {
                 return z.ZomboniState.Rate;
@@ -11034,14 +11101,6 @@ namespace PlantsVsZombies.Simulation
                 Submerged = kind == ZombieKind.Digger,
                 AbilityTimer = kind == ZombieKind.Dancing ? 4f : kind == ZombieKind.Bungee ? 4f : 5f
             };
-            if (kind == ZombieKind.Bungee)
-            {
-                var target = Plants.Count > 0 ? Plants[_random.Next(Plants.Count)] : null;
-                z.Row = target == null ? row : target.Row;
-                z.TargetColumn = target == null ? _random.Next(2, 9) : target.Column;
-                z.X = z.TargetColumn + 0.5f;
-            }
-
             if (Adventure.Level.Mode == AdventureMode.LittleTrouble)
             {
                 z.IsSmall = true;
@@ -11055,6 +11114,16 @@ namespace PlantsVsZombies.Simulation
             z.PresentationMaxArmor = z.ArmorHealth;
             z.PresentationMaxShield = z.ShieldHealth;
             InitializeAdventureZombieNative(z, x >= 9.5f && kind != ZombieKind.Bungee);
+            if (kind == ZombieKind.Bungee)
+            {
+                z.BungeeState = new AdventureBungeeState();
+                z.PresentationAltitude = 3000f + _random.Next(151);
+                z.PresentationNativeVelocity = 0f;
+                z.Speed = 0f;
+                z.PresentationNativePhase = 4;
+                PickAdventureBungeeTarget(z);
+            }
+
             if (kind == ZombieKind.JackInTheBox)
             {
                 // PC 53E808..53E895: distance tickets, rare early pop, then integer division by velocity and doubling.
@@ -11166,13 +11235,323 @@ namespace PlantsVsZombies.Simulation
             var passengerRow = ChooseAdventureZombieRow(kind);
             var passenger = SpawnAdventureBoardZombie(kind, passengerRow, column + 0.5f, wave);
             passenger.Row = row;
-            passenger.DropRemaining = 4f;
+            passenger.DropRemaining = float.MaxValue;
+            passenger.BungeeCarrierId = carrier.Id;
+            passenger.PresentationNativeHeight = 9;
+            passenger.X = AdventureZombieNativeRules.GridX(25f + column * 80f, AdventureDancerRules.Scale(passenger));
+            passenger.PresentationPreviousX = passenger.X;
             carrier.BungeeCarrier = true;
             carrier.Row = row;
             carrier.TargetColumn = column;
-            carrier.X = column + 0.5f;
+            carrier.X = AdventureZombieNativeRules.GridX(40f + column * 80f, AdventureDancerRules.Scale(carrier));
+            carrier.PresentationPreviousX = carrier.X;
+            carrier.BungeeState!.CarriesZombie = true;
+            carrier.BungeeState.AnimationSeconds = 0f;
             carrier.LinkedZombieId = passenger.Id;
             Adventure.Notice(AdventureNoticeKind.RoofDrop, (int)kind, row, column);
+        }
+
+        /// <summary>Reproduces PC 540180's weighted cell selection and reservation, including protection of the last sun producer.</summary>
+        /// <param name="zombie">The bungee selecting its initial target.</param>
+        /// <param name="column">A boss-constrained column, or minus one for the complete lawn.</param>
+        private void PickAdventureBungeeTarget(Zombie zombie, int column = -1)
+        {
+            var producers = 0;
+            foreach (var plant in Plants)
+            {
+                if (plant.Health > 0f && plant.BungeeState != 2 && BungeeSunProducer(plant.Kind))
+                {
+                    producers++;
+                }
+            }
+
+            var reservedProducers = 0;
+            foreach (var other in Zombies)
+            {
+                if (other.Kind == ZombieKind.Bungee && other.Health > 0f && other.TargetColumn >= 0)
+                {
+                    var target = AdventureAirAttackPlantAt(other.Row, other.TargetColumn);
+                    if (target != null && BungeeSunProducer(target.Kind))
+                    {
+                        reservedProducers++;
+                    }
+                }
+            }
+
+            var protectProducer = reservedProducers == producers - 1;
+            var total = 0;
+            for (var x = 0; x < 9; x++)
+            {
+                for (var row = 0; row < 6; row++)
+                {
+                    var index = x * 6 + row;
+                    _bungeeTargetWeights[index] = 0;
+                    if (!Adventure.Level.IsLawnRow(row) || column >= 0 && x != column)
+                    {
+                        continue;
+                    }
+
+                    var graveAtCell = false;
+                    foreach (var grave in Adventure._graves)
+                    {
+                        if (grave.Row == row && grave.Column == x)
+                        {
+                            graveAtCell = true;
+                            break;
+                        }
+                    }
+
+                    if (graveAtCell)
+                    {
+                        continue;
+                    }
+
+                    var plant = AdventureAirAttackPlantAt(row, x);
+                    if (plant != null && (plant.Kind == PlantKind.GraveBuster || plant.Kind == PlantKind.CobCannon
+                        || protectProducer && BungeeSunProducer(plant.Kind)))
+                    {
+                        continue;
+                    }
+
+                    var reserved = false;
+                    foreach (var other in Zombies)
+                    {
+                        if (other.Kind == ZombieKind.Bungee && other.Health > 0f
+                            && other.Row == row && other.TargetColumn == x)
+                        {
+                            reserved = true;
+                            break;
+                        }
+                    }
+
+                    if (!reserved)
+                    {
+                        _bungeeTargetWeights[index] = plant == null ? 1 : 10000;
+                        total += _bungeeTargetWeights[index];
+                    }
+                }
+            }
+
+            if (total == 0)
+            {
+                zombie.Health = 0f;
+                zombie.PresentationDeath = AdventureZombieDeathPresentation.Removed;
+                return;
+            }
+
+            var draw = _random.Next(total);
+            for (var index = 0; index < _bungeeTargetWeights.Length; index++)
+            {
+                draw -= _bungeeTargetWeights[index];
+                if (draw < 0)
+                {
+                    zombie.Row = index % 6;
+                    zombie.TargetColumn = index / 6;
+                    zombie.X = AdventureZombieNativeRules.GridX(40f + zombie.TargetColumn * 80f, AdventureDancerRules.Scale(zombie));
+                    zombie.PresentationPreviousX = zombie.X;
+                    return;
+                }
+            }
+        }
+
+        /// <summary>Reuses the native column-major nine-by-six target weights without per-spawn allocation.</summary>
+        private readonly int[] _bungeeTargetWeights = new int[54];
+
+        /// <summary>Checks the original MakesSun plant types used by bungee target selection.</summary>
+        /// <param name="kind">The candidate original plant type.</param>
+        /// <returns>Whether the plant produces sun.</returns>
+        private static bool BungeeSunProducer(PlantKind kind)
+        {
+            return kind == PlantKind.Sunflower || kind == PlantKind.TwinSunflower || kind == PlantKind.SunShroom;
+        }
+
+        /// <summary>Advances PC 540C20/540980's original bungee altitude, phase counters and capture lifecycle.</summary>
+        /// <param name="zombie">The live bungee after immobilization checks.</param>
+        private void AdvanceAdventureBungee(Zombie zombie)
+        {
+            if (zombie.Health <= 0f)
+            {
+                zombie.PresentationDeath = AdventureZombieDeathPresentation.Removed;
+                KillAdventureZombie(zombie);
+                return;
+            }
+
+            var state = zombie.BungeeState ??= new AdventureBungeeState();
+            if (state.TargetPlant != null && !Plants.Contains(state.TargetPlant))
+            {
+                state.TargetPlant = null;
+            }
+
+            if (state.PhaseTicks > 0)
+            {
+                state.PhaseTicks--;
+            }
+
+            if (state.Phase == 4 || state.Phase == 5)
+            {
+                var previous = zombie.PresentationAltitude;
+                zombie.PresentationAltitude -= 8f;
+                if (previous > 2596f && zombie.PresentationAltitude <= 2596f && zombie.LinkedZombieId == 0)
+                {
+                    RequestAdventureZombieFoley(74);
+                }
+
+                if (state.Phase == 4 && zombie.PresentationAltitude < 1500f && Adventure.Level.Mode != AdventureMode.Boss)
+                {
+                    state.Phase = 5;
+                    RequestAdventureZombieFoley(44);
+                }
+
+                if (zombie.PresentationAltitude <= 40f)
+                {
+                    Plant? umbrella = null;
+                    foreach (var plant in Plants)
+                    {
+                        if (plant.Kind == PlantKind.UmbrellaLeaf && plant.Health > 0f && plant.BungeeState != 2
+                            && Math.Abs(plant.Row - zombie.Row) <= 1 && Math.Abs(plant.Column - zombie.TargetColumn) <= 1)
+                        {
+                            umbrella = plant;
+                            break;
+                        }
+                    }
+
+                    if (umbrella != null)
+                    {
+                        RequestAdventureZombieFoley(-6);
+                        RequestAdventureZombieFoley(73);
+                        if (umbrella.PresentationUmbrellaAge < 0f)
+                        {
+                            umbrella.PresentationUmbrellaAge = 0f;
+                        }
+
+                        state.HitUmbrella = true;
+                        state.Phase = 8;
+                    }
+                    else if (zombie.PresentationAltitude <= 0f)
+                    {
+                        zombie.PresentationAltitude = 0f;
+                        Zombie? passenger = null;
+                        foreach (var other in Zombies)
+                        {
+                            if (other.Id == zombie.LinkedZombieId)
+                            {
+                                passenger = other;
+                                break;
+                            }
+                        }
+
+                        if (passenger != null)
+                        {
+                            passenger.BungeeCarrierId = 0;
+                            passenger.DropRemaining = 0f;
+                            passenger.PresentationNativeHeight = 0;
+                            passenger.PresentationAnimation = string.Empty;
+                            AdventurePresentationZombieAnimation(passenger);
+                            zombie.LinkedZombieId = 0;
+                            state.CarriesZombie = false;
+                            state.Enter(8);
+                        }
+                        else
+                        {
+                            state.Enter(6, 300, 5);
+                        }
+                    }
+                }
+            }
+            else if (state.Phase == 6 && state.PhaseTicks == 0)
+            {
+                state.Enter(7, 0, 20);
+                var target = AdventureAirAttackPlantAt(zombie.Row, zombie.TargetColumn);
+                if (target != null && target.Kind != PlantKind.CobCannon && target.Kind != PlantKind.GraveBuster
+                    && !target.PresentationBiteNotOnGround)
+                {
+                    state.TargetPlant = target;
+                    target.BungeeState = 1;
+                }
+            }
+            else if (state.Phase == 7 && state.AnimationSeconds * 24f >= 15f)
+            {
+                var target = state.TargetPlant;
+                if (target != null)
+                {
+                    foreach (var other in Zombies)
+                    {
+                        if (other != zombie && other.BungeeState?.TargetPlant == target)
+                        {
+                            other.BungeeState.TargetPlant = null;
+                        }
+                    }
+
+                    target.BungeeState = 2;
+                    RequestAdventureZombieFoley(68);
+                    if (target.Kind == PlantKind.Cattail && AdventurePlantAt(target.Row, target.Column, PlantLayer.Armor) != null)
+                    {
+                        var previous = Presentation._nativePlantingEffects;
+                        Presentation._nativePlantingEffects = true;
+                        try
+                        {
+                            PlaceAdventurePlant(PlantKind.LilyPad, target.Row, target.Column);
+                        }
+                        finally
+                        {
+                            Presentation._nativePlantingEffects = previous;
+                        }
+                    }
+                }
+
+                state.Enter(8);
+            }
+            else if (state.Phase == 8)
+            {
+                zombie.PresentationAltitude += 8f;
+                if (zombie.PresentationAltitude >= 600f)
+                {
+                    zombie.PresentationDeath = AdventureZombieDeathPresentation.Removed;
+                    KillAdventureZombie(zombie);
+                    return;
+                }
+            }
+
+            zombie.PresentationNativePhase = state.Phase;
+            zombie.PresentationAnimation = state.Animation;
+            zombie.PresentationAnimationAge = state.AnimationSeconds;
+        }
+
+        /// <summary>Restores a grabbed plant on interruption, removes lifted cargo, and releases no suspended zombie on carrier death.</summary>
+        /// <param name="zombie">The departing or dying bungee whose ownership must be cleared.</param>
+        private void ReleaseAdventureBungeeCargo(Zombie zombie)
+        {
+            var state = zombie.BungeeState;
+            var plant = state?.TargetPlant;
+            if (plant != null && Plants.Contains(plant))
+            {
+                if (plant.BungeeState == 2)
+                {
+                    RemoveAdventurePlantAndStack(plant);
+                }
+                else
+                {
+                    plant.BungeeState = 0;
+                }
+            }
+
+            if (state != null)
+            {
+                state.TargetPlant = null;
+            }
+
+            foreach (var passenger in new PooledSnapshot<Zombie>(Zombies))
+            {
+                if (zombie.LinkedZombieId != 0 && passenger.Id == zombie.LinkedZombieId
+                    || zombie.Id != 0 && passenger.BungeeCarrierId == zombie.Id)
+                {
+                    passenger.BungeeCarrierId = 0;
+                    passenger.PresentationDeath = AdventureZombieDeathPresentation.Removed;
+                    KillAdventureZombie(passenger);
+                }
+            }
+
+            zombie.LinkedZombieId = 0;
         }
 
         /// <summary>Restarts a native one-shot phase, including transitions that reuse the same clip.</summary>
@@ -12359,7 +12738,7 @@ namespace PlantsVsZombies.Simulation
                     continue;
                 }
 
-                if ((z.Kind == ZombieKind.DolphinRider || z.Kind == ZombieKind.JackInTheBox || z.Kind == ZombieKind.Balloon || z.Kind == ZombieKind.Digger || z.Kind == ZombieKind.Pogo)
+                if ((z.Kind == ZombieKind.DolphinRider || z.Kind == ZombieKind.JackInTheBox || z.Kind == ZombieKind.Balloon || z.Kind == ZombieKind.Digger || z.Kind == ZombieKind.Pogo || z.Kind == ZombieKind.Bungee)
                     && z.PresentationButter > 0f)
                 {
                     continue;
@@ -12406,50 +12785,7 @@ namespace PlantsVsZombies.Simulation
                 z.AbilityTimer -= dt * slow;
                 if (z.Kind == ZombieKind.Bungee)
                 {
-                    if (HasUmbrellaNear(z.Row, z.TargetColumn))
-                    {
-                        RequestAdventureZombieFoley(73);
-                        Zombie? passenger = null;
-                        foreach (var other in Zombies)
-                        {
-                            if (other.Id == z.LinkedZombieId)
-                            {
-                                passenger = other;
-                                break;
-                            }
-                        }
-                        if (passenger != null)
-                        {
-                            passenger.PresentationDeath = AdventureZombieDeathPresentation.Removed;
-                            KillAdventureZombie(passenger);
-                        }
-
-                        z.PresentationDeath = AdventureZombieDeathPresentation.Removed;
-                        KillAdventureZombie(z);
-                        continue;
-                    }
-
-                    if (z.AbilityTimer <= 0)
-                    {
-                        if (!z.BungeeCarrier)
-                        {
-                            var victim = AdventureAirAttackPlantAt(z.Row, z.TargetColumn);
-                            // PC Bungee cannot take a Cattail enclosed by a pumpkin.
-                            if (victim?.Kind == PlantKind.Cattail && AdventurePlantAt(z.Row, z.TargetColumn, PlantLayer.Armor) != null)
-                            {
-                                victim = null;
-                            }
-
-                            if (victim != null)
-                            {
-                                RemoveAdventurePlantAndStack(victim);
-                            }
-                        }
-
-                        z.PresentationDeath = AdventureZombieDeathPresentation.Removed;
-                        KillAdventureZombie(z);
-                    }
-
+                    AdvanceAdventureBungee(z);
                     continue;
                 }
 
@@ -16758,7 +17094,8 @@ namespace PlantsVsZombies.Simulation
             if (kind == ZombieKind.Bungee)
             {
                 z.Row = row;
-                z.X = column + 0.5f;
+                z.X = AdventureZombieNativeRules.GridX(40f + column * 80f, AdventureDancerRules.Scale(z));
+                z.PresentationPreviousX = z.X;
                 z.TargetColumn = column;
             }
 
@@ -16818,8 +17155,8 @@ namespace PlantsVsZombies.Simulation
             foreach (var id in new List<int>(s._sunflowerHealth.Keys))
             {
                 var p = Plants.Find(x => x.Id == id);
-                var lost = s._sunflowerHealth[id] - (p == null ? 0 : p.Health);
-                var drops = p == null ? 8 : Math.Min(8, (int)(lost / 40f));
+                var lost = s._sunflowerHealth[id] - (p == null || p.BungeeState == 2 ? 0 : p.Health);
+                var drops = p == null || p.BungeeState == 2 ? 8 : Math.Min(8, (int)(lost / 40f));
                 var old = s._sunflowerDrops[id];
                 for (var i = old; i < drops; i++)
                 {

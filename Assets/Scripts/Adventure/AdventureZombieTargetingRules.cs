@@ -20,6 +20,12 @@ namespace PlantsVsZombies.Adventure
                 return false;
             }
 
+            if (z.BungeeCarrierId != 0 || z.Kind == ZombieKind.Bungee
+                && z.PresentationNativePhase != 6 && z.PresentationNativePhase != 7)
+            {
+                return false;
+            }
+
             if (z.PresentationNativePhase == 74 || z.BobsledState?.Position > 0
                 || z.Kind == ZombieKind.Bobsled && z.PresentationNativePhase == 19)
             {

@@ -11,6 +11,8 @@ namespace PlantsVsZombies.Adventure
         public float WorldX, WorldY, Scale = 1f, Altitude, AnimationRate, InitialPhase;
         /// <summary>Retains the original UI Pogo bounce counter and held body clock independently of the cutscene timeline.</summary>
         public AdventurePogoState? PogoState;
+        /// <summary>Retains the original two-hundred-update bungee preview bob counter.</summary>
+        public int BungeeTicks;
         /// <summary>Stores animation.</summary>
         public string Animation = string.Empty;
         /// <summary>Stores loop, show ducky tube.</summary>

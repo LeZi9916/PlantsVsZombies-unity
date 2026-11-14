@@ -520,6 +520,9 @@ namespace PlantsVsZombies.Game
             DrawOriginalUiButton(rect, text);
         }
 
+        /// <summary>Selects the original PC row placement while a plant is rendered as bungee cargo.</summary>
+        private bool _drawingBungeeCargo;
+
         /// <summary>Tracks whether board textures belong to the current object rendering frame.</summary>
         private bool _renderingBoardObjects;
         /// <summary>Renders the board through pooled scene renderers before drawing its interface.</summary>
@@ -1709,7 +1712,22 @@ namespace PlantsVsZombies.Game
                     seconds += preview.InitialPhase * info.Count / preview.AnimationRate;
                 }
 
-                DrawAdventureZombiePose(zombie, asset, clip, new Vector2(preview.WorldX, preview.WorldY - preview.Altitude), preview.Scale, seconds, preview.AnimationRate, preview.Loop);
+                if (preview.NativeKind == (int)ZombieKind.Bungee)
+                {
+                    zombie.BungeeState ??= new AdventureBungeeState();
+                    zombie.BungeeState.Phase = 10;
+                    zombie.BungeeState.AnimationSeconds = seconds;
+                    zombie.PresentationAltitude = preview.Altitude;
+                    var origin = new Vector2(preview.WorldX + 45f - 30f * preview.Scale,
+                        preview.WorldY - 8f + 120f * (1f - preview.Scale) - preview.Altitude);
+                    DrawAdventureBungeeCord(zombie, origin, preview.WorldX, seconds, preview.Scale);
+                    DrawAdventureBungeeBodyGroup(zombie, origin, seconds, preview.Scale, 0);
+                    DrawAdventureBungeeBodyGroup(zombie, origin, seconds, preview.Scale, 2);
+                }
+                else
+                {
+                    DrawAdventureZombiePose(zombie, asset, clip, new Vector2(preview.WorldX, preview.WorldY - preview.Altitude), preview.Scale, seconds, preview.AnimationRate, preview.Loop);
+                }
             }
 
             foreach (var animation in _owner.Opening._adventureIntroFrame.Animations)
@@ -2132,6 +2150,7 @@ namespace PlantsVsZombies.Game
                         }
                     }
 
+                    DrawAdventureBungeeShadows(row);
                     foreach (var grave in _owner.RequiredGame.Adventure._graves)
                     {
                         if (grave.Row == row)
@@ -2159,11 +2178,13 @@ namespace PlantsVsZombies.Game
                     }
 
                     DrawAdventureIceSparkles(row);
+                    DrawAdventureBungees(row, false);
                     for (var layer = 0; layer <= (int)PlantLayer.Effect; layer++)
                     {
                         foreach (Plant plant in _owner.RequiredGame.Plants)
                         {
-                            if (plant.Row == row && (int)plant.Layer == layer
+                            if (plant.Row == row && (int)plant.Layer == layer && plant.BungeeState == 0
+                                && !(plant.Kind == PlantKind.UmbrellaLeaf && plant.PresentationUmbrellaAge >= .05f)
                                 && !(plant.Kind == PlantKind.Squash && plant.SquashPresentation?.NativePhase >= 5))
                             {
                                 DrawAdventurePlant(plant);
@@ -2197,8 +2218,15 @@ namespace PlantsVsZombies.Game
                         }
                     }
 
+                    DrawAdventureBungees(row, true);
                     foreach (var plant in _owner.RequiredGame.Plants)
                     {
+                        if (plant.BungeeState == 0 && plant.Kind == PlantKind.UmbrellaLeaf && plant.Row + 1 == row
+                            && plant.PresentationUmbrellaAge >= .05f)
+                        {
+                            DrawAdventurePlant(plant);
+                        }
+
                         if (plant.Row == row && plant.Kind == PlantKind.Squash && plant.SquashPresentation?.NativePhase >= 5)
                         {
                             // PC UpdateSquash promotes the flying and flattened body to the original particle row layer.
@@ -2256,6 +2284,14 @@ namespace PlantsVsZombies.Game
                         DrawAdventureProjectile(pea);
                     }
 
+                    foreach (var bungee in _owner.RequiredGame.Zombies)
+                    {
+                        if (bungee.Kind == ZombieKind.Bungee && bungee.Row == row)
+                        {
+                            DrawAdventureBungeeTarget(bungee);
+                        }
+                    }
+
                     DrawAdventureSnowTrails(row);
                     for (var nutIndex = 0; nutIndex < _owner.RequiredGame.Adventure.BowlingNuts.Count; nutIndex++)
                     {
@@ -2299,8 +2335,24 @@ namespace PlantsVsZombies.Game
                     }
                 }
 
+                foreach (var plant in _owner.RequiredGame.Plants)
+                {
+                    if (plant.BungeeState == 0 && plant.Kind == PlantKind.UmbrellaLeaf
+                        && plant.Row + 1 >= _owner.RequiredGame.RowCount && plant.PresentationUmbrellaAge >= .05f)
+                    {
+                        DrawAdventurePlant(plant);
+                    }
+                }
+
                 // PC Board::Draw submits attracted metal at MakeRenderOrder(Top, 0, -1), above every normal row.
                 DrawAdventureMagnetItemsOnTop();
+                foreach (var bungee in _owner.RequiredGame.Zombies)
+                {
+                    if (bungee.Kind == ZombieKind.Bungee && bungee.BungeeState?.HitUmbrella == true)
+                    {
+                        DrawAdventureBungee(bungee);
+                    }
+                }
                 DrawAdventurePlantingEffects();
                 DrawAdventureExplosionOverlay();
                 DrawAdventureVaseHammer();
@@ -2778,12 +2830,9 @@ namespace PlantsVsZombies.Game
                 case ZombieKind.Bobsled:
                     y -= 12f;
                     break;
-                case ZombieKind.Bungee:
-                    pixelX -= 18f;
-                    break;
             }
 
-            if (zombie.DropRemaining > 0)
+            if (zombie.DropRemaining > 0 && zombie.BungeeCarrierId == 0)
             {
                 y -= Mathf.Min(260f, zombie.DropRemaining * 120f);
             }
@@ -2983,7 +3032,7 @@ namespace PlantsVsZombies.Game
             {
                 foreach (var support in _owner.RequiredGame.Plants)
                 {
-                    if (support.Kind == PlantKind.FlowerPot && support.Row == plant.Row && support.Column == plant.Column)
+                    if (support.Kind == PlantKind.FlowerPot && support.BungeeState != 2 && support.Row == plant.Row && support.Column == plant.Column)
                     {
                         hasFlowerPot = true;
                         break;
@@ -3145,6 +3194,12 @@ namespace PlantsVsZombies.Game
             var name = AdventurePlantAnimation(plant.Kind);
             var size = plant.IsSmall ? .5f : 1f;
             var drawHeight = AdventurePlantHeight(plant);
+            if (_drawingBungeeCargo && _owner.RequiredGame.Adventure.Level.HasRoof)
+            {
+                // PC 473490 has no mobile-only roof -12 offset. Preserve the native cargo origin without changing other roof plants.
+                drawHeight += 12f;
+            }
+
             var level = _owner.RequiredGame.Adventure.Level;
             var shadowHeight = AdventurePlantShadowRules.DrawHeight(plant, _owner.RequiredGame.Plants, level.IsWaterRow(plant.Row), _owner.RequiredGame.Adventure._ticks);
             var squash = plant.Kind == PlantKind.Squash ? plant.SquashPresentation : null;
@@ -3259,6 +3314,14 @@ namespace PlantsVsZombies.Game
                 {
                     age = Math.Max(0, (plant.CannonPhase == CobCannonPhase.Firing ? GameSimulation.AdventureCobFiringSeconds : GameSimulation.AdventureCobLoadingSeconds) - plant.CannonReloadRemaining) + AdventureRenderRemainder;
                 }
+            }
+
+            if (plant.Kind == PlantKind.UmbrellaLeaf && plant.PresentationUmbrellaAge >= 0f)
+            {
+                clip = "anim_block";
+                age = plant.PresentationUmbrellaAge + AdventureRenderRemainder;
+                rate = 22f;
+                loop = false;
             }
 
             if (plant.Kind == PlantKind.Imitater && _owner.AnimationCatalog.AdventureClipExists(name, "anim_morph"))
@@ -3408,7 +3471,7 @@ namespace PlantsVsZombies.Game
         /// <param name="drawnPlant">The plant at whose native render order the back group may be submitted.</param>
         private void DrawAdventurePumpkinBack(Plant drawnPlant)
         {
-            if (drawnPlant.Layer != PlantLayer.Main && drawnPlant.Kind != PlantKind.Pumpkin)
+            if (drawnPlant.BungeeState != 0 || drawnPlant.Layer != PlantLayer.Main && drawnPlant.Kind != PlantKind.Pumpkin)
             {
                 return;
             }
@@ -3417,7 +3480,7 @@ namespace PlantsVsZombies.Game
             Plant? contained = null;
             foreach (var candidate in _owner.RequiredGame.Plants)
             {
-                if (candidate.Row != drawnPlant.Row || candidate.Column != drawnPlant.Column)
+                if (candidate.Row != drawnPlant.Row || candidate.Column != drawnPlant.Column || candidate.BungeeState != 0)
                 {
                     continue;
                 }
@@ -3670,6 +3733,11 @@ namespace PlantsVsZombies.Game
         /// <param name="zombie">The ordinary actor or front member responsible for drawing its complete team.</param>
         private void DrawAdventureZombieTeam(Zombie zombie)
         {
+            if (zombie.BungeeCarrierId != 0 || zombie.Kind == ZombieKind.Bungee)
+            {
+                return;
+            }
+
             var state = zombie.BobsledState;
             if (state == null)
             {
@@ -3791,6 +3859,170 @@ namespace PlantsVsZombies.Game
             {
                 _owner.RequiredAnimations.DrawResourceSprite(resource, point + new Vector2(image.Width * .5f, image.Height * .5f), 1f,
                     additive: additive);
+            }
+        }
+
+        /// <summary>Draws normal bungees at native grave-stone order, and grabbing bungees at their projectile-row order.</summary>
+        /// <param name="row">The row whose original render layer is being submitted.</param>
+        /// <param name="aboveZombies">Whether to draw the grabbing layer instead of the descending and waiting layer.</param>
+        private void DrawAdventureBungees(int row, bool aboveZombies)
+        {
+            foreach (var zombie in _owner.RequiredGame.Zombies)
+            {
+                var state = zombie.BungeeState;
+                if (zombie.Kind == ZombieKind.Bungee && zombie.Row == row && state != null && !state.HitUmbrella
+                    && (state.CarriesZombie || state.Phase == 7 || state.Phase == 8) == aboveZombies)
+                {
+                    DrawAdventureBungee(zombie);
+                }
+            }
+        }
+
+        /// <summary>Draws every bungee's altitude-scaled shadow at original ground order 200003, independently of its body layer.</summary>
+        /// <param name="row">The native row whose ground sprites are being drawn.</param>
+        private void DrawAdventureBungeeShadows(int row)
+        {
+            var name = _owner.RequiredGame.Adventure.Level.IsNight ? "plantshadow2.png" : "plantshadow.png";
+            var image = _owner.Textures.LoadImage(name);
+            if (image == null)
+            {
+                return;
+            }
+
+            foreach (var zombie in _owner.RequiredGame.Zombies)
+            {
+                if (zombie.Kind == ZombieKind.Bungee && zombie.Row == row && HasAdventureZombieShadow(zombie, false))
+                {
+                    using var actor = _owner.RequiredAnimations.Hierarchy.BeginActor("Zombies", zombie.Id, "Bungee");
+                    var x = AdventureRenderX(zombie);
+                    var nativeX = AdventureZombieNativeRules.NativePositionX(x, AdventureDancerRules.Scale(zombie));
+                    var floor = AdventureFloorYAtPixel(row, nativeX + 40f);
+                    DrawImage(name, AdventureZombieShadowBounds(zombie, x, floor, new Vector2(image.Width, image.Height), false));
+                }
+            }
+        }
+
+        /// <summary>Draws PC 548780's rope, body group zero, suspended cargo and the four foreground arm tracks.</summary>
+        /// <param name="zombie">The bungee supplying its native altitude, cargo and body clock.</param>
+        private void DrawAdventureBungee(Zombie zombie)
+        {
+            using var actor = _owner.RequiredAnimations.Hierarchy.BeginActor("Zombies", zombie.Id, "Bungee");
+            var state = zombie.BungeeState!;
+            var scale = AdventureDancerRules.Scale(zombie);
+            var x = AdventureRenderX(zombie);
+            var origin = AdventureZombieOrigin(zombie, x);
+            var nativeX = AdventureZombieNativeRules.NativePositionX(x, scale);
+            var nativeY = AdventureFloorYAtPixel(zombie.Row, nativeX + 40f) - 30f;
+            var seconds = state.AnimationSeconds + (zombie.FrozenRemaining > 0f || zombie.PresentationButter > 0f ? 0f : AdventureRenderRemainder);
+            DrawAdventureBungeeCord(zombie, origin, nativeX, seconds, scale);
+            DrawAdventureBungeeBodyGroup(zombie, origin, seconds, scale, 0);
+            var matrix = CanvasUI.Matrix;
+            var previousCargo = _drawingBungeeCargo;
+            try
+            {
+                Zombie? passenger = null;
+                foreach (var candidate in _owner.RequiredGame.Zombies)
+                {
+                    if (candidate.Id == zombie.LinkedZombieId && candidate.BungeeCarrierId == zombie.Id)
+                    {
+                        passenger = candidate;
+                        break;
+                    }
+                }
+
+                if (passenger != null)
+                {
+                    var passengerX = AdventureZombieNativeRules.NativePositionX(passenger.X, AdventureDancerRules.Scale(passenger));
+                    var passengerY = AdventureFloorYAtPixel(passenger.Row, passengerX + 40f) - 30f
+                        - (passenger.Kind == ZombieKind.Balloon ? 30f : passenger.Kind == ZombieKind.Pogo ? 16f : 0f);
+                    CanvasUI.Matrix = matrix * Matrix4x4.Translate(new Vector3(0f, nativeY - passengerY - zombie.PresentationAltitude, 0f));
+                    DrawAdventureZombie(passenger);
+                }
+                else if (state.TargetPlant != null && _owner.RequiredGame.Plants.Contains(state.TargetPlant))
+                {
+                    var plant = state.TargetPlant;
+                    var lift = -zombie.PresentationAltitude;
+                    if (state.Phase == 8 && (plant.Kind == PlantKind.Spikeweed || plant.Kind == PlantKind.Spikerock))
+                    {
+                        lift -= 34f;
+                    }
+
+                    // Native +30 cancels the bungee's row origin at lawnY-30; the left-roof +10 cancels its slope offset.
+                    CanvasUI.Matrix = matrix * Matrix4x4.Translate(new Vector3(0f, lift, 0f));
+                    _drawingBungeeCargo = true;
+                    DrawAdventurePlant(plant);
+                }
+            }
+            finally
+            {
+                CanvasUI.Matrix = matrix;
+                _drawingBungeeCargo = previousCargo;
+            }
+
+            DrawAdventureBungeeBodyGroup(zombie, origin, seconds, scale, 2);
+        }
+
+        /// <summary>Draws one original bungee render group through the normal hit, chill and butter compositor.</summary>
+        /// <param name="zombie">The bungee being drawn.</param>
+        /// <param name="origin">The original reanimation origin.</param>
+        /// <param name="seconds">The native body-animation time.</param>
+        /// <param name="scale">The original zombie scale.</param>
+        /// <param name="group">Zero for the body or two for the foreground hands.</param>
+        private void DrawAdventureBungeeBodyGroup(Zombie zombie, Vector2 origin, float seconds, float scale, int group)
+        {
+            var state = zombie.BungeeState!;
+            var surface = _presentationKeys.Get(group == 0 ? "bungee-body-surface-" : "bungee-arms-surface-", zombie.Id);
+            _adventurePresentationSurfaces.Add(surface);
+            _adventurePresentationLiveSurfaces.Add(surface);
+            ActorRenderer.DrawZombie(zombie, "Zombie_bungi", state.Animation, origin, scale, seconds,
+                state.AnimationRate, state.AnimationLoops,
+                _presentationKeys.Get(group == 0 ? "bungee-body-" : "bungee-arms-", zombie.Id), surface,
+                remainder: AdventureRenderRemainder, bungeeGroup: group);
+        }
+
+        /// <summary>Tiles PC 549520's unchanged eight-by-sixty-four cord from the original body-track center to the screen top.</summary>
+        /// <param name="zombie">The bungee supplying its original body layer.</param>
+        /// <param name="origin">The original source origin before track transforms.</param>
+        /// <param name="nativeX">The original zombie position before its body overlay.</param>
+        /// <param name="seconds">The current native body age.</param>
+        /// <param name="scale">The original uniform zombie scale.</param>
+        private void DrawAdventureBungeeCord(Zombie zombie, Vector2 origin, float nativeX, float seconds, float scale)
+        {
+            var state = zombie.BungeeState!;
+            if (!_owner.RequiredAnimations.TryGetNativeTrackCenter("Zombie_bungi", state.Animation, "Zombie_bungi_body",
+                seconds, state.AnimationRate, out var anchor, state.AnimationLoops)
+                || !_owner.RequiredAnimations.TryGetNativeSpriteSize("IMAGE_BUNGEECORD", out var size))
+            {
+                return;
+            }
+
+            var height = Math.Max(1, (int)(size.y * scale));
+            var anchorY = origin.y + anchor.y * scale - .5f;
+            for (var y = anchorY - height; y > -height; y -= height)
+            {
+                _owner.RequiredAnimations.DrawResourceSprite("IMAGE_BUNGEECORD",
+                    new Vector2(nativeX + 39f - 4f / scale + size.x * .5f, y + size.y * .5f), scale);
+            }
+        }
+
+        /// <summary>Draws PC 5489B0's unscaled reticle and its original four-hundred-pixel descent curve.</summary>
+        /// <param name="zombie">The thief whose target remains visible until it starts rising.</param>
+        private void DrawAdventureBungeeTarget(Zombie zombie)
+        {
+            var state = zombie.BungeeState;
+            if (state == null || state.Phase == 8 || state.Phase == 9 || state.Phase == 10
+                || zombie.LinkedZombieId != 0 || _owner.RequiredGame.Adventure.Level.Mode == AdventureMode.Boss)
+            {
+                return;
+            }
+
+            var nativeX = (int)AdventureZombieNativeRules.NativePositionX(zombie.X, AdventureDancerRules.Scale(zombie));
+            var nativeY = (int)(AdventureFloorYAtPixel(zombie.Row, nativeX + 40f) - 30f);
+            var t = state.Phase == 4 || state.Phase == 5 ? Mathf.Clamp01((3000f - (int)zombie.PresentationAltitude) / 400f) : 1f;
+            var point = new Vector2(nativeX + 10f + 30f * (1f - t), nativeY + 60f - 600f * (1f - t));
+            if (_owner.RequiredAnimations.TryGetNativeSpriteSize("IMAGE_BUNGEETARGET", out var size))
+            {
+                _owner.RequiredAnimations.DrawResourceSprite("IMAGE_BUNGEETARGET", point + new Vector2(size.x * .5f, size.y * .5f), 1f);
             }
         }
 
@@ -4017,6 +4249,11 @@ namespace PlantsVsZombies.Game
         internal static bool HasAdventureZombieShadow(Zombie zombie, bool inPool)
         {
             // PC 0x54FD80 excludes these native kinds, heights, and animation phases.
+            if (zombie.Kind == ZombieKind.Bungee && zombie.BungeeState?.HitUmbrella == true)
+            {
+                return false;
+            }
+
             if (inPool || zombie.Kind == ZombieKind.Zomboni || zombie.Kind == ZombieKind.Catapult || zombie.Kind == ZombieKind.Boss
                 || zombie.DropRemaining > 0f || zombie.PresentationNativeHeight == 3 || zombie.PresentationNativeHeight == 8 || zombie.PresentationNativeHeight == 9
                 || zombie.Kind == ZombieKind.Digger && zombie.AbilityPhase == 0)
@@ -4108,7 +4345,8 @@ namespace PlantsVsZombies.Game
                     offsetY = -18f;
                     break;
                 case ZombieKind.Bungee:
-                    offsetX -= 30f;
+                    offsetX = -12f;
+                    shadowScale = Mathf.Lerp(.1f, 1.5f, Mathf.Clamp01((2000f - (int)zombie.PresentationAltitude) / 1900f));
                     break;
             }
 
@@ -4362,6 +4600,12 @@ namespace PlantsVsZombies.Game
                 var origin = AdventureZombieOrigin(zombie, zombie.X);
                 try
                 {
+                    if (zombie.Kind == ZombieKind.Bungee && zombie.BungeeState != null)
+                    {
+                        DrawAdventureBungeeCord(zombie, origin,
+                            AdventureZombieNativeRules.NativePositionX(zombie.X, burn.Scale), corpse.FrozenSeconds, burn.Scale);
+                    }
+
                     if (string.Equals(name, "Zombie", StringComparison.OrdinalIgnoreCase) && !zombie.Headless && !plantHead && !burn.FacingLeft && zombie.Kind != ZombieKind.DuckyTube)
                     {
                         _owner.RequiredAnimations.DrawZombiePlayback(origin, burn.Scale, corpse.FrozenSeconds, variant, clip, true, corpse.FrozenRate);

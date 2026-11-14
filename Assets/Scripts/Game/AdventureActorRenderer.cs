@@ -38,6 +38,8 @@ namespace PlantsVsZombies.Game
         private string? _poolHeadKey, _poolInnerKey, _poolOuterKey;
         /// <summary>Selects both pumpkin tracks (-1), the front group (0), or the separate back group (1).</summary>
         private int _pumpkinGroup = -1;
+        /// <summary>Selects an unsplit zombie (-1), bungee body (0), or foreground cargo arms (2).</summary>
+        private int _bungeeGroup = -1;
         /// <summary>The plant whose pose is being drawn synchronously.</summary>
         private Plant _plant = null!;
         /// <summary>The zombie whose pose is being drawn synchronously.</summary>
@@ -174,10 +176,12 @@ namespace PlantsVsZombies.Game
         /// <param name="poolInnerKey">The cached identity of the original upper-arm seaweed.</param>
         /// <param name="poolOuterKey">The cached identity of the original tube seaweed.</param>
         /// <param name="remainder">The nonnegative render remainder added to attachment ages.</param>
+        /// <param name="bungeeGroup">The native bungee render group, or minus one for an ordinary body.</param>
         internal void DrawZombie(Zombie zombie, string name, string? clip, Vector2 origin, float scale, float seconds,
             float rate, bool loop, string key, string surfaceKey, OriginalParticleRenderer? poolParticles = null,
-            string? poolHeadKey = null, string? poolInnerKey = null, string? poolOuterKey = null, float remainder = 0f)
+            string? poolHeadKey = null, string? poolInnerKey = null, string? poolOuterKey = null, float remainder = 0f, int bungeeGroup = -1)
         {
+            _bungeeGroup = bungeeGroup;
             _zombie = zombie;
             _name = name;
             _clip = clip;
@@ -309,6 +313,18 @@ namespace PlantsVsZombies.Game
         /// <returns>Whether the current zombie should display the track.</returns>
         private bool IsZombieTrackVisible(string track)
         {
+            if (_zombie.Kind == ZombieKind.Bungee && _bungeeGroup >= 0)
+            {
+                var arms = track.StartsWith("Zombie_bungi_rightarm_lower2", StringComparison.OrdinalIgnoreCase)
+                    || track.StartsWith("Zombie_bungi_rightarm_hand2", StringComparison.OrdinalIgnoreCase)
+                    || track.StartsWith("Zombie_bungi_leftarm_lower2", StringComparison.OrdinalIgnoreCase)
+                    || track.StartsWith("Zombie_bungi_leftarm_hand2", StringComparison.OrdinalIgnoreCase);
+                if (_bungeeGroup == 2 ? !arms : arms)
+                {
+                    return false;
+                }
+            }
+
             if (_plantHead && (track.IndexOf("head", StringComparison.OrdinalIgnoreCase) >= 0
                 || track.IndexOf("hair", StringComparison.OrdinalIgnoreCase) >= 0
                 || _zombie.ModeHead != 26 && _zombie.ModeHead != 29 && _zombie.ModeHead != 30 && string.Equals(track, "Zombie_tie", StringComparison.OrdinalIgnoreCase)))
@@ -355,6 +371,7 @@ namespace PlantsVsZombies.Game
                     _backwards, _key, _zombie.PresentationBodyBlendTicks >= 0 ? _zombie.PresentationBodyBlendTicks
                         : _zombie.Kind == ZombieKind.Balloon ? _zombie.PresentationBalloonBlendTicks
                         : _zombie.Kind == ZombieKind.Bobsled && _zombie.BobsledState != null ? 0
+                        : _zombie.Kind == ZombieKind.Bungee ? _zombie.BungeeState?.BlendTicks ?? 0
                         : _zombie.Kind == ZombieKind.Pogo ? _zombie.PogoState?.AnimationBlendTicks ?? 20
                         : _zombie.Kind == ZombieKind.Digger ? _zombie.DiggerState?.AnimationBlendTicks ?? 20
                         : _zombie.Kind == ZombieKind.DolphinRider ? AdventureZombieMotionRules.DolphinBlendTicks(_zombie)

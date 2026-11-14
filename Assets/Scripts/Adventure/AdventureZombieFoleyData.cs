@@ -13,6 +13,10 @@ namespace PlantsVsZombies.Adventure
                 85,
                 new AdventureZombieFoleyDefinition(0f, new[] { "scream" })
             },
+            {
+                44,
+                new AdventureZombieFoleyDefinition(2f, new[] { "bungee_scream", "bungee_scream2", "bungee_scream3" })
+            },
             // PC storm Foley: Thunder has ten semitones of pitch variation; Rain loops once per board.
             {
                 17,

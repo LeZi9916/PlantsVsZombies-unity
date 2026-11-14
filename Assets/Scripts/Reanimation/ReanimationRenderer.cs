@@ -3103,8 +3103,9 @@ namespace PlantsVsZombies.Reanimation
         /// <param name="seconds">The frozen source clock.</param>
         /// <param name="rate">The retained original source frame rate.</param>
         /// <param name="position">Receives the transformed original image center, or the marker translation when invisible.</param>
+        /// <param name="loop">Whether the retained native body loops rather than holding its final frame.</param>
         /// <returns>Whether the retained source track is available.</returns>
-        public bool TryGetNativeTrackCenter(string name, string animation, string trackName, float seconds, float rate, out Vector2 position)
+        public bool TryGetNativeTrackCenter(string name, string animation, string trackName, float seconds, float rate, out Vector2 position, bool loop = true)
         {
             position = default;
             if (!TryGetClip(name, animation, out var asset, out var clip))
@@ -3118,7 +3119,7 @@ namespace PlantsVsZombies.Reanimation
                 return false;
             }
 
-            var time = SampleFrame(clip, NativeSeconds(clip, seconds, rate, asset.Fps, true), asset.Fps, false);
+            var time = SampleFrame(clip, NativeSeconds(clip, seconds, rate, asset.Fps, loop), asset.Fps, false);
             var pose = Interpolate(GetFrame(track, time.Current), GetFrame(track, time.Next), time.Fraction);
             var center = pose.Texture != null && pose.Visibility >= 0f
                 ? new Vector3(pose.Texture.Width * .5f, pose.Texture.Height * .5f, 0f) : Vector3.zero;

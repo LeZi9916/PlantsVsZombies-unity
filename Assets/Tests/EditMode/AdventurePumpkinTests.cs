@@ -76,12 +76,20 @@ namespace PlantsVsZombies.Tests.EditMode
             zombie.TargetColumn = 4;
             zombie.AbilityTimer = 0f;
             zombie.DropRemaining = 0f;
+            if (kind == ZombieKind.Bungee)
+            {
+                zombie.BungeeState!.Enter(6, 1);
+                zombie.PresentationNativePhase = 6;
+                zombie.PresentationAltitude = 0f;
+            }
+
             typeof(GameSimulation).GetMethod("AdvanceAdventureZombies", flags)!.Invoke(game, new object[] { .01f });
             Assert.That(shell.Health, Is.EqualTo(4000f));
             Assert.That(game.Plants.Contains(shell), Is.True);
             if (kind == ZombieKind.Bungee)
             {
-                Assert.That(game.Plants.Contains(main), Is.False);
+                Assert.That(zombie.BungeeState!.TargetPlant, Is.SameAs(main));
+                Assert.That(main.BungeeState, Is.EqualTo(1));
             }
             else
             {
@@ -89,9 +97,9 @@ namespace PlantsVsZombies.Tests.EditMode
             }
         }
 
-        /// <summary>Checks the original exception preventing a bungee from taking a pumpkin-protected Cattail.</summary>
+        /// <summary>Checks the original lift replaces a stolen Cattail with a Lily Pad to retain its pumpkin.</summary>
         [Test]
-        public void PumpkinRetainsOriginalCattailBungeeProtection()
+        public void StolenCattailRestoresThePumpkinsLilyPadSupport()
         {
             var game = new GameSimulation(new GameRules { AdventureLevel = 31 }, 91);
             var cattail = new Plant { Id = 1, Kind = PlantKind.Cattail, Layer = PlantLayer.Main, Row = 2, Column = 4, Health = 300f };
@@ -104,8 +112,15 @@ namespace PlantsVsZombies.Tests.EditMode
             zombie.TargetColumn = 4;
             zombie.AbilityTimer = 0f;
             zombie.DropRemaining = 0f;
+            zombie.BungeeState!.Enter(7);
+            zombie.BungeeState.TargetPlant = cattail;
+            zombie.BungeeState.AnimationSeconds = 15f / 24f;
+            cattail.BungeeState = 1;
+            zombie.PresentationNativePhase = 7;
+            zombie.PresentationAltitude = 0f;
             typeof(GameSimulation).GetMethod("AdvanceAdventureZombies", flags)!.Invoke(game, new object[] { .01f });
-            Assert.That(game.Plants.Contains(cattail), Is.True);
+            Assert.That(cattail.BungeeState, Is.EqualTo(2));
+            Assert.That(game.AdventurePlantAt(2, 4, PlantLayer.Support)?.Kind, Is.EqualTo(PlantKind.LilyPad));
             Assert.That(game.Plants.Contains(shell), Is.True);
         }
 

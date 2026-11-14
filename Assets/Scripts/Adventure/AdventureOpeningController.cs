@@ -268,6 +268,17 @@ namespace PlantsVsZombies.Adventure
                 foreach (var preview in _adventurePreview)
                 {
                     AdventurePogoRules.AdvanceStreetPreview(preview);
+                    if (preview.NativeKind == (int)ZombieKind.Bungee)
+                    {
+                        preview.BungeeTicks = preview.BungeeTicks > 0 ? preview.BungeeTicks - 1 : 0;
+                        var t = (200 - preview.BungeeTicks) / 200f;
+                        var height = 40f - 40f * (float)Math.Sin(t * Math.PI * 2d);
+                        preview.Altitude = (int)(height + .5f);
+                        if (preview.BungeeTicks == 0)
+                        {
+                            preview.BungeeTicks = 200;
+                        }
+                    }
                 }
 
                 _owner.RequiredGame.AdvanceAdventurePoolEffect(RequiredAdventureIntro.Plan.RequiredContext.SurvivalRepick);

@@ -68,6 +68,10 @@ namespace PlantsVsZombies.Simulation
         // Kept in this independent file so production/rendering integration need not alter shared state files.
         /// <summary>Stores producer glow.</summary>
         public global::PlantsVsZombies.Adventure.AdventureProducerGlowState ProducerGlow;
+        /// <summary>Stores the original Umbrella Leaf block animation age, or minus one while inactive.</summary>
+        public float PresentationUmbrellaAge = -1f;
+        /// <summary>Stores native PlantOnBungeeState: zero normal, one grabbed, two rising with its carrier.</summary>
+        public int BungeeState;
         /// <summary>Stores layer.</summary>
         public global::PlantsVsZombies.Adventure.PlantLayer Layer;
         /// <summary>Stores asleep.</summary>

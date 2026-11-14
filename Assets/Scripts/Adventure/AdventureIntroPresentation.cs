@@ -417,6 +417,10 @@ namespace PlantsVsZombies.Adventure
 
             if (kind == 20)
             {
+                z.Animation = "anim_drop";
+                z.AnimationRate = 24f;
+                z.InitialPhase = 0f;
+                z.BungeeTicks = next(201);
                 z.RenderOrder = 200000;
                 z.WorldX = 950 + gx * 50;
                 z.WorldY = 50;

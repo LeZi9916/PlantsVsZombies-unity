@@ -413,7 +413,8 @@ Pumpkin initialization at `46C777` sets width 120; GetPlantRect removes twenty
 pixels, giving a 100x80 eating rectangle. Its unchanged shovel hit test uses the
 original 25..50-pixel rim and lower-edge constraint. Repair uses strict integer
 thirds. Bungee/CatapultOrder selects flying/normal/pumpkin/support independently
-of creation order, including the protected-Cattail exception. Whole-cell crushing
+of creation order. The bungee follow-up below corrects the earlier Cattail
+interpretation: lifting it from a pumpkin restores Lily Pad support. Whole-cell crushing
 removes the shell and normal contents together; the native spike exceptions and
 empty-pumpkin support-placement restriction are preserved.
 
@@ -425,3 +426,60 @@ empty-pumpkin support-placement restriction are preserved.
 These production-component simulations and real graphics/audio-source checks do
 not constitute a packaged Player playthrough, physical-speaker listening, or
 validation on Windows, Linux, mobile devices or IL2CPP.
+
+
+## Original PC Bungee Zombie
+
+The supplied hash-identified `PlantsVsZombies.exe` is authoritative where the
+mobile C# reference differs. `53E245..53E326` initializes 450 body health,
+altitude `3000 + Rand(151)`, phase 4, looping `anim_drop` at 24 FPS, and **four**
+foreground arm prefixes in render group 2. `540180` selects column-major cells
+with empty/occupied weights 1/10000, reserves existing bungee targets, excludes
+graves/Grave Buster/Cob Cannon, and leaves the final unreserved sun producer.
+
+`540C20` descends and rises eight pixels per centisecond. `540980` plays Grassstep
+at the 2596-altitude crossing, BungeeScream Foley 44 below 1500 (except the boss),
+and checks Umbrella Leaf only at altitude 40. The bottom pause is 300 updates;
+`540700` starts the fifteen-frame `anim_grab` at 24 FPS with blend 20. The native
+plant remains allocated while grabbed and rising. `540800` lifts it with Floop,
+starts `anim_raise` at 36 FPS, and `540C20` removes the carrier at altitude 600.
+Death during grabbing restores the plant; lifted cargo is removed on departure.
+
+The previous pumpkin follow-up incorrectly treated a pumpkin-enclosed Cattail as
+immune to theft. PC `5408F2..540950` explicitly lifts it and creates a Lily Pad
+(type 16) under the remaining pumpkin. The corrected regression checks this
+original replacement and retains the pumpkin.
+
+`540410` positions a suspended zombie fifteen pixels left of its carrier,
+sets height 9 and a zero-rate idle pose, and gives the carrier row order 303004.
+Landing releases the passenger alive; carrier death or umbrella departure removes
+unreleased cargo without loot. The ordinary thief body uses order 301007 until
+grabbing promotes it to 305000. An umbrella bounce promotes it to 400001 and
+retains the previous body pose. The target is a separate 305001 pass.
+
+`548780` draws rope, body group 0, cargo, then group 2. `5489B0` draws the unchanged
+71x76 reticle with its original 3000..2600 descent curve; it does not scale it with
+the zombie or draw it for passengers, ascent or the boss. `549520` tiles the
+unchanged 8x64 rope from the original body-track center, preserving native
+center-based scaled-image placement. Preview phase 10 uses `anim_drop` at 24 FPS
+and the original integer SinWave over a 200-update counter. Bounced bungees lose
+their shadow, and the frozen original pose retains its rope when burned.
+
+Captured plants stop their abilities, remain occupied during grabbing, and leave
+the board's occupancy/targeting when lifted. A carried sunflower yields its remaining
+I, Zombie sun at lift rather than waiting for carrier removal. Captured support
+plants cannot be used for new roof/water planting. Grabbed plants cannot be
+upgraded, and First Aid cannot replace a grabbed defensive plant.
+
+```powershell
+./Tools/Tests/Run-UnityTests.ps1 -Platform EditMode -TestFilter 'AdventureBungeeTests;AdventurePumpkinTests;AdventureSpawnFidelityTests.UmbrellaInterceptionFollowsCarrierAndPassengerCreation'
+# Set PVZ_BOARD_STRESS_ASSETS to the read-only original runtime resources.
+./Tools/Tests/Run-UnityTests.ps1 -Platform PlayMode -TestFilter 'OriginalBungeeGraphicsTests;OriginalBungeeAudioTests'
+```
+
+The original-art tests compare exact body/rope/reticle/cargo pixels, native plant
+occlusion, the suspended idle passenger, and animated street preview. Audio tests
+load all three shipped scream variants through the production loader and check
+actual Foley voices, the original [0,+2] semitone pitch range, the direct Boing
+one-shot and Umbrella's original Throw2 sample. These isolated checks do not prove
+packaged Player behavior, physical-speaker output or other target-platform devices.
