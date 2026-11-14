@@ -98,7 +98,7 @@ namespace PlantsVsZombies.Reanimation
             }
 
             Frame previous;
-            if (blend.Fraction < 1f && blend.From.TryGetValue(track, out previous))
+            if (blend.Fraction < 1f && blend.From.TryGetValue(track, out previous) && previous.Visibility >= 0f)
             {
                 var interpolated = Interpolate(previous, pose, blend.Fraction);
                 interpolated.Kx = BlendNativeAngle(previous.Kx, pose.Kx, blend.Fraction);
@@ -686,6 +686,12 @@ namespace PlantsVsZombies.Reanimation
                         var flagHand = flag != null && !cachedFlag && TrackIs(track.Name, "Zombie_flaghand");
                         if (from.Visibility < 0f || from.Texture == null && !flagHand)
                         {
+                            if (blend != null)
+                            {
+                                // Retain the current hidden pose so a later reload cannot blend from a stale visible projectile.
+                                blend.Current[track.Name] = from;
+                            }
+
                             continue;
                         }
 
@@ -1918,6 +1924,12 @@ namespace PlantsVsZombies.Reanimation
                     var from = GetFrame(track, time.Current);
                     if (from.Visibility < 0f || from.Texture == null)
                     {
+                        if (blend != null)
+                        {
+                            // PC StartBlend 4827D0 skips invisible tracks; do not reuse their last visible throwing pose.
+                            blend.Current[track.Name] = from;
+                        }
+
                         continue;
                     }
 
@@ -3099,13 +3111,14 @@ namespace PlantsVsZombies.Reanimation
         /// <summary>Samples the original GetTrackMatrix image-center point before the zombie's body overlay.</summary>
         /// <param name="name">The original source reanimation asset.</param>
         /// <param name="animation">The retained source animation.</param>
-        /// <param name="trackName">The original metal track.</param>
+        /// <param name="trackName">The original source track.</param>
         /// <param name="seconds">The frozen source clock.</param>
         /// <param name="rate">The retained original source frame rate.</param>
         /// <param name="position">Receives the transformed original image center, or the marker translation when invisible.</param>
         /// <param name="loop">Whether the retained native body loops rather than holding its final frame.</param>
+        /// <param name="instanceKey">The optional actor identity whose already-drawn blended pose supplies the attachment anchor.</param>
         /// <returns>Whether the retained source track is available.</returns>
-        public bool TryGetNativeTrackCenter(string name, string animation, string trackName, float seconds, float rate, out Vector2 position, bool loop = true)
+        public bool TryGetNativeTrackCenter(string name, string animation, string trackName, float seconds, float rate, out Vector2 position, bool loop = true, string? instanceKey = null)
         {
             position = default;
             if (!TryGetClip(name, animation, out var asset, out var clip))
@@ -3121,6 +3134,14 @@ namespace PlantsVsZombies.Reanimation
 
             var time = SampleFrame(clip, NativeSeconds(clip, seconds, rate, asset.Fps, loop), asset.Fps, false);
             var pose = Interpolate(GetFrame(track, time.Current), GetFrame(track, time.Next), time.Fraction);
+            if (pose.Texture != null && pose.Visibility >= 0f && instanceKey != null
+                && _nativePoseBlends.TryGetValue(instanceKey, out var blend) && blend.LastSeenFrame == _nativeBlendFrame
+                && string.Equals(blend.Animation, animation, StringComparison.OrdinalIgnoreCase)
+                && blend.Current.TryGetValue(track.Name, out var displayed))
+            {
+                pose = displayed;
+            }
+
             var center = pose.Texture != null && pose.Visibility >= 0f
                 ? new Vector3(pose.Texture.Width * .5f, pose.Texture.Height * .5f, 0f) : Vector3.zero;
             var point = PartMatrix(pose).MultiplyPoint3x4(center);

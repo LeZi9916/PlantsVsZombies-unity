@@ -60,6 +60,15 @@ namespace PlantsVsZombies.Adventure
             return 35f;
         }
 
+        /// <summary>Gets the original full body shooting clip length used before a lobber reloads into idle.</summary>
+        /// <param name="kind">The original plant species.</param>
+        /// <returns>Thirty-four frames for corn, thirty-eight for cabbage/melons, or zero for another plant.</returns>
+        internal static int LobberShootingFrames(PlantKind kind)
+        {
+            return kind == PlantKind.KernelPult ? 34
+                : kind == PlantKind.CabbagePult || kind == PlantKind.MelonPult || kind == PlantKind.WinterMelon ? 38 : 0;
+        }
+
         /// <summary>Performs launch age.</summary>
         /// <param name = "kind">The kind.</param>
         /// <returns>The resulting launch age.</returns>

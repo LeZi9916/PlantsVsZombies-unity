@@ -21,7 +21,7 @@ namespace PlantsVsZombies.Game
         /// <summary>The retained callback for cursor imitation composition.</summary>
         private readonly Func<bool> _drawCursor;
         /// <summary>The retained cursor filter for the kernel catapult's idle pose.</summary>
-        private static readonly Func<string, bool> s_cursorKernelVisible = track => !string.Equals(track, "Cornpult_butter", StringComparison.OrdinalIgnoreCase);
+        private static readonly Func<string, bool> s_cursorKernelVisible = track => !track.StartsWith("Cornpult_butter", StringComparison.OrdinalIgnoreCase);
         /// <summary>Whether the current cursor uses the kernel catapult filter.</summary>
         private bool _cursorKernel;
         /// <summary>The retained callback for zombie bodies and attachments.</summary>
@@ -305,7 +305,7 @@ namespace PlantsVsZombies.Game
                 return _pumpkinGroup == 1 ? back : !back;
             }
 
-            return !string.Equals(track, _plant.PresentationButter ? "Cornpult_kernal" : "Cornpult_butter", StringComparison.OrdinalIgnoreCase);
+            return !track.StartsWith(_plant.PresentationButter ? "Cornpult_kernal" : "Cornpult_butter", StringComparison.OrdinalIgnoreCase);
         }
 
         /// <summary>Tests costume, plant head, and missing head layers of the configured zombie.</summary>

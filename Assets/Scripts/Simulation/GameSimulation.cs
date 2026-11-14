@@ -1818,7 +1818,7 @@ namespace PlantsVsZombies.Simulation
                 return false;
             }
 
-            var wasCold = z.ChillRemaining > 0f || z.FrozenRemaining > 0f && z.PresentationButter <= 0f;
+            var wasCold = z.ChillRemaining > 0f || z.FrozenRemaining > 0f;
             var chilled = ApplyAdventureChill(z, true);
             if (!global::PlantsVsZombies.Adventure.AdventureIceRules.CanFreeze((int)z.Kind, AdventureZombieFeedbackPhase(z), chilled))
             {
@@ -1827,7 +1827,7 @@ namespace PlantsVsZombies.Simulation
 
             var pool = z.PresentationInPool ?? (Adventure.Level.IsWaterRow(z.Row) && z.X >= 0f && z.X < 9f);
             var offset = pool ? 0 : _random.Next(wasCold ? 101 : 201);
-            z.FrozenRemaining = Math.Max(z.PresentationButter, global::PlantsVsZombies.Adventure.AdventureIceRules.FreezeTicks(pool, wasCold, offset) * .01f);
+            z.FrozenRemaining = global::PlantsVsZombies.Adventure.AdventureIceRules.FreezeTicks(pool, wasCold, offset) * .01f;
             // PC 54E150 also applies 20 damage with bit1 (bypass held shield). Butter is a separate counter.
             HitAdventureZombie(z, 20f, true, 1U);
             return true;
@@ -1846,10 +1846,7 @@ namespace PlantsVsZombies.Simulation
             if (shot.Fire && z.Kind != ZombieKind.Zomboni && z.Kind != ZombieKind.Catapult && (z.ShieldHealth <= 0f || z.Kind != ZombieKind.ScreenDoor && z.Kind != ZombieKind.Ladder))
             {
                 z.ChillRemaining = 0f;
-                if (z.PresentationButter <= 0f)
-                {
-                    z.FrozenRemaining = 0f;
-                }
+                z.FrozenRemaining = 0f;
             }
         }
 
@@ -2403,16 +2400,22 @@ namespace PlantsVsZombies.Simulation
             var track = shortPuff || fume || scaredy || plant.Kind == PlantKind.CabbagePult || kernel
                 || plant.Kind == PlantKind.MelonPult || plant.Kind == PlantKind.WinterMelon
                 ? global::PlantsVsZombies.Timing.ShootingTrack.Body : global::PlantsVsZombies.Timing.ShootingTrack.Head;
-            var input = new global::PlantsVsZombies.Timing.PlantTimingInput(true, !scaredy, true, true, target, track, true, 0);
+            var resetReady = !lobber || plant.PresentationShotAge < 0f || plant.PresentationLobberIdleAge >= 0f;
+            var input = new global::PlantsVsZombies.Timing.PlantTimingInput(true, !scaredy, true, true, target, track, resetReady, 0);
             var bound = global::PlantsVsZombies.Timing.PlantTiming.RequiredRandomBound(state, input);
             var draw = bound == 0 ? 0 : _random.Next(bound);
             var butter = kernel && state.Countdown <= 1 && target && _random.Next(4) == 0;
             var result = global::PlantsVsZombies.Timing.PlantTiming.Tick(state,
-                new global::PlantsVsZombies.Timing.PlantTimingInput(true, !scaredy, true, true, target, track, true, draw, butter));
+                new global::PlantsVsZombies.Timing.PlantTimingInput(true, !scaredy, true, true, target, track, resetReady, draw, butter));
             plant.Timing = result.State;
             plant.ActionTimer = result.State.Countdown * .01f;
             if (result.AnimationStarted)
             {
+                if (lobber)
+                {
+                    plant.PresentationLobberIdleAge = -1f;
+                }
+
                 if (kernel)
                 {
                     plant.PresentationButter = butter;
@@ -3817,6 +3820,7 @@ namespace PlantsVsZombies.Simulation
                                     {
                                         shot.Butter = p._kernelWeaponPrepared ? p.PresentationButter : _random.Next(4) == 0;
                                         p._kernelWeaponPrepared = false;
+                                        p.PresentationButter = false;
                                         if (shot.Butter)
                                         {
                                             shot.Damage = 40;
@@ -4389,6 +4393,8 @@ namespace PlantsVsZombies.Simulation
             {
                 shot.Butter = plant._kernelWeaponPrepared && plant.PresentationButter;
                 plant._kernelWeaponPrepared = false;
+                // PC 47301D switches the basket back to kernels before creating the butter projectile.
+                plant.PresentationButter = false;
                 if (shot.Butter)
                 {
                     shot.Damage = 40f;
@@ -4853,11 +4859,6 @@ namespace PlantsVsZombies.Simulation
                     AdventurePresentationImpact(p, hit);
                     p.HitIds.Add(hit.Id);
                     ApplyAdventureProjectileCold(p, hit);
-                    if (p.Butter && !AdventurePogoRules.IsBouncing(hit))
-                    {
-                        hit.FrozenRemaining = Math.Max(hit.FrozenRemaining, 4f);
-                    }
-
                     HitAdventureZombie(hit, p.Damage, p.PiercesShield);
                     if (p.Splash)
                     {
@@ -5897,7 +5898,8 @@ namespace PlantsVsZombies.Simulation
                 AdventurePresentationZombieAnimation(zombie);
                 zombie.PresentationFlash = Math.Max(0, zombie.PresentationFlash - dt);
                 zombie.PresentationArmorFlash = Math.Max(0, zombie.PresentationArmorFlash - dt);
-                zombie.PresentationButter = Math.Max(0, zombie.PresentationButter - dt);
+                var butterTicks = Math.Max(0, (int)Math.Round(zombie.PresentationButter * 100f) - 1);
+                zombie.PresentationButter = butterTicks * .01f;
                 AdvanceAdventureZombieClock(zombie, dt);
             }
 
@@ -5946,6 +5948,23 @@ namespace PlantsVsZombies.Simulation
                 if (plant.PresentationShotAge >= 0)
                 {
                     plant.PresentationShotAge += dt;
+                    var shootingFrames = AdventurePresentationRules.LobberShootingFrames(plant.Kind);
+                    if (shootingFrames > 0)
+                    {
+                        if (plant.PresentationLobberIdleAge >= 0f)
+                        {
+                            if (!AdventureZombieIsIZombie)
+                            {
+                                plant.PresentationLobberIdleAge += dt;
+                            }
+                        }
+                        else if (plant.PresentationShotAge * 35f + .0001f >= shootingFrames)
+                        {
+                            // PC 472C70 -> 4768A0 starts idle at time zero and the source definition's twelve FPS.
+                            plant.PresentationLobberIdleAge = 0f;
+                            plant.PresentationRate = AdventureZombieIsIZombie ? 0f : 12f;
+                        }
+                    }
                 }
 
                 for (var head = 0; head < 3; head++)
@@ -6086,20 +6105,40 @@ namespace PlantsVsZombies.Simulation
             }
         }
 
+        /// <summary>Applies PC 54E470's independent four-hundred-update butter immobilization without ice or chill.</summary>
+        /// <param name="zombie">The actual projectile victim whose original butter admission is checked.</param>
+        /// <returns>Whether the original butter state was applied.</returns>
+        internal bool ApplyAdventureButter(Zombie zombie)
+        {
+            var phase = AdventureZombieFeedbackPhase(zombie);
+            var sled = zombie.PresentationHasSled ?? (zombie.Kind == ZombieKind.Bobsled && !zombie.UsedAbility);
+            var canChill = AdventureIceRules.CanChill((int)zombie.Kind, phase, zombie.Health <= 0f, zombie.Hypnotized, sled);
+            if (zombie.Headless || !AdventureIceRules.CanFreeze((int)zombie.Kind, phase, canChill)
+                || zombie.Kind == ZombieKind.Zomboni || zombie.Kind == ZombieKind.Boss
+                || zombie.TangleKelpGrab != null || zombie.PresentationNativeHeight == 3 || sled || zombie.Airborne)
+            {
+                return false;
+            }
+
+            zombie.PresentationButter = 4f;
+            if (zombie.Kind == ZombieKind.Pogo)
+            {
+                zombie.PresentationAltitude = zombie.PogoState?.OnHighGround == true ? 30f : 0f;
+                zombie.PresentationBiteBodyY = (int)-zombie.PresentationAltitude;
+            }
+
+            return true;
+        }
+
         /// <summary>Performs adventure presentation impact.</summary>
         /// <param name = "shot">The shot.</param>
         /// <param name = "zombie">The zombie.</param>
         private void AdventurePresentationImpact(Pea shot, Zombie? zombie)
         {
             RequestAdventureProjectileImpactSound(shot, zombie);
-            if (shot.Butter && zombie != null && !AdventurePogoRules.IsBouncing(zombie))
+            if (shot.Butter && zombie != null)
             {
-                zombie.PresentationButter = Math.Max(zombie.PresentationButter, 4f);
-                if (zombie.Kind == ZombieKind.Pogo)
-                {
-                    zombie.PresentationAltitude = zombie.PogoState?.OnHighGround == true ? 30f : 0f;
-                    zombie.PresentationBiteBodyY = (int)-zombie.PresentationAltitude;
-                }
+                ApplyAdventureButter(zombie);
             }
 
             var effect = new global::PlantsVsZombies.Adventure.AdventureImpact
@@ -10516,9 +10555,7 @@ namespace PlantsVsZombies.Simulation
                 // PC UpdateAnimSpeed leaves the original clocks on flat ground tracks unaffected by chill.
                 z._presentationTickSlow = 1f;
             }
-            if (z.FrozenRemaining > 0f || (AdventureDancerRules.IsDancer(z) || z.Kind == ZombieKind.DolphinRider
-                || z.Kind == ZombieKind.JackInTheBox || z.Kind == ZombieKind.Balloon || z.Kind == ZombieKind.Digger || z.Kind == ZombieKind.Pogo
-                || z.Kind == ZombieKind.Ladder || z.UseLadderColumn >= 0 && (z.PresentationNativeHeight == 6 || z.PresentationNativeHeight == 7)) && z.PresentationButter > 0f)
+            if (z.FrozenRemaining > 0f || z.PresentationButter > 0f)
             {
                 return;
             }
@@ -10997,7 +11034,7 @@ namespace PlantsVsZombies.Simulation
         /// <returns>The resulting adventure presentation walking distance.</returns>
         private float AdventurePresentationWalkingDistance(Zombie z, float dt, float fallbackDistance)
         {
-            if (dt <= 0f || z.PresentationNewspaperGaspRemaining > 0f || z.FrozenRemaining > 0f || z.DropRemaining > 0f || z.Eating
+            if (dt <= 0f || z.PresentationNewspaperGaspRemaining > 0f || z.FrozenRemaining > 0f || z.PresentationButter > 0f || z.DropRemaining > 0f || z.Eating
                 || AdventureDancerRules.IsDancer(z) && !AdventureDancerRules.CanWalk(z, Zombies))
             {
                 return 0f;
@@ -13121,16 +13158,9 @@ namespace PlantsVsZombies.Simulation
                     continue;
                 }
 
-                if (z.FrozenRemaining > 0f)
+                if (z.FrozenRemaining > 0f || z.PresentationButter > 0f)
                 {
                     z.FrozenRemaining = Math.Max(0, z.FrozenRemaining - dt);
-                    continue;
-                }
-
-                if ((z.Kind == ZombieKind.DolphinRider || z.Kind == ZombieKind.JackInTheBox || z.Kind == ZombieKind.Balloon || z.Kind == ZombieKind.Digger || z.Kind == ZombieKind.Pogo || z.Kind == ZombieKind.Bungee || z.Kind == ZombieKind.Ladder
-                    || z.UseLadderColumn >= 0 && (z.PresentationNativeHeight == 6 || z.PresentationNativeHeight == 7))
-                    && z.PresentationButter > 0f)
-                {
                     continue;
                 }
 

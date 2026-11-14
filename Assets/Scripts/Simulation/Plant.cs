@@ -59,6 +59,8 @@ namespace PlantsVsZombies.Simulation
             -1f,
             -1f
         };
+        /// <summary>Stores the fresh twelve-FPS lobber idle clock after a completed shot, or minus one before that reset.</summary>
+        public float PresentationLobberIdleAge = -1f;
         /// <summary>Stores presentation shot age.</summary>
         public float PresentationShotAge = -1f;
         /// <summary>Stores presentation butter.</summary>

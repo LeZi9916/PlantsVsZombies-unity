@@ -577,3 +577,36 @@ clocks, normal/armored/football/ladder/pole followers, ladder removal, corpse
 falling, original shield render groups, day/night and roof ladder occlusion, and
 raised walking-body pixels. These isolated component checks do not replace a
 full-level Player playthrough or target-platform device validation.
+
+
+## Original lobber reload and independent butter state
+
+PC `472C70` keeps the spent shooting counter at one until the body reanimation
+finishes, then `4768A0` restarts idle at frame time zero and the source definition's
+12 FPS (with PC `4768F9` preserving the static I, Zombie idle). The original
+cabbage/melon/winter-melon shooting clips have 38 frames;
+corn has 34, all at 35 FPS. `47301D..473069` restores the corn render prefix before
+creating a butter projectile. The projectile keeps its butter metadata after the
+basket switches back to kernels.
+
+`4827D0` starts blends only for currently visible source tracks. The retained
+renderer now records hidden poses in both drawing paths, so a reappearing load
+cannot blend from an old throwing pose. Butter attachments may read the body's
+already-drawn blended head matrix rather than jumping to an unblended new clip.
+
+PC `54E470` uses a separate 400-update butter counter and the original head,
+freeze-admission, vehicle, flying, sled and kelp gates. It does not create ice or
+chill. Physics, playback and render interpolation honor this independent counter;
+fire removes actual cold state while preserving butter. `549EC0` uses the
+transformed head center (special tracks for a newspaper gasp and catapult), fixed
+(-29,-36) top-left placement, scaled image half-size, and original species offsets/scales.
+These PC values differ from the supplied mobile-derived source.
+
+```powershell
+./Tools/Tests/Run-UnityTests.ps1 -Platform EditMode -TestFilter 'AdventureButterAndReloadTests|AdventurePogoTests.BouncingPogoRejectsButterAndHeadLossBreaksItsStick'
+# Set PVZ_BOARD_STRESS_ASSETS to the read-only original runtime resources.
+./Tools/Tests/Run-UnityTests.ps1 -Platform PlayMode -TestFilter 'OriginalButterAndReloadGraphicsTests|GamePresentationPerformanceTests.KeepsPlantTrackFiltersLocalToEachDraw|GamePresentationPerformanceTests.WarmPlantPresentationDoesNotAllocateManagedMemory|GamePresentationPerformanceTests.WarmZombiePresentationDoesNotAllocateManagedMemory|OriginalDancerGraphicsTests.RaisedArmRestartsBlendFromCurrentPoseAcrossNativeDanceSteps|OriginalZombieDeathBlendTests.SuperlongDeathKeepsOriginalLegDirectionsThroughCorpseBlend'
+```
+
+These focused simulation, allocation and original-art graphics checks do not
+replace a full-level Player playthrough or other target-device validation.

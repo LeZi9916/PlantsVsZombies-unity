@@ -3201,7 +3201,9 @@ namespace PlantsVsZombies.Game
             var clip = "anim_idle";
             var loop = true;
             var rate = plant.PresentationRate > 0 ? plant.PresentationRate : 12f;
-            var age = plant.Age + AdventureRenderRemainder;
+            var age = plant.PresentationLobberIdleAge >= 0f && AdventurePresentationRules.LobberShootingFrames(plant.Kind) > 0
+                ? plant.PresentationLobberIdleAge + (plant.PresentationRate > 0f ? AdventureRenderRemainder : 0f)
+                : plant.Age + AdventureRenderRemainder;
             if (squash != null && squash.NativePhase != 0)
             {
                 clip = squash.Animation;
@@ -3925,6 +3927,10 @@ namespace PlantsVsZombies.Game
             }
 
             DrawAdventureBungeeBodyGroup(zombie, origin, seconds, scale, 2);
+            if (zombie.PresentationButter > 0f)
+            {
+                DrawAdventureButter(zombie, "Zombie_bungi", state.Animation, origin, seconds, state.AnimationRate, scale);
+            }
         }
 
         /// <summary>Draws one original bungee render group through the normal hit, chill and butter compositor.</summary>
@@ -4024,9 +4030,7 @@ namespace PlantsVsZombies.Game
             var constantGroundClock = zombie.Kind == ZombieKind.Balloon && zombie.Airborne
                 || zombie.Kind == ZombieKind.DolphinRider
                     && (zombie.PresentationNativePhase == 52 || zombie.PresentationNativePhase == 54);
-            var ladderButter = zombie.PresentationButter > 0f && (zombie.Kind == ZombieKind.Ladder
-                || zombie.UseLadderColumn >= 0 && (zombie.PresentationNativeHeight == 6 || zombie.PresentationNativeHeight == 7));
-            var age = zombie.PresentationAnimationAge + (zombie.FrozenRemaining > 0 || ladderButter ? 0
+            var age = zombie.PresentationAnimationAge + (zombie.FrozenRemaining > 0 || zombie.PresentationButter > 0f ? 0
                 : AdventureRenderRemainder * (zombie.ChillRemaining > 0 && !constantGroundClock ? .5f : 1f));
             var rate = _owner.RequiredGame.AdventurePresentationZombieRate(zombie);
             if (zombie.Kind == ZombieKind.Digger && zombie.PresentationNativePhase == 34 && zombie.DiggerState != null)
@@ -4062,22 +4066,86 @@ namespace PlantsVsZombies.Game
                     zombie.PresentationNewspaperSurpriseAge + AdventureRenderRemainder, null, false, 12f);
             }
 
-            if (zombie.FrozenRemaining > 0 && zombie.PresentationButter <= 0)
+            if (zombie.FrozenRemaining > 0)
             {
                 _owner.RequiredAnimations.DrawResourceSprite("IMAGE_ICETRAP", new Vector2(BoardLayout.AdventureGridX + x * BoardLayout.CellWidth, _owner.Layout.AdventureCellY(zombie.Row, x) + 79), size);
             }
 
             if (zombie.PresentationButter > 0)
             {
-                Vector2 head;
-                if (_owner.RequiredAnimations.TryGetNativeTrackPosition(name, clip, "anim_head1", age, rate, true, out head))
-                {
-                    _owner.RequiredAnimations.DrawResourceSprite("IMAGE_REANIM_CORNPULT_BUTTER_SPLAT", origin + (head + new Vector2(11, 21)) * size, size);
-                }
+                DrawAdventureButter(zombie, name, clip, origin, age, rate, size);
             }
 
             DrawAdventureTangleKelpGrab(zombie, x);
             DrawAdventureZomboniSmoke(zombie, x);
+        }
+
+        /// <summary>Draws PC 549EC0's butter at the transformed original head center and species offsets.</summary>
+        /// <param name="zombie">The immobilized actor supplying its original kind and facing.</param>
+        /// <param name="name">The retained native body resource.</param>
+        /// <param name="clip">The retained native body clip.</param>
+        /// <param name="origin">The body's original board-space origin.</param>
+        /// <param name="seconds">The frozen native body clock.</param>
+        /// <param name="rate">The original clip rate before immobilization.</param>
+        /// <param name="bodyScale">The original zombie scale applied to its head anchor.</param>
+        private void DrawAdventureButter(Zombie zombie, string name, string clip, Vector2 origin, float seconds, float rate, float bodyScale)
+        {
+            var track = zombie.PresentationNativePhase == 30 ? "anim_head_look"
+                : zombie.Kind == ZombieKind.Catapult ? "Zombie_catapult_driver_head" : "anim_head1";
+            var loop = zombie.Kind == ZombieKind.Bungee && zombie.BungeeState != null ? zombie.BungeeState.AnimationLoops
+                : zombie.PresentationNewspaperGaspRemaining <= 0f && !AdventureZombieMotionRules.PlaysOnce(zombie)
+                    && zombie.PresentationNativePhase != 18 && !AdventureDancerRules.HoldsPoint(zombie);
+            var playbackKey = zombie.ModeHead >= 26 ? null
+                : _presentationKeys.Get(zombie.Kind == ZombieKind.Bungee ? "bungee-body-" : "actor-", zombie.Id);
+            if (!_owner.RequiredAnimations.TryGetNativeTrackCenter(name, clip, track, seconds, rate, out var head, loop, playbackKey)
+                || !_owner.RequiredAnimations.TryGetNativeSpriteSize("IMAGE_REANIM_CORNPULT_BUTTER_SPLAT", out var imageSize))
+            {
+                return;
+            }
+
+            var backwards = zombie.PresentationWalkingBackwards ?? (zombie.Hypnotized
+                || zombie.Kind == ZombieKind.Digger && AdventureDiggerState.WalksBackwards(zombie));
+            if (AdventureDancerRules.IsDancer(zombie))
+            {
+                backwards = AdventureDancerRules.FacesRight(zombie);
+            }
+
+            if (backwards)
+            {
+                head.x = 90f - head.x;
+            }
+
+            var point = origin + head * bodyScale - Vector2.one * .5f;
+            var offset = new Vector2(-29f, -36f);
+            var scale = 1f;
+            var kind = zombie.ModeHead >= 26 ? zombie.ModeHead : (int)zombie.Kind;
+            switch (kind)
+            {
+                case 18:
+                    offset.y -= 5f;
+                    break;
+                case 23:
+                case 32:
+                    offset += new Vector2(-5f, -15f);
+                    scale = 1.2f;
+                    break;
+                case 20:
+                    scale = 1.2f;
+                    break;
+                case 30:
+                    offset += new Vector2(6f, -9f);
+                    break;
+                case 27:
+                    offset += new Vector2(-6f, -1f);
+                    break;
+                case 31:
+                    offset += new Vector2(-24f, -39f);
+                    break;
+            }
+
+            // PC TodDrawImageScaledF (527EF0) preserves the top-left by adding the scaled image half-size.
+            _owner.RequiredAnimations.DrawResourceSprite("IMAGE_REANIM_CORNPULT_BUTTER_SPLAT",
+                point + offset + new Vector2(imageSize.x, imageSize.y) * (.5f * scale), scale);
         }
 
         /// <summary>Draws the PC digger's original tunnel, emergence dirt, and independent axe-loss question mark.</summary>
