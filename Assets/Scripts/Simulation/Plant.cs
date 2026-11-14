@@ -48,6 +48,8 @@ namespace PlantsVsZombies.Simulation
         /// <exception cref="System.InvalidOperationException">The member is not available.</exception>
         public global::PlantsVsZombies.Adventure.AdventurePotatoMineState RequiredPotatoMinePresentation => PotatoMinePresentation ?? throw new System.InvalidOperationException("The member 'PotatoMinePresentation' is not available.");
 
+        /// <summary>Records PC PlantInit's stopped flower-pot idle until the last supported plant dies.</summary>
+        public bool PresentationFlowerPotPaused;
         /// <summary>Stores presentation rate, presentation awake age.</summary>
         public float PresentationRate, PresentationAwakeAge;
         /// <summary>Stores presentation head age.</summary>

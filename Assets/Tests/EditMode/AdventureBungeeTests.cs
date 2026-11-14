@@ -115,6 +115,52 @@ namespace PlantsVsZombies.Tests.EditMode
             Assert.That(AdventureIceRules.CanFreeze(20, phase, true), Is.EqualTo(phase == 6));
         }
 
+        /// <summary>Checks native contact plants admit landed bungees while rejecting descent and ascent.</summary>
+        /// <param name="phase">The original bungee phase under test.</param>
+        /// <param name="triggered">Whether the native bottom phase admits plant contact.</param>
+        [TestCase(4, false)]
+        [TestCase(5, false)]
+        [TestCase(6, true)]
+        [TestCase(7, true)]
+        [TestCase(8, false)]
+        public void ContactPlantsUseOriginalBottomPhaseAdmission(int phase, bool triggered)
+        {
+            foreach (var kind in new[] { PlantKind.PotatoMine, PlantKind.Squash, PlantKind.Chomper })
+            {
+                var game = Board();
+                var plant = (Plant)Invoke(game, "PlaceAdventurePlant", kind, 1, 3)!;
+                var zombie = SpawnAtTarget(game);
+                zombie.BungeeState!.Enter(phase, 300);
+                zombie.PresentationNativePhase = phase;
+                zombie.PresentationAltitude = 0f;
+                if (kind == PlantKind.PotatoMine)
+                {
+                    plant.MinePhase = MinePhase.Armed;
+                    zombie.TargetColumn = 4;
+                    Invoke(game, "AdvanceAdventurePotatoMine", plant);
+                    Assert.That(game.Plants.Contains(plant), Is.True, "PC mine contact requires the same target column.");
+                    zombie.TargetColumn = 3;
+                    Invoke(game, "AdvanceAdventurePotatoMine", plant);
+                    Assert.That(game.Zombies.Contains(zombie), Is.EqualTo(!triggered), "Mine blast " + phase);
+                    Assert.That(game.Plants.Contains(plant), Is.EqualTo(!triggered), "Mine trigger " + phase);
+                }
+                else if (kind == PlantKind.Squash)
+                {
+                    Invoke(game, "AdvanceAdventureSquash", plant);
+                    Assert.That(plant.SquashPresentation!.NativePhase != 0, Is.EqualTo(triggered), "Squash trigger " + phase);
+                }
+                else
+                {
+                    Invoke(game, "AdvanceAdventureChomper", plant);
+                    Assert.That(plant.ChomperPresentation!.NativePhase, Is.EqualTo(1), "PC Chomper cannot eat its own carrier.");
+                    zombie.TargetColumn = 4;
+                    zombie.X = AdventureZombieNativeRules.GridX(360f);
+                    Invoke(game, "AdvanceAdventureChomper", plant);
+                    Assert.That(plant.ChomperPresentation.NativePhase != 1, Is.EqualTo(triggered), "Adjacent Chomper trigger " + phase);
+                }
+            }
+        }
+
         /// <summary>Checks immobilization holds the original bottom countdown and body clock.</summary>
         [Test]
         public void FreezeAndButterSuspendTheGrabClock()

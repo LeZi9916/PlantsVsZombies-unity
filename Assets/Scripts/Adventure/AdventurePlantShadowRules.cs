@@ -59,18 +59,7 @@ namespace PlantsVsZombies.Adventure
         internal static float DrawHeight(Plant plant, IReadOnlyList<Plant> plants, bool inPool, int ticks)
         {
             var height = AdventurePresentationRules.WaterBobbingOffset(plant.Kind, plant.Row, plant.Column, inPool, ticks);
-            for (var index = 0; index < plants.Count; index++)
-            {
-                var support = plants[index];
-                if (plant.Kind != PlantKind.FlowerPot && support.Kind == PlantKind.FlowerPot && support.BungeeState != 2
-                    && support.Row == plant.Row && support.Column == plant.Column)
-                {
-                    // PC 0x473340 is called with scale 1: the extra scale corrections vanish.
-                    height += plant.Kind == PlantKind.ScaredyShroom ? 0f
-                        : plant.Kind == PlantKind.Chomper || plant.Kind == PlantKind.Plantern ? -10f : -5f;
-                    break;
-                }
-            }
+            height += FlowerPotHeight(plant, plants);
 
             switch (plant.Kind)
             {
@@ -87,6 +76,32 @@ namespace PlantsVsZombies.Adventure
                 default:
                     return height;
             }
+        }
+
+        /// <summary>Gets PC 473340's support offset at the original fixed flower-pot scale of one.</summary>
+        /// <param name="plant">The plant whose body and shadow share this height.</param>
+        /// <param name="plants">The board plants used to find a supporting flower pot.</param>
+        /// <returns>Zero without a pot, otherwise the original species-specific support displacement.</returns>
+        internal static float FlowerPotHeight(Plant plant, IReadOnlyList<Plant> plants)
+        {
+            if (plant.Kind == PlantKind.FlowerPot)
+            {
+                return 0f;
+            }
+
+            for (var index = 0; index < plants.Count; index++)
+            {
+                var support = plants[index];
+                if (support.Kind == PlantKind.FlowerPot && support.BungeeState != 2
+                    && support.Row == plant.Row && support.Column == plant.Column)
+                {
+                    // The helper's additional (1 - scale) mushroom corrections vanish at scale one.
+                    return plant.Kind == PlantKind.ScaredyShroom ? 0f
+                        : plant.Kind == PlantKind.Chomper || plant.Kind == PlantKind.Plantern ? -10f : -5f;
+                }
+            }
+
+            return 0f;
         }
 
         /// <summary>Places the original image using its unscaled center before applying the species scale.</summary>

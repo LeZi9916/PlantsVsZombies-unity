@@ -63,7 +63,7 @@ namespace PlantsVsZombies.Tests.PlayMode
                             state.AnimationSeconds, state.AnimationRate, out var anchor, state.AnimationLoops), Is.True);
                         for (var y = origin.y + anchor.y - .5f - 64f; y > -64f; y -= 64f)
                         {
-                            fixture.Animations.DrawResourceSprite("IMAGE_BUNGEECORD", new Vector2(319f, y + 32f), 1f);
+                            fixture.Animations.DrawResourceSprite("IMAGE_BUNGEECORD", new Vector2(341f, y + 32f), 1f);
                         }
 
                         fixture.Animations.DrawNativePlayback("Zombie_bungi", origin, 1f, state.AnimationSeconds,
@@ -119,6 +119,98 @@ namespace PlantsVsZombies.Tests.PlayMode
             Assert.That(fixture.Pixels.GetPixels32(), Is.EqualTo(actual), "PC 301007 bungee body precedes normal plants; its target uses projectile-row order 305001.");
         }
 
+        /// <summary>Checks PC ApplyBurn keeps pre-grab bodies behind plants and promoted grab bodies above them.</summary>
+        /// <returns>Real board captures comparing both overlapping native layer orders.</returns>
+        [UnityTest]
+        public IEnumerator BurnedBungeeKeepsItsOriginalLayerRelativeToPlants()
+        {
+            foreach (var phase in new[] { 6, 7 })
+            {
+                using var fixture = new OriginalStormGraphicsTests.StormFixture(48);
+                var game = fixture.Owner.RequiredGame;
+                game.ChooseDefaultAdventureSeeds();
+                var flags = BindingFlags.Instance | BindingFlags.NonPublic;
+                var plant = (Plant)typeof(GameSimulation).GetMethod("PlaceAdventurePlant", flags)!
+                    .Invoke(game, new object[] { PlantKind.TallNut, 2, 3 })!;
+                var zombie = (Zombie)typeof(GameSimulation).GetMethod("SpawnAdventureBoardZombie", flags)!
+                    .Invoke(game, new object[] { ZombieKind.Bungee, 2, 9.5f, 0 })!;
+                zombie.Row = 2;
+                zombie.TargetColumn = 3;
+                zombie.X = AdventureZombieNativeRules.GridX(280f);
+                zombie.PresentationPreviousX = zombie.X;
+                zombie.PresentationAltitude = 0f;
+                zombie.BungeeState!.Enter(phase, 300);
+                zombie.BungeeState.AnimationSeconds = .25f;
+                zombie.PresentationNativePhase = phase;
+                zombie.PresentationAnimation = zombie.BungeeState.Animation;
+                zombie.PresentationAnimationAge = .25f;
+                typeof(GameSimulation).GetMethod("HitAdventureExplosionZombie", flags)!
+                    .Invoke(game, new object[] { zombie, 1800f, true, 18u });
+                Assert.That(game.Presentation.Corpses.Count, Is.EqualTo(1));
+                var corpse = game.Presentation.Corpses[0];
+                Assert.That(corpse.RequiredBurn.Visual, Is.EqualTo(AdventureBurnVisual.FrozenOriginal));
+                yield return fixture.Capture("DrawAdventureBoard", wholeBoard: true);
+                var actual = fixture.Pixels.GetPixels32();
+                game.Plants.Remove(plant);
+                game.Presentation.Corpses.Clear();
+                yield return fixture.Capture("DrawAdventureBoard", () =>
+                {
+                    if (phase == 6)
+                    {
+                        fixture.DrawPass("DrawAdventureBurnedCorpse", corpse);
+                        fixture.DrawPass("DrawAdventurePlant", plant);
+                    }
+                    else
+                    {
+                        fixture.DrawPass("DrawAdventurePlant", plant);
+                        fixture.DrawPass("DrawAdventureBurnedCorpse", corpse);
+                    }
+                }, true);
+                Assert.That(fixture.Pixels.GetPixels32(), Is.EqualTo(actual), "PC burn keeps bungee layer at phase " + phase);
+                yield return fixture.Capture("DrawAdventureBoard", () =>
+                {
+                    if (phase == 6)
+                    {
+                        fixture.DrawPass("DrawAdventurePlant", plant);
+                        fixture.DrawPass("DrawAdventureBurnedCorpse", corpse);
+                    }
+                    else
+                    {
+                        fixture.DrawPass("DrawAdventureBurnedCorpse", corpse);
+                        fixture.DrawPass("DrawAdventurePlant", plant);
+                    }
+                }, true);
+                Assert.That(fixture.Pixels.GetPixels32(), Is.Not.EqualTo(actual), "The fixture must exercise visible plant/corpse overlap.");
+            }
+        }
+
+        /// <summary>Checks PC 5496A6's +61 anchor and unscaled image centers for normal and small cords.</summary>
+        /// <returns>Real graphics boundaries for the independent cord-only pixel oracle.</returns>
+        [UnityTest]
+        public IEnumerator CordUsesThePcHorizontalOffsetAtBothScales()
+        {
+            using var fixture = new OriginalStormGraphicsTests.StormFixture(48);
+            var zombie = new Zombie { Kind = ZombieKind.Bungee, BungeeState = new AdventureBungeeState() };
+            var origin = new Vector2(155f, 180f);
+            foreach (var scale in new[] { 1f, .5f })
+            {
+                yield return fixture.Capture(null, () => fixture.DrawPass("DrawAdventureBungeeCord", zombie, origin, 140f, .25f, scale));
+                var actual = fixture.Pixels.GetPixels32();
+                yield return fixture.Capture(null, () =>
+                {
+                    Assert.That(fixture.Animations.TryGetNativeTrackCenter("Zombie_bungi", "anim_drop", "Zombie_bungi_body",
+                        .25f, 24f, out var anchor), Is.True);
+                    var height = scale == 1f ? 64f : 32f;
+                    var centerX = scale == 1f ? 201f : 197f;
+                    for (var y = 180f + anchor.y * scale - .5f - height; y > -height; y -= height)
+                    {
+                        fixture.Animations.DrawResourceSprite("IMAGE_BUNGEECORD", new Vector2(centerX, y + 32f), scale);
+                    }
+                });
+                Assert.That(fixture.Pixels.GetPixels32(), Is.EqualTo(actual), "Original cord scale " + scale);
+            }
+        }
+
         /// <summary>Checks the original frozen passenger is drawn between the bungee body and its foreground hands.</summary>
         /// <returns>Actual native graphics frame boundaries.</returns>
         [UnityTest]
@@ -141,7 +233,7 @@ namespace PlantsVsZombies.Tests.PlayMode
                     .2f, 36f, out var anchor, false), Is.True);
                 for (var y = origin.y + anchor.y - .5f - 64f; y > -64f; y -= 64f)
                 {
-                    fixture.Animations.DrawResourceSprite("IMAGE_BUNGEECORD", new Vector2(319f, y + 32f), 1f);
+                    fixture.Animations.DrawResourceSprite("IMAGE_BUNGEECORD", new Vector2(341f, y + 32f), 1f);
                 }
 
                 fixture.Animations.DrawNativePlayback("Zombie_bungi", origin, 1f, .2f, "anim_raise", false, 36f, track => !ForegroundArms(track));

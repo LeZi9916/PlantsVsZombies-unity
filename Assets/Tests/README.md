@@ -506,3 +506,42 @@ unchanged.
 ```powershell
 ./Tools/Tests/Run-UnityTests.ps1 -Platform PlayMode -TestFilter 'OriginalMagnetGraphicsTests;OriginalPlantLayerTests.AllHeldMagneticItemsUseLocalForegroundOnLandAndWater;OriginalPlantLayerTests.FlyingMetalDrawsAboveOtherRowsRatherThanOnlyAboveItsMagnet'
 ```
+
+
+## Roof planting, lobber flight, and bungee contact follow-up
+
+PC `473490` supplies the same body/shadow height without the mobile roof -12
+shift. `473340` receives pot scale one, so its additional mushroom scale terms
+cancel. The pot's +26 baseline and native shadow rectangles remain aligned.
+`46CA8B..46CAD6` stops an occupied pot at its current frame; Plant::Die restarts
+only the uncovered pot at 10..15 FPS without resetting its animation phase.
+
+All four lobber plants and both corn weapons now use `475AA0`/`4765B0` attack
+rectangles, `546270` body-center prediction (zero velocity while eating, frozen,
+or buttered), and `4752E0`'s fifty-update lead, forty-pixel minimum distance and
+120-update velocity divisor. `47C880` integrates native float32 state per update,
+checks nearby bodies during the first twenty updates, and later checks the
+weapon-specific descending height. `47DFF0` uses 40-pixel cabbage/corn/butter
+rectangles and the melon's +20/60-pixel rectangle; `47C130` resolves overlapping
+hits by native zombie position, independently of aiming's body-left priority.
+Roof floor rebasing follows the native contact order, and height above 80 causes
+a ground impact even after target death. Missing launch targets keep the original
+`700 - muzzleX` fallback. Existing reward/dolphin fixtures seed complete native
+flight state rather than reconstructing an arc from age alone.
+
+`5496A6` reads the original cord offset **61**, rather than 39. Native contact
+plants retain `54D810`'s bungee bottom phases, plus `475AA0`'s species-specific
+column checks: a mine triggers for its own column, while Chomper excludes its own
+carrier. `54E920` freezes the burned bungee without replacing its render order;
+pre-grab corpses stay behind plants and grabbing corpses keep order 305000.
+
+```powershell
+./Tools/Tests/Run-UnityTests.ps1 -Platform EditMode -TestFilter 'AdventureRoofCombatTests|AdventureBungeeTests|SimulationPoolingTests.ProjectileResetRestoresEveryFieldAndRetainsHitStorage|AdventureDolphinTests.InFlightProjectilesRespectOriginalProtectedPhases|AdventureDolphinTests.SplashAndChillSkipScriptsButOriginalCherryBlastCanHit'
+# Set PVZ_BOARD_STRESS_ASSETS to the read-only original runtime resources.
+./Tools/Tests/Run-UnityTests.ps1 -Platform PlayMode -TestFilter 'OriginalPlantShadowTests|OriginalBungeeGraphicsTests'
+```
+
+These focused checks cover body/shadow pixels, occupied pot frames, normal/small
+cords, burned-body occlusion, near eating targets with/without Pumpkin, and all
+lobber weapons hitting stationary/moving column-nine targets from roof column
+two. They do not establish a full-level Player playthrough or other target devices.

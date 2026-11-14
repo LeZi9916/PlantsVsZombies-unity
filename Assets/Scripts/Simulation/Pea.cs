@@ -21,6 +21,12 @@ namespace PlantsVsZombies.Simulation
         public float PresentationPreviousX, PresentationPreviousRow, PresentationRotation, PresentationSpin;
         /// <summary>Stores presentation native age, presentation lob height, presentation previous lob height, presentation lob initial velocity, presentation lob x, presentation launch y.</summary>
         public float PresentationNativeAge, PresentationLobHeight, PresentationPreviousLobHeight, PresentationLobInitialVelocity = -7f, PresentationLobX, PresentationLaunchY;
+        /// <summary>Stores the floor-height change before the current lob integration, matching PC contact order.</summary>
+        public float PresentationLobFloorOffset;
+        /// <summary>Stores the PC projectile's float32 position, horizontal velocity and pre-floor-adjustment collision altitude.</summary>
+        public float PresentationLobNativeX, PresentationLobNativeY, PresentationLobNativeZ, PresentationLobNativeVelocityX, PresentationLobContactHeight;
+        /// <summary>Stores the original weapon's descending collision height, including the pool-row adjustment.</summary>
+        public float PresentationLobImpactHeight = -30f;
         /// <summary>Stores the Threepeater's vertical displacement and decaying velocity in native pixels per tick.</summary>
         public float PresentationLaneOffset, PresentationPreviousLaneOffset, PresentationLaneVelocity;
         /// <summary>Stores the independent elapsed seconds and original animation rate of an attached FirePea reanimation.</summary>
@@ -34,7 +40,9 @@ namespace PlantsVsZombies.Simulation
         {
             get
             {
-                return !Lobbed || PresentationLobVelocity >= 0f && PresentationLobHeight >= (Butter ? -32f : Splash ? -35f : -30f);
+                // PC 47C880 tests nearby bodies during the first twenty updates, including the rising arc.
+                return !Lobbed || PresentationNativeAge <= .200001f || PresentationLobVelocity >= 0f
+                    && PresentationLobContactHeight > PresentationLobImpactHeight;
             }
         }
 
@@ -109,6 +117,13 @@ namespace PlantsVsZombies.Simulation
             PresentationLobInitialVelocity = -7f;
             PresentationLobX = 0f;
             PresentationLaunchY = 0f;
+            PresentationLobFloorOffset = 0f;
+            PresentationLobNativeX = 0f;
+            PresentationLobNativeY = 0f;
+            PresentationLobNativeZ = 0f;
+            PresentationLobNativeVelocityX = 0f;
+            PresentationLobContactHeight = 0f;
+            PresentationLobImpactHeight = -30f;
             PresentationLaneOffset = 0f;
             PresentationPreviousLaneOffset = 0f;
             PresentationLaneVelocity = 0f;

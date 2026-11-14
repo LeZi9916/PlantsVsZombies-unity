@@ -478,11 +478,17 @@ namespace PlantsVsZombies.Tests.EditMode
         private static Pea LandingProjectile(PlantKind kind, float x)
         {
             var lobbed = kind == PlantKind.CabbagePult || kind == PlantKind.WinterMelon;
+            var nativeX = (int)AdventureZombieNativeRules.NativePositionX(x) + 36 + (kind == PlantKind.WinterMelon ? -10 : 10);
+            var projectileX = lobbed ? (nativeX - 40f) / 80f : x;
             return new Pea
             {
-                SourceKind = kind, Row = 2, FlightRow = 2f, X = x, StartX = x, Range = 20f, Damage = 20f,
+                SourceKind = kind, Row = 2, FlightRow = 2f, X = projectileX, StartX = projectileX, Range = 20f, Damage = 20f,
                 VelocityX = 0f, Lobbed = lobbed, PresentationInitialized = true,
-                PresentationLobX = x, PresentationNativeAge = lobbed ? 1.2f : 0f
+                PresentationLobX = x, PresentationNativeAge = lobbed ? 1.2f : 0f,
+                PresentationMotionInitialized = lobbed, PresentationLobNativeX = nativeX,
+                PresentationLobNativeY = 250f, PresentationLobNativeZ = 20f,
+                PresentationLobContactHeight = 20f, PresentationLobVelocity = 7f,
+                PresentationLobImpactHeight = kind == PlantKind.WinterMelon ? 5f : 10f
             };
         }
 

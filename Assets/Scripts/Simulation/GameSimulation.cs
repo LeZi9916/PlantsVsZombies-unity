@@ -1863,6 +1863,7 @@ namespace PlantsVsZombies.Simulation
             x = 40f + shot.X * 80f;
             if (shot.Lobbed)
             {
+                x = shot.PresentationLobNativeX;
                 y = shot.PresentationLaunchY + shot.PresentationLobHeight;
                 return;
             }
@@ -1975,8 +1976,9 @@ namespace PlantsVsZombies.Simulation
             {
                 // PC winter-melon impact is particle1 at the lobbed ground/contact coordinates +(30,30).
                 // mPosX-mVelX and mPosY+mPosZ-mVelY-mVelZ are the previous native integration point.
-                var px = 40f + shot.PresentationPreviousX * 80f;
-                var py = shot.PresentationLaunchY + shot.PresentationPreviousLobHeight;
+                var px = shot.PresentationLobNativeX - shot.PresentationLobNativeVelocityX;
+                var py = shot.PresentationLaunchY + shot.PresentationLobFloorOffset
+                    + shot.PresentationLobContactHeight - shot.PresentationLobVelocity;
                 x = px + 30f;
                 y = py + 30f;
             }
@@ -2390,8 +2392,10 @@ namespace PlantsVsZombies.Simulation
                 }
             }
 
-            var targetZombie = fume || shortPuff || sunflower ? null : FindAdventureTarget(plant.Row,
-                plant.ModeFacesLeft ? -1f : plant.Column + .4f, plant.ModeFacesLeft ? plant.Column + .5f : 20f, false);
+            var lobber = plant.Kind == PlantKind.CabbagePult || kernel || plant.Kind == PlantKind.MelonPult || plant.Kind == PlantKind.WinterMelon;
+            var targetZombie = fume || shortPuff || sunflower ? null : lobber ? FindAdventureLobberTarget(plant.Row, plant.Column)
+                : FindAdventureTarget(plant.Row, plant.ModeFacesLeft ? -1f : plant.Column + .4f,
+                    plant.ModeFacesLeft ? plant.Column + .5f : 20f, false);
             var target = fume ? FindAdventureFumeTarget(plant) != null : shortPuff ? FindAdventurePuffTarget(plant) != null
                 : !sunflower && (targetZombie != null || !plant.ModeFacesLeft && CanShootAdventureBoss(plant))
                     && (!scaredy || plant.ScaredyShroomPresentation!.NativePhase == 1);
@@ -3187,6 +3191,13 @@ namespace PlantsVsZombies.Simulation
             };
             InitializeAdventureNativePlantTiming(plant);
             Plants.Add(plant);
+            if (kind != PlantKind.FlowerPot && AdventurePlantAt(row, column, PlantLayer.Support) is Plant pot
+                && pot.Kind == PlantKind.FlowerPot)
+            {
+                // PC 46CA8B..46CAD6 stops the existing pot at its current animation frame.
+                pot.PresentationFlowerPotPaused = true;
+            }
+
             if (kind == PlantKind.GraveBuster)
             {
                 // Plant::PlantInit plays FOLEY_GRAVEBUSTERCHOMP when the buster lands in play.
@@ -3304,6 +3315,15 @@ namespace PlantsVsZombies.Simulation
             if (p.Layer == PlantLayer.Support)
             {
                 Plants.RemoveAll(x => x.Row == p.Row && x.Column <= p.Column && p.Column < x.Column + x.ColumnSpan);
+            }
+
+            if (AdventureAirAttackPlantAt(p.Row, p.Column) is Plant pot && pot.Kind == PlantKind.FlowerPot
+                && pot.PresentationFlowerPotPaused)
+            {
+                // PC Plant::Die restarts only an uncovered pot, preserving its current animation phase.
+                pot.PresentationFlowerPotPaused = false;
+                pot.PresentationRate = 10f + (float)_random.NextDouble() * 5f;
+                pot._presentationKind = PlantKind.FlowerPot;
             }
 
             if (Adventure.SelectedCobCannonId.HasValue && FindPlantById(Adventure.SelectedCobCannonId.Value) == null)
@@ -4372,6 +4392,12 @@ namespace PlantsVsZombies.Simulation
                 plant.PresentationShotAge = .29f;
             }
 
+            if (lob)
+            {
+                // PC Plant::Fire resolves its target at creation, before any other plant can kill it.
+                AdvanceAdventureProjectilePresentation(shot, 0f);
+            }
+
             if (!lob && Adventure.Level.HasRoof && plant.Column < 5)
             {
                 shot.Range = Math.Max(.1f, 5 - plant.Column - .5f);
@@ -4414,6 +4440,46 @@ namespace PlantsVsZombies.Simulation
             plant._presentationPrefiring = false;
         }
 
+        /// <summary>Finds the original leftmost lobber target using Plant::GetPlantAttackRect and range mask thirteen.</summary>
+        /// <param name="row">The lobber's planted row.</param>
+        /// <param name="column">The lobber's planted column, independent of its weapon muzzle.</param>
+        /// <returns>The nearest admitted body overlapping the original eight-hundred-pixel attack interval.</returns>
+        private Zombie? FindAdventureLobberTarget(int row, int column)
+        {
+            var left = 40 + column * 80 + 60;
+            Zombie? best = null;
+            var bestLeft = int.MaxValue;
+            foreach (var zombie in Zombies)
+            {
+                if (zombie.Kind != ZombieKind.Boss && zombie.Row != row || !CanTakeAdventureAshDamage(zombie, 13U))
+                {
+                    continue;
+                }
+
+                var body = AdventureZombieTargetingRules.BodyRectangle(zombie);
+                if (Math.Min(left + 800, body.X + body.Width) >= Math.Max(left, body.X) && body.X < bestLeft)
+                {
+                    best = zombie;
+                    bestLeft = body.X;
+                }
+            }
+
+            return best;
+        }
+
+        /// <summary>Checks PC 47DFF0's lobber rectangle at the preceding integer projectile position.</summary>
+        /// <param name="shot">The cabbage, kernel, butter or melon being integrated.</param>
+        /// <param name="previousX">The original integer projectile position before this native motion update.</param>
+        /// <param name="zombie">The admitted collision candidate.</param>
+        /// <returns>Whether the original horizontal body intervals touch or overlap.</returns>
+        private static bool AdventureLobberCollides(Pea shot, int previousX, Zombie zombie)
+        {
+            var left = previousX + (shot.Splash ? 20 : 0);
+            var width = shot.Splash ? 60 : 40;
+            var body = AdventureZombieTargetingRules.BodyRectangle(zombie);
+            return Math.Min(left + width, body.X + body.Width) >= Math.Max(left, body.X);
+        }
+
         /// <summary>Performs find adventure target.</summary>
         /// <param name = "row">The row.</param>
         /// <param name = "min">The min.</param>
@@ -4428,7 +4494,7 @@ namespace PlantsVsZombies.Simulation
             foreach (Zombie z in Zombies)
             {
                 if (!z.Hypnotized && (sourceKind != PlantKind.TangleKelp || z.PresentationInPool == true)
-                    && AdventureZombieTargetingRules.CanBeAutoTargeted(z, sourceKind) && z.DropRemaining <= 0f && z.Kind != ZombieKind.Bungee && z.Row == row && z.X >= min && z.X <= max && (!z.Airborne || air) && (!z.Submerged || submerged))
+                    && AdventureZombieTargetingRules.CanBeAutoTargeted(z, sourceKind) && z.DropRemaining <= 0f && z.Row == row && z.X >= min && z.X <= max && (!z.Airborne || air) && (!z.Submerged || submerged))
                 {
                     if (best == null || z.X < best.X)
                     {
@@ -4488,7 +4554,7 @@ namespace PlantsVsZombies.Simulation
             BlastAdventureRadius(80 + plant.Column * 80, AdventureBlastCenterY(x, plant.Row), plant.Row, radius, rows, 0x7F);
         }
 
-        /// <summary>Checks the native EffectedByDamage gate used by ash plant target masks.</summary>
+        /// <summary>Checks the native EffectedByDamage gate used by plant and projectile target masks.</summary>
         /// <param name="zombie">The candidate zombie.</param>
         /// <param name="targetFlags">The original damage range mask, separate from damage behavior flags.</param>
         /// <returns>Whether the original mask admits this live zombie's current movement phase.</returns>
@@ -4727,8 +4793,14 @@ namespace PlantsVsZombies.Simulation
                     continue;
                 }
 
+                if (p.Lobbed && !p.PresentationMotionInitialized)
+                {
+                    AdvanceAdventureProjectilePresentation(p, 0f);
+                }
+
                 UpdateAdventureHomingVelocity(p, dt);
                 var before = p.X;
+                var beforeNativeX = (int)p.PresentationLobNativeX;
                 p.X += p.VelocityX * dt;
                 p.FlightRow += p.VelocityY * dt;
                 if (p.SourceKind == PlantKind.Threepeater)
@@ -4749,17 +4821,21 @@ namespace PlantsVsZombies.Simulation
                 Zombie? hit = null;
                 foreach (Zombie z in Zombies)
                 {
-                    if (allowDamage && p.PresentationCanImpact && z.GraveRiseTicks <= 0 && z.PresentationNativePhase != 50 && z.PresentationNativePhase != 74
+                    if (allowDamage && p.PresentationCanImpact && (p.Lobbed ? CanTakeAdventureAshDamage(z, 13U) : AdventureZombieTargetingRules.CanBeAutoTargeted(z, p.SourceKind)) && z.GraveRiseTicks <= 0 && z.PresentationNativePhase != 50 && z.PresentationNativePhase != 74
                         && !(z.Kind == ZombieKind.DolphinRider && (z.PresentationNativePhase == 52 || z.PresentationNativePhase == 54))
                         && !(z.Kind == ZombieKind.Digger && z.PresentationNativePhase >= 33 && z.PresentationNativePhase <= 35)
                         && (!p.Homing || z.Id == p.TargetZombieId) && !z.Hypnotized && Math.Abs(z.Row - p.FlightRow) < 0.45f && !p.HitIds.Contains(z.Id) && (!z.Airborne || p.HitsAir)
                         && (p.SourceKind != PlantKind.Cactus || z.Airborne == p.HitsAir && AdventureZombieTargetingRules.CanBeAutoTargeted(z, PlantKind.Cactus))
-                        && (!z.Submerged || p.Lobbed) && (z.Kind == ZombieKind.Zomboni
+                        && (!z.Submerged || p.Lobbed) && (!p.Lobbed || z.PresentationNativePhase != 59
+                            || p.PresentationLobContactHeight > 45f)
+                        && (p.Lobbed ? AdventureLobberCollides(p, beforeNativeX, z) : z.Kind == ZombieKind.Zomboni
                         ? AdventureZomboniRules.ProjectileCollides(p, z)
                         : AdventurePuffShroomRules.IsShortRange(p.SourceKind) ? AdventurePuffShroomRules.Collides(p, z)
                         : z.X >= Math.Min(before, p.X) - 0.25f && z.X <= Math.Max(before, p.X) + 0.25f))
                     {
-                        if (hit == null || Math.Abs(z.X - before) < Math.Abs(hit.X - before))
+                        if (hit == null || (p.Lobbed ? (int)AdventureZombieNativeRules.NativePositionX(z.X, AdventureDancerRules.Scale(z))
+                            < (int)AdventureZombieNativeRules.NativePositionX(hit.X, AdventureDancerRules.Scale(hit))
+                            : Math.Abs(z.X - before) < Math.Abs(hit.X - before)))
                         {
                             hit = z;
                         }
@@ -4803,6 +4879,14 @@ namespace PlantsVsZombies.Simulation
                 {
                     AdventurePresentationImpact(p, null);
                     DamageAdventureBoss(p.Damage);
+                    remove = true;
+                }
+
+                if (!remove && p.Lobbed && p.PresentationCanImpact
+                    && p.PresentationLobContactHeight > 80f)
+                {
+                    // PC UpdateLobMotion 47C880 impacts the floor even when no zombie survives beneath the shot.
+                    AdventurePresentationImpact(p, null);
                     remove = true;
                 }
 
@@ -5369,7 +5453,7 @@ namespace PlantsVsZombies.Simulation
             foreach (var zombie in Zombies)
             {
                 var phase = AdventureZombieFeedbackPhase(zombie);
-                if (!AdventureZombieTargetingRules.CanBeAutoTargeted(zombie, PlantKind.Chomper) || zombie.Hypnotized || zombie.Row != plant.Row || zombie.Airborne || zombie.Submerged || zombie.DropRemaining > 0 || zombie.Kind == ZombieKind.Bungee || phase == 20 || zombie.Kind == ZombieKind.Digger && zombie.AbilityPhase == 0)
+                if (!AdventureZombieTargetingRules.CanBeAutoTargeted(zombie, PlantKind.Chomper) || zombie.Hypnotized || zombie.Row != plant.Row || zombie.Airborne || zombie.Submerged || zombie.DropRemaining > 0 || zombie.Kind == ZombieKind.Bungee && zombie.TargetColumn == plant.Column || phase == 20 || zombie.Kind == ZombieKind.Digger && zombie.AbilityPhase == 0)
                 {
                     continue;
                 }
@@ -5520,7 +5604,7 @@ namespace PlantsVsZombies.Simulation
             foreach (var zombie in new PooledSnapshot<Zombie>(Zombies))
             {
                 if (zombie.Row != plant.Row || zombie.Hypnotized || zombie.Airborne || zombie.DropRemaining > 0
-                    || zombie.Kind == ZombieKind.Bungee || zombie.Kind == ZombieKind.Boss || zombie.PresentationNativeHeight == 9
+                    || zombie.Kind == ZombieKind.Boss || zombie.PresentationNativeHeight == 9
                     || !AdventureZombieTargetingRules.CanBeAutoTargeted(zombie))
                 {
                     continue;
@@ -5560,7 +5644,7 @@ namespace PlantsVsZombies.Simulation
             var closest = 1000;
             foreach (var z in Zombies)
             {
-                if (!AdventureZombieTargetingRules.CanBeAutoTargeted(z) || z.Hypnotized || z.Airborne || z.Kind == ZombieKind.Bungee || z.Kind == ZombieKind.Boss || z.Row != p.Row || z.DropRemaining > 0 || z.PresentationNativeHeight == 9 || z.Kind == ZombieKind.Digger && z.AbilityPhase == 0)
+                if (!AdventureZombieTargetingRules.CanBeAutoTargeted(z) || z.Hypnotized || z.Airborne || z.Kind == ZombieKind.Boss || z.Row != p.Row || z.DropRemaining > 0 || z.PresentationNativeHeight == 9 || z.Kind == ZombieKind.Digger && z.AbilityPhase == 0)
                 {
                     continue;
                 }
@@ -5570,7 +5654,9 @@ namespace PlantsVsZombies.Simulation
                 var phase = AdventureZombieFeedbackPhase(z);
                 var triggerLeft = left + (z.Kind == ZombieKind.PoleVaulter ? 40 : 0);
                 var triggerOverlap = Math.Min(right, body.X + body.Width) - Math.Max(triggerLeft, body.X);
-                if (!z.Headless && phase != 11 && phase != 12 && !(z.Kind == ZombieKind.Pogo && !z.UsedAbility) && triggerOverlap >= (z.Eating ? -30 : 0))
+                if (AdventureZombieTargetingRules.CanBeAutoTargeted(z, PlantKind.PotatoMine)
+                    && (z.Kind != ZombieKind.Bungee || z.TargetColumn == p.Column)
+                    && phase != 11 && phase != 12 && !(z.Kind == ZombieKind.Pogo && !z.UsedAbility) && triggerOverlap >= (z.Eating ? -30 : 0))
                 {
                     touching = true;
                 }
@@ -5830,6 +5916,12 @@ namespace PlantsVsZombies.Simulation
                     plant.PresentationRate = minimum + (float)_random.NextDouble() * 5f;
                 }
 
+                if (plant.Kind == PlantKind.FlowerPot)
+                {
+                    var potRate = plant.BungeeState == 2 ? .1f : plant.PresentationFlowerPotPaused ? 0f : plant.PresentationRate;
+                    plant.PresentationBodyFrames += dt * potRate;
+                }
+
                 if (plant.Asleep)
                 {
                     continue;
@@ -6013,6 +6105,20 @@ namespace PlantsVsZombies.Simulation
                 Butter = shot.Butter
             };
             RecordAdventureIceImpact(shot, zombie, effect);
+            if (shot.Lobbed && zombie == null && !shot.IsSnow)
+            {
+                // PC 47D410: melon bursts use the preceding flight point; cabbage/butter use mPosY + 12.
+                effect.NativeIcePoint = true;
+                effect.NativeParticleX = shot.PresentationLobNativeX + 12f;
+                effect.NativeParticleY = shot.PresentationLaunchY + shot.PresentationLobFloorOffset + 12f;
+                if (shot.Splash)
+                {
+                    effect.NativeParticleX = shot.PresentationLobNativeX - shot.PresentationLobNativeVelocityX + 30f;
+                    effect.NativeParticleY = shot.PresentationLaunchY + shot.PresentationLobFloorOffset
+                        + shot.PresentationLobContactHeight - shot.PresentationLobVelocity + 30f;
+                }
+            }
+
             if (shot.SourceKind == PlantKind.Starfruit)
             {
                 // PC DoImpact 47D410 puts StarSplat at projectile top-left +(12,12).
@@ -6171,12 +6277,40 @@ namespace PlantsVsZombies.Simulation
                 shot.PresentationSpin = shot.Lobbed ? minimum + (float)_random.NextDouble() * (maximum - minimum) : 0;
                 if (shot.Lobbed)
                 {
-                    var launch = shot.PresentationLaunchColumn + (shot.SourceKind == PlantKind.CabbagePult ? 5f : shot.SourceKind == PlantKind.KernelPult ? shot.Butter ? 12f : 19f : 25f) / 80f;
-                    var target = FindAdventureTarget(shot.Row, launch, 20f, false, true);
-                    var distance = target == null ? 700f - (40f + launch * 80f) : (target.X - launch - target.Speed * .5f) * 80f - 30f;
+                    var muzzleX = shot.SourceKind == PlantKind.CabbagePult ? 5f
+                        : shot.SourceKind == PlantKind.KernelPult ? shot.Butter ? 12f : 19f : 25f;
+                    var nativeLaunchX = 40f + shot.PresentationLaunchColumn * 80f + muzzleX;
+                    var launch = (nativeLaunchX - 40f) / 80f;
+                    var target = FindAdventureLobberTarget(shot.PresentationLaunchRow, shot.PresentationLaunchColumn);
+                    var distance = 700f - nativeLaunchX;
+                    if (target != null)
+                    {
+                        // PC ZombieTargetLeadX(50): eating, freezing and butter set prediction velocity to zero.
+                        var stationary = AdventureStarfruitRules.TargetNotWalking(target)
+                            || AdventureDancerRules.IsDancer(target) && AdventureDancerRules.GroupAffected(target, Zombies, false);
+                        var velocity = stationary ? 0f : target.PresentationNativeVelocity * (target.ChillRemaining > 0f ? .5f : 1f);
+                        if (target.PresentationWalkingBackwards ?? (target.Hypnotized
+                            || target.Kind == ZombieKind.Digger && AdventureDiggerState.WalksBackwards(target)))
+                        {
+                            velocity = -velocity;
+                        }
+
+                        var body = AdventureZombieTargetingRules.BodyRectangle(target);
+                        distance = body.X + body.Width / 2 - velocity * 50f - nativeLaunchX - 30f;
+                        if (target.PresentationNativePhase == 53 || target.Kind == ZombieKind.Pogo && !target.UsedAbility)
+                        {
+                            distance -= 60f;
+                        }
+                        else if (target.PresentationNativePhase == 59)
+                        {
+                            distance -= 40f;
+                        }
+                    }
+
                     shot.PresentationLobX = launch;
                     shot.PresentationPreviousX = launch;
-                    shot.VelocityX = Math.Max(40f, distance) / 120f * 100f / 80f;
+                    shot.PresentationLobNativeVelocityX = Math.Max(40f, distance) / 120f;
+                    shot.VelocityX = shot.PresentationLobNativeVelocityX * 100f / 80f;
                     var pitch = Adventure.Level.HasPool || Adventure.Level.HasRoof ? 85f : 100f;
                     var launchOffset = shot.SourceKind == PlantKind.KernelPult ? shot.Butter ? -56f : -37f : shot.Splash ? -46f : -12f;
                     var launchY = 80 + shot.PresentationLaunchRow * pitch + (Adventure.Level.HasRoof ? Math.Max(0, 5 - shot.PresentationLaunchColumn) * 20 - 10 : 0) + launchOffset;
@@ -6186,19 +6320,17 @@ namespace PlantsVsZombies.Simulation
                     }
 
                     shot.PresentationLaunchY = launchY;
+                    shot.PresentationLobNativeX = nativeLaunchX;
+                    shot.PresentationLobNativeY = launchY;
                     float heightDifference = 0;
                     if (target != null)
                     {
-                        var floorX = 40 + target.X * 80 - 57f * (AdventureDancerRules.Scale(target)) + 40;
-                        var targetY = 80 + target.Row * pitch + (Adventure.Level.HasRoof ? Math.Max(0, 440 - floorX) * .25f - 10 : 0) - 30;
-                        if (target.Kind == ZombieKind.Gargantuar || target.Kind == ZombieKind.Catapult)
+                        var nativeX = AdventureZombieNativeRules.NativePositionX(target.X, AdventureDancerRules.Scale(target));
+                        var body = AdventureZombieTargetingRules.BodyRectangle(target);
+                        var targetY = (int)AdventureBiteNativeY(target, nativeX) + body.Y + target.PresentationBiteBodyY;
+                        if (target.Kind == ZombieKind.Boss)
                         {
-                            targetY -= 13;
-                        }
-
-                        if (target.Kind == ZombieKind.Zomboni)
-                        {
-                            targetY += 22;
+                            targetY = (int)(80f + shot.PresentationLaunchRow * pitch - (Adventure.Level.HasRoof ? 10f : 0f));
                         }
 
                         heightDifference = targetY - launchY;
@@ -6206,6 +6338,8 @@ namespace PlantsVsZombies.Simulation
 
                     shot.PresentationLobInitialVelocity = -7f + heightDifference / 120f;
                     shot.PresentationLobVelocity = shot.PresentationLobInitialVelocity;
+                    shot.PresentationLobImpactHeight = (shot.Butter ? -32f : shot.Splash ? -35f : -30f)
+                        + (Adventure.Level.IsWaterRow(shot.Row) ? 40f : 0f);
                 }
             }
 
@@ -6215,10 +6349,31 @@ namespace PlantsVsZombies.Simulation
                 return;
             }
 
-            var ticks = shot.PresentationNativeAge * 100f;
-            shot.X = shot.PresentationLobX + shot.VelocityX * shot.PresentationNativeAge;
-            shot.PresentationLobHeight = shot.PresentationLobInitialVelocity * ticks + .115f * ticks * (ticks + 1f) * .5f;
-            shot.PresentationLobVelocity = shot.PresentationLobInitialVelocity + .115f * ticks;
+            // PC 47C880 integrates float32 velocity before position, once per native update.
+            // Keeping native X avoids a grid conversion rounding an integer contact edge one update early.
+            var updates = (int)Math.Round(dt * 100f);
+            for (var update = 0; update < updates; update++)
+            {
+                var previousX = shot.PresentationLobNativeX;
+                shot.PresentationLobVelocity += .115f;
+                shot.PresentationLobNativeX += shot.PresentationLobNativeVelocityX;
+                shot.PresentationLobNativeZ += shot.PresentationLobVelocity;
+                shot.PresentationLobContactHeight = shot.PresentationLobNativeZ;
+                shot.PresentationLobFloorOffset = shot.PresentationLobNativeY - shot.PresentationLaunchY;
+                if (Adventure.Level.HasRoof)
+                {
+                    // UpdateLobMotion checks contact before UpdateMotion moves mPosY and rebases mPosZ.
+                    var rowY = 70f + shot.Row * 85f;
+                    var previousFloor = rowY + Math.Max(0f, 440f - previousX) * .25f;
+                    var floor = rowY + Math.Max(0f, 440f - shot.PresentationLobNativeX) * .25f;
+                    var floorDelta = floor - previousFloor;
+                    shot.PresentationLobNativeY += floorDelta;
+                    shot.PresentationLobNativeZ -= floorDelta;
+                }
+            }
+
+            shot.X = (shot.PresentationLobNativeX - 40f) / 80f;
+            shot.PresentationLobHeight = shot.PresentationLobNativeY + shot.PresentationLobNativeZ - shot.PresentationLaunchY;
         }
 
         /// <summary>Performs create adventure presentation sun.</summary>

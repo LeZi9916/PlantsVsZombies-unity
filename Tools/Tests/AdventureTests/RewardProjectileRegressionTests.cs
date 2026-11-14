@@ -66,7 +66,9 @@ internal static class RewardProjectileRegressionTests
             Lobbed = true,
             PresentationMotionInitialized = true,
             PresentationLobX = 3f,
-            PresentationLobInitialVelocity = -7f
+            PresentationLobInitialVelocity = -7f,
+            PresentationLobNativeX = 280f,
+            PresentationLobNativeVelocityX = 2.4f
         };
         game.Peas.Add(pea);
         game.Peas.Add(reverse);

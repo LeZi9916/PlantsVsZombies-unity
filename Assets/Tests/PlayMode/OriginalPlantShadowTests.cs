@@ -128,6 +128,49 @@ namespace PlantsVsZombies.Tests.PlayMode
             }
         }
 
+        /// <summary>Compares roof pot/body/shadow composition with independent PC 473490 and 473AD0 coordinates.</summary>
+        /// <returns>Real graphics boundaries before comparing original-artwork pixels.</returns>
+        [UnityTest]
+        public IEnumerator RoofPotAndSupportedPlantKeepOriginalBodyAndShadowAlignment()
+        {
+            using var fixture = new OriginalStormGraphicsTests.StormFixture(42);
+            var game = fixture.Owner.RequiredGame;
+            game.Plants.Clear();
+            var shadow = fixture.Owner.Textures.RequiredLoadImage("plantshadow.png");
+            foreach (var species in new[] { (PlantKind.CabbagePult, "Cabbagepult", -5f, -3f, 47f, 1f),
+                (PlantKind.PuffShroom, "Puffshroom", 0f, -3f, 42f, .5f),
+                (PlantKind.HypnoShroom, "Hypnoshroom", -5f, -3f, 51f, 1f),
+                (PlantKind.ScaredyShroom, "ScaredyShroom", -14f, -9f, 55f, 1f),
+                (PlantKind.Plantern, "Plantern", -10f, -3f, 57f, 1f) })
+            {
+                game.Plants.Clear();
+                var pot = new Plant { Id = 1, Kind = PlantKind.FlowerPot, Row = 1, Column = 1,
+                    Layer = PlantLayer.Support, PresentationRate = 12f, PresentationFlowerPotPaused = true,
+                    PresentationBodyFrames = 2f, Health = 300f };
+                var plant = new Plant { Id = 2, Kind = species.Item1, Row = 1, Column = 1,
+                    Layer = PlantLayer.Main, PresentationRate = 12f, Age = .25f, Health = 300f };
+                game.Plants.Add(pot);
+                game.Plants.Add(plant);
+                yield return fixture.Capture(null, () =>
+                {
+                    fixture.DrawPass("DrawAdventurePlant", pot);
+                    fixture.DrawPass("DrawAdventurePlant", plant);
+                });
+                var actual = fixture.Pixels.GetPixels32();
+                yield return fixture.Capture(null, () =>
+                {
+                    // PC GridToPixelY(1,1) = 235; flower pot +26, shadow offset(-4,+46).
+                    fixture.Animations.DrawNativeImage(shadow, new Rect(116f, 307f, 86f, 36f), new Rect(0f, 0f, 1f, 1f));
+                    Assert.That(fixture.Animations.DrawNativePlayback("Pot", new Vector2(120f, 261f), 1f, 2f / 12f, "anim_idle", true, 12f), Is.True);
+                    var size = new Vector2(86f, 36f) * species.Item6;
+                    var center = new Vector2(120f + species.Item4 + 43f, 235f + species.Item3 + species.Item5 + 18f);
+                    fixture.Animations.DrawNativeImage(shadow, new Rect(center - size * .5f, size), new Rect(0f, 0f, 1f, 1f));
+                    Assert.That(fixture.Animations.DrawNativePlayback(species.Item2, new Vector2(120f, 235f + species.Item3), 1f, .25f, "anim_idle", true, 12f), Is.True);
+                });
+                Assert.That(fixture.Pixels.GetPixels32(), Is.EqualTo(actual), species.Item1 + " roof body and shadows");
+            }
+        }
+
         /// <summary>Checks the native continuous growth scale and the overlapping coffee shadow exclusion.</summary>
         [Test]
         public void GrowthAndFlyingCoffeeKeepTheOriginalShadowRules()
