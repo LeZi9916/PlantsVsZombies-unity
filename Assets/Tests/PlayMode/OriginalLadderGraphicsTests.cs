@@ -6,6 +6,7 @@ using System.Reflection;
 using NUnit.Framework;
 using PlantsVsZombies.Adventure;
 using PlantsVsZombies.Reanimation;
+using PlantsVsZombies.Rendering;
 using PlantsVsZombies.Simulation;
 using UnityEngine;
 using UnityEngine.TestTools;
@@ -20,35 +21,39 @@ namespace PlantsVsZombies.Tests.PlayMode
         [UnityTest]
         public IEnumerator PlacedLadderUsesOriginalGeometryAndOcclusion()
         {
-            foreach (var level in new[] { 19, 49 })
+            foreach (var sample in new[] { (19, 0), (19, 4), (19, 8), (49, 0), (49, 4), (49, 8) })
             {
+                var level = sample.Item1;
+                var column = sample.Item2;
                 using var fixture = new OriginalStormGraphicsTests.StormFixture(level);
                 var game = fixture.Owner.RequiredGame;
                 game.ChooseDefaultAdventureSeeds();
                 game.Plants.Clear();
-                var plant = (Plant)Invoke(game, "PlaceAdventurePlant", PlantKind.TallNut, 1, 4)!;
+                var plant = (Plant)Invoke(game, "PlaceAdventurePlant", PlantKind.TallNut, 1, column)!;
                 plant.HasLadder = true;
                 var zombie = Spawn(game, ZombieKind.Normal);
+                zombie.X = AdventureZombieNativeRules.GridX(80f + column * 80f);
+                zombie.PresentationPreviousX = zombie.X;
+                var image = (SpriteImage)typeof(ReanimationRenderer).GetMethod("LoadTexture", BindingFlags.Instance | BindingFlags.NonPublic)!
+                    .Invoke(fixture.Animations, new object[] { "IMAGE_REANIM_ZOMBIE_LADDER_5" })!;
                 Assert.That(fixture.Animations.TryGetNativeSpriteSize("IMAGE_REANIM_ZOMBIE_LADDER_5", out var size), Is.True);
+                var cellY = level == 49 ? 155f + Math.Max(0, 5 - column) * 20f : 180f;
+                var destination = new Rect(65f + column * 80f, cellY - 4f, size.x * .8f, size.y * .8f);
                 yield return fixture.Capture("DrawAdventureBoard", wholeBoard: true);
                 var actual = fixture.Pixels.GetPixels32();
                 plant.HasLadder = false;
                 game.Zombies.Remove(zombie);
                 yield return fixture.Capture("DrawAdventureBoard", () =>
                 {
-                    // GridToPixel(4,1) is (360,180) on day/night and (360,175) on the roof.
-                    var cellY = level == 49 ? 175f : 180f;
-                    fixture.Animations.DrawResourceSprite("IMAGE_REANIM_ZOMBIE_LADDER_5",
-                        new Vector2(385f + size.x * .5f, cellY - 4f + size.y * .5f), .8f);
+                    // PC 527EF0 preserves the requested top-left while scaling the original source dimensions.
+                    fixture.Animations.DrawNativeImage(image, destination, new Rect(0f, 0f, 1f, 1f));
                     fixture.DrawPass("DrawAdventureZombie", zombie);
                 }, true);
                 Assert.That(fixture.Pixels.GetPixels32(), Is.EqualTo(actual), "PC ladder geometry and plant/zombie order on level " + level);
                 yield return fixture.Capture("DrawAdventureBoard", () =>
                 {
                     fixture.DrawPass("DrawAdventureZombie", zombie);
-                    var cellY = level == 49 ? 175f : 180f;
-                    fixture.Animations.DrawResourceSprite("IMAGE_REANIM_ZOMBIE_LADDER_5",
-                        new Vector2(385f + size.x * .5f, cellY - 4f + size.y * .5f), .8f);
+                    fixture.Animations.DrawNativeImage(image, destination, new Rect(0f, 0f, 1f, 1f));
                 }, true);
                 Assert.That(fixture.Pixels.GetPixels32(), Is.Not.EqualTo(actual), "The fixture must exercise visible ladder/zombie overlap.");
             }
@@ -90,25 +95,42 @@ namespace PlantsVsZombies.Tests.PlayMode
             using var fixture = new OriginalStormGraphicsTests.StormFixture(49);
             SpriteSourceTestUtilities.SetImage(fixture.Owner.Textures, "plantshadow.png", null!);
             var game = fixture.Owner.RequiredGame;
-            var zombie = Spawn(game, ZombieKind.Normal);
-            zombie.PresentationWalk2 = false;
-            zombie.PresentationAnimation = "anim_walk";
-            zombie.PresentationAnimationAge = .25f;
-            zombie.UseLadderColumn = 4;
-            foreach (var phase in new[] { (6, 32f), (7, 19f) })
+            foreach (var kind in new[] { ZombieKind.Normal, ZombieKind.Ladder })
             {
-                zombie.PresentationNativeHeight = phase.Item1;
-                zombie.PresentationAltitude = phase.Item2;
-                zombie.PoolState = new AdventureZombiePoolState { Altitude = phase.Item2 };
-                var rate = game.AdventurePresentationZombieRate(zombie);
-                yield return fixture.Capture(null, () => fixture.DrawPass("DrawAdventureZombie", zombie));
-                var actual = fixture.Pixels.GetPixels32();
-                yield return fixture.Capture(null, () =>
+                var zombie = Spawn(game, kind);
+                zombie.PresentationWalk2 = false;
+                var clip = kind == ZombieKind.Ladder ? "anim_ladderwalk" : "anim_walk";
+                zombie.PresentationAnimation = clip;
+                zombie.PresentationAnimationAge = .25f;
+                zombie.UseLadderColumn = 4;
+                foreach (var phase in new[] { (6, 32f), (7, 19f) })
                 {
-                    fixture.Animations.DrawZombiePlayback(new Vector2(415f, 117f - phase.Item2), 1f, .25f,
-                        ZombieVariant.Normal, "anim_walk", true, rate, true);
-                });
-                Assert.That(fixture.Pixels.GetPixels32(), Is.EqualTo(actual), "Original ladder height state " + phase.Item1);
+                    zombie.PresentationNativeHeight = phase.Item1;
+                    zombie.PresentationAltitude = phase.Item2;
+                    zombie.PoolState = new AdventureZombiePoolState { Altitude = phase.Item2 };
+                    var rate = game.AdventurePresentationZombieRate(zombie);
+                    yield return fixture.Capture(null, () => fixture.DrawPass("DrawAdventureZombie", zombie));
+                    var actual = fixture.Pixels.GetPixels32();
+                    yield return fixture.Capture(null, () =>
+                    {
+                        var origin = new Vector2(415f, 117f - phase.Item2);
+                        if (kind == ZombieKind.Normal)
+                        {
+                            fixture.Animations.DrawZombiePlayback(origin, 1f, .25f,
+                                ZombieVariant.Normal, "anim_walk", true, rate, true);
+                        }
+                        else
+                        {
+                            for (var group = 0; group < 3; group++)
+                            {
+                                var selected = group;
+                                fixture.Animations.DrawNativePlayback("Zombie_ladder", origin,
+                                    1f, .25f, clip, true, rate, track => NativeLadderGroup(track) == selected);
+                            }
+                        }
+                    });
+                    Assert.That(fixture.Pixels.GetPixels32(), Is.EqualTo(actual), kind + " original ladder height state " + phase.Item1);
+                }
             }
         }
 

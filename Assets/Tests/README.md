@@ -556,8 +556,8 @@ plays the original `ladder_zombie` sample. A missing target retains the carried
 ladder; ice and butter suspend placement, while chill slows its animation clock.
 
 `459610` draws `IMAGE_REANIM_ZOMBIE_LADDER_5` at cell +(25,-4), scale .8, using
-the unscaled image center. The placed object uses row order 302800, after plants
-and before ordinary zombies. PC `546CE0` raises the walking body by .8 per update
+the scaled image half-size so its top-left remains at that offset. The placed
+object uses row order 302800, after plants and before ordinary zombies. PC `546CE0` raises the walking body by .8 per update
 and probes the cell at integer zombie X + 5 + altitude/2; low native velocities
 also receive the original extra .5-pixel leftward movement. Missing the ladder
 or reaching height ninety transitions to `5452B0`'s falling update in the same
@@ -619,3 +619,41 @@ PC `475BEE..475BF7` excludes a bungee targeting the Chomper's own column, and
 Plant::Update stops abilities while grabbed; that original restriction remains.
 These focused simulation, allocation and original-art graphics checks do not
 replace a full-level Player playthrough or other target-device validation.
+
+
+## Ladder geometry, carrying followers, ash removal and Chomper range
+
+PC `459610` calls `TodDrawImageScaledF` (`527EF0`): its matrix adds the
+**scaled** half-image to the requested top-left. Placed ladders retain cell
++(25,-4) at scale .8 on both sloped and flat roof columns. The independent
+rendering oracle now uses a top-left destination rectangle rather than repeating
+the presenter's center arithmetic. The same helper corrects the previous butter
+follow-up's 1.2-scale Bungee/Gargantuar attachments.
+
+`Zombie::EatPlant` checks the ladder cell regardless of the targeted plant layer.
+A carrier therefore still climbs when a bungee lifts the defensive main plant
+and leaves its flower pot. The carried shield and carrying phase survive the
+crossing, and original walking artwork rises and falls with body altitude.
+
+`Board::KillAllZombiesInRadius` (`4294C0`) removes ladders in a square of cells
+around the pixel-to-grid explosion center, using the row range for both axes.
+This happens even without eligible zombies, independently of the pixel circle
+and burn flag. Cherry/Cob use range one, Doom range three, and Potato Mine range
+zero. Jalapeno's `BurnRow` clears the complete row. Removing a ladder sends a
+surviving climber into the original fall on its next action.
+
+PC `4765B0` gives Chomper the horizontal interval [plant X+80, plant X+120];
+`475AA0` accepts touching edges and extends overlap tolerance by sixty pixels
+while biting or against eating targets. Roof/pot drawing offsets do not extend
+that logical interval. Existing runtime targeting already matches these bounds;
+new cases pin both ends on day/night and sloped/flat roof columns, including
+the original body-X > 800 target exclusion.
+
+```powershell
+./Tools/Tests/Run-UnityTests.ps1 -Platform EditMode -TestFilter 'AdventureLadderTests|AdventureChomperRangeTests'
+# Set PVZ_BOARD_STRESS_ASSETS to the read-only original runtime resources.
+./Tools/Tests/Run-UnityTests.ps1 -Platform PlayMode -TestFilter 'OriginalLadderGraphicsTests|OriginalButterAndReloadGraphicsTests.ButterUsesTheOriginalTransformedHeadAndSpeciesOffsets'
+```
+
+These focused native-update and original-art graphics checks do not establish a
+full-level Player playthrough or behavior on other target-platform devices.

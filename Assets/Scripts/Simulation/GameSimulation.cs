@@ -4658,6 +4658,8 @@ namespace PlantsVsZombies.Simulation
                     HitAdventureExplosionZombie(zombie, 1800f, true, 0x12);
                 }
             }
+
+            RemoveAdventureLaddersInBlast(x, y, rows);
         }
 
         /// <summary>Burns eligible zombies throughout the original Jalapeno row without a horizontal cutoff.</summary>
@@ -4672,6 +4674,14 @@ namespace PlantsVsZombies.Simulation
                     zombie.FrozenRemaining = 0f;
                     zombie.ChillRemaining = 0f;
                     HitAdventureExplosionZombie(zombie, 1800f, true, 0x12);
+                }
+            }
+
+            foreach (var plant in Plants)
+            {
+                if (plant.Row == row)
+                {
+                    plant.HasLadder = false;
                 }
             }
         }
@@ -5636,6 +5646,8 @@ namespace PlantsVsZombies.Simulation
                     HitAdventureExplosionZombie(zombie, 1800f, false, 0x12);
                 }
             }
+
+            RemoveAdventureLaddersInBlast(centerX, centerY, 0);
         }
 
         /// <summary>Performs adventure potato mine distance.</summary>
@@ -12883,6 +12895,26 @@ namespace PlantsVsZombies.Simulation
             }
         }
 
+        /// <summary>Removes PC 4294C0's square grid-item range independently of zombie damage and circular blast radius.</summary>
+        /// <param name="x">The original explosion center's horizontal pixel coordinate.</param>
+        /// <param name="y">The original explosion center's vertical pixel coordinate.</param>
+        /// <param name="range">The original row range, also used as the ladder column range.</param>
+        private void RemoveAdventureLaddersInBlast(int x, int y, int range)
+        {
+            // PixelToGridXKeepOnBoard (4280D0) and PixelToGridYKeepOnBoard (428160).
+            var column = Math.Max(0, Math.Min(8, (Math.Max(40, x) - 40) / 80));
+            var roofOffset = Adventure.Level.HasRoof ? Math.Max(0, 4 - column) * 20 : 0;
+            var pitch = Adventure.Level.HasPool || Adventure.Level.HasRoof ? 85 : 100;
+            var row = Math.Max(0, Math.Min(RowCount - 1, (y - 80 - roofOffset) / pitch));
+            foreach (var plant in Plants)
+            {
+                if (Math.Abs(plant.Column - column) <= range && Math.Abs(plant.Row - row) <= range)
+                {
+                    plant.HasLadder = false;
+                }
+            }
+        }
+
         /// <summary>Runs PC 546620's retained twelve-frame placement before detaching the carried shield.</summary>
         /// <param name="zombie">The live ladder carrier whose original action is being advanced.</param>
         /// <returns>Whether the placing body must hold its position for this update.</returns>
@@ -13331,7 +13363,7 @@ namespace PlantsVsZombies.Simulation
                     }
                 }
 
-                if (target != null && AdventureHasLadderAt(target.Row, target.Column) && target.Layer != PlantLayer.Support && z.Kind != ZombieKind.Digger
+                if (target != null && AdventureHasLadderAt(target.Row, target.Column) && z.Kind != ZombieKind.Digger
                     && (AdventureNativeChewer(z) || z.Kind == ZombieKind.PoleVaulter && z.PresentationNativePhase == 11))
                 {
                     StopAdventureNativeEating(z);

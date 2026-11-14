@@ -4549,9 +4549,9 @@ namespace PlantsVsZombies.Game
             {
                 if (_owner.RequiredGame.AdventureHasLadderAt(row, column))
                 {
-                    // TodDrawImageScaledF adds the unscaled image center before applying scale .8.
-                    var point = new Vector2(BoardLayout.AdventureGridX + column * BoardLayout.CellWidth + 25f + size.x * .5f,
-                        _owner.Layout.AdventureCellY(row, column) - 4f + size.y * .5f);
+                    // PC 527EF0 keeps the top-left at cell +(25,-4) while scaling the ladder to .8.
+                    var point = new Vector2(BoardLayout.AdventureGridX + column * BoardLayout.CellWidth + 25f + size.x * .4f,
+                        _owner.Layout.AdventureCellY(row, column) - 4f + size.y * .4f);
                     _owner.RequiredAnimations.DrawResourceSprite("IMAGE_REANIM_ZOMBIE_LADDER_5", point, .8f);
                 }
             }

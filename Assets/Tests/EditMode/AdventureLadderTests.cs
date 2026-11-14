@@ -164,6 +164,144 @@ namespace PlantsVsZombies.Tests.EditMode
             Assert.That(zombie.PoolState == null || zombie.PoolState.Altitude == 0f, Is.True);
         }
 
+        /// <summary>Checks an approaching carrier uses an existing cell ladder without placing or losing its own shield.</summary>
+        /// <param name="lifted">Whether a bungee has lifted the defensive body, leaving its flower pot targetable.</param>
+        [TestCase(false)]
+        [TestCase(true)]
+        public void CarryingZombieClimbsAnExistingLadderFromItsNaturalApproach(bool lifted)
+        {
+            var game = Board();
+            var pot = Place(game, PlantKind.FlowerPot);
+            var plant = Place(game, PlantKind.TallNut);
+            plant.HasLadder = true;
+            plant.BungeeState = lifted ? 2 : 0;
+            var zombie = Spawn(game, ZombieKind.Ladder, 520f);
+            var shield = zombie.ShieldHealth;
+            var rose = false;
+            var fell = false;
+            for (var tick = 0; tick < 900; tick++)
+            {
+                Tick(game, 1);
+                Assert.That(zombie.PresentationNativePhase, Is.EqualTo(76), "An existing ladder must keep the carrying walk.");
+                rose |= zombie.PresentationNativeHeight == 6 && zombie.PresentationAltitude > 0f;
+                fell |= zombie.PresentationNativeHeight == 7;
+                if (fell && zombie.PresentationNativeHeight == 0)
+                {
+                    break;
+                }
+            }
+
+            Assert.That(rose, Is.True, "The carrying body must rise while walking over the cell ladder.");
+            Assert.That(fell, Is.True);
+            Assert.That(zombie.PresentationNativeHeight, Is.Zero);
+            Assert.That(zombie.PresentationAltitude, Is.Zero);
+            Assert.That(zombie.ShieldHealth, Is.EqualTo(shield));
+            Assert.That(zombie.UsedAbility, Is.False);
+            Assert.That(pot.Health, Is.EqualTo(300f));
+            Assert.That(plant.Health, Is.EqualTo(8000f));
+        }
+
+        /// <summary>Checks radial specials clear native square cell ranges even without zombies or circular overlap.</summary>
+        /// <param name="level">The native board background.</param>
+        /// <param name="range">The original explosion's cell range.</param>
+        [TestCase(9, 1)]
+        [TestCase(19, 3)]
+        [TestCase(29, 1)]
+        [TestCase(49, 1)]
+        [TestCase(49, 3)]
+        public void ExplosionsClearTheOriginalCellSquare(int level, int range)
+        {
+            var game = Board(level);
+            FillLadders(game);
+            // PC 4294C0 converts the blast center through PixelToGrid, then uses the row range for both axes.
+            // A radius of one isolates grid-item cleanup from the zombie circle-intersection branch.
+            Invoke(game, "BlastAdventureRadius", 200, level == 49 ? 299 : 280, 1, 1, range, 0u);
+            foreach (var plant in game.Plants)
+            {
+                var expected = Math.Abs(plant.Column - 2) > range || Math.Abs(plant.Row - 2) > range;
+                Assert.That(plant.HasLadder, Is.EqualTo(expected), "Cell " + plant.Column + "," + plant.Row);
+            }
+        }
+
+        /// <summary>Checks the roof inverse-grid offset, rather than the supplied zombie-damage row, centers ladder cleanup.</summary>
+        [Test]
+        public void RoofExplosionUsesItsPixelCenterForLadderCleanup()
+        {
+            var game = Board();
+            FillLadders(game);
+            Invoke(game, "BlastAdventureRadius", 200, 289, 4, 115, 1, 0x7Fu);
+            foreach (var plant in game.Plants)
+            {
+                // Column two's inverse slope is forty: (289 - 80 - 40) / 85 = row one.
+                var expected = Math.Abs(plant.Column - 2) > 1 || Math.Abs(plant.Row - 1) > 1;
+                Assert.That(plant.HasLadder, Is.EqualTo(expected));
+            }
+        }
+
+        /// <summary>Checks a real Jalapeno special removes every ladder in its row and preserves other rows.</summary>
+        [Test]
+        public void JalapenoClearsItsEntireRowWithoutTargets()
+        {
+            var game = Board();
+            FillLadders(game);
+            var pepper = (Plant)Invoke(game, "PlaceAdventurePlant", PlantKind.Jalapeno, 2, 4)!;
+            Invoke(game, "DetonateAdventureJalapeno", pepper);
+            for (var row = 0; row < 5; row++)
+            {
+                for (var column = 0; column < 9; column++)
+                {
+                    Assert.That(game.AdventureHasLadderAt(row, column), Is.EqualTo(row != 2));
+                }
+            }
+        }
+
+        /// <summary>Checks a non-burning mine still clears only the original explosion-center cell.</summary>
+        [Test]
+        public void MineClearsOnlyItsOwnCellAcrossAllPlantLayers()
+        {
+            var game = Board();
+            FillLadders(game);
+            var mine = (Plant)Invoke(game, "PlaceAdventurePlant", PlantKind.PotatoMine, 1, 4)!;
+            mine.HasLadder = true;
+            Invoke(game, "DamageAdventurePotatoMine", mine);
+            foreach (var plant in game.Plants)
+            {
+                Assert.That(plant.HasLadder, Is.EqualTo(plant.Row != 1 || plant.Column != 4));
+            }
+        }
+
+        /// <summary>Checks explosion removal makes a surviving climber fall on its next native action.</summary>
+        [Test]
+        public void DestroyedLadderMakesAnUnaffectedCarrierFall()
+        {
+            var game = Board();
+            var plant = Place(game, PlantKind.TallNut);
+            plant.HasLadder = true;
+            var zombie = Spawn(game, ZombieKind.Ladder, 380f);
+            zombie.UseLadderColumn = 4;
+            zombie.PresentationNativeHeight = 6;
+            zombie.PresentationAltitude = 40f;
+            Invoke(game, "BlastAdventureRadius", 400, 215, 1, 1, 1, 0u);
+            Tick(game, 1);
+            Assert.That(zombie.PresentationNativeHeight, Is.EqualTo(7));
+            Assert.That(zombie.PresentationAltitude, Is.EqualTo(39f));
+            Assert.That(zombie.ShieldHealth, Is.GreaterThan(0f));
+        }
+
+        /// <summary>Creates a complete grid of harmless ladder-bearing support plants.</summary>
+        /// <param name="game">The board whose complete grid receives surviving placed ladders.</param>
+        private static void FillLadders(GameSimulation game)
+        {
+            for (var row = 0; row < game.RowCount; row++)
+            {
+                for (var column = 0; column < 9; column++)
+                {
+                    var plant = (Plant)Invoke(game, "PlaceAdventurePlant", PlantKind.FlowerPot, row, column)!;
+                    plant.HasLadder = true;
+                }
+            }
+        }
+
         /// <summary>Checks the native probe and falling update execute in the same original action pass.</summary>
         [Test]
         public void RemovedLadderImmediatelyChangesClimbingIntoFalling()
@@ -231,10 +369,11 @@ namespace PlantsVsZombies.Tests.EditMode
         }
 
         /// <summary>Creates a controlled production board without waves, graves or preplanted objects.</summary>
+        /// <param name="level">The original level selecting the board background and row count.</param>
         /// <returns>The playing simulation for original ladder interactions.</returns>
-        private static GameSimulation Board()
+        private static GameSimulation Board(int level = 49)
         {
-            var game = new GameSimulation(new GameRules { AdventureLevel = 49 }, 7529);
+            var game = new GameSimulation(new GameRules { AdventureLevel = level }, 7529);
             game.ChooseDefaultAdventureSeeds();
             game.ResetAdventureWaveSchedule(100000, false, false);
             game.Plants.Clear();
