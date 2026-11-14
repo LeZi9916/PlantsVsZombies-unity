@@ -3170,6 +3170,41 @@ namespace PlantsVsZombies.Simulation
             }
         }
 
+        /// <summary>Resolves PC 498E30's chooser warning using original recommendation and Last Stand admission rules.</summary>
+        /// <param name="kind">The seed actually hovered, including the original Imitater packet identifier.</param>
+        /// <param name="coffeeChosen">Whether coffee is already selected in this chooser.</param>
+        /// <returns>The original LawnStrings warning key, or an empty string for a recommended seed.</returns>
+        internal string AdventureChooserWarningKey(PlantKind kind, bool coffeeChosen)
+        {
+            var mechanic = ModeSession?.Definition.Mechanic;
+            if (mechanic == ModeMechanic.LastStand && (kind == PlantKind.Sunflower || kind == PlantKind.SunShroom
+                || kind == PlantKind.TwinSunflower || kind == PlantKind.SeaShroom || kind == PlantKind.PuffShroom))
+            {
+                return "NOT_ALLOWED_ON_THIS_LEVEL";
+            }
+
+            var level = Adventure.Level;
+            if (Nocturnal(kind) && !level.IsNight && !coffeeChosen)
+            {
+                return "NOCTURNAL_WARNING";
+            }
+
+            var graves = level.Terrain == AdventureTerrain.Night && level.Mode != AdventureMode.Bowling
+                && level.Mode != AdventureMode.Vasebreaker && mechanic != ModeMechanic.Bowling && mechanic != ModeMechanic.Pogo
+                && mechanic != ModeMechanic.Beghouled && mechanic != ModeMechanic.BeghouledTwist
+                && mechanic != ModeMechanic.Vases && mechanic != ModeMechanic.LastStand && mechanic != ModeMechanic.IZombie;
+            if (kind == PlantKind.CoffeeBean && level.IsNight || kind == PlantKind.GraveBuster && !graves
+                || kind == PlantKind.Plantern && !AdventureHasFog || kind == PlantKind.FlowerPot && !level.HasRoof
+                || level.HasRoof && (kind == PlantKind.Spikeweed || kind == PlantKind.Spikerock)
+                || !level.HasPool && (kind == PlantKind.LilyPad || kind == PlantKind.TangleKelp
+                    || kind == PlantKind.SeaShroom || kind == PlantKind.Cattail))
+            {
+                return "NOT_RECOMMENDED_FOR_LEVEL";
+            }
+
+            return string.Empty;
+        }
+
         /// <summary>Performs place adventure plant.</summary>
         /// <param name = "kind">The kind.</param>
         /// <param name = "row">The row.</param>

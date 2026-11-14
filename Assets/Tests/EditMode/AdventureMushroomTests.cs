@@ -10,7 +10,7 @@ using PlantsVsZombies.Simulation;
 
 namespace PlantsVsZombies.Tests.EditMode
 {
-    /// <summary>Checks original sleep ownership and Doom cell cleanup.</summary>
+    /// <summary>Checks original sleep ownership, Doom cell cleanup and chooser recommendation warnings.</summary>
     public sealed class AdventureMushroomTests
     {
         /// <summary>Checks every nocturnal species sleeps only on the original daytime backgrounds.</summary>
@@ -114,6 +114,47 @@ namespace PlantsVsZombies.Tests.EditMode
             Assert.That(game.Adventure.Craters, Has.Count.EqualTo(1));
             Tick(game, 1);
             Assert.That(game.Adventure.Craters, Is.Empty);
+        }
+
+        /// <summary>Checks PC 498E30 warning precedence and the native recommendation bits.</summary>
+        /// <param name="level">The original background.</param>
+        /// <param name="kind">The hovered seed.</param>
+        /// <param name="coffee">Whether coffee is already in the chooser bank.</param>
+        /// <param name="key">The original LawnStrings key.</param>
+        [TestCase(9, PlantKind.PuffShroom, false, "NOCTURNAL_WARNING")]
+        [TestCase(9, PlantKind.PuffShroom, true, "")]
+        [TestCase(19, PlantKind.PuffShroom, false, "")]
+        [TestCase(9, PlantKind.SeaShroom, false, "NOCTURNAL_WARNING")]
+        [TestCase(9, PlantKind.SeaShroom, true, "NOT_RECOMMENDED_FOR_LEVEL")]
+        [TestCase(29, PlantKind.SeaShroom, true, "")]
+        [TestCase(19, PlantKind.CoffeeBean, false, "NOT_RECOMMENDED_FOR_LEVEL")]
+        [TestCase(9, PlantKind.GraveBuster, false, "NOT_RECOMMENDED_FOR_LEVEL")]
+        [TestCase(19, PlantKind.GraveBuster, false, "")]
+        [TestCase(9, PlantKind.Plantern, false, "NOT_RECOMMENDED_FOR_LEVEL")]
+        [TestCase(39, PlantKind.Plantern, false, "")]
+        [TestCase(40, PlantKind.Plantern, false, "NOT_RECOMMENDED_FOR_LEVEL")]
+        [TestCase(9, PlantKind.FlowerPot, false, "NOT_RECOMMENDED_FOR_LEVEL")]
+        [TestCase(49, PlantKind.FlowerPot, false, "")]
+        [TestCase(49, PlantKind.Spikeweed, false, "NOT_RECOMMENDED_FOR_LEVEL")]
+        [TestCase(49, PlantKind.Spikerock, false, "NOT_RECOMMENDED_FOR_LEVEL")]
+        [TestCase(9, PlantKind.Cattail, false, "NOT_RECOMMENDED_FOR_LEVEL")]
+        [TestCase(29, PlantKind.Cattail, false, "")]
+        public void ChooserWarningsUseOriginalConditions(int level, PlantKind kind, bool coffee, string key)
+        {
+            Assert.That(Board(level).AdventureChooserWarningKey(kind, coffee), Is.EqualTo(key));
+        }
+
+        /// <summary>Checks the five original Last Stand exclusions override nocturnal advice.</summary>
+        [Test]
+        public void LastStandUsesTheOriginalNotAllowedWarning()
+        {
+            var definition = ModeCatalog.All.First(mode => mode.Mechanic == ModeMechanic.LastStand);
+            var game = new ModeSession(definition.Id, randomSeed: 7529).Game;
+            foreach (var kind in new[] { PlantKind.Sunflower, PlantKind.SunShroom, PlantKind.TwinSunflower,
+                PlantKind.SeaShroom, PlantKind.PuffShroom })
+            {
+                Assert.That(game.AdventureChooserWarningKey(kind, false), Is.EqualTo("NOT_ALLOWED_ON_THIS_LEVEL"));
+            }
         }
 
         /// <summary>Creates a playing production board with no scheduled waves or initial occupants.</summary>

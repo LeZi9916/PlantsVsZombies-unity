@@ -708,7 +708,7 @@ not constitute a full-level packaged Player playthrough, physical-speaker
 listening, or Windows/Linux/mobile/IL2CPP device validation.
 
 
-## Original mushroom sleep and Doom cell cleanup
+## Original mushroom sleep, Doom cell cleanup and chooser warnings
 
 PC `Plant::SetSleeping` (`46CB90`) creates the independent reanimation 68,
 `Z.reanim`, at plant +(50,40), render order +2 and scale one. Fume adds twelve
@@ -729,11 +729,23 @@ aging split and twenty-five-update fade remain intact. Crater occupancy now
 expires at exactly 18000 native updates, avoiding accumulated float subtraction
 error; permanent Beghouled holes retain their infinite lifetime.
 
+PC `498E30`/`49A2C0`/`49A300` select the original `NOT_ALLOWED_ON_THIS_LEVEL`,
+`NOCTURNAL_WARNING` or `NOT_RECOMMENDED_FOR_LEVEL` text. Selected coffee suppresses
+only the daytime-mushroom recommendation bit. The other original conditions
+cover water, graves, fog, roof, spikes on roofs and coffee at night. Tooltip
+routing now also covers selected bank cards and the independent-mode chooser;
+combat hovers keep their existing cooldown/sun advice and omit descriptions.
+No replacement warning prose or artwork is introduced.
+
 ```powershell
-./Tools/Tests/Run-UnityTests.ps1 -Platform EditMode -TestFilter 'AdventureMushroomTests|AdventureScreenEffectsTests.DoomShroomStartsItsOriginalFuseWhenWokenAndDetonatesOnce'
+./Tools/Tests/Run-UnityTests.ps1 -Platform EditMode -TestFilter 'AdventureMushroomTests|AdventureScreenEffectsTests.DoomShroomStartsItsOriginalFuseWhenWokenAndDetonatesOnce|AdventureSeedChooserTests'
 # Set PVZ_BOARD_STRESS_ASSETS to the read-only original runtime resources.
-./Tools/Tests/Run-UnityTests.ps1 -Platform PlayMode -TestFilter OriginalMushroomGraphicsTests
+./Tools/Tests/Run-UnityTests.ps1 -Platform PlayMode -TestFilter 'OriginalMushroomGraphicsTests|OriginalBattleTooltipTests'
 ```
 
-These focused checks do not constitute a full-level packaged Player playthrough
-or validation on Windows/Linux/mobile/IL2CPP devices.
+The focused checks cover sleep flags and independent clocks on all six original
+backgrounds, own-cell Doom cleanup and exact crater expiry, original sleeping/Z
+pixels including a small roof body and lifted cargo, dry/water/roof crater cells
+and fade, and chooser warning pixels through the production bitmap fonts.
+These checks do not constitute a full-level packaged Player playthrough or
+validation on Windows/Linux/mobile/IL2CPP devices.

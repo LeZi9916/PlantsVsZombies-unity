@@ -16,7 +16,7 @@ using UnityEngine.TestTools;
 
 namespace PlantsVsZombies.Tests.PlayMode
 {
-    /// <summary>Checks original mushroom sleep artwork, free Z animation and crater atlases.</summary>
+    /// <summary>Checks original mushroom sleep artwork, free Z animation, crater atlases and native chooser warnings.</summary>
     public sealed class OriginalMushroomGraphicsTests
     {
         /// <summary>Checks all ten source sleeping bodies and independently placed original Z artwork, including roof and small bodies.</summary>
@@ -140,5 +140,58 @@ namespace PlantsVsZombies.Tests.PlayMode
             }
         }
 
+        /// <summary>Checks real chooser hover routes and original bitmap-font warning text, including selected coffee and Last Stand.</summary>
+        /// <returns>Real source-font camera frames comparing expected native warning requests.</returns>
+        [UnityTest]
+        public IEnumerator ChooserHoverDisplaysOriginalWarningsAndCoffeeSuppressesOnlySleepAdvice()
+        {
+            using var fixture = new OriginalStormGraphicsTests.StormFixture(49);
+            fixture.Owner._currentView = PvZGame.ScreenView.Board;
+            fixture.Owner._choosingSeeds = true;
+            fixture.Owner._pendingSeeds = new AdventureSeedChooserState(Array.Empty<PlantKind>());
+            foreach (var sample in new[] { (PlantKind.PuffShroom, false, "NOCTURNAL_WARNING"),
+                (PlantKind.PuffShroom, true, ""), (PlantKind.LilyPad, true, "NOT_RECOMMENDED_FOR_LEVEL") })
+            {
+                fixture.Owner._pendingSeeds = new AdventureSeedChooserState(sample.Item2 ? new[] { PlantKind.CoffeeBean } : Array.Empty<PlantKind>());
+                var card = fixture.Owner.Opening.AdventureCampaignChooserRect(sample.Item1);
+                fixture.Owner.AdventureBoard._adventurePointer = card.center;
+                yield return fixture.Capture("DrawOriginalHoverTips");
+                var actual = fixture.Pixels.GetPixels32();
+                Assert.That(fixture.Owner.RequiredOriginalTooltip.LastError, Is.Null);
+                Assert.That(fixture.Owner.RequiredOriginalTooltip.RequiredLastLayout.RequiredWarning.Glyphs.Count > 0, Is.EqualTo(sample.Item3.Length > 0));
+                yield return fixture.Capture(null, () =>
+                {
+                    var key = sample.Item1 == PlantKind.PuffShroom ? "PUFF_SHROOM" : "LILY_PAD";
+                    var text = new GamePresenter(fixture.Owner);
+                    fixture.DrawPass("DrawOriginalTooltipRequest", new OriginalTooltipRequest
+                    {
+                        Title = text.OriginalProgressionText(key), Body = text.OriginalProgressionText(key + "_TOOLTIP"),
+                        Warning = sample.Item3.Length == 0 ? "" : text.OriginalProgressionText(sample.Item3),
+                        X = (int)card.center.x, Y = (int)card.yMax + 7, Centered = true, UseSeedChooserLineWidth = true
+                    });
+                });
+                Assert.That(fixture.Pixels.GetPixels32(), Is.EqualTo(actual));
+            }
+
+            // Selected chooser-bank cards retain chooser descriptions and warnings instead of combat availability advice.
+            fixture.Owner._pendingSeeds = new AdventureSeedChooserState(new[] { PlantKind.PuffShroom });
+            var bank = fixture.Owner.Layout.AdventureSeedBankOrigin;
+            fixture.Owner.AdventureBoard._adventurePointer = new Vector2(bank.x + AdventureSeedSlotLayout.PositionX(0, fixture.Owner.Layout.SeedBankCapacity) + 25f, bank.y + 43f);
+            yield return fixture.Capture("DrawOriginalHoverTips");
+            Assert.That(fixture.Owner.RequiredOriginalTooltip.RequiredLastLayout.BodyLines.Count, Is.GreaterThan(0));
+            Assert.That(fixture.Owner.RequiredOriginalTooltip.RequiredLastLayout.RequiredWarning.Glyphs.Count, Is.GreaterThan(0));
+
+            var definition = ModeCatalog.All.First(mode => mode.Mechanic == ModeMechanic.LastStand);
+            var session = new ModeSession(definition.Id, randomSeed: 7529);
+            fixture.Owner.IndependentModes._modeSession = session;
+            fixture.Owner._game = session.Game;
+            fixture.Owner._pendingSeeds = new AdventureSeedChooserState(Array.Empty<PlantKind>());
+            var index = fixture.Owner._game.Adventure.AvailableSeeds.ToList().IndexOf(PlantKind.PuffShroom);
+            Assert.That(index, Is.GreaterThanOrEqualTo(0));
+            fixture.Owner.AdventureBoard._adventurePointer = BoardLayout.AdventureChooserRect(index).center;
+            yield return fixture.Capture("DrawOriginalHoverTips");
+            Assert.That(fixture.Owner.RequiredOriginalTooltip.LastError, Is.Null);
+            Assert.That(fixture.Owner.RequiredOriginalTooltip.RequiredLastLayout.RequiredWarning.Glyphs.Count, Is.GreaterThan(0));
+        }
     }
 }

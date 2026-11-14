@@ -7267,17 +7267,33 @@ namespace PlantsVsZombies.Game
                 return;
             }
 
-            if (_owner.Opening.AdventureIntroActive && !_owner.Opening.AdventureIntroAwaitingSeeds)
+            var modeChooser = _owner.IndependentModes.IsModeBoard && _owner.IndependentModes.RequiredModeSession.Phase == ModePhase.ChoosingSeeds;
+            if (_owner.Opening.AdventureIntroActive && !_owner.Opening.AdventureIntroAwaitingSeeds && !modeChooser)
             {
                 return;
             }
 
-            if (_owner.Opening.AdventureIntroAwaitingSeeds)
+            if (_owner.Opening.AdventureIntroAwaitingSeeds || _owner._choosingSeeds || modeChooser)
             {
+                if (_owner._pendingSeeds != null)
+                {
+                    var bank = _owner.Layout.AdventureSeedBankOrigin;
+                    for (var index = 0; index < _owner._pendingSeeds.Count; index++)
+                    {
+                        var selected = _owner._pendingSeeds[index];
+                        var selectedRect = new Rect(bank.x + AdventureSeedSlotLayout.PositionX(index, _owner.Layout.SeedBankCapacity), bank.y + 8f, 50f, 70f);
+                        if (!_owner._pendingSeeds.IsMoving(selected) && selectedRect.Contains(_owner.AdventureBoard._adventurePointer))
+                        {
+                            DrawOriginalPlantTooltip(selected, selectedRect, true);
+                            return;
+                        }
+                    }
+                }
+
                 for (var kindIndex = 0; kindIndex < _owner._game.Adventure.AvailableSeeds.Count; kindIndex++)
                 {
                     var kind = _owner._game.Adventure.AvailableSeeds[kindIndex];
-                    var rect = _owner.Opening.AdventureCampaignChooserRect(kind);
+                    var rect = modeChooser ? BoardLayout.AdventureChooserRect(kindIndex) : _owner.Opening.AdventureCampaignChooserRect(kind);
                     if (rect.Contains(_owner.AdventureBoard._adventurePointer))
                     {
                         DrawOriginalPlantTooltip(kind, rect, true);
@@ -7317,7 +7333,11 @@ namespace PlantsVsZombies.Game
             }
 
             var key = VerifiedDataCatalog.Plants[(int)shown].InternalName;
-            var warning = chooser ? "" : _owner.RequiredGame.CooldownRemaining(kind) > 0 ? OriginalProgressionText("WAITING_TO_REFRESH") : _owner.RequiredGame.AdventureSunAvailable < _owner.RequiredGame.AdventureSeedCost(kind) ? OriginalProgressionText("NOT_ENOUGH_SUN") : "";
+            var warningKey = chooser ? _owner.RequiredGame.AdventureChooserWarningKey(kind,
+                _owner._pendingSeeds?.Contains(PlantKind.CoffeeBean) == true) : string.Empty;
+            var warning = chooser ? warningKey.Length == 0 ? "" : OriginalProgressionText(warningKey)
+                : _owner.RequiredGame.CooldownRemaining(kind) > 0 ? OriginalProgressionText("WAITING_TO_REFRESH")
+                : _owner.RequiredGame.AdventureSunAvailable < _owner.RequiredGame.AdventureSeedCost(kind) ? OriginalProgressionText("NOT_ENOUGH_SUN") : "";
             DrawOriginalTooltipRequest(new OriginalTooltipRequest {
                 Title = OriginalProgressionText(key),
                 Body = chooser ? OriginalProgressionText(key + "_TOOLTIP") : "",
