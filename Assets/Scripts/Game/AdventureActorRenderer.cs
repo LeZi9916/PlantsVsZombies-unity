@@ -193,7 +193,7 @@ namespace PlantsVsZombies.Game
                 : zombie.Kind == ZombieKind.Buckethead && zombie.ArmorHealth > 0 ? ZombieVariant.Buckethead
                 : zombie.Kind == ZombieKind.ScreenDoor && zombie.ShieldHealth > 0 ? ZombieVariant.ScreenDoor : ZombieVariant.Normal;
             _plantHead = zombie.ModeHead >= 26 && zombie.ModeHead <= 31;
-            _backwards = zombie.PresentationWalkingBackwards ?? (zombie.Hypnotized || zombie.Kind == ZombieKind.Digger && zombie.AbilityPhase == 2);
+            _backwards = zombie.PresentationWalkingBackwards ?? (zombie.Hypnotized || zombie.Kind == ZombieKind.Digger && AdventureDiggerState.WalksBackwards(zombie));
             if (AdventureDancerRules.IsDancer(zombie))
             {
                 // PC UpdateReanim 0x547FF0 mirrors only the moonwalk, then applies mind control.
@@ -343,6 +343,8 @@ namespace PlantsVsZombies.Game
                 : RequiredRenderer.DrawNativePlayback(_name, _origin, _scale, _seconds, _clip, _loop, _rate, _zombieVisible, null, null,
                     _backwards, _key, _zombie.Kind == ZombieKind.Balloon ? _zombie.PresentationBalloonBlendTicks
                         : _zombie.Kind == ZombieKind.Bobsled && _zombie.BobsledState != null ? 0
+                        : _zombie.Kind == ZombieKind.Pogo ? _zombie.PogoState?.AnimationBlendTicks ?? 20
+                        : _zombie.Kind == ZombieKind.Digger ? _zombie.DiggerState?.AnimationBlendTicks ?? 20
                         : _zombie.Kind == ZombieKind.DolphinRider ? AdventureZombieMotionRules.DolphinBlendTicks(_zombie)
                         : _clip == "anim_gasp" || _zombie.ZomboniState?.FlatTires == true ? 10
                             : _zombie.Kind == ZombieKind.Snorkel && _zombie.PresentationNativePhase != 58

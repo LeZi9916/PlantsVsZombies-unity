@@ -26,6 +26,12 @@ namespace PlantsVsZombies.Adventure
                 return false;
             }
 
+            if (z.Kind == ZombieKind.Digger && z.PresentationNativePhase >= 33 && z.PresentationNativePhase <= 35)
+            {
+                // PC EffectedByDamage 54D810 admits only range bit 0x10 during emergence and the axe-loss pause.
+                return false;
+            }
+
             if (z.Kind == ZombieKind.DolphinRider && (z.PresentationNativePhase == 52 || z.PresentationNativePhase == 54))
             {
                 // PC EffectedByDamage 54D810 admits only range bit 0x10 while entering water or vaulting.
@@ -49,7 +55,7 @@ namespace PlantsVsZombies.Adventure
         public static NativeRect BodyRectangle(Zombie z)
         {
             var x = (int)AdventureZombieNativeRules.NativePositionX(z.X, AdventureDancerRules.Scale(z));
-            var backwards = z.PresentationWalkingBackwards ?? (z.Hypnotized || z.Kind == ZombieKind.Digger && z.AbilityPhase == 2);
+            var backwards = z.PresentationWalkingBackwards ?? (z.Hypnotized || z.Kind == ZombieKind.Digger && AdventureDiggerState.WalksBackwards(z));
             if (z.Kind == ZombieKind.Bobsled && z.PresentationNativePhase != 19 && (z.PresentationHasSled ?? !z.UsedAbility))
             {
                 return new NativeRect(x + (backwards ? -105 : -50), 0, 275, 115);
@@ -65,7 +71,7 @@ namespace PlantsVsZombies.Adventure
         public static NativeRect BodyRectangle(Zombie z, int y)
         {
             var x = (int)AdventureZombieNativeRules.NativePositionX(z.X, AdventureDancerRules.Scale(z));
-            var backwards = z.PresentationWalkingBackwards ?? (z.Hypnotized || z.Kind == ZombieKind.Digger && z.AbilityPhase == 2);
+            var backwards = z.PresentationWalkingBackwards ?? (z.Hypnotized || z.Kind == ZombieKind.Digger && AdventureDiggerState.WalksBackwards(z));
             if (z.Kind == ZombieKind.Bobsled && z.PresentationNativePhase != 19 && (z.PresentationHasSled ?? !z.UsedAbility))
             {
                 return new NativeRect(x + (backwards ? -105 : -50), y, 275, 115);

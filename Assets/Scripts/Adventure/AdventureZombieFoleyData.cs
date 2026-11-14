@@ -140,6 +140,20 @@ namespace PlantsVsZombies.Adventure
                 76,
                 new AdventureZombieFoleyDefinition(10f, new[] { "coblaunch" })
             },
+            // PC Foley 26 at 74B3B8 + 26 * 52: the pogo landing sample varies over four semitones.
+            {
+                26,
+                new AdventureZombieFoleyDefinition(4f, new[] { "pogo_zombie" })
+            },
+            {
+                39,
+                new AdventureZombieFoleyDefinition(10f, new[] { "firepea" })
+            },
+            // PC Foley 80 at 74B3B8 + 80 * 52: rising dirt has a five-semitone range.
+            {
+                80,
+                new AdventureZombieFoleyDefinition(5f, new[] { "dirt_rise" })
+            },
             {
                 83,
                 new AdventureZombieFoleyDefinition(0f, new[] { "wakeup" })

@@ -23,6 +23,10 @@ namespace PlantsVsZombies.Simulation
         public float PresentationNativeAge, PresentationLobHeight, PresentationPreviousLobHeight, PresentationLobInitialVelocity = -7f, PresentationLobX, PresentationLaunchY;
         /// <summary>Stores the Threepeater's vertical displacement and decaying velocity in native pixels per tick.</summary>
         public float PresentationLaneOffset, PresentationPreviousLaneOffset, PresentationLaneVelocity;
+        /// <summary>Stores the independent elapsed seconds and original animation rate of an attached FirePea reanimation.</summary>
+        public float PresentationFireAge, PresentationFireRate;
+        /// <summary>Stores a star's native shadow y, including original vertical motion and roof floor deltas.</summary>
+        public float PresentationStarShadowY;
         /// <summary>Stores presentation motion initialized.</summary>
         public bool PresentationMotionInitialized;
         /// <summary>Gets or sets presentation can impact.</summary>
@@ -108,6 +112,9 @@ namespace PlantsVsZombies.Simulation
             PresentationLaneOffset = 0f;
             PresentationPreviousLaneOffset = 0f;
             PresentationLaneVelocity = 0f;
+            PresentationFireAge = 0f;
+            PresentationFireRate = 0f;
+            PresentationStarShadowY = 0f;
             PresentationMotionInitialized = false;
             PresentationInitialized = false;
             Damage = 20f;

@@ -2208,8 +2208,15 @@ namespace PlantsVsZombies.Game
                     {
                         if (effect.Row == row)
                         {
-                            RequiredAdventureParticles.Draw(_presentationKeys.Get("grave-zombie-rise-", effect.Id), effect.Dancer ? "DancerRise" : effect.Whack ? "WhackAZombieRise" : "ZombieRise",
+                            RequiredAdventureParticles.Draw(_presentationKeys.Get("grave-zombie-rise-", effect.Id), effect.Digger ? "DiggerRise" : effect.Dancer ? "DancerRise" : effect.Whack ? "WhackAZombieRise" : "ZombieRise",
                                 effect.Age + AdventureRenderRemainder, new Vector2(effect.X, effect.Y), effect.Id);
+                            if (effect.Digger && _owner.RequiredAnimations.TryGetNativeDefinitionInfo("Digger_rising_dirt", out var dirt)
+                                && effect.Age + AdventureRenderRemainder < dirt.Count / 24f)
+                            {
+                                // PC 543D90 creates the independent dirt at native+(13,97), rather than the particle's +(60,118).
+                                _owner.RequiredAnimations.DrawNativePlayback("Digger_rising_dirt", new Vector2(effect.X - 47f, effect.Y - 21f),
+                                    1f, effect.Age + AdventureRenderRemainder, null, false, 24f);
+                            }
                         }
                     }
 
@@ -2670,11 +2677,6 @@ namespace PlantsVsZombies.Game
                 case ZombieKind.Bungee:
                     pixelX -= 18f;
                     break;
-            }
-
-            if (zombie.Kind == ZombieKind.Pogo && !zombie.UsedAbility)
-            {
-                y -= 16f;
             }
 
             if (zombie.DropRemaining > 0)
@@ -3562,6 +3564,12 @@ namespace PlantsVsZombies.Game
             var age = zombie.PresentationAnimationAge + (zombie.FrozenRemaining > 0 ? 0
                 : AdventureRenderRemainder * (zombie.ChillRemaining > 0 && !constantGroundClock ? .5f : 1f));
             var rate = _owner.RequiredGame.AdventurePresentationZombieRate(zombie);
+            if (zombie.Kind == ZombieKind.Digger && zombie.PresentationNativePhase == 34 && zombie.DiggerState != null)
+            {
+                age = zombie.DiggerState.PausedDigSeconds;
+                rate = 12f;
+            }
+
             age = AdventureZombieMotionRules.PlaybackSeconds(zombie, age);
             var spotlight = AdventureDancerRules.HasSpotlight(zombie) && _owner.RequiredGame.State != MatchState.Lost;
             if (spotlight)
@@ -3575,6 +3583,7 @@ namespace PlantsVsZombies.Game
                 && zombie.PresentationNativePhase != 18 && !AdventureDancerRules.HoldsPoint(zombie));
             DrawAdventureBobsled(zombie, false);
             DrawAdventurePoolZombieEffects(zombie);
+            DrawAdventureDiggerEffects(zombie);
             if (spotlight)
             {
                 DrawAdventureDancerSpotlight(zombie, x, true);
@@ -3604,6 +3613,36 @@ namespace PlantsVsZombies.Game
 
             DrawAdventureTangleKelpGrab(zombie, x);
             DrawAdventureZomboniSmoke(zombie, x);
+        }
+
+        /// <summary>Draws the PC digger's original tunnel, emergence dirt, and independent axe-loss question mark.</summary>
+        /// <param name="zombie">The digger retaining its native phase and original effect clocks.</param>
+        private void DrawAdventureDiggerEffects(Zombie zombie)
+        {
+            if (zombie.Kind != ZombieKind.Digger || zombie.DiggerState == null)
+            {
+                return;
+            }
+
+            var state = zombie.DiggerState;
+            var nativeX = AdventureZombieNativeRules.NativePositionX(AdventureRenderX(zombie), AdventureDancerRules.Scale(zombie));
+            var nativeY = AdventureFloorYAtPixel(zombie.Row, nativeX + 40f) - 30f;
+            if (_adventureParticles != null)
+            {
+                _adventureParticles.Draw(_presentationKeys.Get("digger-tunnel-", zombie.Id), "DiggerTunnel",
+                    zombie.Age + AdventureRenderRemainder, new Vector2(nativeX + 60f, nativeY + 100f), zombie.Id,
+                    stopAge: state.TunnelStopAge);
+            }
+
+            var surpriseAge = state.SurpriseAge + AdventureRenderRemainder;
+            if (state.SurpriseAge >= 0f && surpriseAge < 15f / 12f)
+            {
+                // PC AddAttachedReanim 54E050 leaves this whole-sheet PlayOnce at its source twelve FPS.
+                // Attachments use the unmirrored, unscaled native origin and an independent animation clock.
+                _owner.RequiredAnimations.DrawNativePlayback("Zombie_surprise",
+                    new Vector2(nativeX + 23f, nativeY + 93f - zombie.PresentationAltitude),
+                    1f, surpriseAge, null, false, 12f);
+            }
         }
 
         /// <summary>Draws the PC damaged engine's attached smoke at its unscaled native position.</summary>
@@ -3749,7 +3788,7 @@ namespace PlantsVsZombies.Game
         {
             var scale = AdventureDancerRules.Scale(zombie);
             var shadowScale = scale;
-            var backwards = zombie.PresentationWalkingBackwards ?? (zombie.Hypnotized || zombie.Kind == ZombieKind.Digger && zombie.AbilityPhase == 2);
+            var backwards = zombie.PresentationWalkingBackwards ?? (zombie.Hypnotized || zombie.Kind == ZombieKind.Digger && AdventureDiggerState.WalksBackwards(zombie));
             var offsetX = backwards ? 11f : 23f;
             var offsetY = 0f;
             // Native GetDrawPos followed by Zombie::DrawShadow, not the reanimation pivot.
@@ -3862,7 +3901,7 @@ namespace PlantsVsZombies.Game
                 pose.IsSmall = arm.Scale < 1f;
                 pose.UsedAbility = arm.Animation != "anim_pogo" && arm.Animation != "anim_run" && arm.Animation != "anim_walkdolphin";
                 pose.PresentationNativePhase = pose.Kind == ZombieKind.DolphinRider ? arm.NativePhase : -1;
-                pose.PresentationAltitude = pose.Kind == ZombieKind.DolphinRider ? arm.NativeAltitude : 0f;
+                pose.PresentationAltitude = pose.Kind == ZombieKind.DolphinRider || pose.Kind == ZombieKind.Pogo ? arm.NativeAltitude : 0f;
                 _owner.RequiredAnimations.DrawNativeZombieArmDrop(_adventureParticles, arm, AdventureZombieOrigin(pose, arm.X), AdventureRenderRemainder);
             }
         }
@@ -3886,7 +3925,7 @@ namespace PlantsVsZombies.Game
                 pose.IsSmall = part.Scale < 1f;
                 pose.UsedAbility = part.Animation != "anim_pogo" && part.Animation != "anim_run" && part.Animation != "anim_walkdolphin";
                 pose.PresentationNativePhase = pose.Kind == ZombieKind.DolphinRider ? part.NativePhase : -1;
-                pose.PresentationAltitude = pose.Kind == ZombieKind.DolphinRider ? part.NativeAltitude : 0f;
+                pose.PresentationAltitude = pose.Kind == ZombieKind.DolphinRider || pose.Kind == ZombieKind.Pogo ? part.NativeAltitude : 0f;
                 _owner.RequiredAnimations.DrawNativeZombiePartDrop(_adventureParticles, part, AdventureZombieOrigin(pose, part.X), AdventureRenderRemainder);
             }
         }
@@ -4198,7 +4237,6 @@ namespace PlantsVsZombies.Game
             var x = pea.PresentationInitialized ? Mathf.Lerp(pea.PresentationPreviousX, pea.X, AdventureRenderRemainder * 100f) : pea.X;
             var row = pea.PresentationInitialized ? Mathf.Lerp(pea.PresentationPreviousRow, pea.FlightRow, AdventureRenderRemainder * 100f) : pea.FlightRow;
             var y = BoardLayout.AdventureGridY + row * _owner.Layout.AdventurePitch + _owner.Layout.AdventureSlope(x) + 30f;
-            var age = pea.PresentationAge + AdventureRenderRemainder;
             var shortPuff = AdventurePuffShroomRules.IsShortRange(pea.SourceKind);
             if (pea.SourceKind == PlantKind.Threepeater)
             {
@@ -4206,7 +4244,11 @@ namespace PlantsVsZombies.Game
                 y = pea.PresentationLaunchY + Mathf.Lerp(pea.PresentationPreviousLaneOffset,
                     pea.PresentationLaneOffset, AdventureRenderRemainder * 100f);
             }
-            else if (shortPuff || pea.SourceKind == PlantKind.Cactus)
+            else if (pea.SourceKind == PlantKind.Starfruit)
+            {
+                y = pea.PresentationLaunchY + (row - pea.PresentationLaunchRow) * _owner.Layout.AdventurePitch + 19f;
+            }
+            else if (shortPuff || pea.SourceKind == PlantKind.Cactus || AdventureTorchwoodRules.IsPea(pea.SourceKind) && pea.PresentationLaunchY != 0f)
             {
                 y = pea.PresentationLaunchY;
             }
@@ -4220,9 +4262,22 @@ namespace PlantsVsZombies.Game
             }
 
             var center = new Vector2(BoardLayout.AdventureGridX + x * BoardLayout.CellWidth, y);
+            if (pea.SourceKind == PlantKind.Starfruit)
+            {
+                // Original art is 38x38; AddProjectile stores its top-left, separately from the 40x40 hit box.
+                center.x += 19f;
+                rotation = pea.PresentationSpin * (pea.PresentationNativeAge + AdventureRenderRemainder) * 100f * Mathf.Rad2Deg;
+                var shadowY = pea.PresentationStarShadowY + pea.VelocityY * _owner.Layout.AdventurePitch * AdventureRenderRemainder;
+                _owner.RequiredAnimations.DrawResourceSprite("IMAGE_PEA_SHADOWS", new Vector2(center.x - 1.5f, shadowY + 4.5f), 1f, 0, _owner.RequiredGame.Adventure.Level.IsNight ? 1 : 0);
+            }
+
             if (pea.Fire)
             {
-                _owner.RequiredAnimations.DrawNativePlayback("FirePea", center, 1f, age, null, true);
+                // PC attachment uses mPos+(-25,-25), or mPos+(55,-25) with negative X scale for backward motion.
+                // The retained 28x28 pea center is mPos+(14,14); native mirroring adds the original eighty pixels.
+                _owner.RequiredAnimations.DrawNativePlayback("FirePea", center - new Vector2(39f, 39f), 1f,
+                    pea.PresentationFireAge + AdventureRenderRemainder, null, true, pea.PresentationFireRate,
+                    facingLeft: pea.Backward, mirrorWidth: 80f);
                 return;
             }
 

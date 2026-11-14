@@ -31,6 +31,80 @@ namespace PlantsVsZombies.Adventure
             return plantY + 25;
         }
 
+        /// <summary>Gets the star's original vertical position independently of the floor beneath its current x.</summary>
+        /// <param name="shot">The original star retaining its launch position and vertical displacement.</param>
+        /// <param name="rowPitch">The board's original row spacing in pixels.</param>
+        /// <returns>The current native top-left y coordinate.</returns>
+        public static float PositionY(Pea shot, float rowPitch)
+        {
+            return shot.PresentationLaunchY + (shot.FlightRow - shot.PresentationLaunchRow) * rowPitch;
+        }
+
+        /// <summary>Maps a moving star to PC PixelToGridYKeepOnBoard rather than rounding its displacement from the plant.</summary>
+        /// <param name="x">The star's native top-left x coordinate.</param>
+        /// <param name="y">The star's native top-left y coordinate.</param>
+        /// <param name="pool">Whether the board has six pool or fog rows.</param>
+        /// <param name="roof">Whether the original roof inverse-grid offset applies.</param>
+        /// <returns>The original collision row, clamped to the board.</returns>
+        public static int CollisionRow(float x, float y, bool pool, bool roof)
+        {
+            var column = Math.Max(0, Math.Min(8, (Math.Max(40, (int)x) - 40) / 80));
+            var offset = roof ? Math.Max(0, 4 - column) * 20 : 0;
+            var row = ((int)y - offset - 80) / (pool || roof ? 85 : 100);
+            return Math.Max(0, Math.Min(pool ? 5 : 4, row));
+        }
+
+        /// <summary>Checks PC CheckForCollision's exact original star bounds before attempting any hit.</summary>
+        /// <param name="x">The star's native top-left x coordinate.</param>
+        /// <param name="y">The star's native top-left y coordinate.</param>
+        /// <returns>Whether the original projectile must be removed without impact.</returns>
+        public static bool OffBoard(float x, float y)
+        {
+            return x > 800f || x + 40f < 0f || y > 600f || y < 40f;
+        }
+
+        /// <summary>Checks PC ZombieNotWalking's fixed phase and height gates before predicting a star target.</summary>
+        /// <param name="zombie">The zombie whose native velocity would otherwise predict movement.</param>
+        /// <returns>Whether the target's original prediction velocity is zero.</returns>
+        public static bool TargetNotWalking(Zombie zombie)
+        {
+            if (zombie.Eating || zombie.FrozenRemaining > 0f || zombie.PresentationButter > 0f
+                || zombie.PresentationNativeHeight >= 8 && zombie.PresentationNativeHeight <= 10
+                || zombie.Kind == ZombieKind.Bungee || zombie.Kind == ZombieKind.Boss)
+            {
+                return true;
+            }
+
+            switch (zombie.PresentationNativePhase)
+            {
+                case 16:
+                case 30:
+                case 33:
+                case 34:
+                case 35:
+                case 36:
+                case 41:
+                case 42:
+                case 43:
+                case 45:
+                case 46:
+                case 47:
+                case 48:
+                case 49:
+                case 50:
+                case 67:
+                case 68:
+                case 69:
+                case 70:
+                case 71:
+                case 72:
+                case 77:
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
         /// <summary>Checks one zombie against the original five-direction Starfruit target paths.</summary>
         /// <param name="plant">The Starfruit attempting to shoot.</param>
         /// <param name="zombie">The potential target.</param>

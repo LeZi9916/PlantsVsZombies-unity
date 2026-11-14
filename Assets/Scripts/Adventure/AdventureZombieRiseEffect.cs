@@ -16,5 +16,8 @@ namespace PlantsVsZombies.Adventure
 
         /// <summary>Gets whether this effect uses the original backup dancer emergence particles.</summary>
         public bool Dancer;
+
+        /// <summary>Gets whether this is the original independent DiggerRise particle and rising dirt reanimation.</summary>
+        public bool Digger;
     }
 }

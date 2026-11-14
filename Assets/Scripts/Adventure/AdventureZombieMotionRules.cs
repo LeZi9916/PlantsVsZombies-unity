@@ -32,6 +32,27 @@ namespace PlantsVsZombies.Adventure
         /// <returns>The phase animation, or null for the existing generic selector.</returns>
         internal static string? Animation(Zombie zombie)
         {
+            if (AdventurePogoRules.IsBouncing(zombie))
+            {
+                return "anim_pogo";
+            }
+
+            if (zombie.Kind == ZombieKind.Digger)
+            {
+                switch (zombie.PresentationNativePhase)
+                {
+                    case 32:
+                    case 34:
+                        return "anim_dig";
+                    case 33:
+                        return zombie.DiggerState?.PhaseTicks > 30 ? "anim_drill" : "anim_landing";
+                    case 35:
+                        return "anim_landing";
+                    case 36:
+                        return "anim_dizzy";
+                }
+            }
+
             if (zombie.Kind == ZombieKind.PoleVaulter)
             {
                 return zombie.PresentationNativePhase == 12 ? "anim_jump" : !zombie.UsedAbility ? "anim_run" : null;
@@ -92,7 +113,9 @@ namespace PlantsVsZombies.Adventure
         internal static bool PlaysOnce(Zombie zombie)
         {
             var phase = zombie.PresentationNativePhase;
-            return zombie.Kind == ZombieKind.JackInTheBox && phase == 16
+            return AdventurePogoRules.IsBouncing(zombie)
+                || zombie.Kind == ZombieKind.Digger && (phase == 35 || phase == 33 && zombie.DiggerState?.PhaseTicks <= 30)
+                || zombie.Kind == ZombieKind.JackInTheBox && phase == 16
                 || zombie.Kind == ZombieKind.Zomboni && zombie.ZomboniState?.FlatTires == true
                 || zombie.Kind == ZombieKind.Balloon && phase == 74
                 || zombie.Kind == ZombieKind.PoleVaulter && phase == 12
@@ -150,6 +173,14 @@ namespace PlantsVsZombies.Adventure
         /// <returns>The native clipping height, or the original off-screen sentinel.</returns>
         internal static float ClipHeight(Zombie zombie, float scale)
         {
+            if (zombie.Kind == ZombieKind.Digger
+                && (zombie.PresentationNativePhase == 33 || zombie.PresentationNativePhase == 35)
+                && zombie.DiggerState?.PhaseTicks > 20)
+            {
+                // PC 549C33 / 548D40 cancels the underground altitude at the fixed ground clipping edge.
+                return -zombie.PresentationAltitude;
+            }
+
             // PC GetDrawPos 54998C..549B31 changes the clip only during these authored dolphin intervals.
             if (zombie.Kind == ZombieKind.DolphinRider)
             {

@@ -143,6 +143,22 @@ namespace PlantsVsZombies.Adventure
             }
         }
 
+        /// <summary>Checks PC 0x470170's circular magnet reach against the original zombie body rectangle.</summary>
+        /// <param name="zombie">The candidate zombie, including its eating state and original facing.</param>
+        /// <param name="plantX">The Magnet-shroom's native top-left x coordinate.</param>
+        /// <param name="plantY">The Magnet-shroom's native top-left y coordinate.</param>
+        /// <param name="zombieY">The original collision origin y after the native body altitude has been applied.</param>
+        /// <returns>Whether the zombie body touches the original 270-pixel or eating 320-pixel circle.</returns>
+        public static bool InMagnetRange(Zombie zombie, int plantX, int plantY, int zombieY)
+        {
+            var body = AdventureZombieTargetingRules.BodyRectangle(zombie, zombieY);
+            var centerY = plantY + 20;
+            var dx = Math.Max(body.X - plantX, Math.Max(0, plantX - body.X - body.Width));
+            var dy = Math.Max(body.Y - centerY, Math.Max(0, centerY - body.Y - body.Height));
+            var radius = zombie.Eating ? 320 : 270;
+            return dx * dx + dy * dy <= radius * radius;
+        }
+
         /// <summary>Gets the original particle emitted when a held shield is detached.</summary>
         /// <param name="zombie">The zombie supplying its original shield type.</param>
         /// <returns>The PC particle identifier, or minus one when the zombie has no supported shield.</returns>
@@ -205,6 +221,12 @@ namespace PlantsVsZombies.Adventure
         {
             if (z.Kind == ZombieKind.JackInTheBox && z.UsedAbility
                 && (Same(track, "zombie_jackbox_box") || Same(track, "zombie_jackbox_handle")))
+            {
+                return false;
+            }
+
+            if (z.Kind == ZombieKind.Digger && z.UsedAbility
+                && (Same(track, "zombie_digger_pickaxe") || Same(track, "zombie_digger_dirt")))
             {
                 return false;
             }

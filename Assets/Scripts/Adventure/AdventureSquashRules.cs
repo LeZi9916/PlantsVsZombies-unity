@@ -56,7 +56,7 @@ namespace PlantsVsZombies.Adventure
                 rear -= 60;
             }
 
-            var backwards = zombie.PresentationWalkingBackwards ?? (zombie.Hypnotized || zombie.Kind == ZombieKind.Digger && zombie.AbilityPhase == 2);
+            var backwards = zombie.PresentationWalkingBackwards ?? (zombie.Hypnotized || zombie.Kind == ZombieKind.Digger && AdventureDiggerState.WalksBackwards(zombie));
             return backwards || body.X + body.Width >= rear;
         }
 

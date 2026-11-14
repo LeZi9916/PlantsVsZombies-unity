@@ -45,6 +45,11 @@ namespace PlantsVsZombies.Audio
             {
                 _jackInTheBoxMusic.volume = volume;
             }
+
+            if (_diggerTunnelingSound != null)
+            {
+                _diggerTunnelingSound.volume = volume;
+            }
         }
 
         /// <summary>Destroys the loaded legacy effect clips.</summary>
@@ -251,6 +256,13 @@ namespace PlantsVsZombies.Audio
                 _jackInTheBoxMusic.Stop();
                 UnityEngine.Object.Destroy(_jackInTheBoxMusic);
                 _jackInTheBoxMusic = null;
+            }
+
+            if (_diggerTunnelingSound != null)
+            {
+                _diggerTunnelingSound.Stop();
+                UnityEngine.Object.Destroy(_diggerTunnelingSound);
+                _diggerTunnelingSound = null;
             }
         }
 
@@ -558,6 +570,83 @@ namespace PlantsVsZombies.Audio
             }
         }
 
+        /// <summary>Owns the original reference-counted drill sample shared by live tunneling diggers.</summary>
+        private AudioSource? _diggerTunnelingSound;
+        /// <summary>Tracks whether the tunneling sample is suspended by the board pause.</summary>
+        private bool _diggerTunnelingSoundPaused;
+
+        /// <summary>Synchronizes PC Foley 33 with tunneling actors, immobilization and the active board.</summary>
+        private void UpdateDiggerTunnelingSound()
+        {
+            var game = _owner._game;
+            var active = false;
+            if (_owner._currentView == PvZGame.ScreenView.Board && game != null && game.IsAdventure && (game.State == MatchState.Playing || game.State == MatchState.Paused))
+            {
+                foreach (var zombie in game.Zombies)
+                {
+                    // PC StartZombieSound/StopZombieSound retains one shared Foley 33 voice.
+                    var tunneling = zombie.PresentationNativePhase == 32
+                        || zombie.PresentationNativePhase < 0 && zombie.AbilityPhase == 0;
+                    if (zombie.Kind == ZombieKind.Digger && tunneling && !zombie.Headless
+                        && zombie.Health > 0f && zombie.FrozenRemaining <= 0f && zombie.PresentationButter <= 0f)
+                    {
+                        active = true;
+                        break;
+                    }
+                }
+            }
+
+            if (!active)
+            {
+                if (_diggerTunnelingSound != null)
+                {
+                    _diggerTunnelingSound.Stop();
+                }
+
+                _diggerTunnelingSoundPaused = false;
+                return;
+            }
+
+            if (_audioSource == null || !_presentationSounds.TryGetValue("digger_zombie", out var clip) || clip == null)
+            {
+                return;
+            }
+
+            if (_diggerTunnelingSound == null)
+            {
+                _diggerTunnelingSound = _audioSource.gameObject.AddComponent<AudioSource>();
+                _diggerTunnelingSound.playOnAwake = false;
+                _diggerTunnelingSound.loop = true;
+                _diggerTunnelingSound.spatialBlend = 0f;
+                _diggerTunnelingSound.clip = clip;
+                _diggerTunnelingSound.outputAudioMixerGroup = _audioSource.outputAudioMixerGroup;
+                _diggerTunnelingSound.ignoreListenerPause = _audioSource.ignoreListenerPause;
+            }
+
+            _diggerTunnelingSound.volume = _soundVolume;
+            if (game!.State == MatchState.Paused)
+            {
+                if (!_diggerTunnelingSoundPaused)
+                {
+                    _diggerTunnelingSound.Pause();
+                    _diggerTunnelingSoundPaused = true;
+                }
+            }
+            else
+            {
+                if (_diggerTunnelingSoundPaused)
+                {
+                    _diggerTunnelingSound.UnPause();
+                    _diggerTunnelingSoundPaused = false;
+                }
+
+                if (!_diggerTunnelingSound.isPlaying)
+                {
+                    _diggerTunnelingSound.Play();
+                }
+            }
+        }
+
         /// <summary>Stores zombie part audio game.</summary>
         private GameSimulation? _zombiePartAudioGame;
         /// <summary>Stores zombie part audio serial, rise sound serial, and zombie sound read index.</summary>
@@ -581,6 +670,8 @@ namespace PlantsVsZombies.Audio
                 _zombieFoleyLastTick.Clear();
                 _jackInTheBoxMusic?.Stop();
                 _jackInTheBoxMusicPaused = false;
+                _diggerTunnelingSound?.Stop();
+                _diggerTunnelingSoundPaused = false;
             }
 
             if (!_zombiePartAudioLoading)
@@ -610,6 +701,7 @@ namespace PlantsVsZombies.Audio
             }
 
             UpdateJackInTheBoxMusic();
+            UpdateDiggerTunnelingSound();
             while (_zombieSoundReadIndex < _owner._game.Presentation.ZombieSounds.Count)
             {
                 var evt = _owner._game.Presentation.ZombieSounds[_zombieSoundReadIndex++];
@@ -705,6 +797,7 @@ namespace PlantsVsZombies.Audio
                 "zombiesplash",
                 "mindcontrolled",
                 "jackinthebox",
+                "digger_zombie",
                 "boing"
             };
             foreach (var definition in AdventureZombieFoleyData.Definitions.Values)
