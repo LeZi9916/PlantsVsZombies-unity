@@ -3419,17 +3419,18 @@ namespace PlantsVsZombies.Game
             var magnetCenter = Vector2.zero;
             var magnetOnTop = false;
             var magnetItemVisible = magnet?.Item != null && PrepareAdventureMagnetItem(plant, magnet.Item, drawHeight, out magnetCenter, out magnetOnTop);
-            if (magnetItemVisible && !magnetOnTop)
-            {
-                DrawAdventureMagnetItem(magnet!.Item!, magnetCenter);
-            }
-
             _doomShroomState = doom;
             ActorRenderer.DrawPlant(plant, name, origin, size, heads == null ? age : plant.Age + AdventureRenderRemainder,
                 clip, loop, rate, heads, _presentationKeys.Get("plant-", plant.Id), new Rect(x - 80, y - 160, 300, 340),
                 squash != null && squash.NativePhase != 0 ? squash.BlendTicks
                     : magnet != null ? magnet.BlendTicks : doom != null || blover != null ? 0 : scaredy != null && scaredy.NativePhase != 1 || plant.Kind == PlantKind.Threepeater || plant.Kind == PlantKind.Cattail ? 10 : 20, AdventureRenderRemainder,
                 _presentationKeys.Get("producer-plant-", plant.Id), highlighted, doom == null ? null : _doomTrackOffset, plant.Kind == PlantKind.Pumpkin ? 0 : -1);
+
+            // PC Plant::Draw 47420B draws the body before the local retained-metal pass at 4744D3.
+            if (magnetItemVisible && !magnetOnTop)
+            {
+                DrawAdventureMagnetItem(magnet!.Item!, magnetCenter);
+            }
 
             if (plant.Kind == PlantKind.FumeShroom && plant.PresentationShotAge >= .35f && plant.PresentationShotAge < 1.35f)
             {
@@ -3552,7 +3553,7 @@ namespace PlantsVsZombies.Game
         /// <param name="item">The captured original metal item and source-pose snapshot.</param>
         /// <param name="drawHeight">The original plant draw-height offset, including pot support.</param>
         /// <param name="center">Receives the unchanged original image cell's draw center.</param>
-        /// <param name="onTop">Receives whether the moving metal draws above the body rather than behind it.</param>
+        /// <param name="onTop">Receives whether the metal uses the global top pass instead of the plant's local foreground pass.</param>
         /// <returns>Whether original artwork is available for this metal.</returns>
         private bool PrepareAdventureMagnetItem(Plant plant, AdventureMagnetItem item, float drawHeight, out Vector2 center, out bool onTop)
         {

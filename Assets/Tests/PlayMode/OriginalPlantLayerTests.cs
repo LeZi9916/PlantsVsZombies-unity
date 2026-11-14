@@ -57,6 +57,63 @@ namespace PlantsVsZombies.Tests.PlayMode
             Assert.That(fixture.Pixels.GetPixels32(), Is.EqualTo(empty), "An empty shell must still draw both original halves exactly once.");
         }
 
+        /// <summary>Checks every original retained metal type is locally drawn after its Magnet-shroom on land and water.</summary>
+        /// <returns>Original-art frames comparing all metal cels with the native body-then-item composition.</returns>
+        [UnityTest]
+        public IEnumerator AllHeldMagneticItemsUseLocalForegroundOnLandAndWater()
+        {
+            foreach (var level in new[] { 11, 31 })
+            {
+                using var fixture = new OriginalStormGraphicsTests.StormFixture(level);
+                var game = fixture.Owner.RequiredGame;
+                SpriteSourceTestUtilities.SetImage(fixture.Owner.Textures, "plantshadow.png", null!);
+                SpriteSourceTestUtilities.SetImage(fixture.Owner.Textures, "plantshadow2.png", null!);
+                var place = typeof(GameSimulation).GetMethod("PlaceAdventurePlant", BindingFlags.Instance | BindingFlags.NonPublic)!;
+                if (level == 31)
+                {
+                    place.Invoke(game, new object[] { PlantKind.LilyPad, 2, 3 });
+                }
+
+                var plant = (Plant)place.Invoke(game, new object[] { PlantKind.MagnetShroom, 2, 3 })!;
+                var state = new AdventureMagnetState { NativePhase = 27, AnimationSeconds = .5f, AnimationRate = 2f, BlendTicks = 0 };
+                plant.MagnetPresentation = state;
+                game.Adventure._ticks = 37;
+                var nativeY = level == 31 ? 250f : 280f;
+                var height = AdventurePresentationRules.WaterBobbingOffset(PlantKind.MagnetShroom, 2, 3, level == 31, 37);
+                foreach (var kind in new[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 20, 21 })
+                {
+                    var destinationX = kind <= 3 ? 25f : kind <= 6 ? 20f : kind <= 9 || kind >= 14 && kind <= 16 ? 30f
+                        : kind <= 12 ? 44f : kind == 13 ? 20f : kind == 20 ? 10f : 45f;
+                    var destinationY = kind <= 6 ? 20f : kind <= 9 || kind >= 14 && kind <= 16 || kind == 20 ? 0f
+                        : kind <= 12 ? 10f : 15f;
+                    state.Item = new AdventureMagnetItem
+                    {
+                        NativeKind = kind, AgeTicks = 500, PositionResolved = true,
+                        X = 280f + destinationX, Y = nativeY + destinationY,
+                        DestinationX = destinationX, DestinationY = destinationY
+                    };
+                    yield return fixture.Capture(null, () =>
+                    {
+                        fixture.DrawPass("DrawAdventurePlant", plant);
+                        fixture.DrawPass("DrawAdventureMagnetItemsOnTop");
+                    });
+                    var actual = fixture.Pixels.GetPixels32();
+                    yield return fixture.Capture(null, () =>
+                    {
+                        fixture.Animations.DrawNativePlayback("MagnetShroom", new Vector2(280f, nativeY + height),
+                            1f, .5f, "anim_nonactive_idle2", true, 2f);
+                        var resource = AdventureMagnetRules.Image(kind);
+                        Assert.That(fixture.Animations.TryGetNativeSpriteSize(resource, out var size), Is.True);
+                        fixture.Animations.DrawResourceSprite(resource,
+                            new Vector2(280f + destinationX + size.x * .5f, nativeY + destinationY + height + size.y * .5f),
+                            .8f, frame: kind >= 10 && kind <= 12 ? kind - 10 : 0);
+                    });
+                    Assert.That(fixture.Pixels.GetPixels32(), Is.EqualTo(actual),
+                        "PC 47420B draws the body before 4744D3 draws held metal " + kind + " on adventure stage " + level);
+                }
+            }
+        }
+
         /// <summary>Checks flying metal crosses a later zombie row at native Top layer 399999.</summary>
         /// <returns>Real production-board camera boundaries before reading overlap pixels.</returns>
         [UnityTest]

@@ -78,7 +78,7 @@ namespace PlantsVsZombies.Adventure
         /// <param name="plantY">The plant's native top-left y.</param>
         /// <param name="x">Receives the original current unscaled item x.</param>
         /// <param name="y">Receives the original current unscaled item y.</param>
-        /// <returns>Whether the remaining distance puts this item above the plant's body.</returns>
+        /// <returns>Whether the remaining distance selects the global top pass instead of the plant's local foreground pass.</returns>
         public static bool SampleItem(AdventureMagnetItem item, float plantX, float plantY, out float x, out float y)
         {
             x = item.X;

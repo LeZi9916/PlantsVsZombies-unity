@@ -407,7 +407,8 @@ pausing retry transition. Captures use the production deferred geometry path.
 `OriginalPlantLayerTests` compares Pumpkin_back / protected body / Pumpkin_front
 against independent original-art composition, including both damage cels, and
 checks attracted metal against other rows' zombies. The magnet's airborne item
-belongs to native Top order 399999; held metal stays behind its own body.
+belongs to native Top order 399999. Held metal uses the plant's local foreground
+pass after its own body, as corrected by the follow-up below.
 
 Pumpkin initialization at `46C777` sets width 120; GetPlantRect removes twenty
 pixels, giving a 100x80 eating rectangle. Its unchanged shovel hit test uses the
@@ -483,3 +484,25 @@ load all three shipped scream variants through the production loader and check
 actual Foley voices, the original [0,+2] semitone pitch range, the direct Boing
 one-shot and Umbrella's original Throw2 sample. These isolated checks do not prove
 packaged Player behavior, physical-speaker output or other target-platform devices.
+
+
+### Retained magnetic metal foreground correction
+
+The original PC `Plant::Draw` (`473F00`) draws its body at `47420B` through
+`Reanimation::DrawRenderGroup` (`4822F0`). At the end, `4744C6` checks
+`DrawMagnetItemsOnTop` (`4700B0`); when the metal is within twenty pixels,
+`4744D3` calls `DrawMagnetItems` (`4738B0`) **after** the body. Returning from the
+global Top layer therefore selects a local foreground pass. The earlier
+implementation and its artwork oracle incorrectly put held items behind the body.
+
+`OriginalPlantLayerTests.AllHeldMagneticItemsUseLocalForegroundOnLandAndWater`
+checks all eighteen original metal identifiers/damage cels (1..16, 20, 21), at
+their native destinations on both land and Lily Pad water cells. It compares
+production deferred-camera pixels with independent body-then-item composition.
+The existing cross-row flying-metal regression still protects native global order
+399999. Original item movement, stopping distance, scale, offsets and artwork are
+unchanged.
+
+```powershell
+./Tools/Tests/Run-UnityTests.ps1 -Platform PlayMode -TestFilter 'OriginalMagnetGraphicsTests;OriginalPlantLayerTests.AllHeldMagneticItemsUseLocalForegroundOnLandAndWater;OriginalPlantLayerTests.FlyingMetalDrawsAboveOtherRowsRatherThanOnlyAboveItsMagnet'
+```

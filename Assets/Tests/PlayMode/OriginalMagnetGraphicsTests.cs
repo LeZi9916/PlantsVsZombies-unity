@@ -151,7 +151,6 @@ namespace PlantsVsZombies.Tests.PlayMode
             var item = state.Item;
             var x = initialX;
             var y = initialY;
-            var onTop = false;
             if (item != null)
             {
                 for (var tick = 0; tick < item.AgeTicks; tick++)
@@ -166,21 +165,14 @@ namespace PlantsVsZombies.Tests.PlayMode
                     x += dx * .05f;
                     y += dy * .05f;
                 }
-
-                var remainingX = 280f + item.DestinationX - x;
-                var remainingY = 280f + item.DestinationY - y;
-                onTop = (float)Math.Sqrt(remainingX * remainingX + remainingY * remainingY) > 20f;
-                if (!onTop)
-                {
-                    animations.DrawResourceSprite("IMAGE_REANIM_ZOMBIE_BUCKET1", new Vector2(x + 31f, y + 33.5f), .8f);
-                }
             }
 
             var clip = state.NativePhase == 26 ? "anim_shooting" : state.NativePhase == 27 ? "anim_nonactive_idle2" : "anim_idle";
             var rate = state.NativePhase == 26 ? 12f : state.NativePhase == 27 ? 2f : state.AnimationRate;
             Assert.That(animations.DrawNativePlayback("MagnetShroom", new Vector2(280f, 280f), 1f,
                 state.AnimationSeconds, clip, state.NativePhase != 26, rate), Is.True);
-            if (item != null && onTop)
+            // Both native item passes follow this body's draw; only their order relative to other actors differs.
+            if (item != null)
             {
                 animations.DrawResourceSprite("IMAGE_REANIM_ZOMBIE_BUCKET1", new Vector2(x + 31f, y + 33.5f), .8f);
             }
