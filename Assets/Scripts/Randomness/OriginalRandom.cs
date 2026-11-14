@@ -25,6 +25,14 @@ namespace PlantsVsZombies.Randomness
         /// <param name = "seed">The seed.</param>
         public OriginalRandom(uint seed)
         {
+            Reseed(seed);
+        }
+
+        /// <summary>Restores the native initial MT state while reusing the existing state buffer.</summary>
+        /// <param name="seed">The original seed; zero selects the native default seed.</param>
+        public void Reseed(uint seed)
+        {
+            DrawCount = 0;
             _state[0] = seed == 0 ? DefaultSeed : seed;
             unchecked
             {

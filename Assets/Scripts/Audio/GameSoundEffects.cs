@@ -50,6 +50,11 @@ namespace PlantsVsZombies.Audio
             {
                 _diggerTunnelingSound.volume = volume;
             }
+
+            if (_stormRainSound != null)
+            {
+                _stormRainSound.volume = volume;
+            }
         }
 
         /// <summary>Destroys the loaded legacy effect clips.</summary>
@@ -266,6 +271,13 @@ namespace PlantsVsZombies.Audio
         internal void DisposeAdventureCherryBombAudio()
         {
             _soundVoices?.Dispose();
+            if (_stormRainSound != null)
+            {
+                _stormRainSound.Stop();
+                UnityEngine.Object.Destroy(_stormRainSound);
+                _stormRainSound = null;
+            }
+
             if (_jackInTheBoxMusic != null)
             {
                 _jackInTheBoxMusic.Stop();
@@ -278,6 +290,65 @@ namespace PlantsVsZombies.Audio
                 _diggerTunnelingSound.Stop();
                 UnityEngine.Object.Destroy(_diggerTunnelingSound);
                 _diggerTunnelingSound = null;
+            }
+        }
+
+        /// <summary>Owns the single original looping Rain Foley voice for the active storm board.</summary>
+        private AudioSource? _stormRainSound;
+        /// <summary>Tracks suspension of the rain loop by the board or its modal UI.</summary>
+        private bool _stormRainPaused;
+
+        /// <summary>Synchronizes PC looping, one-at-a-time Foley 49 with the storm board's lifetime.</summary>
+        private void UpdateStormRainSound()
+        {
+            var game = _owner._game;
+            if (_owner._currentView != PvZGame.ScreenView.Board || game == null || !game.IsAdventure
+                || game.Adventure.Level.Mode != AdventureMode.Storm)
+            {
+                _stormRainSound?.Stop();
+                _stormRainPaused = false;
+                return;
+            }
+
+            if (_audioSource == null || !_presentationSounds.TryGetValue("rain", out var clip) || clip == null)
+            {
+                return;
+            }
+
+            if (_stormRainSound == null)
+            {
+                _stormRainSound = _audioSource.gameObject.AddComponent<AudioSource>();
+                _stormRainSound.playOnAwake = false;
+                _stormRainSound.loop = true;
+                _stormRainSound.spatialBlend = 0f;
+                _stormRainSound.clip = clip;
+                _stormRainSound.outputAudioMixerGroup = _audioSource.outputAudioMixerGroup;
+                _stormRainSound.ignoreListenerPause = _audioSource.ignoreListenerPause;
+            }
+
+            _stormRainSound.volume = _soundVolume;
+            var paused = game.State == MatchState.Paused || _owner._optionsView != null && _owner._optionsView.IsOpen
+                || _owner._profileDialog != null && _owner._profileDialog.IsOpen;
+            if (paused)
+            {
+                if (!_stormRainPaused)
+                {
+                    _stormRainSound.Pause();
+                    _stormRainPaused = true;
+                }
+            }
+            else
+            {
+                if (_stormRainPaused)
+                {
+                    _stormRainSound.UnPause();
+                    _stormRainPaused = false;
+                }
+
+                if (!_stormRainSound.isPlaying)
+                {
+                    _stormRainSound.Play();
+                }
             }
         }
 
@@ -687,6 +758,8 @@ namespace PlantsVsZombies.Audio
                 _jackInTheBoxMusicPaused = false;
                 _diggerTunnelingSound?.Stop();
                 _diggerTunnelingSoundPaused = false;
+                _stormRainSound?.Stop();
+                _stormRainPaused = false;
             }
 
             if (!_zombiePartAudioLoading)
@@ -717,6 +790,7 @@ namespace PlantsVsZombies.Audio
 
             UpdateJackInTheBoxMusic();
             UpdateDiggerTunnelingSound();
+            UpdateStormRainSound();
             while (_zombieSoundReadIndex < _owner._game.Presentation.ZombieSounds.Count)
             {
                 var evt = _owner._game.Presentation.ZombieSounds[_zombieSoundReadIndex++];
@@ -771,7 +845,8 @@ namespace PlantsVsZombies.Audio
             var projectileImpact = evt.Foley == 1 || evt.Foley == 32 || evt.Foley == 38 || evt.Foley == 43
                 || evt.Foley == 46 || evt.Foley == 58 || evt.Foley == 62;
             int previous;
-            if (!projectileImpact && _zombieFoleyLastTick.TryGetValue(evt.Foley, out previous) && evt.Tick - previous < 10)
+            // Storm countdowns continue while paused, independently of the frozen combat-event tick.
+            if (evt.Foley != 17 && !projectileImpact && _zombieFoleyLastTick.TryGetValue(evt.Foley, out previous) && evt.Tick - previous < 10)
             {
                 return;
             }

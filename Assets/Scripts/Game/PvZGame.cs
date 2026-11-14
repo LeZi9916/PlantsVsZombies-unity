@@ -435,6 +435,12 @@ namespace PlantsVsZombies.Game
                 }
             }
 
+            if (!openingBlocksSimulation && _currentView == ScreenView.Board
+                && (RequiredOptionsView.IsOpen || _profileDialog != null && _profileDialog.IsOpen))
+            {
+                RequiredGame.AdvanceAdventureStormPresentation(Time.deltaTime, true);
+            }
+
             AdventureBoard.NormalizeAdventureSelection();
             using (s_updateAudioMarker.Auto())
             {

@@ -9,6 +9,15 @@ namespace PlantsVsZombies.Adventure
         /// <summary>Stores definitions.</summary>
         public static readonly Dictionary<int, AdventureZombieFoleyDefinition> Definitions = new Dictionary<int, AdventureZombieFoleyDefinition>
         {
+            // PC storm Foley: Thunder has ten semitones of pitch variation; Rain loops once per board.
+            {
+                17,
+                new AdventureZombieFoleyDefinition(10f, new[] { "thunder" })
+            },
+            {
+                49,
+                new AdventureZombieFoleyDefinition(0f, new[] { "rain" })
+            },
             // PC 74B3B8 + id * 52: six normal groans, three extra brains variants, and two low giant groans.
             {
                 11,

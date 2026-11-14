@@ -332,3 +332,40 @@ The focused Unity 6000.3.17f1 macOS follow-up run passes 54 EditMode and nine
 PlayMode cases with no skipped tests. These fixtures exercise production presentation and
 input in isolation; full-level Player playthroughs, physical-speaker listening,
 and other target-platform devices remain unverified.
+
+
+## Original PC Stormy Night (adventure 4-10)
+
+The supplied `PlantsVsZombies.exe` (SHA-256
+`e1511201ec2ae9a7e30259f04bc2ec7272badb2574a2e9b405d0e916ae5c082c`)
+is the authority for the storm constants. `42ACA0` initializes phase 6/countdown
+150 and looping Rain Foley 49; `42B000` starts gameplay at phase 5/countdown 400.
+`42EF10` selects the original random flash intervals, handles the Yeti and loss
+branches, emits Thunder Foley 17, and lets paused flashes settle at countdown one.
+
+`431E20` draws two 9x7 rain layers using `particles/Rain.png`, scales 1 and 1.5,
+periods 100/20 and 161/33, and board-pan alignment in 100-pixel steps. `437750`
+creates RainSplash/RainCircle/RainSplash in the three original vertical bands,
+with the original alpha/scale draws and an 11-to-21-update spawn interval.
+The supplied reanimations retain their native 12 FPS and eight/nineteen frames.
+
+`431CB0` seeds a **local** MT generator from `MainCounter / 6`; its integer noise
+must not reseed or consume the board RNG. `432110` draws the native black/white
+masks, including the weaker second flash in phase 5, and redraws BottomUI and
+TopRightUI. The opaque black intervals cover the world and street-preview actors;
+pickups and cursor previews remain above Weather layer 500003. The original
+lightning effect is this fullscreen flash, without an additional bolt sprite.
+
+```powershell
+./Tools/Tests/Run-UnityTests.ps1 -Platform EditMode -TestFilter 'AdventureStormTests;AdventureFogTests'
+# Set PVZ_BOARD_STRESS_ASSETS to the read-only original runtime resources first.
+./Tools/Tests/Run-UnityTests.ps1 -Platform PlayMode -TestFilter 'OriginalStormGraphicsTests;OriginalStormAudioTests'
+```
+
+The graphics tests compare actual rain pixels with independent native tile
+rectangles and check the real reanimations, world darkness, interface/pickup
+brightness and street-preview occlusion. Audio tests decode the shipped clips
+through the production loader and inspect actual loop/thunder voices, pitch,
+volume and pause/exit behavior. These isolated production-component checks do
+not establish a full-level Player playthrough, physical-speaker listening or
+other target-platform behavior.

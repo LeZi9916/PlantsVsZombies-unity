@@ -333,6 +333,12 @@ namespace PlantsVsZombies.Simulation
         /// <param name = "deltaTime">The delta time.</param>
         public void Update(float deltaTime)
         {
+            if (IsAdventure && (State == MatchState.Paused || State == MatchState.Lost))
+            {
+                AdvanceAdventureStormPresentation(deltaTime, State == MatchState.Paused);
+                return;
+            }
+
             if (IsAdventure && State == MatchState.Won)
             {
                 AdvanceAdventureRewardPresentation(deltaTime);
@@ -3305,6 +3311,71 @@ namespace PlantsVsZombies.Simulation
             }
         }
 
+        /// <summary>Applies the original storm state before the level introduction.</summary>
+        internal void BeginAdventureStormIntro()
+        {
+            if (IsAdventure && Adventure.Level.Mode == AdventureMode.Storm)
+            {
+                Adventure.Storm.BeginIntro();
+            }
+        }
+
+        /// <summary>Applies the original storm countdown when the introduction finishes.</summary>
+        internal void BeginAdventureStormPlaying()
+        {
+            if (IsAdventure && Adventure.Level.Mode == AdventureMode.Storm)
+            {
+                Adventure.Storm.BeginPlaying();
+            }
+        }
+
+        /// <summary>Advances the original storm challenge after the board objects for one native update.</summary>
+        /// <param name="intro">Whether the native scene is still LevelIntro.</param>
+        /// <param name="paused">Whether to freeze rain and board counters while allowing the flash to settle.</param>
+        /// <param name="lostThisTick">Whether combat changed to the loss scene after this update's main-counter increment.</param>
+        internal void AdvanceAdventureStormTick(bool intro = false, bool paused = false, bool lostThisTick = false)
+        {
+            if (!IsAdventure || Adventure.Level.Mode != AdventureMode.Storm)
+            {
+                return;
+            }
+
+            var yeti = false;
+            foreach (var zombie in Zombies)
+            {
+                if (zombie.Kind == ZombieKind.Yeti)
+                {
+                    yeti = true;
+                    break;
+                }
+            }
+
+            if (Adventure.Storm.Advance(_random, !intro && State != MatchState.Lost, paused, State == MatchState.Lost, yeti, lostThisTick))
+            {
+                RequestAdventureZombieFoley(17);
+            }
+        }
+
+        /// <summary>Continues native storm updates while the regular simulation is suspended.</summary>
+        /// <param name="delta">The elapsed presentation time in seconds.</param>
+        /// <param name="paused">Whether the board is paused rather than showing the loss sequence.</param>
+        /// <param name="intro">Whether the suspended board is in its introduction.</param>
+        internal void AdvanceAdventureStormPresentation(float delta, bool paused, bool intro = false)
+        {
+            if (!IsAdventure || Adventure.Level.Mode != AdventureMode.Storm || delta <= 0f || float.IsNaN(delta) || float.IsInfinity(delta))
+            {
+                return;
+            }
+
+            var storm = Adventure.Storm;
+            storm.PresentationRemainder += delta;
+            while (storm.PresentationRemainder + .0000001 >= SimulationStep)
+            {
+                AdvanceAdventureStormTick(intro, paused);
+                storm.PresentationRemainder -= SimulationStep;
+            }
+        }
+
         /// <summary>Gets whether the original stage uses fog, excluding Stormy Night and Invisighoul.</summary>
         internal bool AdventureHasFog => IsAdventure && Adventure.Level.Terrain == AdventureTerrain.Fog
             && Adventure.Level.Mode != AdventureMode.Storm && (ModeSession == null || ModeSession.Definition.Id != 21);
@@ -3353,11 +3424,6 @@ namespace PlantsVsZombies.Simulation
             if (!IsAdventure || !Adventure.Level.IsLawnRow(row) || column < 0 || column >= 9)
             {
                 return false;
-            }
-
-            if (Adventure.Level.Mode == AdventureMode.Storm && !Adventure.StormFlash)
-            {
-                return column < 2;
             }
 
             if (!AdventureHasFog || Adventure.FogBlownRemaining > 0f || column < AdventureFogLeftColumn)
@@ -6632,6 +6698,7 @@ namespace PlantsVsZombies.Simulation
             AdvanceAdventurePresentationSuns(.01f);
             AdvanceVasePackets();
             AdvanceAdventureCoins(.01f);
+            AdvanceAdventureStormTick();
             foreach (var plant in Plants)
             {
                 plant.Age += .01f;
@@ -7242,6 +7309,7 @@ namespace PlantsVsZombies.Simulation
             if (State != MatchState.Playing)
             {
                 Adventure.Phase = AdventurePhase.Lost;
+                AdvanceAdventureStormTick(lostThisTick: true);
                 return;
             }
 
@@ -7291,6 +7359,8 @@ namespace PlantsVsZombies.Simulation
                     Raise(GameEvent.Won);
                 }
             }
+
+            AdvanceAdventureStormTick();
         }
 
         /// <summary>Advances the original PC flag meter after this tick's combat and spawning updates.</summary>
@@ -7403,8 +7473,6 @@ namespace PlantsVsZombies.Simulation
                     a._packets[i].Age += dt;
                 }
             }
-
-            a.StormFlash = a.Level.Mode == AdventureMode.Storm && a._ticks % 600 < 150;
         }
 
         /// <summary>Advances the original Whack-a-Zombie seed-bank reveal after a sun is available.</summary>

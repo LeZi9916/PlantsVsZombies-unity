@@ -158,6 +158,7 @@ namespace PlantsVsZombies.Adventure
             };
             _adventureIntro = new AdventureIntroClock(AdventureIntroPresentation.CreatePlan(context));
             _owner.RequiredGame.BeginAdventureFogIntro();
+            _owner.RequiredGame.BeginAdventureStormIntro();
             _owner._game.Adventure.GravesEnabled = _adventureIntro.Plan.GraveStoneTime == 0
                 && !(level.Mode == AdventureMode.WhackAZombie && _crazyDaveStartIndex == 401);
             _adventureIntroFrame = _adventureIntro.Frame;
@@ -246,6 +247,11 @@ namespace PlantsVsZombies.Adventure
 
             if (!_adventureIntroDrawn || _owner.RequiredOptionsView.IsOpen || _owner._confirmingQuit || _owner._unavailableFeature != null || _owner.RequiredGame.State == MatchState.Paused)
             {
+                if (_adventureIntroDrawn)
+                {
+                    _owner.RequiredGame.AdvanceAdventureStormPresentation(dt, true, true);
+                }
+
                 return true;
             }
 
@@ -271,6 +277,7 @@ namespace PlantsVsZombies.Adventure
                 var plan = RequiredAdventureIntro.Plan;
                 _owner.RequiredGame.AdvanceAdventureFog(true,
                     RequiredAdventureIntro.NativeTime > 5950 + plan.DaveTime + plan.SodTime + plan.GraveStoneTime);
+                _owner.RequiredGame.AdvanceAdventureStormTick(AdventureIntroActive);
                 if (_crazyDaveStartIndex >= 0 && RequiredAdventureIntro.NativeTime == 2000 && _owner.Dave._crazyDaveAnimation == null)
                 {
                     _owner.Dave.SetCrazyDaveAnimation("anim_enter", 24f, false);
@@ -465,6 +472,7 @@ namespace PlantsVsZombies.Adventure
 
             if (item == AdventureIntroEvent.IntroFinished)
             {
+                _owner.RequiredGame.BeginAdventureStormPlaying();
                 _owner._choosingSeeds = false;
                 _adventurePreview.Clear();
             }

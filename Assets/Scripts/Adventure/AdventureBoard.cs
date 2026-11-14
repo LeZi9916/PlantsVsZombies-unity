@@ -194,8 +194,10 @@ namespace PlantsVsZombies.Adventure
 
         /// <summary>Retains the original overlapping fog tiles and their rolling displacement.</summary>
         internal AdventureFogState Fog { get; } = new AdventureFogState();
-        /// <summary>Gets or sets storm flash.</summary>
-        public bool StormFlash { get; internal set; }
+        /// <summary>Retains the original storm challenge, rain and flash presentation.</summary>
+        internal AdventureStormState Storm { get; } = new AdventureStormState();
+        /// <summary>Gets whether the original storm challenge is inside one of its flash windows.</summary>
+        public bool StormFlash => Level.Mode == AdventureMode.Storm && Storm.FlashVisible;
         /// <summary>Gets or sets boss health.</summary>
         public float BossHealth { get; internal set; }
 

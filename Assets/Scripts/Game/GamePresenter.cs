@@ -2093,23 +2093,12 @@ namespace PlantsVsZombies.Game
                     DrawAdventurePool();
                 }
 
-                if (!_owner.Opening.AdventureIntroActive && !_owner._choosingSeeds)
+                if (level.Mode != AdventureMode.Storm)
                 {
-                    // PC Board::Draw 0x421D80 sorts BottomUi at 100001 in play; 0x425CDD draws the whole bank.
-                    if (_owner.IndependentModes.IsModeBoard)
-                    {
-                        DrawModeSeedBank();
-                    }
-                    else
-                    {
-                        DrawAdventureSeedBankContents();
-                    }
-
-                    DrawAdventurePacketReadyFlashes();
+                    DrawAdventureBottomUi();
                 }
 
-                // PC Board::DrawBottomUI 0x425B40 includes the shovel at layer 100001 during play.
-                DrawAdventureShovelBank();
+                DrawAdventureRainSplashes();
 
                 for (var craterIndex = 0; craterIndex < _owner.RequiredGame.Adventure.Craters.Count; craterIndex++)
                 {
@@ -2178,7 +2167,10 @@ namespace PlantsVsZombies.Game
                         }
                     }
 
-                    DrawAdventurePlantPreview(row);
+                    if (level.Mode != AdventureMode.Storm)
+                    {
+                        DrawAdventurePlantPreview(row);
+                    }
                     for (var vaseIndex = 0; vaseIndex < _owner.RequiredGame.Adventure.Vases.Count; vaseIndex++)
                     {
                         var vase = _owner.RequiredGame.Adventure.Vases[vaseIndex];
@@ -2308,7 +2300,7 @@ namespace PlantsVsZombies.Game
                 DrawAdventureVaseHammer();
                 DrawAdventureVaseScreenFlash();
                 // PC preview zombies use layers 200000..301000, below fog at 500000 and pickups at 600001.
-                if (_owner.RequiredGame.AdventureHasFog)
+                if (_owner.RequiredGame.AdventureHasFog || level.Mode == AdventureMode.Storm)
                 {
                     DrawAdventureOpeningActors();
                 }
@@ -2316,6 +2308,14 @@ namespace PlantsVsZombies.Game
                 DrawAdventureFog();
                 DrawAdventurePlanternLights();
                 DrawAdventureVasePackets();
+                if (level.Mode == AdventureMode.Storm)
+                {
+                    // PC Weather layer 500003 precedes pickups (600001) and the cursor preview (800000).
+                    DrawAdventureStormRain();
+                    DrawAdventureStormDarkness();
+                    DrawAdventureBottomUi();
+                }
+
                 foreach (global::PlantsVsZombies.Simulation.Sun sun in _owner.RequiredGame.Suns)
                 {
                     if (!sun.PresentationNative || !sun.PresentationPickup.Collecting)
@@ -2377,12 +2377,15 @@ namespace PlantsVsZombies.Game
                     _owner.RequiredAnimations.DrawResourceSprite("IMAGE_REANIM_COBCANNON_COB", new Vector2(BoardLayout.AdventureGridX + x * BoardLayout.CellWidth, BoardLayout.AdventureGridY + row * _owner.Layout.AdventurePitch + _owner.Layout.AdventureSlope(x) + z), 1f, rising ? 90 : -90);
                 }
 
-                if (level.Mode == AdventureMode.Storm && !_owner.RequiredGame.Adventure.StormFlash)
+                if (level.Mode == AdventureMode.Storm)
                 {
-                    Fill(new Rect(0, 80, 800, 520), new Color(0.01f, 0.02f, 0.08f, 0.72f));
+                    for (var row = 0; row < _owner.RequiredGame.RowCount; row++)
+                    {
+                        DrawAdventurePlantPreview(row);
+                    }
                 }
 
-                if (!_owner.RequiredGame.AdventureHasFog)
+                if (!_owner.RequiredGame.AdventureHasFog && level.Mode != AdventureMode.Storm)
                 {
                     DrawAdventureOpeningActors();
                 }
@@ -2391,6 +2394,89 @@ namespace PlantsVsZombies.Game
             {
                 CanvasUI.Matrix = openingMatrix;
                 EndAdventurePresentation();
+            }
+        }
+
+        /// <summary>Draws the seed bank and shovel, redrawn after darkness by PC DrawStormNight 0x432110.</summary>
+        private void DrawAdventureBottomUi()
+        {
+            if (!_owner.Opening.AdventureIntroActive && !_owner._choosingSeeds)
+            {
+                if (_owner.IndependentModes.IsModeBoard)
+                {
+                    DrawModeSeedBank();
+                }
+                else
+                {
+                    DrawAdventureSeedBankContents();
+                }
+
+                DrawAdventurePacketReadyFlashes();
+            }
+
+            DrawAdventureShovelBank();
+        }
+
+        /// <summary>Draws original RainCircle and RainSplash reanimations beneath the board actors.</summary>
+        private void DrawAdventureRainSplashes()
+        {
+            if (_owner.RequiredGame.Adventure.Level.Mode != AdventureMode.Storm)
+            {
+                return;
+            }
+
+            var tint = CanvasUI.Color;
+            var effects = _owner.RequiredGame.Adventure.Storm.Rain;
+            for (var index = 0; index < effects.Count; index++)
+            {
+                var rain = effects[index];
+                CanvasUI.Color = new Color(1f, 1f, 1f, rain.Alpha / 255f);
+                _owner.RequiredAnimations.DrawNativePlayback(rain.Circle ? "Rain_circle" : "Rain_splash",
+                    new Vector2(rain.X, rain.Y), rain.Scale, rain.Ticks * .01f, null, false);
+            }
+
+            CanvasUI.Color = tint;
+        }
+
+        /// <summary>Draws the PC 0x431E20 rain tiles: two nine-by-seven layers at scales one and one-and-a-half.</summary>
+        private void DrawAdventureStormRain()
+        {
+            if (_owner.Opening.AdventureIntroActive && !_owner.Opening._adventureIntroDrawn)
+            {
+                return;
+            }
+
+            var ticks = _owner.RequiredGame.Adventure.Storm.EffectTicks;
+            var boardX = _owner.Opening.AdventureIntroActive ? _owner.Opening.RequiredAdventureIntroFrame.BoardX : 0;
+            var alignment = (boardX > 0 ? (boardX + 100) / 100 : boardX / 100) * -100;
+            for (var layer = 0; layer < 2; layer++)
+            {
+                var horizontalPeriod = layer == 0 ? 100 : 161;
+                var verticalPeriod = layer == 0 ? 20 : 33;
+                var x = AdventureStormState.Linear(0, horizontalPeriod, ticks % horizontalPeriod, 0, -100);
+                var y = AdventureStormState.Linear(0, verticalPeriod, ticks % verticalPeriod, -100, 0);
+                var scale = layer == 0 ? 1f : 1.5f;
+                for (var column = 0; column < 9; column++)
+                {
+                    for (var row = 0; row < 7; row++)
+                    {
+                        // TodDrawImageScaledF preserves the unscaled image center at (x+50,y+50).
+                        _owner.RequiredAnimations.DrawResourceSprite("IMAGE_RAIN",
+                            new Vector2((x + column * 100) * scale + alignment + 50f, (y + row * 100) * scale + 50f), scale);
+                    }
+                }
+            }
+        }
+
+        /// <summary>Draws PC 0x432110 darkness and 0x431CB0 black/white flash masks over the complete board.</summary>
+        private void DrawAdventureStormDarkness()
+        {
+            _owner.RequiredGame.Adventure.Storm.GetFlashAlpha(out var black, out var white);
+            var bounds = new Rect(-1000f, -1000f, 2800f, 2600f);
+            Fill(bounds, new Color(0f, 0f, 0f, black / 255f));
+            if (white > 0)
+            {
+                Fill(bounds, new Color(1f, 1f, 1f, white / 255f));
             }
         }
 
