@@ -26,7 +26,7 @@ namespace PlantsVsZombies.Adventure
                 return false;
             }
 
-            if (z.PresentationNativePhase == 74 || z.BobsledState?.Position > 0
+            if (z.PresentationNativePhase == 71 || z.PresentationNativePhase == 74 || z.BobsledState?.Position > 0
                 || z.Kind == ZombieKind.Bobsled && z.PresentationNativePhase == 19)
             {
                 return false;

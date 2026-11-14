@@ -73,6 +73,10 @@ namespace PlantsVsZombies.Adventure
                 new AdventureZombieFoleyDefinition(10f, new[] { "plant_water", "zombie_entering_water" })
             },
             {
+                88,
+                new AdventureZombieFoleyDefinition(5f, new[] { "imp", "imp2" })
+            },
+            {
                 21,
                 new AdventureZombieFoleyDefinition(0f, new[] { "chomp", "chomp2" })
             },

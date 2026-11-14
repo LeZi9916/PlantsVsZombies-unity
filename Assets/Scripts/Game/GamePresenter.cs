@@ -2856,7 +2856,8 @@ namespace PlantsVsZombies.Game
             var pixelX = AdventureZombieNativeRules.ReanimationSourceX(x, size);
             var nativeX = AdventureZombieNativeRules.NativePositionX(x, size);
             // PC 0x547FF0 applies the body overlay eight pixels above mPosY.
-            var y = AdventureFloorYAtPixel(zombie.Row, nativeX + 40f) - 38f;
+            var y = zombie.PresentationNativePhase == 71 && zombie.ThrownImpState != null
+                ? zombie.ThrownImpState.NativeY - 8f : AdventureFloorYAtPixel(zombie.Row, nativeX + 40f) - 38f;
             if (zombie.Kind == ZombieKind.Balloon)
             {
                 y -= 30f;
@@ -4156,7 +4157,8 @@ namespace PlantsVsZombies.Game
             if (shadow != null && HasAdventureZombieShadow(zombie, inPool))
             {
                 var nativeX = AdventureZombieNativeRules.NativePositionX(x, size);
-                var floor = AdventureFloorYAtPixel(zombie.Row, nativeX + 40f);
+                var floor = zombie.PresentationNativePhase == 71 && zombie.ThrownImpState != null
+                    ? zombie.ThrownImpState.NativeY + 30f : AdventureFloorYAtPixel(zombie.Row, nativeX + 40f);
                 using var hierarchyShadow = _owner.RequiredAnimations.Hierarchy.BeginNamedSprite("Shadow");
                 DrawImage(shadowName, AdventureZombieShadowBounds(zombie, x, floor, new Vector2(shadow.Width, shadow.Height), inPool));
             }

@@ -1108,6 +1108,10 @@ namespace PlantsVsZombies.Adventure
                 0f,
                 0f
             });
+            result["Zombie_gargantuar/anim_smash"] = new AdventureZombieGroundClip(33, 12f, null);
+            result["Zombie_gargantuar/anim_throw"] = new AdventureZombieGroundClip(34, 12f, null);
+            result["Zombie_imp/anim_thrown"] = new AdventureZombieGroundClip(16, 12f, null);
+            result["Zombie_imp/anim_land"] = new AdventureZombieGroundClip(6, 12f, null);
             result["Zombie_gargantuar/anim_idle"] = new AdventureZombieGroundClip(22, 12f, new float[] {
                 0f,
                 0f,

@@ -10651,7 +10651,7 @@ namespace PlantsVsZombies.Simulation
             if (rightEdge)
             {
                 int r40 = _random.Next(40), r10 = 0;
-                if (z.Kind == ZombieKind.PoleVaulter || z.Kind == ZombieKind.Zomboni || z.Kind == ZombieKind.Catapult || z.Kind == ZombieKind.Gargantuar)
+                if (z.Kind == ZombieKind.PoleVaulter || z.Kind == ZombieKind.Zomboni || z.Kind == ZombieKind.Catapult || z.Kind == ZombieKind.Gargantuar || (int)z.Kind == 32)
                 {
                     r10 = _random.Next(10);
                 }
@@ -10694,6 +10694,18 @@ namespace PlantsVsZombies.Simulation
                 z.PresentationNativePhase = 73;
                 z.PresentationAltitude = 25f;
                 z.PresentationNativeHeight = 0;
+            }
+
+            if (z.Kind == ZombieKind.Gargantuar || (int)z.Kind == 32)
+            {
+                var roll = _random.Next(100);
+                z.GargantuarState = new AdventureGargantuarState
+                {
+                    Weapon = Adventure.Level.Number == 48 ? 0 : roll < 10 ? 2 : roll < 35 ? 1 : 0
+                };
+                z.NativeVariant = false;
+                z.PresentationNativePhase = 0;
+                z.PresentationBodyBlendTicks = 0;
             }
 
             if (z.Kind == ZombieKind.Catapult)
@@ -11476,6 +11488,26 @@ namespace PlantsVsZombies.Simulation
                 {
                     return 10f;
                 }
+            }
+
+            if (z.Kind == ZombieKind.Gargantuar && z.PresentationNativePhase == 69)
+            {
+                return 24f;
+            }
+
+            if (z.Kind == ZombieKind.Gargantuar && z.PresentationNativePhase == 70)
+            {
+                return 16f;
+            }
+
+            if (z.Kind == ZombieKind.Imp && z.PresentationNativePhase == 71)
+            {
+                return 18f;
+            }
+
+            if (z.Kind == ZombieKind.Imp && z.PresentationNativePhase == 72)
+            {
+                return 24f;
             }
 
             if (z.Eating)
@@ -13413,6 +13445,229 @@ namespace PlantsVsZombies.Simulation
             }
         }
 
+        /// <summary>Starts the original giant body action without replacing its retained walking velocity.</summary>
+        /// <param name="zombie">The giant starting or completing an authored action.</param>
+        /// <param name="phase">The original normal, throwing or smashing phase.</param>
+        private void SetAdventureGargantuarPhase(Zombie zombie, int phase)
+        {
+            zombie.Eating = false;
+            (zombie.GargantuarState ??= new AdventureGargantuarState()).ActionTriggered = false;
+            if (phase == 0)
+            {
+                SetAdventureZombieMotionPhase(zombie, phase);
+            }
+            else
+            {
+                zombie.PresentationNativePhase = phase;
+                zombie._presentationSpeedPhase = phase;
+                zombie.PresentationAnimation = string.Empty;
+                AdventurePresentationZombieAnimation(zombie);
+            }
+
+            zombie.PresentationBodyBlendTicks = 20;
+        }
+
+        /// <summary>Runs PC 542790's animation events, smash reacquisition and original throw admission.</summary>
+        /// <param name="zombie">The live giant whose action advances after its native body clock.</param>
+        /// <returns>Whether this update is occupied by the giant's authored action.</returns>
+        private bool AdvanceAdventureGargantuar(Zombie zombie)
+        {
+            if (zombie.Kind != ZombieKind.Gargantuar)
+            {
+                return false;
+            }
+
+            var state = zombie.GargantuarState ??= new AdventureGargantuarState();
+            var phase = zombie.PresentationNativePhase;
+            if (phase == 69 || phase == 70)
+            {
+                var progress = zombie.PresentationAnimationAge * (phase == 69 ? 24f / 34f : 16f / 33f);
+                if (!state.ActionTriggered && progress + .000001f >= (phase == 69 ? .74f : .64f))
+                {
+                    state.ActionTriggered = true;
+                    if (phase == 69)
+                    {
+                        ThrowAdventureImp(zombie);
+                    }
+                    else
+                    {
+                        var target = FindAdventureNativePlantTarget(zombie, AdventureBiteAttack.Chew);
+                        if (target?.Kind == PlantKind.Spikerock)
+                        {
+                            HitAdventureZombie(zombie, 20f, true, 32U);
+                            target.Health -= 50f;
+                            if (target.Health <= 0f)
+                            {
+                                RequestAdventureZombieFoley(21);
+                                RemoveAdventurePlantAndStack(target);
+                                CrushAdventurePlantCell(target.Row, target.Column, false);
+                            }
+                        }
+                        else if (target != null)
+                        {
+                            CrushAdventurePlantCell(target.Row, target.Column, false);
+                        }
+
+                        var vase = FindAdventureGargantuarVase(zombie);
+                        if (vase != null)
+                        {
+                            if (ModeSession == null)
+                            {
+                                OpenAdventureVase(vase);
+                            }
+                            else
+                            {
+                                OpenModeVase(vase);
+                            }
+                        }
+
+                        RequestAdventureZombieFoley(40);
+                        Presentation.ScreenShake.Start(0, 3);
+                    }
+                }
+
+                if (progress + .000001f >= 1f && Zombies.Contains(zombie))
+                {
+                    SetAdventureGargantuarPhase(zombie, 0);
+                    return false;
+                }
+
+                return true;
+            }
+
+            if (zombie.Headless || zombie.Hypnotized)
+            {
+                return false;
+            }
+
+            var x = AdventureZombieNativeRules.NativePositionX(zombie.X, AdventureDancerRules.Scale(zombie));
+            if (!zombie.ThrownImp && zombie.Health < (int)zombie.StartingHealth / 2 && x - 360f > 40f)
+            {
+                SetAdventureGargantuarPhase(zombie, 69);
+                return true;
+            }
+
+            if (FindAdventureNativePlantTarget(zombie, AdventureBiteAttack.Chew) != null
+                || FindAdventureGargantuarVase(zombie) != null)
+            {
+                SetAdventureGargantuarPhase(zombie, 70);
+                RequestAdventureZombieFoley(70);
+                return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>Finds the original vase under the giant's own native column without allocating a per-update predicate.</summary>
+        /// <param name="zombie">The giant whose current native position probes the vase grid.</param>
+        /// <returns>The original vase, or null when this cell contains no unopened vase.</returns>
+        private AdventureVase? FindAdventureGargantuarVase(Zombie zombie)
+        {
+            if (Adventure._vases.Count == 0)
+            {
+                return null;
+            }
+
+            var x = (int)AdventureZombieNativeRules.NativePositionX(zombie.X, AdventureDancerRules.Scale(zombie));
+            var column = Math.Max(0, Math.Min(8, (x - 40) / 80));
+            foreach (var vase in Adventure._vases)
+            {
+                if (vase.Row == zombie.Row && vase.Column == column)
+                {
+                    return vase;
+                }
+            }
+
+            return null;
+        }
+
+        /// <summary>Creates PC 5429B7's thrown imp at the .74 body event, preserving roof and chill rules.</summary>
+        /// <param name="giant">The giant whose authored throwing hand releases its imp.</param>
+        private void ThrowAdventureImp(Zombie giant)
+        {
+            giant.ThrownImp = true;
+            RequestAdventureZombieFoley(47);
+            var x = AdventureZombieNativeRules.NativePositionX(giant.X, AdventureDancerRules.Scale(giant));
+            var distance = x - 360f;
+            var minimum = 40f;
+            if (Adventure.Level.HasRoof)
+            {
+                distance -= 180f;
+                minimum = -140f;
+            }
+
+            if (distance < minimum)
+            {
+                distance = minimum;
+            }
+            else if (distance > 140f)
+            {
+                distance -= (float)_random.NextDouble() * 100f;
+            }
+
+            var imp = SpawnAdventureBoardZombie(ZombieKind.Imp, giant.Row, AdventureZombieNativeRules.GridX(x - 133f), giant.Wave);
+            imp.NativeVariant = false;
+            imp.PresentationNativePhase = 71;
+            imp.PresentationAltitude = 88f;
+            imp.PresentationBiteBodyY = -88;
+            imp.ChillRemaining = giant.ChillRemaining;
+            imp.ThrownImpState = new AdventureThrownImpState
+            {
+                VelocityZ = .5f * (distance / 3f) * .05f,
+                NativeY = AdventureBiteNativeY(giant, x)
+            };
+            imp.PresentationBodyBlendTicks = 0;
+            imp.PresentationAnimation = string.Empty;
+            AdventurePresentationZombieAnimation(imp);
+            RequestAdventureZombieFoley(88);
+        }
+
+        /// <summary>Runs PC 542D60's unchilled ballistic movement and six-frame landing before walking resumes.</summary>
+        /// <param name="zombie">The imp with a retained native thrown state.</param>
+        /// <returns>Whether flight or landing occupies this update.</returns>
+        private bool AdvanceAdventureThrownImp(Zombie zombie)
+        {
+            var state = zombie.ThrownImpState;
+            if (zombie.Kind != ZombieKind.Imp || state == null)
+            {
+                return false;
+            }
+
+            if (zombie.PresentationNativePhase == 71)
+            {
+                state.VelocityZ -= .05f;
+                zombie.PresentationAltitude += state.VelocityZ;
+                zombie.X -= 3f / 80f;
+                var x = AdventureZombieNativeRules.NativePositionX(zombie.X, AdventureDancerRules.Scale(zombie));
+                var y = AdventureBiteNativeY(zombie, x);
+                zombie.PresentationAltitude += y - state.NativeY;
+                state.NativeY = y;
+                if (zombie.PresentationAltitude <= 0f)
+                {
+                    zombie.PresentationAltitude = 0f;
+                    SetAdventureZombieMotionPhase(zombie, 72);
+                    zombie.PresentationBodyBlendTicks = 0;
+                }
+
+                zombie.PresentationBiteBodyY = (int)-zombie.PresentationAltitude;
+                return true;
+            }
+
+            if (zombie.PresentationNativePhase == 72)
+            {
+                if (zombie.PresentationAnimationAge * 24f + .0001f >= 6f)
+                {
+                    SetAdventureZombieMotionPhase(zombie, 0);
+                    zombie.PresentationBodyBlendTicks = 0;
+                    return false;
+                }
+
+                return true;
+            }
+
+            return false;
+        }
+
         /// <summary>Runs PC 546620's retained twelve-frame placement before detaching the carried shield.</summary>
         /// <param name="zombie">The live ladder carrier whose original action is being advanced.</param>
         /// <returns>Whether the placing body must hold its position for this update.</returns>
@@ -13778,10 +14033,9 @@ namespace PlantsVsZombies.Simulation
                     }
                 }
 
-                if (z.Kind == ZombieKind.Gargantuar && !z.ThrownImp && z.Health <= 1500 && z.X > 2.5f && !z.Hypnotized)
+                if (AdvanceAdventureGargantuar(z) || AdvanceAdventureThrownImp(z))
                 {
-                    z.ThrownImp = true;
-                    SpawnAdventureZombie(ZombieKind.Imp, z.Row, Math.Max(1.2f, z.X - 4f), z.Wave);
+                    continue;
                 }
 
                 if (z.Kind == ZombieKind.Newspaper && z.ShieldHealth <= 0 && !z.UsedAbility)
@@ -13892,7 +14146,7 @@ namespace PlantsVsZombies.Simulation
                     continue;
                 }
 
-                if (z.Kind != ZombieKind.Gargantuar && z.Kind != ZombieKind.Zomboni && z.Kind != ZombieKind.Catapult)
+                if (z.Kind != ZombieKind.Zomboni && z.Kind != ZombieKind.Catapult)
                 {
                     target = null;
                 }
@@ -13937,15 +14191,8 @@ namespace PlantsVsZombies.Simulation
                             continue;
                         }
 
-                        if (z.Kind == ZombieKind.Gargantuar && target.Kind != PlantKind.Spikerock)
-                        {
-                            CrushAdventurePlantCell(target.Row, target.Column, false);
-                            z.BiteTimer = 2f;
-                            continue;
-                        }
-
-                        target.Health -= z.Kind == ZombieKind.Gargantuar ? 50f : 4f;
-                        z.BiteTimer = z.Kind == ZombieKind.Gargantuar ? 2f : 0.04f;
+                        target.Health -= 4f;
+                        z.BiteTimer = .04f;
                         if (target.Kind == PlantKind.Garlic && z.Kind != ZombieKind.Gargantuar)
                         {
                             var rows = new List<int>();

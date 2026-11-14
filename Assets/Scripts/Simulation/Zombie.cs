@@ -5,6 +5,10 @@ namespace PlantsVsZombies.Simulation
     /// <summary>Defines zombie.</summary>
     public sealed class Zombie
     {
+        /// <summary>Retains the original giant's weapon and authored action event.</summary>
+        public global::PlantsVsZombies.Adventure.AdventureGargantuarState? GargantuarState;
+        /// <summary>Retains the original thrown imp's ballistic motion independently of body playback.</summary>
+        public global::PlantsVsZombies.Adventure.AdventureThrownImpState? ThrownImpState;
         /// <summary>Retains the original pogo's bounce counter, held reanimation, and stick-loss transitions.</summary>
         public global::PlantsVsZombies.Adventure.AdventurePogoState? PogoState;
         /// <summary>Retains the original digger emergence, axe-loss pause, and attached dirt effects.</summary>

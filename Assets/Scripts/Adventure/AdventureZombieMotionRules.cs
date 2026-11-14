@@ -32,6 +32,18 @@ namespace PlantsVsZombies.Adventure
         /// <returns>The phase animation, or null for the existing generic selector.</returns>
         internal static string? Animation(Zombie zombie)
         {
+            if (zombie.Kind == ZombieKind.Gargantuar)
+            {
+                return zombie.PresentationNativePhase == 69 ? "anim_throw"
+                    : zombie.PresentationNativePhase == 70 ? "anim_smash" : "anim_walk";
+            }
+
+            if (zombie.Kind == ZombieKind.Imp && zombie.ThrownImpState != null)
+            {
+                return zombie.PresentationNativePhase == 71 ? "anim_thrown"
+                    : zombie.PresentationNativePhase == 72 ? "anim_land" : null;
+            }
+
             if (AdventurePogoRules.IsBouncing(zombie))
             {
                 return "anim_pogo";
@@ -118,7 +130,9 @@ namespace PlantsVsZombies.Adventure
         internal static bool PlaysOnce(Zombie zombie)
         {
             var phase = zombie.PresentationNativePhase;
-            return zombie.Kind == ZombieKind.Ladder && zombie.PresentationNativePhase == 77
+            return zombie.Kind == ZombieKind.Gargantuar && (phase == 69 || phase == 70)
+                || zombie.Kind == ZombieKind.Imp && (phase == 71 || phase == 72)
+                || zombie.Kind == ZombieKind.Ladder && zombie.PresentationNativePhase == 77
                 || zombie.Kind == ZombieKind.Catapult && (phase == 67 || zombie.CatapultState?.FlatTires == true)
                 || AdventurePogoRules.IsBouncing(zombie)
                 || zombie.Kind == ZombieKind.Digger && (phase == 35 || phase == 33 && zombie.DiggerState?.PhaseTicks <= 30)

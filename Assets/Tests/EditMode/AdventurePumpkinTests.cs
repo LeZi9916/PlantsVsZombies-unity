@@ -153,6 +153,10 @@ namespace PlantsVsZombies.Tests.EditMode
         public void CrushingDestroysTheShellAndItsContainedPlantTogether(ZombieKind kind)
         {
             var game = new GameSimulation(new GameRules { AdventureLevel = 31 }, 91);
+            Assert.That(game.ChooseDefaultAdventureSeeds(), Is.True);
+            game.ResetAdventureWaveSchedule(100000, false, false);
+            game.Plants.Clear();
+            game.Zombies.Clear();
             var main = new Plant { Id = 1, Kind = PlantKind.Peashooter, Layer = PlantLayer.Main, Row = 1, Column = 4, Health = 300f };
             var shell = new Plant { Id = 2, Kind = PlantKind.Pumpkin, Layer = PlantLayer.Armor, Row = 1, Column = 4, Health = 4000f };
             game.Plants.Add(main);
@@ -163,6 +167,15 @@ namespace PlantsVsZombies.Tests.EditMode
             zombie.AbilityPhase = 12;
             zombie.BiteTimer = 0f;
             typeof(GameSimulation).GetMethod("AdvanceAdventureZombies", flags)!.Invoke(game, new object[] { .01f });
+            if (kind == ZombieKind.Gargantuar)
+            {
+                Assert.That(game.Plants.Contains(shell), Is.True, "The original giant must finish the smash windup first.");
+                for (var tick = 0; tick < 132; tick++)
+                {
+                    game.Update(.01f);
+                }
+            }
+
             Assert.That(game.Plants.Contains(shell), Is.False);
             Assert.That(game.Plants.Contains(main), Is.False);
         }

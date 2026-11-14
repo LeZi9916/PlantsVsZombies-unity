@@ -227,6 +227,13 @@ namespace PlantsVsZombies.Adventure
                 return false;
             }
 
+            if (z.Kind == ZombieKind.Gargantuar && z.ThrownImp
+                && (track.StartsWith("Zombie_imp", StringComparison.OrdinalIgnoreCase)
+                    || Same(track, "zombie_gargantuar_whiterope")))
+            {
+                return false;
+            }
+
             var helm = HelmType(z);
             string? h = HelmTrack(helm), shield = ShieldTrack(z);
             if (helm > 0 && helm < 8 && h != null && Same(track, h) && z.ArmorHealth <= 0)
@@ -260,6 +267,38 @@ namespace PlantsVsZombies.Adventure
             if (bodyTrack && z.Kind == ZombieKind.Zomboni)
             {
                 return AdventureZomboniRules.DamageImage(z, track);
+            }
+
+            if (bodyTrack && z.Kind == ZombieKind.Gargantuar)
+            {
+                var damage = DamageIndex(z.Health, (int)z.StartingHealth);
+                if (Same(track, "zombie_gargantuar_telephonepole"))
+                {
+                    return z.GargantuarState?.Weapon == 2 ? "IMAGE_REANIM_ZOMBIE_GARGANTUAR_ZOMBIE"
+                        : z.GargantuarState?.Weapon == 1 ? "IMAGE_REANIM_ZOMBIE_GARGANTUAR_DUCKXING" : null;
+                }
+
+                if (Same(track, "zombie_gargantua_body1") && damage > 0)
+                {
+                    return damage == 2 ? "IMAGE_REANIM_ZOMBIE_GARGANTUAR_BODY1_3" : "IMAGE_REANIM_ZOMBIE_GARGANTUAR_BODY1_2";
+                }
+
+                if (Same(track, "zombie_gargantuar_outerarm_lower") && damage > 0)
+                {
+                    return "IMAGE_REANIM_ZOMBIE_GARGANTUAR_OUTERARM_LOWER2";
+                }
+
+                if (Same(track, "zombie_gargantuar_outerleg_foot") && damage == 2)
+                {
+                    return "IMAGE_REANIM_ZOMBIE_GARGANTUAR_FOOT2";
+                }
+
+                if (Same(track, "anim_head1"))
+                {
+                    return z.ModeHead == 32 ? damage == 2 ? "IMAGE_REANIM_ZOMBIE_GARGANTUAR_HEAD2_REDEYE"
+                        : "IMAGE_REANIM_ZOMBIE_GARGANTUAR_HEAD_REDEYE"
+                        : damage == 2 ? "IMAGE_REANIM_ZOMBIE_GARGANTUAR_HEAD2" : null;
+                }
             }
 
             // PC UpdateZombieNewspaper (0x541829) replaces only anim_head1 after the gasp completes.

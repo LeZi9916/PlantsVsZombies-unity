@@ -833,7 +833,28 @@ They do not constitute a full-level packaged Player playthrough, physical-speake
 listening, or other target-platform/device validation.
 
 
-## Original PC squished plant pictures
+## Original PC Gargantuar and squished plant pictures
+
+The supplied PC executable is authoritative. `53F988..53FACB` initializes the
+normal/red-eye giant's body health, carried imp and original weapon variations.
+`542790` retains the 33-frame `anim_smash` at 16 FPS and 34-frame `anim_throw`
+at 24 FPS, both once-and-hold with twenty-update blends. The .64 smash event
+reacquires its target, applies original whole-cell Squish, damages Spikerock by
+fifty and the giant by twenty, and requests Thump plus (0,3) board shake. The
+450-health rock therefore survives eight smashes. Lowgroan starts the smash.
+
+`542C74..542CB4` requires body health strictly below half and native X > 400.
+The PC throwing distance uses **mPosX - 360**, while the mobile-derived source
+uses 460. The .74 release hides the imp/white rope, requests Swing and Imp,
+and creates the imp at mPosX -133, altitude 88 and horizontal velocity three.
+Roofs subtract 180 from the distance and allow a -140 minimum. `542D60` keeps
+.05 gravity and native floor rebasing independent of chill; the original
+sixteen-frame thrown and six-frame landing bodies use 18/24 FPS. `547173`
+updates actions before walking, including the update that finishes an action.
+Flying imps retain the original range-mask exclusion for ordinary projectiles.
+`54D47A` supplies the original integer-thirds body, arm, foot and head damage
+images, including red-eye variants. Foley table `74B3B8` supplies both Imp
+recordings at a five-semitone range and the two Squish/chomp recordings.
 
 `470FA0` runs the awake instant-plant specials and preserves triggered Squash
 immunity. Other crushed plants leave active lawn occupancy while retaining
@@ -848,7 +869,7 @@ pictures. The PC picture remains opaque throughout its retained lifetime.
 ```powershell
 ./Tools/Tests/Run-UnityTests.ps1 -Platform EditMode -TestFilter 'AdventureGargantuarTests|AdventurePumpkinTests.CrushingDestroysTheShellAndItsContainedPlantTogether|AdventureScreenEffectsTests.IceShroomCreatesOriginalIceTrapAndExpiresAtFortyTicks|AdventurePlantSoundTests.InstantSpecialRequestsItsNativeActivationSample'
 # Set PVZ_BOARD_STRESS_ASSETS to the read-only original runtime resources.
-./Tools/Tests/Run-UnityTests.ps1 -Platform PlayMode -TestFilter 'OriginalGargantuarGraphicsTests'
+./Tools/Tests/Run-UnityTests.ps1 -Platform PlayMode -TestFilter 'OriginalGargantuarGraphicsTests|OriginalGargantuarAudioTests'
 ```
 
 These focused production-update and original-art checks do not establish a full-level
