@@ -184,38 +184,108 @@ namespace PlantsVsZombies.Tests.EditMode
             Assert.That(game.Presentation.ScreenShake.OffsetY, Is.EqualTo(-4));
         }
 
-        /// <summary>Checks the squash landing delay and the PC pool exclusion for its smaller downward shake.</summary>
-        /// <param name="level">The adventure terrain containing the target row.</param>
-        /// <param name="row">The land or pool row receiving the squash.</param>
+        /// <summary>Checks the complete PC Squash sequence before its five-update damage-to-landing delay.</summary>
+        /// <param name="level">The original ground, pool or roof background.</param>
+        /// <param name="row">The original land or water lane.</param>
         /// <param name="shakes">Whether the original terrain permits landing shake.</param>
         [TestCase(19, 1, true)]
         [TestCase(29, 2, false)]
+        [TestCase(49, 1, true)]
         public void SquashShakesFiveTicksAfterDamageOnlyOnLand(int level, int row, bool shakes)
         {
-            // PC Plant::UpdateSquash 0x46ED90 damages at falling counter five and lands at zero.
+            // PC 46ED90: look80, prelaunch45, rising50, falling10; damage at counter5, landing at zero.
+            // The supplied mobile-derived source differs: prelaunch30 and damage at counter4.
             var game = Fixture(level);
-            var plant = (Plant)Invoke(game, "PlaceAdventurePlant", PlantKind.Squash, row, 4)!;
-            plant.ActionTimer = .01f;
-            var target = new Zombie
+            Plant? support = null;
+            if (game.Adventure.Level.IsWaterRow(row) || game.Adventure.Level.HasRoof)
             {
-                Id = 1000,
-                Kind = ZombieKind.Normal,
-                Row = row,
-                X = 4.5f,
-                Health = 270f,
-                StartingHealth = 270f
-            };
-            game.Zombies.Add(target);
+                support = (Plant)Invoke(game, "PlaceAdventurePlant",
+                    game.Adventure.Level.HasRoof ? PlantKind.FlowerPot : PlantKind.LilyPad, row, 4)!;
+            }
+
+            var plant = (Plant)Invoke(game, "PlaceAdventurePlant", PlantKind.Squash, row, 4)!;
+            // This general-purpose timer cannot skip the original authored action sequence.
+            plant.ActionTimer = .01f;
+            var target = (Zombie)Invoke(game, "SpawnAdventureBoardZombie", ZombieKind.Normal, row,
+                AdventureZombieNativeRules.GridX(390f), 0)!;
+            target.X = AdventureZombieNativeRules.GridX(390f);
+            target.PresentationPreviousX = target.X;
+            target.FrozenRemaining = 100f;
             game.Update(.01f);
-            Assert.That(game.Zombies.Contains(target), Is.False, "The fixture must reach the production squash damage path.");
+            var state = plant.SquashPresentation!;
+            Assert.That(state.NativePhase, Is.EqualTo(3));
+            Assert.That(state.Countdown, Is.EqualTo(80));
+            Assert.That(state.Animation, Is.EqualTo("anim_lookright"));
+            Assert.That(state.Rate, Is.EqualTo(24f));
+            Assert.That(state.BlendTicks, Is.EqualTo(10));
+            Assert.That(game.Zombies, Has.Member(target));
+            game.Update(.79f);
+            Assert.That(state.NativePhase, Is.EqualTo(3));
+            Assert.That(state.Countdown, Is.EqualTo(1));
+            game.Update(.01f);
+            Assert.That(state.NativePhase, Is.EqualTo(4));
+            Assert.That(state.Countdown, Is.EqualTo(45));
+            Assert.That(state.Animation, Is.EqualTo("anim_jumpup"));
+            Assert.That(state.BlendTicks, Is.EqualTo(20));
+            game.Update(.44f);
+            Assert.That(state.NativePhase, Is.EqualTo(4));
+            Assert.That(state.Countdown, Is.EqualTo(1));
+            game.Update(.01f);
+            Assert.That(state.NativePhase, Is.EqualTo(5));
+            Assert.That(state.Countdown, Is.EqualTo(50));
+            Assert.That(plant.PresentationBiteNotOnGround, Is.True);
+            game.Update(.49f);
+            Assert.That(state.NativePhase, Is.EqualTo(5));
+            Assert.That(state.Countdown, Is.EqualTo(1));
+            game.Update(.01f);
+            Assert.That(state.NativePhase, Is.EqualTo(6));
+            Assert.That(state.Countdown, Is.EqualTo(10));
+            Assert.That(state.Animation, Is.EqualTo("anim_jumpdown"));
+            Assert.That(state.Rate, Is.EqualTo(60f));
+            Assert.That(state.BlendTicks, Is.Zero);
             Assert.That(game.Presentation.ScreenShake.TicksRemaining, Is.Zero);
             game.Update(.04f);
+            Assert.That(state.Countdown, Is.EqualTo(6));
+            Assert.That(game.Zombies, Has.Member(target), "Damage must wait until falling counter five.");
+            game.Update(.01f);
+            Assert.That(state.Countdown, Is.EqualTo(5));
+            Assert.That(game.Zombies, Has.No.Member(target));
+            Assert.That(game.Presentation.ScreenShake.TicksRemaining, Is.Zero);
+            game.Update(.04f);
+            Assert.That(state.Countdown, Is.EqualTo(1));
             Assert.That(game.Presentation.ScreenShake.TicksRemaining, Is.Zero);
             game.Update(.01f);
             Assert.That(game.Presentation.ScreenShake.TicksRemaining, Is.EqualTo(shakes ? 12 : 0));
+            Assert.That(game.Presentation._squashLandings.Count, Is.EqualTo(1));
+            var landing = game.Presentation._squashLandings[0];
+            Assert.That(landing.Water, Is.EqualTo(!shakes));
+            Assert.That(landing.X, Is.EqualTo(state.NativeX + (shakes ? 40f : -11f)));
+            Assert.That(landing.Y, Is.EqualTo(state.NativeY + (!shakes ? 20f : level == 49 ? 69f : 80f)));
+            Assert.That(game.Plants.Contains(plant), Is.EqualTo(shakes));
+            Assert.That(game.Presentation.ZombieSounds.FindAll(sound => sound.Foley == 40).Count, Is.EqualTo(shakes ? 1 : 0));
+            Assert.That(game.Presentation.ZombieSounds.FindAll(sound => sound.Foley == -4).Count, Is.EqualTo(shakes ? 0 : 1));
+            if (support != null)
+            {
+                Assert.That(game.Plants, Has.Member(support));
+            }
+
+            if (shakes)
+            {
+                Assert.That(state.NativePhase, Is.EqualTo(7));
+                Assert.That(state.Countdown, Is.EqualTo(100));
+            }
+
             game.Update(.06f);
             Assert.That(Math.Abs(game.Presentation.ScreenShake.OffsetX), Is.EqualTo(shakes ? 1 : 0));
             Assert.That(game.Presentation.ScreenShake.OffsetY, Is.EqualTo(shakes ? 4 : 0));
+            if (shakes)
+            {
+                game.Update(.93f);
+                Assert.That(state.Countdown, Is.EqualTo(1));
+                Assert.That(game.Plants, Has.Member(plant));
+                game.Update(.01f);
+                Assert.That(game.Plants, Has.No.Member(plant), "The original flattened body remains for exactly one hundred updates.");
+            }
         }
 
         /// <summary>Checks the ice special action creates the original flash and snowflake particle system without shake.</summary>

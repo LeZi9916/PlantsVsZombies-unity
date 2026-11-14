@@ -5485,7 +5485,7 @@ namespace PlantsVsZombies.Simulation
                 velocity = -velocity;
             }
 
-            if (zombie.Eating || zombie.FrozenRemaining > 0f || zombie.PresentationButter > 0f
+            if (AdventureStarfruitRules.TargetNotWalking(zombie)
                 || AdventureDancerRules.IsDancer(zombie) && !AdventureDancerRules.CanWalk(zombie, Zombies))
             {
                 velocity = 0f;

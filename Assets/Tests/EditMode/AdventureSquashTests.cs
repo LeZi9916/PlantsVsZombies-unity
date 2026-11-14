@@ -152,11 +152,57 @@ namespace PlantsVsZombies.Tests.EditMode
             Assert.That(AdventureSquashRules.RisingPosition(0, 100, 200), Is.EqualTo(200));
         }
 
-        /// <summary>Creates a playing night lawn with no automatic waves during the Squash action.</summary>
-        /// <returns>The isolated production simulation.</returns>
-        private static GameSimulation Fixture()
+        /// <summary>Checks ZombieTargetLeadX treats launching and reloading catapults as stationary.</summary>
+        /// <param name="phase">The original stopped catapult native phase.</param>
+        [TestCase(67)]
+        [TestCase(68)]
+        public void StoppedCatapultUsesItsOriginalBodyCenterWithoutWalkingLead(int phase)
         {
-            var game = new GameSimulation(new GameRules { AdventureLevel = 19 }, 4231);
+            var game = Fixture();
+            var zombie = Spawn(game, ZombieKind.Catapult, 1, 450f);
+            zombie.PresentationNativePhase = phase;
+            Assert.That(zombie.PresentationNativeVelocity, Is.GreaterThan(0f), "A stopped phase retains the original walking velocity.");
+            // PC vehicle body is [mX,mX+153]; integer center 450+76, minus half the plant width forty.
+            Assert.That(Invoke(game, "AdventureSquashTargetX", zombie, 30), Is.EqualTo(486));
+        }
+
+        /// <summary>Checks PC 54E240 excludes a live zombie already owned by a Tangle Kelp from Squash acquisition.</summary>
+        [Test]
+        public void KelpOwnedZombieCannotTriggerTheSquashLook()
+        {
+            var game = Fixture(29);
+            Invoke(game, "PlaceAdventurePlant", PlantKind.LilyPad, 2, 4);
+            var squash = (Plant)Invoke(game, "PlaceAdventurePlant", PlantKind.Squash, 2, 4)!;
+            var zombie = Spawn(game, ZombieKind.Normal, 2, 390f);
+            zombie.FrozenRemaining = 100f;
+            zombie.TangleKelpGrab = new AdventureTangleKelpState { TargetZombieId = zombie.Id };
+            game.Update(.01f);
+            Assert.That(squash.SquashPresentation!.NativePhase, Is.Zero);
+            Assert.That(game.Presentation.ZombieSounds.Exists(sound => sound.Foley == 41), Is.False);
+        }
+
+        /// <summary>Checks the PC target scan allows multiple Squashes to select the same live zombie.</summary>
+        [Test]
+        public void PcOriginalDoesNotReserveTargetsBetweenDifferentSquashes()
+        {
+            var game = Fixture();
+            var first = (Plant)Invoke(game, "PlaceAdventurePlant", PlantKind.Squash, 1, 4)!;
+            var second = (Plant)Invoke(game, "PlaceAdventurePlant", PlantKind.Squash, 1, 5)!;
+            var zombie = Spawn(game, ZombieKind.Normal, 1, 440f);
+            zombie.FrozenRemaining = 100f;
+            game.Update(.01f);
+            Assert.That(first.SquashPresentation!.NativePhase, Is.EqualTo(3));
+            Assert.That(second.SquashPresentation!.NativePhase, Is.EqualTo(3));
+            Assert.That(first.SquashPresentation.TargetZombieId, Is.EqualTo(zombie.Id));
+            Assert.That(second.SquashPresentation.TargetZombieId, Is.EqualTo(zombie.Id));
+        }
+
+        /// <summary>Creates a playing original board with no automatic waves during the Squash action.</summary>
+        /// <param name="level">The original background; existing cases retain the default night lawn.</param>
+        /// <returns>The isolated production simulation.</returns>
+        private static GameSimulation Fixture(int level = 19)
+        {
+            var game = new GameSimulation(new GameRules { AdventureLevel = level }, 4231);
             Assert.That(game.ChooseDefaultAdventureSeeds(), Is.True);
             game.ResetAdventureWaveSchedule(100000, false, false);
             game.Plants.Clear();
@@ -187,6 +233,20 @@ namespace PlantsVsZombies.Tests.EditMode
                 FrozenRemaining = 100f
             };
             game.Zombies.Add(zombie);
+            return zombie;
+        }
+
+        /// <summary>Spawns a real native actor at an exact original pixel coordinate.</summary>
+        /// <param name="game">The controlled playing board.</param>
+        /// <param name="kind">The original zombie identifier.</param>
+        /// <param name="row">The zero-based lane.</param>
+        /// <param name="x">The native horizontal position.</param>
+        /// <returns>The initialized live actor.</returns>
+        private static Zombie Spawn(GameSimulation game, ZombieKind kind, int row, float x)
+        {
+            var zombie = (Zombie)Invoke(game, "SpawnAdventureBoardZombie", kind, row, AdventureZombieNativeRules.GridX(x), 0)!;
+            zombie.X = AdventureZombieNativeRules.GridX(x);
+            zombie.PresentationPreviousX = zombie.X;
             return zombie;
         }
 

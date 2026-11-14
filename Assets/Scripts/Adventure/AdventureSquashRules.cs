@@ -36,7 +36,8 @@ namespace PlantsVsZombies.Adventure
         /// <returns>Whether the original actor can trigger or redirect this Squash.</returns>
         public static bool CanTarget(Plant plant, Zombie zombie, NativeRect body, int nativeX, int phase, bool vasebreaker)
         {
-            if (zombie.Headless || zombie.Kind != ZombieKind.Boss && zombie.Row != plant.Row
+            if (zombie.Headless || zombie.TangleKelpGrab != null || zombie.PresentationNativeHeight == 3
+                || zombie.Kind != ZombieKind.Boss && zombie.Row != plant.Row
                 || phase == 11 && body.X >= nativeX + 20 || phase == 12 || phase == 58
                 || phase == 52 || phase == 53 || phase == 54
                 || zombie.Kind == ZombieKind.Bobsled && (zombie.PresentationHasSled ?? !zombie.UsedAbility))

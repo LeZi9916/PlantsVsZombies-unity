@@ -138,9 +138,10 @@ expectations. Opt-in original-artwork tests use `PVZ_BOARD_STRESS_ASSETS`.
 The final isolated macOS run using Unity 6000.3.17f1 passes 282 PlayMode tests
 with two opt-in tests skipped, and 448 EditMode tests. Both skipped PlayMode
 cases (the benchmark and original Dave voice) also pass in separate configured
-runs, giving 284 unique passing PlayMode cases. Two pre-existing
-`SquashShakesFiveTicksAfterDamageOnlyOnLand` cases also fail on the unchanged
-HEAD baseline; they are simulation fixture failures, not graphics validation.
+runs, giving 284 unique passing PlayMode cases. At that rendering-validation
+revision, two `SquashShakesFiveTicksAfterDamageOnlyOnLand` cases also failed on
+its unchanged HEAD baseline. The focused Squash follow-up below now corrects
+their obsolete immediate-damage setup using the complete original PC sequence.
 The rendering benchmark is run separately with its output environment variable.
 A GPU timing source that provides too few samples is explicitly marked unavailable.
 
@@ -749,3 +750,40 @@ pixels including a small roof body and lifted cargo, dry/water/roof crater cells
 and fade, and chooser warning pixels through the production bitmap fonts.
 These checks do not constitute a full-level packaged Player playthrough or
 validation on Windows/Linux/mobile/IL2CPP devices.
+
+
+## Original PC Squash sequence and targeting
+
+The supplied PC executable is authoritative where the mobile-derived C# differs.
+`46ED90` uses eighty look updates, **forty-five** prelaunch updates, fifty rising
+updates and ten falling updates. `46F052..46F058` damages at falling counter
+**five**; at zero, dry/roof landings start the original (1,4) screen shake and
+Thump, while water landings use Splat/Splash and immediately remove the Squash.
+Dry land retains its flattened body for one hundred updates. The mobile source
+uses thirty prelaunch updates and damage at counter four instead.
+
+The old screen-feedback fixtures set `ActionTimer=.01` and expected damage on
+the next update. They now exercise a real triggered Squash against a controlled
+native zombie through every original phase, proving the general timer cannot
+skip the sequence. Ground, pool and roof cases verify both sides of the damage
+boundary, the five-update landing delay, terrain effects/sounds, surviving
+support and exact flattened-body lifetime.
+
+The audit also restores two native target gates. `46EC0C` calls `54E240` to
+exclude kelp-owned/dragged-under zombies from acquisition. `546270` calls
+`546300` before leading a body: stopped launch/reload phases, including native
+Catapult phases 67/68, use zero prediction velocity. The shared original
+ZombieNotWalking gate now supplies that decision. The PC `46EBA0` scan allows
+multiple Squashes to select the same zombie; the mobile-only target reservation
+restriction is deliberately not added.
+
+```powershell
+./Tools/Tests/Run-UnityTests.ps1 -Platform EditMode -TestFilter 'AdventureScreenEffectsTests.SquashShakesFiveTicksAfterDamageOnlyOnLand|AdventureSquashTests|AdventureButterAndReloadTests.TriggeredSquashSurvivesOrdinaryZombieChewingUntilAirborne|AdventureButterAndReloadTests.EatenFlowerPotKeepsTheAlreadyAirborneSquashAlive'
+# Set PVZ_BOARD_STRESS_ASSETS to the read-only original runtime resources.
+./Tools/Tests/Run-UnityTests.ps1 -Platform PlayMode -TestFilter OriginalPuffShroomTests.SquashUsesOriginalLookLaunchFlightAndFlattenedArtwork
+```
+
+The focused cases include the previously corrected chewing immunity and airborne
+roof-support independence, plus original source-art playback. They do not
+constitute a full-level packaged Player playthrough or other platform/device
+validation.
