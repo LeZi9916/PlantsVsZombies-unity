@@ -16,7 +16,7 @@ using UnityEngine.TestTools;
 
 namespace PlantsVsZombies.Tests.PlayMode
 {
-    /// <summary>Checks original mushroom sleep artwork and free Z animation.</summary>
+    /// <summary>Checks original mushroom sleep artwork, free Z animation and crater atlases.</summary>
     public sealed class OriginalMushroomGraphicsTests
     {
         /// <summary>Checks all ten source sleeping bodies and independently placed original Z artwork, including roof and small bodies.</summary>
@@ -90,6 +90,54 @@ namespace PlantsVsZombies.Tests.PlayMode
             yield return fixture.Capture("DrawAdventureBoard", () =>
                 fixture.Animations.DrawNativePlayback("Z", new Vector2(250f, 220f), 1f, .4f, null, true, 7f), true);
             Assert.That(fixture.Pixels.GetPixels32(), Is.EqualTo(actual));
+        }
+
+        /// <summary>Checks terrain-specific crater cells, the ninety-second aging split and the last twenty-five-update alpha.</summary>
+        /// <returns>Real camera frames comparing native top-left atlas composition.</returns>
+        [UnityTest]
+        public IEnumerator CratersUseOriginalGroundWaterAndRoofArtworkAndFade()
+        {
+            foreach (var sample in new[] { (9, 1, 2, 180f), (19, 1, 2, 89f), (29, 2, 2, 180f),
+                (39, 2, 2, 89f), (49, 1, 2, 180f), (49, 1, 7, .12f), (50, 1, 2, 89f) })
+            {
+                using var fixture = new OriginalStormGraphicsTests.StormFixture(sample.Item1);
+                fixture.Owner.RequiredGame.Adventure._ticks = 25;
+                var crater = new AdventureCellTimer { Row = sample.Item2, Column = sample.Item3, Remaining = sample.Item4 };
+                yield return fixture.Capture(null, () => fixture.DrawPass("DrawAdventureCrater", crater));
+                var actual = fixture.Pixels.GetPixels32();
+                yield return fixture.Capture(null, () =>
+                {
+                    var water = sample.Item1 == 29 || sample.Item1 == 39;
+                    var roof = sample.Item1 == 49 || sample.Item1 == 50;
+                    var old = sample.Item4 < 90f;
+                    var x = 32f + sample.Item3 * 80f;
+                    var y = 120f + sample.Item2 * (water || roof ? 85f : 100f);
+                    var image = sample.Item1 == 19 ? old ? "crater_fading.png" : "crater.png"
+                        : old ? "crater_fading.png" : "crater.png";
+                    var cel = sample.Item1 == 19 ? 1 : 0;
+                    if (water)
+                    {
+                        image = sample.Item1 == 39 ? "crater_water_night.png" : "crater_water_day.png";
+                        cel = old ? 1 : 0;
+                        y += (float)Math.Sin(sample.Item2 * Mathf.PI + sample.Item3 * Mathf.PI * .25f + 25 * Mathf.PI * 2f / 200f) * 2f;
+                    }
+                    else if (roof)
+                    {
+                        var left = sample.Item3 < 5;
+                        image = left ? "crater_roof_left.png" : "crater_roof_center.png";
+                        x += left ? 16f : 18f;
+                        y += Math.Max(0, 5 - sample.Item3) * 20f - 10f + (left ? -16f : -9f);
+                        cel = old ? 1 : 0;
+                    }
+
+                    var texture = fixture.Owner.Textures.LoadImage(image)!;
+                    var color = CanvasUI.Color;
+                    CanvasUI.Color = new Color(1f, 1f, 1f, sample.Item4 < .25f ? 122f / 255f : 1f);
+                    fixture.Animations.DrawNativeImage(texture, new Rect(x, y, texture.Width * .5f, texture.Height), new Rect(cel * .5f, 0f, .5f, 1f));
+                    CanvasUI.Color = color;
+                });
+                Assert.That(fixture.Pixels.GetPixels32(), Is.EqualTo(actual), "Original crater " + sample);
+            }
         }
 
     }

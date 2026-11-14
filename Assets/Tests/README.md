@@ -708,7 +708,7 @@ not constitute a full-level packaged Player playthrough, physical-speaker
 listening, or Windows/Linux/mobile/IL2CPP device validation.
 
 
-## Original mushroom sleep
+## Original mushroom sleep and Doom cell cleanup
 
 PC `Plant::SetSleeping` (`46CB90`) creates the independent reanimation 68,
 `Z.reanim`, at plant +(50,40), render order +2 and scale one. Fume adds twelve
@@ -720,8 +720,17 @@ or dies. Sleeping Gloom upgrades create the same independent state immediately.
 All ten existing mushroom body clips were compared against the original
 `anim_sleep`; these correct source body poses remain unchanged.
 
+`474B10` calls `474AC0` before adding the crater: every allocated plant in the
+Doom-shroom's own row/column dies, including flower pot, Lily Pad and Pumpkin.
+Adjacent cells' plants survive. Clearing the roof support reveals the crater
+that was previously covered by the surviving pot. The original 250-pixel,
+three-row zombie blast, awake fuse, terrain-specific crater atlases, ninety-second
+aging split and twenty-five-update fade remain intact. Crater occupancy now
+expires at exactly 18000 native updates, avoiding accumulated float subtraction
+error; permanent Beghouled holes retain their infinite lifetime.
+
 ```powershell
-./Tools/Tests/Run-UnityTests.ps1 -Platform EditMode -TestFilter AdventureMushroomTests
+./Tools/Tests/Run-UnityTests.ps1 -Platform EditMode -TestFilter 'AdventureMushroomTests|AdventureScreenEffectsTests.DoomShroomStartsItsOriginalFuseWhenWokenAndDetonatesOnce'
 # Set PVZ_BOARD_STRESS_ASSETS to the read-only original runtime resources.
 ./Tools/Tests/Run-UnityTests.ps1 -Platform PlayMode -TestFilter OriginalMushroomGraphicsTests
 ```

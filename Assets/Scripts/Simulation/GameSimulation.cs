@@ -5613,7 +5613,15 @@ namespace PlantsVsZombies.Simulation
             {
                 BlastAdventureAshPlant(plant, 250, 3);
                 AdventurePresentationExplosion(PlantKind.DoomShroom, plant.Column + .5f, plant.Row);
-                RemoveAdventurePlantAndStack(plant);
+                // PC 474AC0 kills every allocated plant in the Doom-shroom's own cell, including supports and shells.
+                foreach (var occupant in new PooledSnapshot<Plant>(Plants))
+                {
+                    if (occupant.Row == plant.Row && occupant.Column == plant.Column && Plants.Contains(occupant))
+                    {
+                        RemoveAdventurePlantAndStack(occupant);
+                    }
+                }
+
                 Adventure._craters.Add(new AdventureCellTimer { Row = plant.Row, Column = plant.Column, Remaining = 180f });
                 Raise(GameEvent.DoomExplosion);
             }
@@ -7980,8 +7988,10 @@ namespace PlantsVsZombies.Simulation
         {
             for (var i = cells.Count - 1; i >= 0; i--)
             {
-                cells[i].Remaining -= dt;
-                if (cells[i].Remaining <= 0f)
+                // Original craters use integer centiseconds; repeated float subtraction extends the 18000-tick lifetime.
+                var ticks = Math.Max(0d, Math.Round((double)cells[i].Remaining * 100d) - Math.Round(dt * 100d));
+                cells[i].Remaining = (float)(ticks * .01d);
+                if (ticks <= 0d)
                 {
                     cells.RemoveAt(i);
                 }
