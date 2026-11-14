@@ -60,6 +60,8 @@ namespace PlantsVsZombies.Adventure
         public int GraveBusterChompSoundSerial;
         /// <summary>Stores corpses.</summary>
         public readonly List<AdventureZombieCorpse> Corpses = new List<AdventureZombieCorpse>();
+        /// <summary>Retains the original five-second flattened cached plant pictures below live actors.</summary>
+        public readonly List<AdventureSquishedPlant> SquishedPlants = new List<AdventureSquishedPlant>();
         /// <summary>Retains original ice vehicle explosion and tire systems after their source actor is removed.</summary>
         public readonly List<AdventureZomboniParticle> ZomboniParticles = new List<AdventureZomboniParticle>();
         /// <summary>Stores impacts.</summary>

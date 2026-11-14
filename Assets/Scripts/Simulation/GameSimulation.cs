@@ -3699,6 +3699,14 @@ namespace PlantsVsZombies.Simulation
         /// <param name = "dt">The dt.</param>
         private void AdvanceAdventurePlants(float dt)
         {
+            for (var i = Presentation.SquishedPlants.Count - 1; i >= 0; i--)
+            {
+                if (--Presentation.SquishedPlants[i].Remaining < 0)
+                {
+                    Presentation.SquishedPlants.RemoveAt(i);
+                }
+            }
+
             foreach (Plant p in new PooledSnapshot<Plant>(Plants))
             {
                 var producerAdvanced = false;
@@ -3821,21 +3829,7 @@ namespace PlantsVsZombies.Simulation
                             DetonateAdventureJalapeno(p);
                             break;
                         case PlantKind.IceShroom:
-                            RequestAdventureZombieFoley(18);
-                            NotifyAdventureIceTrap();
-                            AdventurePresentationExplosion(PlantKind.IceShroom, x, p.Row);
-                            foreach (Zombie z in new PooledSnapshot<Zombie>(Zombies))
-                            {
-                                ApplyAdventureIceTrap(z);
-                            }
-
-                            Adventure._balls.RemoveAll(b => !b.IsIce);
-                            if (Adventure.BossHeadVulnerable)
-                            {
-                                DamageAdventureBoss(20f);
-                            }
-
-                            RemoveAdventurePlantAndStack(p);
+                            DetonateAdventureIceShroom(p);
                             break;
                         case PlantKind.GraveBuster:
                             for (var i = Adventure._graves.Count - 1; i >= 0; i--)
@@ -5658,6 +5652,27 @@ namespace PlantsVsZombies.Simulation
             plant.PresentationBiteNotOnGround = state.NativePhase >= 5;
         }
 
+        /// <summary>Runs the original Ice-shroom special for both its fuse and an awake plant being squished.</summary>
+        /// <param name="plant">The consumed mushroom whose cell anchors the original ice particle system.</param>
+        private void DetonateAdventureIceShroom(Plant plant)
+        {
+            RequestAdventureZombieFoley(18);
+            NotifyAdventureIceTrap();
+            AdventurePresentationExplosion(PlantKind.IceShroom, plant.Column + .5f, plant.Row);
+            foreach (var zombie in new PooledSnapshot<Zombie>(Zombies))
+            {
+                ApplyAdventureIceTrap(zombie);
+            }
+
+            Adventure._balls.RemoveAll(ball => !ball.IsIce);
+            if (Adventure.BossHeadVulnerable)
+            {
+                DamageAdventureBoss(20f);
+            }
+
+            RemoveAdventurePlantAndStack(plant);
+        }
+
         /// <summary>Starts and advances the original awake Doom-shroom special action once per native tick.</summary>
         /// <param name="plant">The awake Doom-shroom whose fuse and original exploding body are updated.</param>
         private void AdvanceAdventureDoomShroom(Plant plant)
@@ -5690,6 +5705,7 @@ namespace PlantsVsZombies.Simulation
                     }
                 }
 
+                Presentation.SquishedPlants.RemoveAll(crushed => crushed.Plant.Row == plant.Row && crushed.Plant.Column == plant.Column);
                 Adventure._craters.Add(new AdventureCellTimer { Row = plant.Row, Column = plant.Column, Remaining = 180f });
                 Raise(GameEvent.DoomExplosion);
             }
@@ -10043,9 +10059,68 @@ namespace PlantsVsZombies.Simulation
                 if (plant.Row == row && plant.Column == column && plant.Kind != PlantKind.Spikerock
                     && (!driveOver || plant.Kind != PlantKind.Spikeweed))
                 {
-                    RemoveAdventurePlantAndStack(plant);
+                    SquishAdventurePlant(plant);
                 }
             }
+        }
+
+        /// <summary>Applies PC 470FA0's instant-special exceptions and retained flattened plant picture.</summary>
+        /// <param name="plant">The actual allocated plant contacted by a crush.</param>
+        private void SquishAdventurePlant(Plant plant)
+        {
+            if (!Plants.Contains(plant) || plant.PresentationBiteNotOnGround || plant.BungeeState == 2
+                || plant.Kind == PlantKind.Squash && plant.SquashPresentation?.NativePhase > 0)
+            {
+                return;
+            }
+
+            if (!plant.Asleep)
+            {
+                if (plant.Kind == PlantKind.CherryBomb)
+                {
+                    DetonateAdventureCherryBomb(plant);
+                    return;
+                }
+
+                if (plant.Kind == PlantKind.Jalapeno)
+                {
+                    DetonateAdventureJalapeno(plant);
+                    return;
+                }
+
+                if (plant.Kind == PlantKind.DoomShroom)
+                {
+                    (plant.DoomShroomPresentation ??= new AdventureDoomShroomState()).Countdown = 0;
+                    AdvanceAdventureDoomShroom(plant);
+                    return;
+                }
+
+                if (plant.Kind == PlantKind.IceShroom)
+                {
+                    DetonateAdventureIceShroom(plant);
+                    return;
+                }
+
+                if (plant.Kind == PlantKind.PotatoMine && plant.MinePhase != MinePhase.Buried)
+                {
+                    DamageAdventurePotatoMine(plant);
+                    AdventurePresentationExplosion(PlantKind.PotatoMine, plant.Column + .5f, plant.Row);
+                    RemoveAdventurePlantAndStack(plant);
+                    Raise(GameEvent.MineExplosion);
+                    return;
+                }
+            }
+
+            RemoveAdventureLadder(plant.Row, plant.Column);
+            plant.SleepingPresentation = null;
+            Plants.Remove(plant);
+            if (Adventure.SelectedCobCannonId == plant.Id)
+            {
+                Adventure.SelectedCobCannonId = null;
+            }
+
+            Presentation.SquishedPlants.Add(new AdventureSquishedPlant(plant));
+            RequestAdventureZombieFoley(21);
         }
 
         /// <summary>Performs adventure bite can target.</summary>
@@ -13844,11 +13919,7 @@ namespace PlantsVsZombies.Simulation
                                 RemoveAdventurePlantAndStack(target);
                             }
                         }
-                        else
-                        {
-                            RemoveAdventurePlantAndStack(target);
-                        }
-
+                        // Squish owns ordinary plants, including instant-special and triggered-Squash immunity.
                         continue;
                     }
 

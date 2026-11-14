@@ -72,6 +72,10 @@ namespace PlantsVsZombies.Adventure
                 19,
                 new AdventureZombieFoleyDefinition(10f, new[] { "plant_water", "zombie_entering_water" })
             },
+            {
+                21,
+                new AdventureZombieFoleyDefinition(0f, new[] { "chomp", "chomp2" })
+            },
             // PC vase opening uses Swing Foley, then direct BONK and the downward-pitched VaseBreaking Foley.
             {
                 47,

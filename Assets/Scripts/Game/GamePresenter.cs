@@ -1472,6 +1472,50 @@ namespace PlantsVsZombies.Game
             }
         }
 
+        /// <summary>Draws PC 473F88's static cached squished pictures at grave order 301008, pot first.</summary>
+        /// <param name="row">The original board row receiving the retained flattened pictures.</param>
+        private void DrawAdventureSquishedPlants(int row)
+        {
+            for (var layer = 0; layer < 2; layer++)
+            {
+                foreach (var crushed in _owner.RequiredGame.Presentation.SquishedPlants)
+                {
+                    var plant = crushed.Plant;
+                    if (plant.Row != row || (plant.Kind == PlantKind.FlowerPot ? 0 : 1) != layer)
+                    {
+                        continue;
+                    }
+
+                    var height = AlmanacPortraitLayout.PlantHeightOffset((int)plant.Kind);
+                    if (plant.Kind == PlantKind.FlowerPot)
+                    {
+                        height -= 15f;
+                    }
+
+                    if (plant.Kind == PlantKind.CoffeeBean)
+                    {
+                        height += 10f;
+                    }
+
+                    var previous = SpriteDrawState.Matrix;
+                    try
+                    {
+                        // PC 47F48E scales cached image offsets, retaining DrawSeedType's unscaled height +60 argument.
+                        SpriteDrawState.Matrix = previous
+                            * Matrix4x4.Translate(new Vector3(40f + plant.Column * 80f,
+                                _owner.Layout.AdventureCellY(row, plant.Column) + height + 60f, 0f))
+                            * Matrix4x4.Scale(new Vector3(1f, .25f, 1f));
+                        DrawAdventureCursorPlant(plant.Kind, Vector2.zero, 1f,
+                            _presentationKeys.Get("squished-plant-", plant.Id));
+                    }
+                    finally
+                    {
+                        SpriteDrawState.Matrix = previous;
+                    }
+                }
+            }
+        }
+
         /// <summary>Draws the original Squash landing dust or fourteen-frame water splash above its row's actors.</summary>
         /// <param name="row">The native board row whose retained impact effects are being submitted.</param>
         private void DrawAdventureSquashLandings(int row)
@@ -2185,6 +2229,7 @@ namespace PlantsVsZombies.Game
                     DrawAdventureIceSparkles(row);
                     DrawAdventureBungees(row, false);
                     DrawAdventureBungeeCorpses(row, 301007);
+                    DrawAdventureSquishedPlants(row);
                     for (var layer = 0; layer <= (int)PlantLayer.Effect; layer++)
                     {
                         foreach (Plant plant in _owner.RequiredGame.Plants)

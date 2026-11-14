@@ -831,3 +831,25 @@ card pixels and campaign submissions, coffee flights/removal/Imitater, existing
 sleep/Z and tooltip artwork, original audio voices and warmed plant allocation.
 They do not constitute a full-level packaged Player playthrough, physical-speaker
 listening, or other target-platform/device validation.
+
+
+## Original PC squished plant pictures
+
+`470FA0` runs the awake instant-plant specials and preserves triggered Squash
+immunity. Other crushed plants leave active lawn occupancy while retaining
+static cached pictures at row order 301008, after pre-grab bungees and before
+live plants. The native disappear counter starts at 500 and removes the object
+only when negative. `473F88` uses quarter-height images and an unscaled
+height-plus-sixty argument; `47F48E` scales the cached image offsets rather than
+that argument. Pots retain their -15 adjustment. Whole-cell crushing preserves
+each layer's picture, and Doom's own-cell cleanup also removes earlier crushed
+pictures. The PC picture remains opaque throughout its retained lifetime.
+
+```powershell
+./Tools/Tests/Run-UnityTests.ps1 -Platform EditMode -TestFilter 'AdventureGargantuarTests|AdventurePumpkinTests.CrushingDestroysTheShellAndItsContainedPlantTogether|AdventureScreenEffectsTests.IceShroomCreatesOriginalIceTrapAndExpiresAtFortyTicks|AdventurePlantSoundTests.InstantSpecialRequestsItsNativeActivationSample'
+# Set PVZ_BOARD_STRESS_ASSETS to the read-only original runtime resources.
+./Tools/Tests/Run-UnityTests.ps1 -Platform PlayMode -TestFilter 'OriginalGargantuarGraphicsTests'
+```
+
+These focused production-update and original-art checks do not establish a full-level
+packaged Player playthrough, physical-speaker listening, or other target-platform/device validation.
