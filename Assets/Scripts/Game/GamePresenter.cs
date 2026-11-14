@@ -2181,12 +2181,18 @@ namespace PlantsVsZombies.Game
                     {
                         foreach (Plant plant in _owner.RequiredGame.Plants)
                         {
-                            if (plant.Row == row && (int)plant.Layer == layer && plant.BungeeState == 0
-                                && !(plant.Kind == PlantKind.UmbrellaLeaf && plant.PresentationUmbrellaAge >= .05f)
+                            if (plant.Row != row || (int)plant.Layer != layer)
+                            {
+                                continue;
+                            }
+
+                            if (plant.BungeeState == 0 && !(plant.Kind == PlantKind.UmbrellaLeaf && plant.PresentationUmbrellaAge >= .05f)
                                 && !(plant.Kind == PlantKind.Squash && plant.SquashPresentation?.NativePhase >= 5))
                             {
                                 DrawAdventurePlant(plant);
                             }
+
+                            DrawAdventureSleepingPlant(plant);
                         }
                     }
 
@@ -3433,6 +3439,37 @@ namespace PlantsVsZombies.Game
                     }
                 }
             }
+        }
+
+        /// <summary>Draws PC SetSleeping's free Z reanimation at plant order plus two, independently of its body.</summary>
+        /// <param name="plant">The allocated sleeping plant retaining its original cell and animation clock.</param>
+        private void DrawAdventureSleepingPlant(Plant plant)
+        {
+            var state = plant.SleepingPresentation;
+            if (!plant.Asleep || state == null)
+            {
+                return;
+            }
+
+            var x = BoardLayout.AdventureGridX + plant.Column * BoardLayout.CellWidth + 50f;
+            var y = _owner.Layout.AdventureCellY(plant.Row, plant.Column) + 40f;
+            if (plant.Kind == PlantKind.FumeShroom)
+            {
+                x += 12f;
+            }
+            else if (plant.Kind == PlantKind.ScaredyShroom)
+            {
+                y -= 20f;
+            }
+            else if (plant.Kind == PlantKind.GloomShroom)
+            {
+                y -= 12f;
+            }
+
+            using var actor = _owner.RequiredAnimations.Hierarchy.BeginActor("Plants", plant.Id, AdventurePlantAnimation(plant.Kind));
+            _owner.RequiredAnimations.DrawNativePlayback("Z", new Vector2(x, y), 1f,
+                state.AnimationSeconds + AdventureRenderRemainder, null, true, state.Rate,
+                instanceKey: _presentationKeys.Get("plant-sleeping-", plant.Id));
         }
 
         /// <summary>Draws the original attached Plantern shine above fog and below ordinary pickups.</summary>

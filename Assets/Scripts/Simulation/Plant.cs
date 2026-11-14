@@ -18,6 +18,8 @@ namespace PlantsVsZombies.Simulation
         public AdventureSquashState? SquashPresentation { get; internal set; }
         /// <summary>Gets or sets the original Scaredy-shroom fear and recovery body state.</summary>
         public AdventureScaredyShroomState? ScaredyShroomPresentation { get; internal set; }
+        /// <summary>Retains the original independent sleeping Z animation until this plant wakes or dies.</summary>
+        public AdventureSleepingState? SleepingPresentation;
         /// <summary>Gets the pre-explosion body and head state, created when a Doom-shroom first updates awake.</summary>
         public AdventureDoomShroomState? DoomShroomPresentation { get; internal set; }
         /// <summary>Gets or sets the original Jalapeno fuse animation and native per-update shake.</summary>

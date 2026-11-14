@@ -3148,6 +3148,28 @@ namespace PlantsVsZombies.Simulation
             return (int)k >= 8 && (int)k <= 15 && k != PlantKind.GraveBuster || k == PlantKind.SeaShroom || k == PlantKind.MagnetShroom || k == PlantKind.GloomShroom;
         }
 
+        /// <summary>Creates or removes PC SetSleeping's independent original Z animation.</summary>
+        /// <param name="plant">The allocated plant whose current sleep flag owns the animation.</param>
+        private void InitializeAdventureSleepingPlant(Plant plant)
+        {
+            if (!plant.Asleep)
+            {
+                plant.SleepingPresentation = null;
+                return;
+            }
+
+            if (plant.SleepingPresentation == null)
+            {
+                var rate = 6f + (float)_random.NextDouble() * 2f;
+                plant.SleepingPresentation = new AdventureSleepingState
+                {
+                    Rate = rate,
+                    // PC reanimation 68 is Z.reanim: seventeen frames, random normalized time in [0,.9].
+                    AnimationSeconds = (float)_random.NextDouble() * .9f * 17f / rate
+                };
+            }
+        }
+
         /// <summary>Performs place adventure plant.</summary>
         /// <param name = "kind">The kind.</param>
         /// <param name = "row">The row.</param>
@@ -3193,6 +3215,7 @@ namespace PlantsVsZombies.Simulation
                 IsSmall = false
             };
             InitializeAdventureNativePlantTiming(plant);
+            InitializeAdventureSleepingPlant(plant);
             Plants.Add(plant);
             if (kind != PlantKind.FlowerPot && AdventurePlantAt(row, column, PlantLayer.Support) is Plant pot
                 && pot.Kind == PlantKind.FlowerPot)
@@ -3645,6 +3668,7 @@ namespace PlantsVsZombies.Simulation
                         if (p.WakeTimer <= 0f)
                         {
                             p.Asleep = false;
+                            p.SleepingPresentation = null;
                             p.AwakeByCoffee = true;
                         }
                     }
@@ -6189,6 +6213,13 @@ namespace PlantsVsZombies.Simulation
 
             foreach (Plant plant in Plants)
             {
+                InitializeAdventureSleepingPlant(plant);
+                if (plant.SleepingPresentation != null)
+                {
+                    // PC sleeping reanimations are independent board objects, including while their plant is grabbed.
+                    plant.SleepingPresentation.AnimationSeconds += dt;
+                }
+
                 if (plant.BungeeState != 0)
                 {
                     plant.Age += dt * (plant.BungeeState == 2 ? .1f / Math.Max(1f, plant.PresentationRate) : 1f);
@@ -9221,6 +9252,7 @@ namespace PlantsVsZombies.Simulation
                 CannonReloadRemaining = kind == PlantKind.CobCannon ? 5f : 0
             };
             InitializeAdventureNativePlantTiming(result);
+            InitializeAdventureSleepingPlant(result);
             Plants.Add(result);
             Raise(GameEvent.Planted);
             return result;

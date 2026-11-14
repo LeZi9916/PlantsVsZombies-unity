@@ -706,3 +706,25 @@ Splat, TirePop and Explosion use their existing original recordings.
 These focused production-update, original-art GPU and real audio-voice checks do
 not constitute a full-level packaged Player playthrough, physical-speaker
 listening, or Windows/Linux/mobile/IL2CPP device validation.
+
+
+## Original mushroom sleep
+
+PC `Plant::SetSleeping` (`46CB90`) creates the independent reanimation 68,
+`Z.reanim`, at plant +(50,40), render order +2 and scale one. Fume adds twelve
+pixels to X; Scaredy subtracts twenty from Y and Gloom subtracts twelve. The
+seventeen-frame source loops at a random six-to-eight FPS with an initial
+normalized phase in [0,.9]. This free board object keeps its original position
+and clock while a bungee captures the body, and disappears when the plant wakes
+or dies. Sleeping Gloom upgrades create the same independent state immediately.
+All ten existing mushroom body clips were compared against the original
+`anim_sleep`; these correct source body poses remain unchanged.
+
+```powershell
+./Tools/Tests/Run-UnityTests.ps1 -Platform EditMode -TestFilter AdventureMushroomTests
+# Set PVZ_BOARD_STRESS_ASSETS to the read-only original runtime resources.
+./Tools/Tests/Run-UnityTests.ps1 -Platform PlayMode -TestFilter OriginalMushroomGraphicsTests
+```
+
+These focused checks do not constitute a full-level packaged Player playthrough
+or validation on Windows/Linux/mobile/IL2CPP devices.
