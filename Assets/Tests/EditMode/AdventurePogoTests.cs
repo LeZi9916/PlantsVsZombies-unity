@@ -257,6 +257,62 @@ namespace PlantsVsZombies.Tests.EditMode
             Assert.That(zombie.PresentationAltitude, Is.Zero, "PC PlayDeathAnim cancels the retained pogo altitude before death.");
         }
 
+        /// <summary>Checks UI Pogo initialization retains the original randomized counter and held final pose.</summary>
+        /// <param name="ticket">The original zero-based random ticket within eighty updates.</param>
+        [TestCase(0)]
+        [TestCase(79)]
+        public void StreetPreviewInitializesOriginalBounceCounter(int ticket)
+        {
+            var preview = AdventureIntroPresentation.PlaceStreetZombie(new AdventureIntroContext(), (int)ZombieKind.Pogo,
+                0, 1, bound => bound == 80 ? ticket : 0, _ => 0f, (kind, clip) => true);
+            Assert.That(preview.PogoState, Is.Not.Null);
+            Assert.That(preview.PogoState!.PhaseTicks, Is.EqualTo(ticket + 1));
+            Assert.That(preview.PogoState.AnimationSeconds, Is.EqualTo(11f / 40f));
+            Assert.That(preview.Animation, Is.EqualTo("anim_pogo"));
+            Assert.That(preview.AnimationRate, Is.EqualTo(40f));
+            Assert.That(preview.InitialPhase, Is.EqualTo(1f));
+            Assert.That(preview.Loop, Is.False);
+        }
+
+        /// <summary>Checks UI bounce height, the seven-update restart, and repeated held animation without walking.</summary>
+        [Test]
+        public void StreetPreviewAdvancesOriginalBounceAndHeldAnimationWithoutWalking()
+        {
+            var preview = AdventureIntroPresentation.PlaceStreetZombie(new AdventureIntroContext(), (int)ZombieKind.Pogo,
+                0, 1, bound => bound == 80 ? 79 : 0, _ => 0f, (kind, clip) => true);
+            var x = preview.WorldX;
+            var y = preview.WorldY;
+            for (var tick = 0; tick < 40; tick++)
+            {
+                AdventurePogoRules.AdvanceStreetPreview(preview);
+            }
+
+            Assert.That(preview.PogoState!.PhaseTicks, Is.EqualTo(40));
+            Assert.That(preview.Altitude, Is.EqualTo(49f));
+            Assert.That(preview.PogoState.AnimationSeconds, Is.EqualTo(11f / 40f));
+            for (var tick = 0; tick < 33; tick++)
+            {
+                AdventurePogoRules.AdvanceStreetPreview(preview);
+            }
+
+            Assert.That(preview.PogoState.PhaseTicks, Is.EqualTo(7));
+            Assert.That(preview.PogoState.AnimationSeconds, Is.Zero);
+            AdventurePogoRules.AdvanceStreetPreview(preview);
+            AdventurePogoRules.AdvanceStreetPreview(preview);
+            Assert.That(preview.Altitude, Is.EqualTo(18.375f));
+            Assert.That(preview.PogoState.AnimationSeconds, Is.EqualTo(.02f));
+            for (var tick = 0; tick < 80; tick++)
+            {
+                AdventurePogoRules.AdvanceStreetPreview(preview);
+            }
+
+            Assert.That(preview.PogoState.PhaseTicks, Is.EqualTo(5));
+            Assert.That(preview.Altitude, Is.EqualTo(18.375f));
+            Assert.That(preview.PogoState.AnimationSeconds, Is.EqualTo(.02f));
+            Assert.That(preview.WorldX, Is.EqualTo(x));
+            Assert.That(preview.WorldY, Is.EqualTo(y));
+        }
+
         /// <summary>Creates an active deterministic dry-row production board.</summary>
         /// <returns>The production board with automatic waves postponed.</returns>
         private static GameSimulation Board()

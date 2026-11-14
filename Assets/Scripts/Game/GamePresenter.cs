@@ -1690,6 +1690,8 @@ namespace PlantsVsZombies.Game
                 zombie.PresentationMaxArmor = zombie.ArmorHealth;
                 zombie.PresentationMaxShield = zombie.ShieldHealth;
                 zombie.IsSmall = preview.Scale <= .5f;
+                zombie.PogoState = preview.PogoState;
+                zombie.PresentationNativePhase = preview.PogoState != null ? 20 : -1;
                 string asset = AdventureAnimationCatalog.AdventureZombieAnimation(zombie.Kind), clip = preview.Animation;
                 if (!_owner.AnimationCatalog.AdventureClipExists(asset, clip))
                 {
@@ -1698,7 +1700,11 @@ namespace PlantsVsZombies.Game
 
                 global::PlantsVsZombies.Reanimation.NativeAnimationInfo info;
                 var seconds = _owner.Opening._adventureIntroVisualAge;
-                if (_owner.RequiredAnimations.TryGetNativeAnimationInfo(asset, clip, out info) && preview.AnimationRate > 0)
+                if (preview.PogoState != null)
+                {
+                    seconds = preview.PogoState.AnimationSeconds;
+                }
+                else if (_owner.RequiredAnimations.TryGetNativeAnimationInfo(asset, clip, out info) && preview.AnimationRate > 0)
                 {
                     seconds += preview.InitialPhase * info.Count / preview.AnimationRate;
                 }

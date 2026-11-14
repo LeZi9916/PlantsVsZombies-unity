@@ -9,6 +9,7 @@ using PlantsVsZombies.Game;
 using PlantsVsZombies.Reanimation;
 using PlantsVsZombies.Rendering;
 using PlantsVsZombies.Simulation;
+using PlantsVsZombies.UI;
 using UnityEngine;
 using UnityEngine.TestTools;
 
@@ -116,11 +117,138 @@ namespace PlantsVsZombies.Tests.PlayMode
             }
         }
 
+        /// <summary>Checks the real street preview keeps bouncing while the seed chooser waits, without board movement or bounce sounds.</summary>
+        /// <returns>One initialization frame for the original artwork renderer.</returns>
+        [UnityTest]
+        public IEnumerator StreetPreviewKeepsOriginalPogoBounceWhileChoosingSeeds()
+        {
+            var root = Environment.GetEnvironmentVariable("PVZ_BOARD_STRESS_ASSETS") ?? "";
+            if (!Directory.Exists(Path.Combine(root, "reanim")))
+            {
+                Assert.Ignore("Set PVZ_BOARD_STRESS_ASSETS to the read-only original runtime resource directory.");
+            }
+
+            yield return null;
+            var host = new GameObject("Inactive original Pogo street fixture");
+            host.SetActive(false);
+            var owner = host.AddComponent<PvZGame>();
+            using var animations = new ReanimationRenderer(root);
+            using var options = new OptionsView(root);
+            var presenter = new GamePresenter(owner);
+            var target = new RenderTexture(800, 600, 24, RenderTextureFormat.ARGB32);
+            target.Create();
+            var pixels = new Texture2D(800, 600, TextureFormat.RGBA32, false);
+            var previousMatrix = SpriteDrawState.Matrix;
+            var previousColor = SpriteDrawState.Color;
+            var previousClip = SpriteDrawState.Clip;
+            try
+            {
+                owner._root = root;
+                owner._optionsView = options;
+                owner._animations = animations;
+                owner._game = new GameSimulation(new GameRules { AdventureLevel = 43 }, 7529);
+                owner._game.ChooseDefaultAdventureSeeds();
+                owner._currentView = PvZGame.ScreenView.Board;
+                var context = new AdventureIntroContext { Level = 43, NativeBackground = 4 };
+                var clock = new AdventureIntroClock(AdventureIntroPresentation.CreatePlan(context));
+                for (var tick = 0; tick < 1000 && !clock.WaitingForSeeds; tick++)
+                {
+                    clock.Tick();
+                }
+
+                Assert.That(clock.WaitingForSeeds, Is.True);
+                owner.Opening._adventureIntro = clock;
+                owner.Opening._adventureIntroFrame = clock.Frame;
+                owner.Opening._adventureIntroDrawn = true;
+                owner.Opening._adventureIntroEventHandler = _ =>
+                {
+                };
+                owner._choosingSeeds = true;
+                var preview = AdventureIntroPresentation.PlaceStreetZombie(context, (int)ZombieKind.Pogo, 0, 1,
+                    bound => bound == 80 ? 79 : 0, _ => 0f,
+                    (nativeKind, clip) => animations.TryGetNativeAnimationInfo("Zombie_pogo", clip, out _));
+                owner.Opening._adventurePreview.Add(preview);
+                var nativeTime = clock.NativeTime;
+                var soundCount = owner._game.Presentation.ZombieSounds.Count;
+                var draw = typeof(GamePresenter).GetMethod("DrawAdventureOpeningActors", BindingFlags.Instance | BindingFlags.NonPublic)!;
+                SpriteDrawState.Color = Color.white;
+                BeginFrame(animations);
+                SpriteDrawState.Matrix = Matrix4x4.Translate(new Vector3(-600f, 0f, 0f));
+                draw.Invoke(presenter, null);
+                animations.EndObjectFrame();
+                Read(animations, target, pixels);
+                var first = pixels.GetPixels32();
+                owner.Opening.UpdateAdventureOpening(.4f);
+                BeginFrame(animations);
+                SpriteDrawState.Matrix = Matrix4x4.Translate(new Vector3(-600f, 0f, 0f));
+                draw.Invoke(presenter, null);
+                animations.EndObjectFrame();
+                Read(animations, target, pixels);
+                var peak = pixels.GetPixels32();
+                var changedPixels = 0;
+                for (var index = 0; index < peak.Length; index++)
+                {
+                    if (!peak[index].Equals(first[index]))
+                    {
+                        changedPixels++;
+                    }
+                }
+
+                Assert.That(changedPixels, Is.GreaterThan(20), "The real seed-chooser preview must keep bouncing rather than holding anim_pogo forever.");
+                Assert.That(clock.NativeTime, Is.EqualTo(nativeTime), "The chooser remains stalled while the original preview zombie keeps updating.");
+                Assert.That(preview.WorldX, Is.EqualTo(825f), "Street Pogo updates must not apply combat walking.");
+                Assert.That(owner._game.Presentation.ZombieSounds.Count, Is.EqualTo(soundCount), "Original UI zombies do not request the on-board Pogo Foley.");
+                // PC 53DD90 starts counter80 at the held frame; 546B40 still calls 540F10 for wave -2/-3.
+                // Forty updates later the original altitude is49, and the eleven-frame clip still holds its end.
+                BeginFrame(animations);
+                SpriteDrawState.Matrix = Matrix4x4.Translate(new Vector3(-600f, 0f, 0f));
+                Assert.That(animations.DrawNativePlayback("Zombie_pogo", new Vector2(preview.WorldX, preview.WorldY - 49f),
+                    preview.Scale, 11f / 40f, "anim_pogo", false, 40f), Is.True);
+                animations.EndObjectFrame();
+                Read(animations, target, pixels);
+                Assert.That(peak, Is.EqualTo(pixels.GetPixels32()), "The street bounce must use the original peak and held pose.");
+                owner.Opening.UpdateAdventureOpening(.35f);
+                BeginFrame(animations);
+                SpriteDrawState.Matrix = Matrix4x4.Translate(new Vector3(-600f, 0f, 0f));
+                draw.Invoke(presenter, null);
+                animations.EndObjectFrame();
+                Read(animations, target, pixels);
+                var landing = pixels.GetPixels32();
+                BeginFrame(animations);
+                SpriteDrawState.Matrix = Matrix4x4.Translate(new Vector3(-600f, 0f, 0f));
+                Assert.That(animations.DrawNativePlayback("Zombie_pogo", new Vector2(preview.WorldX, preview.WorldY - 18.375f),
+                    preview.Scale, .02f, "anim_pogo", false, 40f), Is.True);
+                animations.EndObjectFrame();
+                Read(animations, target, pixels);
+                Assert.That(landing, Is.EqualTo(pixels.GetPixels32()), "Counter7 restarts the original body clip, so counter5 samples two updates of forty-FPS animation.");
+                var altitude = preview.Altitude;
+                owner._game.TogglePause();
+                owner.Opening.UpdateAdventureOpening(.5f);
+                Assert.That(preview.Altitude, Is.EqualTo(altitude));
+                owner._game.TogglePause();
+                owner.Opening.UpdateAdventureOpening(.8f);
+                Assert.That(preview.Altitude, Is.EqualTo(altitude).Within(.0001f), "An eighty-update UI bounce repeats without walking or plant targeting.");
+            }
+            finally
+            {
+                SpriteDrawState.Matrix = previousMatrix;
+                SpriteDrawState.Color = previousColor;
+                SpriteDrawState.Clip = previousClip;
+                presenter.Dispose();
+                owner.Textures.ReleaseAll();
+                target.Release();
+                UnityEngine.Object.Destroy(target);
+                UnityEngine.Object.Destroy(pixels);
+                UnityEngine.Object.Destroy(host);
+            }
+        }
+
         /// <summary>Begins an original sprite frame and isolates body artwork above the unrelated ground shadow.</summary>
         /// <param name="animations">The original artwork renderer receiving the frame.</param>
         private static void BeginFrame(ReanimationRenderer animations)
         {
             ObjectSpriteRenderer.BeginSceneFrame();
+            SpriteDrawState.Matrix = Matrix4x4.identity;
             SpriteDrawState.Clip = new Rect(0f, 0f, 800f, 600f);
             animations.BeginObjectFrame();
             animations.DrawNativeImage(Texture2D.whiteTexture, new Rect(0f, 0f, 800f, 600f), new Rect(0f, 0f, 1f, 1f));

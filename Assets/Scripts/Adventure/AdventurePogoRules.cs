@@ -27,6 +27,31 @@ namespace PlantsVsZombies.Adventure
             return phase >= 20 && phase <= 28 || phase < 0;
         }
 
+        /// <summary>Advances one native UI Pogo update without combat walking, plant targeting, or on-board Foley.</summary>
+        /// <param name="preview">The street preview retaining its original bounce counter and held reanimation.</param>
+        public static void AdvanceStreetPreview(AdventureIntroPreviewZombie preview)
+        {
+            var state = preview.PogoState;
+            if (preview.NativeKind != (int)ZombieKind.Pogo || state == null)
+            {
+                return;
+            }
+
+            // PC Zombie::Update 546B40 calls UpdateZombiePogo even for cutscene/UI waves -2 and -3.
+            state.AnimationSeconds = Math.Min(HeldAnimationSeconds, state.AnimationSeconds + .01f);
+            state.PhaseTicks = Math.Max(0, state.PhaseTicks - 1);
+            preview.Altitude = Altitude(20, state.PhaseTicks);
+            if (state.PhaseTicks == 7)
+            {
+                state.AnimationSeconds = 0f;
+            }
+
+            if (state.PhaseTicks == 0)
+            {
+                state.PhaseTicks = BounceTicks;
+            }
+        }
+
         /// <summary>Checks PC 470170's original pogo object, head, height, death, and right-edge magnet gates.</summary>
         /// <param name="zombie">The pogo whose retained stick is being considered by a Magnet-shroom.</param>
         /// <returns>Whether the original live pogo can lose its stick to the magnet.</returns>

@@ -368,6 +368,8 @@ namespace PlantsVsZombies.Adventure
                 z.AnimationRate = 40;
                 z.InitialPhase = 1;
                 z.Loop = false;
+                // PC 53DD90 initializes the same eighty-update counter for UI and on-board Pogo zombies.
+                z.PogoState = new AdventurePogoState { PhaseTicks = next(AdventurePogoRules.BounceTicks) + 1 };
             }
 
             if (c.HasRoof)

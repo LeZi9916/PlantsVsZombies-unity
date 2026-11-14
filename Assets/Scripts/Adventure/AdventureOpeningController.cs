@@ -259,6 +259,11 @@ namespace PlantsVsZombies.Adventure
             {
                 _adventureIntroRemainder -= (double).01f;
                 _adventureIntroVisualAge += .01f;
+                foreach (var preview in _adventurePreview)
+                {
+                    AdventurePogoRules.AdvanceStreetPreview(preview);
+                }
+
                 _owner.RequiredGame.AdvanceAdventurePoolEffect(RequiredAdventureIntro.Plan.RequiredContext.SurvivalRepick);
                 _owner.Dave.UpdateCrazyDaveAnimation(.01f);
                 _owner.RequiredGame.AdvanceAdventureGraves();
