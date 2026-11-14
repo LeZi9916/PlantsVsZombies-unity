@@ -876,6 +876,12 @@ that argument. Pots retain their -15 adjustment. Whole-cell crushing preserves
 each layer's picture, and Doom's own-cell cleanup also removes earlier crushed
 pictures. The PC picture remains opaque throughout its retained lifetime.
 
+`54E920` creates a free charred catapult reanimation at native mPos +(-14,-30).
+Its thirty original frames run at twelve FPS times the original .9..1.1 random
+rate. Live body's GetDrawPos species offsets and body overlay do not apply to
+this free definition. Dry ground, pool banks and both roof sections are checked
+against the unchanged source artwork.
+
 ```powershell
 ./Tools/Tests/Run-UnityTests.ps1 -Platform EditMode -TestFilter 'AdventureScreenEffectsTests.IceShroomCreatesOriginalIceTrapAndExpiresAtFortyTicks|AdventurePlantSoundTests.InstantSpecialRequestsItsNativeActivationSample|AdventureGargantuarTests|AdventureRoofShooterTests|AdventureRoofCombatTests|AdventurePumpkinTests.CrushingDestroysTheShellAndItsContainedPlantTogether|AdventureTorchwoodTests|AdventureCactusTests|AdventureScaredyShroomTests.ActiveShotCompletesBeforeLoweringWithoutFiringTwice|AdventureCatapultTests|AdventureButterAndReloadTests.EatenFlowerPotKeepsTheAlreadyAirborneSquashAlive|AdventureSquashTests.ImpactUsesOriginalShieldAndCorpseRulesInsteadOfAnExplosion|SimulationPoolingTests.ProjectileResetRestoresEveryFieldAndRetainsHitStorage'
 # Set PVZ_BOARD_STRESS_ASSETS to the read-only original runtime resources.

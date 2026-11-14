@@ -4899,7 +4899,11 @@ namespace PlantsVsZombies.Game
                 throw new System.InvalidOperationException("The value 'zombie' is not available.");
             }
 
-            var position = AdventureZombieSourceOrigin(zombie, zombie.X) + new Vector2(burn.X + burn.PivotX, burn.Y + burn.PivotY);
+            // PC ApplyBurn creates a free reanimation at mPos; GetDrawPos/body overlays belong only to living art.
+            var nativeX = AdventureZombieNativeRules.NativePositionX(zombie.X, AdventureDancerRules.Scale(zombie));
+            var nativeY = AdventureFloorYAtPixel(zombie.Row, nativeX + 40f) - 30f
+                - (zombie.Kind == ZombieKind.Balloon ? 30f : zombie.Kind == ZombieKind.Pogo ? 16f : 0f);
+            var position = new Vector2(nativeX + burn.X + burn.PivotX, nativeY + burn.Y + burn.PivotY);
             var trackVisible = burn.HideImp ? (Func<string, bool>)(track => !string.Equals(track, "impblink", StringComparison.OrdinalIgnoreCase) && !string.Equals(track, "imphead", StringComparison.OrdinalIgnoreCase)) : null;
             if (full)
             {

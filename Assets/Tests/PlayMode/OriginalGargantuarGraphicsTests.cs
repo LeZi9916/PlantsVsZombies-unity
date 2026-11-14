@@ -92,6 +92,39 @@ namespace PlantsVsZombies.Tests.PlayMode
             }
         }
 
+        /// <summary>Checks ash creates the original thirty-frame free vehicle definition at mPos +(-14,-30).</summary>
+        /// <returns>Real source-art camera frames across dry, pool, sloping and flat roof positions.</returns>
+        [UnityTest]
+        public IEnumerator CharredCatapultUsesOriginalFreeReanimationAndWorldPosition()
+        {
+            foreach (var sample in new[] { (9, 400f), (29, 400f), (49, 200f), (49, 500f) })
+            {
+                using var fixture = new OriginalStormGraphicsTests.StormFixture(sample.Item1);
+                var game = fixture.Owner.RequiredGame;
+                game.Zombies.Clear();
+                var zombie = (Zombie)Invoke(game, "SpawnAdventureBoardZombie", ZombieKind.Catapult, 1,
+                    AdventureZombieNativeRules.GridX(sample.Item2), 0)!;
+                Invoke(game, "HitAdventureExplosionZombie", zombie, 1800f, true, 0x12U);
+                Assert.That(game.Zombies.Contains(zombie), Is.False);
+                var corpse = game.Presentation.Corpses.Single();
+                Assert.That(corpse.RequiredBurn.ReanimationId, Is.EqualTo(40));
+                Assert.That(fixture.Animations.TryGetNativeDefinitionInfo("Zombie_charred_catapult", out var info), Is.True);
+                Assert.That(info.Count, Is.EqualTo(30));
+                Assert.That(info.SourceRate, Is.EqualTo(12f));
+                var nativeY = sample.Item1 == 9 ? 150f : sample.Item1 == 29 ? 135f
+                    : 125f + Math.Max(0f, 400f - sample.Item2) * .25f;
+                foreach (var age in new[] { .1f, .8f, 1.8f, 2.49f })
+                {
+                    corpse.Age = age / corpse.RateScale;
+                    yield return fixture.Capture(null, () => fixture.DrawPass("DrawAdventureBurnedCorpse", corpse));
+                    var actual = fixture.Pixels.GetPixels32();
+                    yield return fixture.Capture(null, () => fixture.Animations.DrawNativeDefinition("Zombie_charred_catapult",
+                        new Vector2(sample.Item2 - 14f, nativeY - 30f), 1f, age, false, 12f));
+                    Assert.That(fixture.Pixels.GetPixels32(), Is.EqualTo(actual), "Original free charred catapult " + sample + " at " + age);
+                }
+            }
+        }
+
         /// <summary>Checks flattened cached plants use PC's .25 scale, sixty-pixel argument and original pot order.</summary>
         /// <returns>Real camera frames comparing static unchanged source artwork.</returns>
         [UnityTest]
