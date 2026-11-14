@@ -267,6 +267,19 @@ namespace PlantsVsZombies.Adventure
                 emit(AdventureIntroEvent.GraveStonesEnabled);
             }
 
+            if (p.RequiredContext.IsStormyNight)
+            {
+                if (Crossed(previous, current, p.PanRightEnd - 1000))
+                {
+                    emit(AdventureIntroEvent.StormFlashStarted);
+                }
+
+                if (Crossed(previous, current, p.PanLeftEnd))
+                {
+                    emit(AdventureIntroEvent.StormFlashStarted);
+                }
+            }
+
             if (p.ReadyTime > 0 && Crossed(previous, current, p.ReadyStart))
             {
                 emit(AdventureIntroEvent.ReadySetPlantStarted);

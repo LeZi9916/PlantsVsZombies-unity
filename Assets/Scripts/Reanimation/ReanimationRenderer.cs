@@ -1696,7 +1696,8 @@ namespace PlantsVsZombies.Reanimation
                 }
 
                 var clipName = animation == null || useDefault ? DefaultAnimation(asset.Name) : animation.Trim();
-                if (!string.IsNullOrEmpty(clipName) && !clipName.StartsWith("anim_", StringComparison.OrdinalIgnoreCase) && !clipName.StartsWith("_", StringComparison.Ordinal))
+                if (!string.IsNullOrEmpty(clipName) && !clipName.StartsWith("anim_", StringComparison.OrdinalIgnoreCase)
+                    && !clipName.StartsWith("_", StringComparison.Ordinal) && FindTrack(asset, clipName) == null)
                 {
                     clipName = "anim_" + clipName;
                 }
@@ -1756,7 +1757,13 @@ namespace PlantsVsZombies.Reanimation
                 };
                 if (!TryCalculateBounds(asset, clip, out clip.Bounds))
                 {
-                    return Fail("The animation has no drawable image tracks: " + name + " / " + cacheKey);
+                    if (FindTrack(asset, "fullscreen") == null)
+                    {
+                        return Fail("The animation has no drawable image tracks: " + name + " / " + cacheKey);
+                    }
+
+                    // Native Reanimation::DrawTrack fills the 800x600 screen for the image-free fullscreen track.
+                    clip.Bounds = new Rect(0f, 0f, 800f, 600f);
                 }
 
                 asset.Clips.Add(cacheKey, clip);
@@ -3059,6 +3066,33 @@ namespace PlantsVsZombies.Reanimation
             var time = SampleFrame(clip, NativeSeconds(clip, seconds, rate, asset.Fps, loop), asset.Fps, false);
             var pose = Interpolate(GetFrame(track, time.Current), GetFrame(track, time.Next), time.Fraction);
             position = new Vector2(pose.X, pose.Y);
+            return true;
+        }
+
+        /// <summary>Samples a native reanimation track's opacity, including an image-free fullscreen track.</summary>
+        /// <param name="name">The original reanimation resource.</param>
+        /// <param name="animation">The selected native animation layer.</param>
+        /// <param name="trackName">The original track supplying opacity.</param>
+        /// <param name="seconds">The elapsed playback time.</param>
+        /// <param name="rate">The native playback rate.</param>
+        /// <param name="alpha">Receives the authored interpolated opacity.</param>
+        /// <returns>Whether the original animation and track are available.</returns>
+        public bool TryGetNativeTrackAlpha(string name, string animation, string trackName, float seconds, float rate, out float alpha)
+        {
+            alpha = 0f;
+            if (!TryGetClip(name, animation, out var asset, out var clip))
+            {
+                return false;
+            }
+
+            var track = FindTrack(asset, trackName);
+            if (track == null)
+            {
+                return false;
+            }
+
+            var time = SampleFrame(clip, NativeSeconds(clip, seconds, rate, asset.Fps, false), asset.Fps, false);
+            alpha = Interpolate(GetFrame(track, time.Current), GetFrame(track, time.Next), time.Fraction).Alpha;
             return true;
         }
 

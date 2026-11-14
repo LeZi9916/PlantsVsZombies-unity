@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
 using NUnit.Framework;
+using PlantsVsZombies.Adventure;
 using PlantsVsZombies.Audio;
 using PlantsVsZombies.Game;
 using PlantsVsZombies.Simulation;
@@ -73,6 +74,17 @@ namespace PlantsVsZombies.Tests.PlayMode
                 Assert.That(loop.pitch, Is.EqualTo(1f));
                 effects.UpdateAdventureZombiePartAudio();
                 Assert.That(CountPlaying(audio, rain), Is.EqualTo(1), "PC Foley 49 loops once per board, independently of actor count.");
+                owner.Opening._adventureIntro = new AdventureIntroClock(AdventureIntroPresentation.CreatePlan(
+                    new AdventureIntroContext { Level = 40, NativeBackground = 3, IsConveyor = true, IsStormyNight = true }));
+                owner.Opening._adventureIntroFrame = owner.Opening.RequiredAdventureIntro.Frame;
+                owner._game.BeginAdventureStormIntro();
+                owner._game.TogglePause();
+                effects.UpdateAdventureZombiePartAudio();
+                Assert.That(loop.isPlaying, Is.True, "PC Board::Pause does not pause Rain Foley while the native scene is LevelIntro.");
+                owner._game.TogglePause();
+                owner.Opening._adventureIntro = null;
+                owner.Opening._adventureIntroFrame = null;
+                owner._game.BeginAdventureStormPlaying();
                 for (var tick = 0; tick < 100; tick++)
                 {
                     owner._game.Update(.01f);
@@ -106,6 +118,13 @@ namespace PlantsVsZombies.Tests.PlayMode
                 typeof(GameSimulation).GetProperty(nameof(GameSimulation.State))!.SetValue(owner._game, MatchState.Lost);
                 effects.UpdateAdventureZombiePartAudio();
                 Assert.That(loop.isPlaying, Is.True, "The original rain continues over the loss sequence.");
+                for (var tick = 0; tick < 1100; tick++)
+                {
+                    owner._game.Update(.01f);
+                }
+
+                effects.UpdateAdventureZombiePartAudio();
+                Assert.That(loop.isPlaying, Is.False, "The original game-over dialog pauses its background rain.");
                 owner._currentView = PvZGame.ScreenView.Selector;
                 effects.UpdateAdventureZombiePartAudio();
                 Assert.That(loop.isPlaying, Is.False);

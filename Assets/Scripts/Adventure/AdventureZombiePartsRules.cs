@@ -72,6 +72,8 @@ namespace PlantsVsZombies.Adventure
                     return "ZombieLadder";
                 case 11:
                     return "ZombieFlag";
+                case 16:
+                    return "ZombiePogo";
                 case 17:
                     return "ZombieNewspaperHead";
                 case 18:

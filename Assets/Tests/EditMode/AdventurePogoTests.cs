@@ -10,6 +10,14 @@ namespace PlantsVsZombies.Tests.EditMode
     /// <summary>Regresses PC 540F10/540DF0 pogo animation, bounce movement, blocking, and stick loss.</summary>
     public sealed class AdventurePogoTests
     {
+        /// <summary>Checks PC particle sixteen resolves to its authored forty-update broken-stick effect.</summary>
+        [Test]
+        public void BrokenStickUsesOriginalParticleNameAndLifetime()
+        {
+            Assert.That(AdventureZombiePartsRules.ParticleName(16), Is.EqualTo("ZombiePogo"));
+            Assert.That(new AdventureZombiePartDrop { ParticleId = 16 }.Duration, Is.EqualTo(.4f));
+        }
+
         /// <summary>Checks original initialization, held body animation, and native movement independent of the reanimation ground track.</summary>
         [Test]
         public void SpawnUsesOriginalHeldFortyFpsClipAndNativeBounceVelocity()

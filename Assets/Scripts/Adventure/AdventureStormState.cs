@@ -27,6 +27,20 @@ namespace PlantsVsZombies.Adventure
         internal int EffectTicks { get; private set; }
         /// <summary>Gets the Board main counter used by the local flash noise, excluding the introduction and pauses.</summary>
         internal int MainTicks { get; private set; }
+        /// <summary>Gets whether the native loss cutscene has started.</summary>
+        internal bool Lost { get; private set; }
+        /// <summary>Gets the loss cutscene's elapsed centisecond updates.</summary>
+        internal int LostTicks { get; private set; }
+        /// <summary>Gets whether PC CutScene has opened its pausing GameOverDialog at 11000 milliseconds.</summary>
+        internal bool LossDialogReady => Lost && LostTicks >= 1100;
+        /// <summary>Gets the original board pan toward the house during loss.</summary>
+        internal int LossBoardX => AdventureIntroPresentation.Curve(1500, 3500, LostTicks * 10, 0, 220, 4);
+        /// <summary>Gets the original one-shot ZombiesWon reanimation age after the 6000-millisecond cue.</summary>
+        internal float LossGraphicSeconds => Math.Max(0, LostTicks - 599) * .01f;
+        /// <summary>Gets the native one-pixel horizontal banner shake.</summary>
+        internal float LossShakeX { get; private set; }
+        /// <summary>Gets the native one-pixel vertical banner shake.</summary>
+        internal float LossShakeY { get; private set; }
         /// <summary>Retains fractional time only for updates outside the normal gameplay loop.</summary>
         internal double PresentationRemainder { get; set; }
         /// <summary>Gets the active original ground reanimations.</summary>
@@ -49,20 +63,45 @@ namespace PlantsVsZombies.Adventure
             Countdown = 400;
         }
 
+        /// <summary>Applies PC AnimateBoard 0x447B78's forced preview/return flash.</summary>
+        internal void BeginIntroFlash()
+        {
+            Phase = 6;
+            Countdown = 310;
+        }
+
+        /// <summary>Starts PC StartZombiesWon without resetting the active weather challenge.</summary>
+        internal void BeginLoss()
+        {
+            Lost = true;
+        }
+
+        /// <summary>Advances PC 0x448040 before the board update, preserving the PC timing constants from 0x6EF150.</summary>
+        /// <returns>The original chomp or scream Foley cue, or minus one when there is no cue.</returns>
+        internal int AdvanceLossClock()
+        {
+            if (LossDialogReady)
+            {
+                return -1;
+            }
+
+            LostTicks++;
+            return LostTicks == 510 || LostTicks == 560 ? 5 : LostTicks == 600 ? 85 : -1;
+        }
+
         /// <summary>Advances PC UpdateStormyNight 0x42EF10 and UpdateRain 0x437750 by one centisecond.</summary>
         /// <param name="random">The existing native board random stream.</param>
         /// <param name="playing">Whether the native scene is Playing, including its award sequence.</param>
         /// <param name="paused">Whether the board objects and rain are paused.</param>
         /// <param name="lost">Whether the native scene is ZombiesWon.</param>
         /// <param name="hasYeti">Whether a Yeti remains in the original zombie iterator.</param>
-        /// <param name="lostThisTick">Whether the world changed from Playing to ZombiesWon during this update.</param>
         /// <returns>Whether this update emits the original Thunder Foley.</returns>
-        internal bool Advance(Random random, bool playing, bool paused, bool lost, bool hasYeti, bool lostThisTick = false)
+        internal bool Advance(Random random, bool playing, bool paused, bool lost, bool hasYeti)
         {
             if (!paused)
             {
                 EffectTicks++;
-                if (playing || lostThisTick)
+                if (playing)
                 {
                     MainTicks++;
                 }
@@ -80,6 +119,13 @@ namespace PlantsVsZombies.Adventure
                         _rain[index] = rain;
                     }
                 }
+            }
+
+            if (!paused)
+            {
+                var shaking = Lost && LostTicks >= 700 && LostTicks < 800;
+                LossShakeX = shaking ? RainRandomFloat(random, 2f) - 1f : 0f;
+                LossShakeY = shaking ? RainRandomFloat(random, 2f) - 1f : 0f;
             }
 
             var thunder = AdvanceFlash(random, playing, paused, lost, hasYeti);

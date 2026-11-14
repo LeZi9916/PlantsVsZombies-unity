@@ -82,6 +82,7 @@ namespace PlantsVsZombies.Tests.PlayMode
                 {
                     BeginFrame(animations);
                     draw.Invoke(presenter, new object[] { plant });
+                    typeof(GamePresenter).GetMethod("DrawAdventureMagnetItemsOnTop", flags)!.Invoke(presenter, null);
                     animations.EndObjectFrame();
                     Read(animations, target, pixels);
                     var actual = pixels.GetPixels32();

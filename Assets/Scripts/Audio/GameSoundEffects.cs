@@ -327,8 +327,10 @@ namespace PlantsVsZombies.Audio
             }
 
             _stormRainSound.volume = _soundVolume;
-            var paused = game.State == MatchState.Paused || _owner._optionsView != null && _owner._optionsView.IsOpen
-                || _owner._profileDialog != null && _owner._profileDialog.IsOpen;
+            // PC Board::Pause does not GamePause Foley during LevelIntro; the loss dialog pauses the board later.
+            var paused = !_owner.Opening.AdventureIntroActive
+                && (game.State == MatchState.Paused || _owner._optionsView != null && _owner._optionsView.IsOpen
+                    || _owner._profileDialog != null && _owner._profileDialog.IsOpen || game.Adventure.Storm.LossDialogReady);
             if (paused)
             {
                 if (!_stormRainPaused)

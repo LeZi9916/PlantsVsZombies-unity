@@ -18,6 +18,8 @@ namespace PlantsVsZombies.Adventure
         /// <summary>Identifies ready set plant started.</summary>
         ReadySetPlantStarted,
         /// <summary>Identifies intro finished.</summary>
-        IntroFinished
+        IntroFinished,
+        /// <summary>Identifies the original forced storm flash while panning to the street or returning to the lawn.</summary>
+        StormFlashStarted
     }
 }

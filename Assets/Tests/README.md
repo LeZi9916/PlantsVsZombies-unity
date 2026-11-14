@@ -369,3 +369,59 @@ through the production loader and inspect actual loop/thunder voices, pitch,
 volume and pause/exit behavior. These isolated production-component checks do
 not establish a full-level Player playthrough, physical-speaker listening or
 other target-platform behavior.
+
+
+### Storm flow and native actor-layer follow-up
+
+The follow-up uses the same hash-identified PC executable, rather than the mobile
+port's differing loss timings. `447B78..447BCA` forces phase 6/countdown 310 at
+`PanRightEnd - 1000` and `PanLeftEnd` (2500/6000 ms for adventure 4-10). The same
+update then decrements to 309. `420E45` updates game objects before `420FF7` tests
+the scene and `42102B` increments MainCounter, so the losing combat update does
+not increment that counter. The presentation accumulator preserves centisecond
+updates across pause/resume without accumulating float roundoff.
+
+`448040` pans toward the house from 1500 to 3500 ms, plays the two loss chomps,
+and starts `ZombiesWon` at 6000 ms, at 12 FPS. PC initializers `6EF150..6EF19A`
+set the banner shake to 7000..8000 ms and the screen-layer/retry dialog cue to
+11000 ms. The image-free `fullscreen` track supplies its authored black opacity;
+the retry dialog pauses rain/effects while the native flash settles. Original
+Board::Pause keeps Rain Foley running during LevelIntro. The award phase keeps
+the weather active while the board scene is still Playing.
+
+In 4-10, **the conveyor intentionally draws above overlapping zombie heads**:
+`4321C3` redraws `425B40` after the storm mask; `425CDD` calls the complete
+`SeedBank::Draw` at `49F100`, including the original conveyor backdrop and belt.
+The native-overlap regression preserves this original behavior.
+
+The intermittent partial board was a separate rendering exception. PC particle
+table `74C8D8`, eight-byte entry 16, resolves to `particles\ZombiePogo.xml`.
+`PogoBreak` (`540DF0`) emits it when the stick breaks without magnetic removal;
+its authored SystemDuration is forty updates. Missing this mapping aborted the
+frame before later rows, weather and the conveyor could draw. The regression
+produces a real broken-stick event and completes the whole production storm frame.
+
+`OriginalStormFlowTests` runs the production opening, options pause, battle pause,
+unplanted battle through natural loss, camera pan, original banner opacity and
+pausing retry transition. Captures use the production deferred geometry path.
+`OriginalPlantLayerTests` compares Pumpkin_back / protected body / Pumpkin_front
+against independent original-art composition, including both damage cels, and
+checks attracted metal against other rows' zombies. The magnet's airborne item
+belongs to native Top order 399999; held metal stays behind its own body.
+
+Pumpkin initialization at `46C777` sets width 120; GetPlantRect removes twenty
+pixels, giving a 100x80 eating rectangle. Its unchanged shovel hit test uses the
+original 25..50-pixel rim and lower-edge constraint. Repair uses strict integer
+thirds. Bungee/CatapultOrder selects flying/normal/pumpkin/support independently
+of creation order, including the protected-Cattail exception. Whole-cell crushing
+removes the shell and normal contents together; the native spike exceptions and
+empty-pumpkin support-placement restriction are preserved.
+
+```powershell
+./Tools/Tests/Run-UnityTests.ps1 -Platform EditMode -TestFilter 'AdventureStormTests;AdventurePumpkinTests;AdventurePogoTests.BrokenStickUsesOriginalParticleNameAndLifetime'
+./Tools/Tests/Run-UnityTests.ps1 -Platform PlayMode -TestFilter 'OriginalStormFlowTests;OriginalStormGraphicsTests;OriginalStormAudioTests;OriginalPlantLayerTests;OriginalMagnetGraphicsTests;OriginalPoolPlantBobbingTests;GamePresentationPerformanceTests.DefensiveDamageReplacesOnlyTheOriginalBodyTrack'
+```
+
+These production-component simulations and real graphics/audio-source checks do
+not constitute a packaged Player playthrough, physical-speaker listening, or
+validation on Windows, Linux, mobile devices or IL2CPP.

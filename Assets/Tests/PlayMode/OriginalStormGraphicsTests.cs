@@ -198,6 +198,87 @@ namespace PlantsVsZombies.Tests.PlayMode
             Assert.That(Changed(preview, fixture.Pixels.GetPixels32()), Is.GreaterThan(50), "Street-preview actors become visible during the original flash window.");
         }
 
+        /// <summary>Regresses the original broken-pogo particle that previously aborted the rest of the storm frame.</summary>
+        /// <returns>Real production-board rendering and texture-readback boundaries.</returns>
+        [UnityTest]
+        public IEnumerator BrokenPogoStickCannotAbortLaterRowsWeatherOrConveyor()
+        {
+            using var fixture = new StormFixture();
+            var game = fixture.Owner.RequiredGame;
+            var flags = BindingFlags.Instance | BindingFlags.NonPublic;
+            var spawn = typeof(GameSimulation).GetMethod("SpawnAdventureBoardZombie", flags)!;
+            var pogo = (Zombie)spawn.Invoke(game, new object[] { ZombieKind.Pogo, 2, 4.5f, 0 })!;
+            typeof(GameSimulation).GetMethod("BreakAdventurePogo", flags)!.Invoke(game, new object[] { pogo, 0u });
+            Assert.That(game.Presentation.ZombiePartDrops.Exists(drop => drop.ParticleId == 16), Is.True);
+            spawn.Invoke(game, new object[] { ZombieKind.Normal, 5, 5f, 0 });
+            game.Adventure.Storm.Phase = 6;
+            game.Adventure.Storm.Countdown = 150;
+            yield return fixture.Capture("DrawAdventureBoard", wholeBoard: true);
+            var visible = fixture.Pixels.GetPixels32();
+            game.Adventure.Storm.Countdown = 300;
+            yield return fixture.Capture("DrawAdventureBoard", wholeBoard: true);
+            var dark = fixture.Pixels.GetPixels32();
+            Assert.That(Changed(visible, dark), Is.GreaterThan(10000), "Both the broken-stick particle and the later weather/darkness pass must finish drawing.");
+            var scale = Mathf.Min(Screen.width / 800f, Screen.height / 600f);
+            var margin = (Screen.width - 800f * scale) * .5f;
+            var marginY = (Screen.height - 600f * scale) * .5f;
+            var sixthRow = 0;
+            var conveyor = 0;
+            for (var index = 0; index < visible.Length; index++)
+            {
+                var x = (index % fixture.Target.width - margin) / scale;
+                var y = (fixture.Target.height - 1 - index / fixture.Target.width - marginY) / scale;
+                if (x > 350f && x < 570f && y > 475f && y < 550f && Difference(visible[index], dark[index]) > 12)
+                {
+                    sixthRow++;
+                }
+
+                if (x > 110f && x < 500f && y > 5f && y < 70f && dark[index].r + dark[index].g + dark[index].b > 100)
+                {
+                    conveyor++;
+                }
+            }
+
+            Assert.That(sixthRow, Is.GreaterThan((int)(1000f * scale * scale)));
+            Assert.That(conveyor, Is.GreaterThan((int)(1000f * scale * scale)));
+        }
+
+        /// <summary>Checks the PC storm's intentional seed-bank redraw above overlapping zombie heads.</summary>
+        /// <returns>Native camera frames comparing the actual weather/UI pass with a deliberately foreground zombie.</returns>
+        [UnityTest]
+        public IEnumerator StormConveyorKeepsNativeUiRedrawAboveOverlappingZombieHeads()
+        {
+            using var fixture = new StormFixture();
+            var game = fixture.Owner.RequiredGame;
+            game.Adventure.Storm.Phase = 6;
+            game.Adventure.Storm.Countdown = 150;
+            yield return fixture.Capture("DrawAdventureBoard", wholeBoard: true);
+            var empty = fixture.Pixels.GetPixels32();
+            var zombie = (Zombie)typeof(GameSimulation).GetMethod("SpawnAdventureBoardZombie", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .Invoke(game, new object[] { ZombieKind.Buckethead, 0, 5f, 0 })!;
+            yield return fixture.Capture("DrawAdventureBoard", wholeBoard: true);
+            var native = fixture.Pixels.GetPixels32();
+            yield return fixture.Capture("DrawAdventureBoard", () => fixture.DrawPass("DrawAdventureZombieTeam", zombie), true);
+            var foreground = fixture.Pixels.GetPixels32();
+            var scale = Mathf.Min(Screen.width / 800f, Screen.height / 600f);
+            var marginX = (Screen.width - 800f * scale) * .5f;
+            var marginY = (Screen.height - 600f * scale) * .5f;
+            var covered = 0;
+            for (var index = 0; index < native.Length; index++)
+            {
+                var x = (index % fixture.Target.width - marginX) / scale;
+                var y = (fixture.Target.height - 1 - index / fixture.Target.width - marginY) / scale;
+                if (x > 100f && x < 600f && y > 0f && y < 87f
+                    && Difference(empty[index], native[index]) <= 3 && Difference(native[index], foreground[index]) > 30)
+                {
+                    covered++;
+                }
+            }
+
+            Assert.That(covered, Is.GreaterThan((int)(50f * scale * scale)),
+                "PC 4321C3 calls DrawBottomUI 425B40, which calls the complete SeedBank::Draw 49F100 after the storm mask.");
+        }
+
         /// <summary>Counts visible RGB changes without printing complete camera buffers on failure.</summary>
         /// <param name="first">The reference pixels.</param>
         /// <param name="second">The pixels being compared.</param>
@@ -226,7 +307,7 @@ namespace PlantsVsZombies.Tests.PlayMode
         }
 
         /// <summary>Owns an inactive production host and a real graphics target without touching saves or the main scene.</summary>
-        private sealed class StormFixture : IDisposable
+        internal sealed class StormFixture : IDisposable
         {
             /// <summary>Gets the read-only runtime resource directory.</summary>
             internal string Root { get; }
@@ -244,7 +325,8 @@ namespace PlantsVsZombies.Tests.PlayMode
             private readonly OptionsView _options;
 
             /// <summary>Creates an original 4-10 board using only supplied runtime resources.</summary>
-            internal StormFixture()
+            /// <param name="level">The original adventure stage used by a related native layer comparison.</param>
+            internal StormFixture(int level = 40)
             {
                 Root = Environment.GetEnvironmentVariable("PVZ_BOARD_STRESS_ASSETS") ?? "";
                 if (!File.Exists(Path.Combine(Root, "particles", "Rain.png")))
@@ -261,12 +343,20 @@ namespace PlantsVsZombies.Tests.PlayMode
                 Owner._root = Root;
                 Owner._animations = Animations;
                 Owner._optionsView = _options;
-                Owner._game = new GameSimulation(new GameRules { AdventureLevel = 40 }, 91);
+                Owner._game = new GameSimulation(new GameRules { AdventureLevel = level }, 91);
                 typeof(GamePresenter).GetField("_renderingBoardObjects", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(_presenter, true);
                 Target = new RenderTexture(Screen.width, Screen.height, 24, RenderTextureFormat.ARGB32);
                 Target.Create();
                 Pixels = new Texture2D(Target.width, Target.height, TextureFormat.RGBA32, false);
                 ObjectSpriteRenderer.SceneCamera.targetTexture = Target;
+            }
+
+            /// <summary>Submits a production presenter pass inside the fixture's current native frame.</summary>
+            /// <param name="method">The original presenter pass name.</param>
+            /// <param name="arguments">The pass's immediately consumed arguments.</param>
+            internal void DrawPass(string method, params object[] arguments)
+            {
+                typeof(GamePresenter).GetMethod(method, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(_presenter, arguments);
             }
 
             /// <summary>Captures a production pass or an independently submitted native geometry oracle.</summary>
@@ -276,38 +366,41 @@ namespace PlantsVsZombies.Tests.PlayMode
             /// <returns>Camera frame boundaries before reading actual rendered pixels.</returns>
             internal IEnumerator Capture(string? method, Action? oracle = null, bool wholeBoard = false)
             {
-                ObjectSpriteRenderer.BeginSceneFrame();
-                CanvasUI.BeginFrame();
-                var scale = Mathf.Min(Screen.width / 800f, Screen.height / 600f);
-                CanvasUI.Matrix = Matrix4x4.TRS(new Vector3((Screen.width - 800f * scale) * .5f, (Screen.height - 600f * scale) * .5f),
-                    Quaternion.identity, new Vector3(scale, scale, 1f));
-                CanvasUI.Color = Color.white;
-                Animations.BeginObjectFrame();
-                Animations.DrawNativeImage(Texture2D.whiteTexture, new Rect(0f, 0f, 800f, 600f), new Rect(0f, 0f, 1f, 1f));
-                var flags = BindingFlags.Instance | BindingFlags.NonPublic;
-                if (!wholeBoard)
+                using (ObjectSpriteRenderer.BeginDeferred())
                 {
-                    if (Owner.Opening.AdventureIntroActive)
+                    ObjectSpriteRenderer.BeginSceneFrame();
+                    CanvasUI.BeginFrame();
+                    var scale = Mathf.Min(Screen.width / 800f, Screen.height / 600f);
+                    CanvasUI.Matrix = Matrix4x4.TRS(new Vector3((Screen.width - 800f * scale) * .5f, (Screen.height - 600f * scale) * .5f),
+                        Quaternion.identity, new Vector3(scale, scale, 1f));
+                    CanvasUI.Color = Color.white;
+                    Animations.BeginObjectFrame();
+                    Animations.DrawNativeImage(Texture2D.whiteTexture, new Rect(0f, 0f, 800f, 600f), new Rect(0f, 0f, 1f, 1f));
+                    var flags = BindingFlags.Instance | BindingFlags.NonPublic;
+                    if (!wholeBoard)
                     {
-                        CanvasUI.Matrix *= Matrix4x4.Translate(new Vector3(Owner.Opening.RequiredAdventureIntroFrame.BoardX, Owner.Opening.RequiredAdventureIntroFrame.BoardY, 0f));
+                        if (Owner.Opening.AdventureIntroActive)
+                        {
+                            CanvasUI.Matrix *= Matrix4x4.Translate(new Vector3(Owner.Opening.RequiredAdventureIntroFrame.BoardX, Owner.Opening.RequiredAdventureIntroFrame.BoardY, 0f));
+                        }
+
+                        typeof(GamePresenter).GetMethod("BeginAdventurePresentation", flags)!.Invoke(_presenter, null);
                     }
 
-                    typeof(GamePresenter).GetMethod("BeginAdventurePresentation", flags)!.Invoke(_presenter, null);
-                }
+                    if (method != null)
+                    {
+                        typeof(GamePresenter).GetMethod(method, flags)!.Invoke(_presenter, null);
+                    }
 
-                if (method != null)
-                {
-                    typeof(GamePresenter).GetMethod(method, flags)!.Invoke(_presenter, null);
-                }
+                    oracle?.Invoke();
+                    if (!wholeBoard)
+                    {
+                        typeof(GamePresenter).GetMethod("EndAdventurePresentation", flags)!.Invoke(_presenter, null);
+                    }
 
-                oracle?.Invoke();
-                if (!wholeBoard)
-                {
-                    typeof(GamePresenter).GetMethod("EndAdventurePresentation", flags)!.Invoke(_presenter, null);
+                    Animations.EndObjectFrame();
+                    CanvasUI.EndFrame();
                 }
-
-                Animations.EndObjectFrame();
-                CanvasUI.EndFrame();
                 yield return null;
                 yield return null;
                 var previous = RenderTexture.active;

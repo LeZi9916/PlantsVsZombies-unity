@@ -470,6 +470,11 @@ namespace PlantsVsZombies.Adventure
                 _owner._choosingSeeds = true;
             }
 
+            if (item == AdventureIntroEvent.StormFlashStarted)
+            {
+                _owner.RequiredGame.Adventure.Storm.BeginIntroFlash();
+            }
+
             if (item == AdventureIntroEvent.IntroFinished)
             {
                 _owner.RequiredGame.BeginAdventureStormPlaying();

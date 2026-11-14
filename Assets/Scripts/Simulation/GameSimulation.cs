@@ -3111,7 +3111,7 @@ namespace PlantsVsZombies.Simulation
                 return AdventurePlantingFailure.Occupied;
             }
 
-            if (kind == PlantKind.FlowerPot && (l.IsWaterRow(row) || main != null))
+            if (kind == PlantKind.FlowerPot && (l.IsWaterRow(row) || main != null || AdventurePlantAt(row, column, PlantLayer.Armor) != null))
             {
                 return AdventurePlantingFailure.Occupied;
             }
@@ -3332,8 +3332,7 @@ namespace PlantsVsZombies.Simulation
         /// <summary>Advances the original storm challenge after the board objects for one native update.</summary>
         /// <param name="intro">Whether the native scene is still LevelIntro.</param>
         /// <param name="paused">Whether to freeze rain and board counters while allowing the flash to settle.</param>
-        /// <param name="lostThisTick">Whether combat changed to the loss scene after this update's main-counter increment.</param>
-        internal void AdvanceAdventureStormTick(bool intro = false, bool paused = false, bool lostThisTick = false)
+        internal void AdvanceAdventureStormTick(bool intro = false, bool paused = false)
         {
             if (!IsAdventure || Adventure.Level.Mode != AdventureMode.Storm)
             {
@@ -3350,7 +3349,12 @@ namespace PlantsVsZombies.Simulation
                 }
             }
 
-            if (Adventure.Storm.Advance(_random, !intro && State != MatchState.Lost, paused, State == MatchState.Lost, yeti, lostThisTick))
+            if (State == MatchState.Lost && !Adventure.Storm.Lost)
+            {
+                Adventure.Storm.BeginLoss();
+            }
+
+            if (Adventure.Storm.Advance(_random, !intro && State != MatchState.Lost, paused, State == MatchState.Lost, yeti))
             {
                 RequestAdventureZombieFoley(17);
             }
@@ -3368,11 +3372,29 @@ namespace PlantsVsZombies.Simulation
             }
 
             var storm = Adventure.Storm;
+            if (State == MatchState.Lost && !storm.Lost)
+            {
+                storm.BeginLoss();
+            }
+
             storm.PresentationRemainder += delta;
             while (storm.PresentationRemainder + .0000001 >= SimulationStep)
             {
-                AdvanceAdventureStormTick(intro, paused);
+                if (State == MatchState.Lost && !paused)
+                {
+                    var foley = storm.AdvanceLossClock();
+                    if (foley >= 0)
+                    {
+                        RequestAdventureZombieFoley(foley, presentationTick: (int)Math.Round(Elapsed * 100f) + storm.LostTicks);
+                    }
+                }
+
+                AdvanceAdventureStormTick(intro, paused || storm.LossDialogReady);
                 storm.PresentationRemainder -= SimulationStep;
+                if (Math.Abs(storm.PresentationRemainder) < .0000001)
+                {
+                    storm.PresentationRemainder = 0d;
+                }
             }
         }
 
@@ -6532,7 +6554,8 @@ namespace PlantsVsZombies.Simulation
             }
 
             var old = AdventurePlantAt(row, column, kind == PlantKind.Pumpkin ? PlantLayer.Armor : PlantLayer.Main);
-            return old != null && old.Kind == kind && old.Health < (kind == PlantKind.TallNut ? 8000f : 4000f) * 2f / 3f;
+            var maximum = kind == PlantKind.TallNut ? 8000 : 4000;
+            return old != null && old.Kind == kind && old.Health < maximum * 2 / 3;
         }
 
         /// <summary>Performs remember adventure reward position.</summary>
@@ -7309,7 +7332,7 @@ namespace PlantsVsZombies.Simulation
             if (State != MatchState.Playing)
             {
                 Adventure.Phase = AdventurePhase.Lost;
-                AdvanceAdventureStormTick(lostThisTick: true);
+                AdvanceAdventureStormTick();
                 return;
             }
 
@@ -9354,7 +9377,33 @@ namespace PlantsVsZombies.Simulation
         /// <returns>The resulting adventure plant eating rectangle.</returns>
         public NativeRect AdventurePlantEatingRectangle(Plant p)
         {
-            return global::PlantsVsZombies.Adventure.AdventureZombieBiteRules.PlantRect((int)p.Kind, 40 + p.Column * 80, 80 + p.Row * (Adventure.Level.HasPool || Adventure.Level.HasRoof ? 85 : 100) + (Adventure.Level.HasRoof ? (int)(Math.Max(0f, 5f - p.Column) * 20f - 10f) : 0));
+            return global::PlantsVsZombies.Adventure.AdventureZombieBiteRules.PlantRect((int)p.Kind, 40 + p.Column * 80, 80 + p.Row * (Adventure.Level.HasPool || Adventure.Level.HasRoof ? 85 : 100) + (Adventure.Level.HasRoof ? (int)(Math.Max(0f, 5f - p.Column) * 20f - 10f) : 0), p.Kind == PlantKind.Pumpkin ? 120 : 80);
+        }
+
+        /// <summary>Uses the original BungeeOrder/CatapultOrder instead of plant creation order for a layered cell.</summary>
+        /// <param name="row">The native lawn row.</param>
+        /// <param name="column">The native lawn column.</param>
+        /// <returns>The flying, normal, pumpkin or support plant in original priority order.</returns>
+        private Plant? AdventureAirAttackPlantAt(int row, int column)
+        {
+            return AdventurePlantAt(row, column, PlantLayer.Effect) ?? AdventurePlantAt(row, column, PlantLayer.Main)
+                ?? AdventurePlantAt(row, column, PlantLayer.Armor) ?? AdventurePlantAt(row, column, PlantLayer.Support);
+        }
+
+        /// <summary>Applies the original SquishAllInSquare stack removal rather than letting a pumpkin absorb a whole-cell crush.</summary>
+        /// <param name="row">The crushed lawn row.</param>
+        /// <param name="column">The crushed lawn column.</param>
+        /// <param name="driveOver">Whether to preserve spiky plants for the separate vehicle/spike collision.</param>
+        private void CrushAdventurePlantCell(int row, int column, bool driveOver)
+        {
+            foreach (var plant in new PooledSnapshot<Plant>(Plants))
+            {
+                if (plant.Row == row && plant.Column == column && plant.Kind != PlantKind.Spikerock
+                    && (!driveOver || plant.Kind != PlantKind.Spikeweed))
+                {
+                    RemoveAdventurePlantAndStack(plant);
+                }
+            }
         }
 
         /// <summary>Performs adventure bite can target.</summary>
@@ -10931,11 +10980,12 @@ namespace PlantsVsZombies.Simulation
         /// <summary>Performs request adventure zombie foley.</summary>
         /// <param name = "id">The id.</param>
         /// <param name="pitch">The explicit original pitch adjustment in semitones.</param>
-        private void RequestAdventureZombieFoley(int id, float pitch = 0f)
+        /// <param name="presentationTick">The advancing cutscene tick when the battle elapsed clock is frozen.</param>
+        private void RequestAdventureZombieFoley(int id, float pitch = 0f, int? presentationTick = null)
         {
             Presentation.ZombieSounds.Add(new global::PlantsVsZombies.Adventure.AdventureZombieSoundEvent
             {
-                Id = ++Presentation._effectId, Foley = id, Tick = (int)System.Math.Round(Elapsed * 100f), Pitch = pitch
+                Id = ++Presentation._effectId, Foley = id, Tick = presentationTick ?? (int)System.Math.Round(Elapsed * 100f), Pitch = pitch
             });
         }
 
@@ -12383,7 +12433,13 @@ namespace PlantsVsZombies.Simulation
                     {
                         if (!z.BungeeCarrier)
                         {
-                            var victim = PlantAt(z.Row, z.TargetColumn);
+                            var victim = AdventureAirAttackPlantAt(z.Row, z.TargetColumn);
+                            // PC Bungee cannot take a Cattail enclosed by a pumpkin.
+                            if (victim?.Kind == PlantKind.Cattail && AdventurePlantAt(z.Row, z.TargetColumn, PlantLayer.Armor) != null)
+                            {
+                                victim = null;
+                            }
+
                             if (victim != null)
                             {
                                 RemoveAdventurePlantAndStack(victim);
@@ -12432,7 +12488,7 @@ namespace PlantsVsZombies.Simulation
                         {
                             if (p.Row == z.Row && (victim == null || p.Column < victim.Column))
                             {
-                                victim = p;
+                                victim = AdventureAirAttackPlantAt(p.Row, p.Column);
                             }
                         }
 
@@ -12564,6 +12620,7 @@ namespace PlantsVsZombies.Simulation
                 {
                     if (z.Kind == ZombieKind.Zomboni || z.Kind == ZombieKind.Catapult)
                     {
+                        CrushAdventurePlantCell(target.Row, target.Column, true);
                         if (z.Kind == ZombieKind.Zomboni && target.Kind == PlantKind.Spikeweed)
                         {
                             HitAdventureZombie(z, 20f, true, 32U);
@@ -12601,7 +12658,14 @@ namespace PlantsVsZombies.Simulation
                             continue;
                         }
 
-                        target.Health -= z.Kind == ZombieKind.Gargantuar ? target.Kind == PlantKind.Spikerock ? 50f : 9999f : 4f;
+                        if (z.Kind == ZombieKind.Gargantuar && target.Kind != PlantKind.Spikerock)
+                        {
+                            CrushAdventurePlantCell(target.Row, target.Column, false);
+                            z.BiteTimer = 2f;
+                            continue;
+                        }
+
+                        target.Health -= z.Kind == ZombieKind.Gargantuar ? 50f : 4f;
                         z.BiteTimer = z.Kind == ZombieKind.Gargantuar ? 2f : 0.04f;
                         if (target.Kind == PlantKind.Garlic && z.Kind != ZombieKind.Gargantuar)
                         {

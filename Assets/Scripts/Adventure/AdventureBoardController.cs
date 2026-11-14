@@ -377,6 +377,11 @@ namespace PlantsVsZombies.Adventure
 
             if (_owner.RequiredGame.State == MatchState.Lost)
             {
+                if (board.Level.Mode == AdventureMode.Storm && !board.Storm.LossDialogReady)
+                {
+                    return;
+                }
+
                 if (new Rect(316, 340, 168, 48).Contains(point))
                 {
                     _owner.Campaign.RestartAdventure();

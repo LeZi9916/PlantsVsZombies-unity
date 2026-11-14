@@ -2061,6 +2061,10 @@ namespace PlantsVsZombies.Game
             {
                 CanvasUI.Matrix = openingMatrix * Matrix4x4.Translate(new Vector3(_owner.Opening.RequiredAdventureIntroFrame.BoardX, _owner.Opening.RequiredAdventureIntroFrame.BoardY, 0));
             }
+            else if (AdventureStormLost)
+            {
+                CanvasUI.Matrix = openingMatrix * Matrix4x4.Translate(new Vector3(_owner.RequiredGame.Adventure.Storm.LossBoardX, 0f, 0f));
+            }
 
             try
             {
@@ -2295,6 +2299,8 @@ namespace PlantsVsZombies.Game
                     }
                 }
 
+                // PC Board::Draw submits attracted metal at MakeRenderOrder(Top, 0, -1), above every normal row.
+                DrawAdventureMagnetItemsOnTop();
                 DrawAdventurePlantingEffects();
                 DrawAdventureExplosionOverlay();
                 DrawAdventureVaseHammer();
@@ -2400,6 +2406,11 @@ namespace PlantsVsZombies.Game
         /// <summary>Draws the seed bank and shovel, redrawn after darkness by PC DrawStormNight 0x432110.</summary>
         private void DrawAdventureBottomUi()
         {
+            if (AdventureStormLost)
+            {
+                return;
+            }
+
             if (!_owner.Opening.AdventureIntroActive && !_owner._choosingSeeds)
             {
                 if (_owner.IndependentModes.IsModeBoard)
@@ -2447,7 +2458,8 @@ namespace PlantsVsZombies.Game
             }
 
             var ticks = _owner.RequiredGame.Adventure.Storm.EffectTicks;
-            var boardX = _owner.Opening.AdventureIntroActive ? _owner.Opening.RequiredAdventureIntroFrame.BoardX : 0;
+            var boardX = _owner.Opening.AdventureIntroActive ? _owner.Opening.RequiredAdventureIntroFrame.BoardX
+                : AdventureStormLost ? _owner.RequiredGame.Adventure.Storm.LossBoardX : 0;
             var alignment = (boardX > 0 ? (boardX + 100) / 100 : boardX / 100) * -100;
             for (var layer = 0; layer < 2; layer++)
             {
@@ -3148,6 +3160,7 @@ namespace PlantsVsZombies.Game
             }
 
             DrawPlantShadow(plant, new Vector2(x, y), shadowHeight, level.IsNight);
+            DrawAdventurePumpkinBack(plant);
             if (squash != null && squash.NativePhase >= 5)
             {
                 y = squash.NativeY;
@@ -3353,12 +3366,7 @@ namespace PlantsVsZombies.Game
                 clip, loop, rate, heads, _presentationKeys.Get("plant-", plant.Id), new Rect(x - 80, y - 160, 300, 340),
                 squash != null && squash.NativePhase != 0 ? squash.BlendTicks
                     : magnet != null ? magnet.BlendTicks : doom != null || blover != null ? 0 : scaredy != null && scaredy.NativePhase != 1 || plant.Kind == PlantKind.Threepeater || plant.Kind == PlantKind.Cattail ? 10 : 20, AdventureRenderRemainder,
-                _presentationKeys.Get("producer-plant-", plant.Id), highlighted, doom == null ? null : _doomTrackOffset);
-
-            if (magnetItemVisible && magnetOnTop)
-            {
-                DrawAdventureMagnetItem(magnet!.Item!, magnetCenter);
-            }
+                _presentationKeys.Get("producer-plant-", plant.Id), highlighted, doom == null ? null : _doomTrackOffset, plant.Kind == PlantKind.Pumpkin ? 0 : -1);
 
             if (plant.Kind == PlantKind.FumeShroom && plant.PresentationShotAge >= .35f && plant.PresentationShotAge < 1.35f)
             {
@@ -3393,6 +3401,73 @@ namespace PlantsVsZombies.Game
                     _owner.Layout.AdventureCellY(plant.Row, plant.Column) + 40f);
                 RequiredAdventureParticles.Draw(_presentationKeys.Get("native-plantern-shine-", plant.Id), "LanternShine",
                     plant.Age + AdventureRenderRemainder, origin, plant.Id);
+            }
+        }
+
+        /// <summary>Draws native Pumpkin_back immediately before the contained normal plant, or before an empty shell.</summary>
+        /// <param name="drawnPlant">The plant at whose native render order the back group may be submitted.</param>
+        private void DrawAdventurePumpkinBack(Plant drawnPlant)
+        {
+            if (drawnPlant.Layer != PlantLayer.Main && drawnPlant.Kind != PlantKind.Pumpkin)
+            {
+                return;
+            }
+
+            Plant? shell = null;
+            Plant? contained = null;
+            foreach (var candidate in _owner.RequiredGame.Plants)
+            {
+                if (candidate.Row != drawnPlant.Row || candidate.Column != drawnPlant.Column)
+                {
+                    continue;
+                }
+
+                if (candidate.Kind == PlantKind.Pumpkin)
+                {
+                    shell = candidate;
+                }
+                else if (candidate.Layer == PlantLayer.Main
+                    && !(candidate.Kind == PlantKind.Squash && candidate.SquashPresentation?.NativePhase >= 5))
+                {
+                    contained = candidate;
+                }
+            }
+
+            if (shell == null || !ReferenceEquals(drawnPlant, contained ?? shell))
+            {
+                return;
+            }
+
+            using var hierarchyActor = _owner.RequiredAnimations.Hierarchy.BeginActor("Plants", shell.Id, "Pumpkin");
+            var scale = shell.IsSmall ? .5f : 1f;
+            var x = BoardLayout.AdventureGridX + shell.Column * BoardLayout.CellWidth;
+            var y = _owner.Layout.AdventureCellY(shell.Row, shell.Column);
+            var origin = new Vector2(x + (1f - scale) * 40f, y + AdventurePlantHeight(shell) + (1f - scale) * 80f);
+            var highlighted = _owner._shovel && ReferenceEquals(shell, _owner.Layout.AdventureShovelTarget(_owner.AdventureBoard._adventurePointer));
+            var surface = _presentationKeys.Get("producer-pumpkin-back-", shell.Id);
+            if (highlighted || shell.IsImitated || shell.PresentationEatenFlashTicks > 0)
+            {
+                _adventurePresentationSurfaces.Add(surface);
+                _adventurePresentationLiveSurfaces.Add(surface);
+            }
+
+            ActorRenderer.DrawPlant(shell, "Pumpkin", origin, scale, shell.Age + AdventureRenderRemainder,
+                "anim_idle", true, shell.PresentationRate > 0f ? shell.PresentationRate : 12f, null,
+                _presentationKeys.Get("pumpkin-back-", shell.Id), new Rect(x - 80f, y - 160f, 300f, 340f), 0,
+                AdventureRenderRemainder, surface, highlighted, pumpkinGroup: 1);
+        }
+
+        /// <summary>Draws native airborne magnetic metal above all ordinary plants and zombies, before weather.</summary>
+        private void DrawAdventureMagnetItemsOnTop()
+        {
+            foreach (var plant in _owner.RequiredGame.Plants)
+            {
+                var item = plant.MagnetPresentation?.Item;
+                if (plant.Kind == PlantKind.MagnetShroom && item != null
+                    && PrepareAdventureMagnetItem(plant, item, AdventurePlantHeight(plant), out var center, out var onTop) && onTop)
+                {
+                    DrawAdventureMagnetItem(item, center);
+                }
             }
         }
 
@@ -5396,10 +5471,45 @@ namespace PlantsVsZombies.Game
             }
         }
 
+        /// <summary>Gets whether the current board is in the original Stormy Night loss scene.</summary>
+        private bool AdventureStormLost => _owner.RequiredGame.Adventure.Level.Mode == AdventureMode.Storm
+            && _owner.RequiredGame.State == MatchState.Lost;
+
+        /// <summary>Restricts the original loss banner pass to its authored image track.</summary>
+        private static readonly Func<string, bool> s_zombiesWonVisible = track => string.Equals(track, "ZombiesWon", StringComparison.OrdinalIgnoreCase);
+
+        /// <summary>Draws the original loss fullscreen opacity and banner above weather, before the pausing retry dialog.</summary>
+        private void DrawAdventureStormLoss()
+        {
+            var state = _owner.RequiredGame.Adventure.Storm;
+            if (state.LostTicks >= 600)
+            {
+                var clip = state.LossDialogReady ? "anim_screen" : "ZombiesWon";
+                if (_owner.RequiredAnimations.TryGetNativeTrackAlpha("ZombiesWon", clip, "fullscreen", state.LossGraphicSeconds, 12f, out var alpha))
+                {
+                    Fill(new Rect(0f, 0f, 800f, 600f), new Color(0f, 0f, 0f, alpha));
+                }
+
+                _owner.RequiredAnimations.DrawNativePlayback("ZombiesWon", new Vector2(state.LossShakeX, state.LossShakeY),
+                    1f, state.LossGraphicSeconds, clip, false, 12f, s_zombiesWonVisible);
+            }
+
+            if (state.LossDialogReady)
+            {
+                DrawDialog("僵尸吃掉了你的脑子！", "重新开始", false);
+            }
+        }
+
         /// <summary>Performs draw adventure interface.</summary>
         private void DrawAdventureInterface()
         {
             var board = _owner.RequiredGame.Adventure;
+            if (AdventureStormLost)
+            {
+                DrawAdventureStormLoss();
+                return;
+            }
+
             if (DrawAdventureOpeningInterface())
             {
                 return;

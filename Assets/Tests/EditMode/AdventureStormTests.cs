@@ -183,6 +183,70 @@ namespace PlantsVsZombies.Tests.EditMode
             Assert.That(random.Generator.DrawCount, Is.EqualTo(draws));
         }
 
+        /// <summary>Checks both original forced flash cues survive an interval spanning their native boundaries.</summary>
+        [Test]
+        public void IntroEventIntervalIncludesBothOriginalStormFlashes()
+        {
+            var plan = AdventureIntroPresentation.CreatePlan(new AdventureIntroContext { Level = 40, IsStormyNight = true, IsConveyor = true });
+            var flashes = 0;
+            AdventureIntroPresentation.EventsBetween(plan, 0, plan.End, item =>
+            {
+                if (item == AdventureIntroEvent.StormFlashStarted)
+                {
+                    flashes++;
+                }
+            });
+            Assert.That(flashes, Is.EqualTo(2));
+        }
+
+        /// <summary>Checks the original award phase continues weather while the board scene remains Playing.</summary>
+        [Test]
+        public void VictoryRewardKeepsOriginalWeatherActive()
+        {
+            var game = new GameSimulation(new GameRules { AdventureLevel = 40 }, 91);
+            game.Adventure.CurrentWave = game.Adventure.Waves.Count;
+            game.Adventure._finalAmbush = true;
+            game.Update(.01f);
+            Assert.That(game.State, Is.EqualTo(MatchState.Won));
+            var storm = game.Adventure.Storm;
+            var effects = storm.EffectTicks;
+            var main = storm.MainTicks;
+            var countdown = storm.Countdown;
+            game.Update(.1f);
+            Assert.That(storm.EffectTicks, Is.EqualTo(effects + 10));
+            Assert.That(storm.MainTicks, Is.EqualTo(main + 10));
+            Assert.That(storm.Countdown, Is.EqualTo(countdown - 10));
+            Assert.That(storm.Lost, Is.False);
+        }
+
+        /// <summary>Checks repeated float centiseconds do not lose native paused/loss updates through accumulated rounding.</summary>
+        [Test]
+        public void PresentationClockPreservesCentisecondTicksAcrossPauseAndLoss()
+        {
+            var game = new GameSimulation(new GameRules { AdventureLevel = 40 }, 91);
+            var storm = game.Adventure.Storm;
+            storm.Phase = 6;
+            storm.Countdown = 2000;
+            game.TogglePause();
+            for (var tick = 0; tick < 1100; tick++)
+            {
+                game.Update(.01f);
+            }
+
+            Assert.That(storm.Countdown, Is.EqualTo(900));
+            Assert.That(storm.EffectTicks, Is.Zero);
+            typeof(GameSimulation).GetProperty(nameof(GameSimulation.State))!.SetValue(game, MatchState.Lost);
+            for (var tick = 0; tick < 1100; tick++)
+            {
+                game.Update(.01f);
+            }
+
+            Assert.That(storm.LostTicks, Is.EqualTo(1100));
+            Assert.That(storm.LossDialogReady, Is.True);
+            Assert.That(storm.EffectTicks, Is.EqualTo(1099), "The dialog pauses the board before the 1100th loss tick's effect update.");
+            Assert.That(storm.MainTicks, Is.Zero);
+        }
+
         /// <summary>Checks the production gameplay, pause and loss entry points retain the native storm behavior.</summary>
         [Test]
         public void SimulationTicksStormWithoutHidingInteractionInTheRightColumns()
@@ -210,9 +274,9 @@ namespace PlantsVsZombies.Tests.EditMode
             Assert.That(game.Adventure.Storm.EffectTicks, Is.EqualTo(effects + 1));
             var transition = new AdventureStormState();
             var random = new OriginalRandomAdapter(91);
-            transition.Advance(random, false, false, true, false, lostThisTick: true);
             transition.Advance(random, false, false, true, false);
-            Assert.That(transition.MainTicks, Is.EqualTo(1), "The losing combat update increments MainCounter; later loss presentation updates only increment EffectCounter.");
+            transition.Advance(random, false, false, true, false);
+            Assert.That(transition.MainTicks, Is.Zero, "PC 420E20 updates game objects before checking the scene, so the losing combat update does not increment MainCounter.");
         }
     }
 }

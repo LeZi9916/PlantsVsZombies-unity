@@ -22,7 +22,7 @@ namespace PlantsVsZombies.Adventure
         {
             get
             {
-                return ParticleId == 12 || ParticleId == 13 || ParticleId == 54 ? .4f : ParticleId == 8 || ParticleId == 9 || ParticleId == 10 || ParticleId == 11 || ParticleId == 14 || ParticleId == 74 ? .5f : 1.8f;
+                return ParticleId == 12 || ParticleId == 13 || ParticleId == 16 || ParticleId == 54 ? .4f : ParticleId == 8 || ParticleId == 9 || ParticleId == 10 || ParticleId == 11 || ParticleId == 14 || ParticleId == 74 ? .5f : 1.8f;
             }
         }
     }

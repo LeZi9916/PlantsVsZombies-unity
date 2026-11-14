@@ -36,6 +36,8 @@ namespace PlantsVsZombies.Game
         private OriginalParticleRenderer? _poolParticles;
         /// <summary>The cached head, upper-arm, and tube particle identities for the current zombie.</summary>
         private string? _poolHeadKey, _poolInnerKey, _poolOuterKey;
+        /// <summary>Selects both pumpkin tracks (-1), the front group (0), or the separate back group (1).</summary>
+        private int _pumpkinGroup = -1;
         /// <summary>The plant whose pose is being drawn synchronously.</summary>
         private Plant _plant = null!;
         /// <summary>The zombie whose pose is being drawn synchronously.</summary>
@@ -93,9 +95,11 @@ namespace PlantsVsZombies.Game
         /// <param name="surfaceKey">The stable feedback surface identity.</param>
         /// <param name="highlighted">Whether the held shovel highlights this plant.</param>
         /// <param name="trackOffset">Optional native per-track shake offsets for this plant's body animation.</param>
+        /// <param name="pumpkinGroup">The native pumpkin render group, or minus one for an unsplit portrait.</param>
         internal void DrawPlant(Plant plant, string name, Vector2 origin, float scale, float seconds, string clip,
-            bool loop, float rate, HeadPlayback[]? heads, string key, Rect viewport, int blendTicks, float remainder, string surfaceKey, bool highlighted = false, Func<string, Vector2>? trackOffset = null)
+            bool loop, float rate, HeadPlayback[]? heads, string key, Rect viewport, int blendTicks, float remainder, string surfaceKey, bool highlighted = false, Func<string, Vector2>? trackOffset = null, int pumpkinGroup = -1)
         {
+            _pumpkinGroup = pumpkinGroup;
             _plant = plant;
             _name = name;
             _origin = origin;
@@ -264,7 +268,8 @@ namespace PlantsVsZombies.Game
         /// <returns>Whether native plant artwork was submitted.</returns>
         private bool DrawPlantPose()
         {
-            var visible = _plant.Kind == PlantKind.KernelPult || _plant.Kind == PlantKind.PotatoMine ? _plantVisible : null;
+            var visible = _plant.Kind == PlantKind.KernelPult || _plant.Kind == PlantKind.PotatoMine
+                || _plant.Kind == PlantKind.Pumpkin && _pumpkinGroup >= 0 ? _plantVisible : null;
             var drawn = _heads != null
                 ? RequiredRenderer.DrawNativeAttachedHeads(_name, _origin, _scale, _seconds, _rate, _heads, visible, _plant.ModeFacesLeft, _key, _blendTicks)
                 : RequiredRenderer.DrawNativePlayback(_name, _origin, _scale, _seconds, _clip, _loop, _rate, visible,
@@ -288,6 +293,12 @@ namespace PlantsVsZombies.Game
             if (_plant.Kind == PlantKind.PotatoMine)
             {
                 return !string.Equals(track, "anim_glow", StringComparison.OrdinalIgnoreCase);
+            }
+
+            if (_plant.Kind == PlantKind.Pumpkin)
+            {
+                var back = string.Equals(track, "Pumpkin_back", StringComparison.OrdinalIgnoreCase);
+                return _pumpkinGroup == 1 ? back : !back;
             }
 
             return !string.Equals(track, _plant.PresentationButter ? "Cornpult_kernal" : "Cornpult_butter", StringComparison.OrdinalIgnoreCase);
