@@ -153,7 +153,7 @@ namespace PlantsVsZombies.Tests.EditMode
 
         /// <summary>Checks coffee's crumble and wake samples retain their separate original milestones.</summary>
         [Test]
-        public void CoffeeAndWakeSamplesFollowTheCombinedTwoSecondTimer()
+        public void CoffeeAndWakeSamplesFollowIndependentFuseAndWakeCounters()
         {
             // PC Coffee special 0x47503E requests Foley 69; Plant::Update 0x47161E requests Foley 83 at wake counter 60.
             var game = Fixture(9);

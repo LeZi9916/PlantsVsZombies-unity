@@ -3205,6 +3205,15 @@ namespace PlantsVsZombies.Game
             }
 
             var origin = new Vector2(x + (1f - size) * 40f, y + drawHeight + (1f - size) * 80f);
+            if (plant.Kind == PlantKind.CoffeeBean)
+            {
+                origin += new Vector2(12f, 10f);
+                size *= .8f;
+            }
+
+            var wakeScale = AdventureCoffeeBeanState.WakeScale((int)Math.Round(plant.WakeTimer * 100f));
+            origin.y += 80f * (1f - wakeScale);
+
             if (DrawAdventureCherryBomb(plant, origin, size))
             {
                 return;
@@ -3226,6 +3235,15 @@ namespace PlantsVsZombies.Game
             var age = plant.PresentationLobberIdleAge >= 0f && AdventurePresentationRules.LobberShootingFrames(plant.Kind) > 0
                 ? plant.PresentationLobberIdleAge + (plant.PresentationRate > 0f ? AdventureRenderRemainder : 0f)
                 : plant.Age + AdventureRenderRemainder;
+            var coffee = plant.CoffeePresentation;
+            if (plant.Kind == PlantKind.CoffeeBean && coffee?.Crumbling == true)
+            {
+                clip = "anim_crumble";
+                rate = AdventureCoffeeBeanState.CrumbleRate;
+                age = coffee.AnimationTicks * .01f + AdventureRenderRemainder;
+                loop = false;
+            }
+
             if (squash != null && squash.NativePhase != 0)
             {
                 clip = squash.Animation;
@@ -3407,6 +3425,18 @@ namespace PlantsVsZombies.Game
                 rate = 12f;
             }
 
+            if (plant.PresentationCoffeeWakeAge >= 0f && (clip == "anim_idle" || clip == "anim_bigidle"))
+            {
+                var sleepClip = clip == "anim_bigidle" ? "anim_bigsleep" : "anim_sleep";
+                if (_owner.RequiredAnimations.TryGetNativeAnimationInfo(name, sleepClip, out var sleepInfo)
+                    && _owner.RequiredAnimations.TryGetNativeAnimationInfo(name, clip, out var idleInfo) && rate > 0f)
+                {
+                    // PC SetSleeping(false) keeps normalized animTime when changing sleep and idle frame ranges.
+                    var phase = Mathf.Repeat(plant.PresentationCoffeeWakeAge * plant.PresentationRate / sleepInfo.Count, 1f);
+                    age = phase * idleInfo.Count / rate + plant.Age - plant.PresentationCoffeeWakeAge + AdventureRenderRemainder;
+                }
+            }
+
             var magnetCenter = Vector2.zero;
             var magnetOnTop = false;
             var magnetItemVisible = magnet?.Item != null && PrepareAdventureMagnetItem(plant, magnet.Item, drawHeight, out magnetCenter, out magnetOnTop);
@@ -3414,8 +3444,9 @@ namespace PlantsVsZombies.Game
             ActorRenderer.DrawPlant(plant, name, origin, size, heads == null ? age : plant.Age + AdventureRenderRemainder,
                 clip, loop, rate, heads, _presentationKeys.Get("plant-", plant.Id), new Rect(x - 80, y - 160, 300, 340),
                 squash != null && squash.NativePhase != 0 ? squash.BlendTicks
-                    : magnet != null ? magnet.BlendTicks : doom != null || blover != null ? 0 : scaredy != null && scaredy.NativePhase != 1 || plant.Kind == PlantKind.Threepeater || plant.Kind == PlantKind.Cattail ? 10 : 20, AdventureRenderRemainder,
-                _presentationKeys.Get("producer-plant-", plant.Id), highlighted, doom == null ? null : _doomTrackOffset, plant.Kind == PlantKind.Pumpkin ? 0 : -1);
+                    : coffee != null ? coffee.Crumbling ? 20 : 0 : magnet != null ? magnet.BlendTicks : doom != null || blover != null ? 0 : scaredy != null && scaredy.NativePhase != 1 || plant.Kind == PlantKind.Threepeater || plant.Kind == PlantKind.Cattail ? 10 : 20, AdventureRenderRemainder,
+                _presentationKeys.Get("producer-plant-", plant.Id), highlighted, doom == null ? null : _doomTrackOffset,
+                plant.Kind == PlantKind.Pumpkin ? 0 : -1, size * wakeScale);
 
             // PC Plant::Draw 47420B draws the body before the local retained-metal pass at 4744D3.
             if (magnetItemVisible && !magnetOnTop)

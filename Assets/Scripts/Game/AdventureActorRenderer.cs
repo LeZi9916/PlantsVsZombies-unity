@@ -54,6 +54,8 @@ namespace PlantsVsZombies.Game
         private float _scale, _seconds, _rate, _remainder;
         /// <summary>Whether the current clip loops or the actor faces backwards.</summary>
         private bool _loop, _backwards;
+        /// <summary>Overrides the original plant body's vertical scale during coffee wake, or minus one for ordinary playback.</summary>
+        private float _plantVerticalScale = -1f;
         /// <summary>Whether the current plant is the native shovel target.</summary>
         private bool _highlighted;
         /// <summary>The blend duration used by the current plant pose.</summary>
@@ -98,10 +100,12 @@ namespace PlantsVsZombies.Game
         /// <param name="highlighted">Whether the held shovel highlights this plant.</param>
         /// <param name="trackOffset">Optional native per-track shake offsets for this plant's body animation.</param>
         /// <param name="pumpkinGroup">The native pumpkin render group, or minus one for an unsplit portrait.</param>
+        /// <param name="verticalScale">The native coffee-wake vertical body scale, or minus one for ordinary playback.</param>
         internal void DrawPlant(Plant plant, string name, Vector2 origin, float scale, float seconds, string clip,
-            bool loop, float rate, HeadPlayback[]? heads, string key, Rect viewport, int blendTicks, float remainder, string surfaceKey, bool highlighted = false, Func<string, Vector2>? trackOffset = null, int pumpkinGroup = -1)
+            bool loop, float rate, HeadPlayback[]? heads, string key, Rect viewport, int blendTicks, float remainder, string surfaceKey, bool highlighted = false, Func<string, Vector2>? trackOffset = null, int pumpkinGroup = -1, float verticalScale = -1f)
         {
             _pumpkinGroup = pumpkinGroup;
+            _plantVerticalScale = verticalScale;
             _plant = plant;
             _name = name;
             _origin = origin;
@@ -278,7 +282,7 @@ namespace PlantsVsZombies.Game
                 ? RequiredRenderer.DrawNativeAttachedHeads(_name, _origin, _scale, _seconds, _rate, _heads, visible, _plant.ModeFacesLeft, _key, _blendTicks)
                 : RequiredRenderer.DrawNativePlayback(_name, _origin, _scale, _seconds, _clip, _loop, _rate, visible,
                     AdventureDefensivePlantRules.DamageTrack(_plant.Kind), AdventureDefensivePlantRules.DamageImage(_plant.Kind, _plant.Health),
-                    _plant.ModeFacesLeft, _key, _blendTicks, trackOffset: _plantTrackOffset);
+                    _plant.ModeFacesLeft, _key, _blendTicks, verticalScale: _plantVerticalScale, trackOffset: _plantTrackOffset);
             var mine = _plant.PotatoMinePresentation;
             if (_plant.Kind == PlantKind.PotatoMine && mine != null && mine.LightCreated && _plant.MinePhase == MinePhase.Armed)
             {

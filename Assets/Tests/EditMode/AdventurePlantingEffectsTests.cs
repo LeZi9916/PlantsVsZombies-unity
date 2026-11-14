@@ -95,7 +95,11 @@ namespace PlantsVsZombies.Tests.EditMode
             var mushroom = (Plant)Invoke(game, "PlaceAdventurePlant", PlantKind.PuffShroom, 0, 4)!;
             Assert.That(mushroom.Asleep, Is.True);
             Assert.That(game.TryPlant(PlantKind.CoffeeBean, 0, 4), Is.True);
-            Assert.That(mushroom.WakeTimer, Is.EqualTo(2f));
+            Assert.That(mushroom.WakeTimer, Is.Zero, "The bean's own fuse precedes the mushroom wake countdown.");
+            var coffee = game.AdventurePlantAt(0, 4, PlantLayer.Effect);
+            Assert.That(coffee, Is.Not.Null);
+            Assert.That(coffee.Kind, Is.EqualTo(PlantKind.CoffeeBean));
+            Assert.That(coffee.CoffeePresentation!.Countdown, Is.EqualTo(100));
             Assert.That(game.Presentation.PlantingEffects, Is.Empty);
         }
 

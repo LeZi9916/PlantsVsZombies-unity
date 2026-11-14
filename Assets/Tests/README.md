@@ -787,3 +787,33 @@ The focused cases include the previously corrected chewing immunity and airborne
 roof-support independence, plus original source-art playback. They do not
 constitute a full-level packaged Player playthrough or other platform/device
 validation.
+
+
+## Original flying coffee bean and mushroom wake
+
+PC `46C847..46C853` gives coffee its own hundred-update special countdown.
+`474FEA..47503E` then sets the sleeping main plant's separate wake counter to
+one hundred, starts the bean's fifteen-frame `anim_crumble` at 22 FPS with
+blend twenty, and requests Coffee Foley 69. The body completes its own crumble
+before removal; the mushroom wakes independently and requests Wakeup Foley 83
+at counter sixty. Placement now creates a real flying Effect-layer bean rather
+than returning the mushroom and starting an aggregate timer. Its occupancy
+blocks duplicate coffee immediately; removing the mushroom does not skip the
+bean's own authored lifetime. A grabbed bean suspends its special while its
+body reanimation continues; an already-started mushroom wake remains independent.
+
+`471D60` draws coffee at scale .8 with +(12,10) over its ordinary draw-height
+offset. `471F22..471FBD` uses the mushroom's last seventy wake updates for the
+original EaseSinWave squish/stretch, preserving the eighty-pixel foot anchor.
+`46CB90` retains normalized body time across sleep-to-idle clip ranges; the
+original Sun-shroom's ten sleeping and twelve idle frames are checked explicitly.
+Later body actions discard this initial wake phase instead of reusing it.
+
+```powershell
+./Tools/Tests/Run-UnityTests.ps1 -Platform EditMode -TestFilter 'AdventureCoffeeBeanTests|AdventurePlantSoundTests.CoffeeAndWakeSamplesFollowIndependentFuseAndWakeCounters|AdventurePlantingEffectsTests.CoffeeBeanDoesNotCreateSoilOrWaterParticles|AdventurePlantingSoundTests.SuccessfulPacketPlacementRequestsOriginalSquareSound|AdventureMushroomTests.SleepingClockRemainsIndependentOfCapturedBodyAndCoffeeWake'
+# Set PVZ_BOARD_STRESS_ASSETS to the read-only original runtime resources.
+./Tools/Tests/Run-UnityTests.ps1 -Platform PlayMode -TestFilter 'OriginalCoffeeBeanGraphicsTests|OriginalPlantSoundTests.NativePlantSamplesLoadAndReachTheirCorrectProductionVoices|GamePresentationPerformanceTests.WarmPlantPresentationDoesNotAllocateManagedMemory'
+```
+
+These focused checks do not constitute a full-level packaged Player playthrough,
+physical-speaker listening, or other target-platform/device validation.

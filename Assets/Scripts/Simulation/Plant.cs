@@ -18,6 +18,10 @@ namespace PlantsVsZombies.Simulation
         public AdventureSquashState? SquashPresentation { get; internal set; }
         /// <summary>Gets or sets the original Scaredy-shroom fear and recovery body state.</summary>
         public AdventureScaredyShroomState? ScaredyShroomPresentation { get; internal set; }
+        /// <summary>Retains the original flying coffee bean's special counter and crumble playback.</summary>
+        public AdventureCoffeeBeanState? CoffeePresentation;
+        /// <summary>Stores the body age at coffee wake, or minus one before wake or a later body action restarts playback.</summary>
+        public float PresentationCoffeeWakeAge = -1f;
         /// <summary>Retains the original independent sleeping Z animation until this plant wakes or dies.</summary>
         public AdventureSleepingState? SleepingPresentation;
         /// <summary>Gets the pre-explosion body and head state, created when a Doom-shroom first updates awake.</summary>

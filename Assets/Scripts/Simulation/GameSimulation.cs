@@ -2411,6 +2411,7 @@ namespace PlantsVsZombies.Simulation
             plant.ActionTimer = result.State.Countdown * .01f;
             if (result.AnimationStarted)
             {
+                plant.PresentationCoffeeWakeAge = -1f;
                 if (lobber)
                 {
                     plant.PresentationLobberIdleAge = -1f;
@@ -3137,7 +3138,7 @@ namespace PlantsVsZombies.Simulation
         /// <returns>The resulting layer for.</returns>
         private static PlantLayer LayerFor(PlantKind kind)
         {
-            return kind == PlantKind.LilyPad || kind == PlantKind.FlowerPot ? PlantLayer.Support : kind == PlantKind.Pumpkin ? PlantLayer.Armor : PlantLayer.Main;
+            return kind == PlantKind.LilyPad || kind == PlantKind.FlowerPot ? PlantLayer.Support : kind == PlantKind.Pumpkin ? PlantLayer.Armor : kind == PlantKind.CoffeeBean ? PlantLayer.Effect : PlantLayer.Main;
         }
 
         /// <summary>Performs nocturnal.</summary>
@@ -3219,18 +3220,6 @@ namespace PlantsVsZombies.Simulation
                 return upgraded;
             }
 
-            if (kind == PlantKind.CoffeeBean)
-            {
-                var target = AdventurePlantAt(row, column, PlantLayer.Main);
-                if (target != null)
-                {
-                    target.WakeTimer = 2f;
-                }
-
-                Raise(GameEvent.Planted);
-                return target;
-            }
-
             if (IsAdventureFirstAid(kind, row, column))
             {
                 var old = AdventurePlantAt(row, column, kind == PlantKind.Pumpkin ? PlantLayer.Armor : PlantLayer.Main);
@@ -3251,6 +3240,14 @@ namespace PlantsVsZombies.Simulation
             };
             InitializeAdventureNativePlantTiming(plant);
             InitializeAdventureSleepingPlant(plant);
+            if (kind == PlantKind.CoffeeBean)
+            {
+                plant.CoffeePresentation = new AdventureCoffeeBeanState();
+                plant._presentationKind = kind;
+                plant.PresentationRate = 10f + (float)_random.NextDouble() * 5f;
+                plant.ActionTimer = 1f;
+            }
+
             Plants.Add(plant);
             if (kind != PlantKind.FlowerPot && AdventurePlantAt(row, column, PlantLayer.Support) is Plant pot
                 && pot.Kind == PlantKind.FlowerPot)
@@ -3664,6 +3661,40 @@ namespace PlantsVsZombies.Simulation
             }
         }
 
+        /// <summary>Runs the original coffee special before its fifteen-frame crumble ends its own lifetime.</summary>
+        /// <param name="plant">The live flying bean, independent of the mushroom below it.</param>
+        private void AdvanceAdventureCoffeeBean(Plant plant)
+        {
+            var state = plant.CoffeePresentation ??= new AdventureCoffeeBeanState();
+            if (!state.Crumbling)
+            {
+                state.Countdown = Math.Max(0, state.Countdown - 1);
+                plant.ActionTimer = state.Countdown * .01f;
+                if (state.Countdown > 0)
+                {
+                    return;
+                }
+
+                var mushroom = AdventurePlantAt(plant.Row, plant.Column, PlantLayer.Main);
+                if (mushroom != null && mushroom.Asleep)
+                {
+                    mushroom.WakeTimer = 1f;
+                }
+
+                state.Crumbling = true;
+                state.AnimationTicks = 0;
+                RequestAdventureZombieFoley(69);
+            }
+            else if (state.AnimationTicks * .01f * AdventureCoffeeBeanState.CrumbleRate >= AdventureCoffeeBeanState.CrumbleFrames)
+            {
+                RemoveAdventurePlantAndStack(plant);
+                return;
+            }
+
+            // PC Animate updates the newly started body in the same special-action tick.
+            state.AnimationTicks++;
+        }
+
         /// <summary>Performs advance adventure plants.</summary>
         /// <param name = "dt">The dt.</param>
         private void AdvanceAdventurePlants(float dt)
@@ -3690,11 +3721,6 @@ namespace PlantsVsZombies.Simulation
                     {
                         var wakeTicks = Math.Max(0, (int)Math.Round(p.WakeTimer * 100f) - 1);
                         p.WakeTimer = wakeTicks * .01f;
-                        if (wakeTicks == 100)
-                        {
-                            // This combined timer retains Coffee's 100-tick crumble followed by the mushroom's 100-tick wake.
-                            RequestAdventureZombieFoley(69);
-                        }
                         if (wakeTicks == 60)
                         {
                             // PC Plant::Update plays Wakeup at the sixty-tick milestone.
@@ -3705,11 +3731,18 @@ namespace PlantsVsZombies.Simulation
                             p.Asleep = false;
                             p.SleepingPresentation = null;
                             p.AwakeByCoffee = true;
+                            p.PresentationCoffeeWakeAge = p.Age;
                         }
                     }
 
                     if (p.Asleep)
                     {
+                        continue;
+                    }
+
+                    if (p.Kind == PlantKind.CoffeeBean)
+                    {
+                        AdvanceAdventureCoffeeBean(p);
                         continue;
                     }
 
@@ -6257,6 +6290,14 @@ namespace PlantsVsZombies.Simulation
             foreach (Plant plant in Plants)
             {
                 InitializeAdventureSleepingPlant(plant);
+                if (plant.PresentationCoffeeWakeAge >= 0f && !plant.Asleep
+                    && (plant.PresentationShotAge >= 0f || plant.MagnetPresentation != null && plant.MagnetPresentation.NativePhase != 1
+                        || plant.ScaredyShroomPresentation != null && plant.ScaredyShroomPresentation.NativePhase != 1))
+                {
+                    // A later body action starts fresh playback rather than retaining the earlier sleep-to-idle phase.
+                    plant.PresentationCoffeeWakeAge = -1f;
+                }
+
                 if (plant.SleepingPresentation != null)
                 {
                     // PC sleeping reanimations are independent board objects, including while their plant is grabbed.
@@ -6266,6 +6307,11 @@ namespace PlantsVsZombies.Simulation
                 if (plant.BungeeState != 0)
                 {
                     plant.Age += dt * (plant.BungeeState == 2 ? .1f / Math.Max(1f, plant.PresentationRate) : 1f);
+                    if (plant.CoffeePresentation?.Crumbling == true)
+                    {
+                        // The free body keeps animating during a grab; lifted cargo uses the original .1-FPS body rate.
+                        plant.CoffeePresentation.AnimationTicks += plant.BungeeState == 2 ? .1f / AdventureCoffeeBeanState.CrumbleRate : 1f;
+                    }
                 }
 
                 if (plant.PresentationUmbrellaAge >= 0f)
@@ -6301,6 +6347,7 @@ namespace PlantsVsZombies.Simulation
                 plant.PresentationAwakeAge += dt;
                 if (plant.Kind == PlantKind.SunShroom && previousAwakeAge < 120f && plant.PresentationAwakeAge >= 120f)
                 {
+                    plant.PresentationCoffeeWakeAge = -1f;
                     RequestAdventureZombieFoley(63);
                 }
                 if (plant.PresentationShotAge >= 0)
@@ -7492,7 +7539,7 @@ namespace PlantsVsZombies.Simulation
 
             if (resolved == PlantKind.CoffeeBean)
             {
-                return Plants.Exists(p => p.Asleep && p.WakeTimer <= 0);
+                return Plants.Exists(p => p.Asleep && p.WakeTimer <= 0 && AdventurePlantAt(p.Row, p.Column, PlantLayer.Effect) == null);
             }
 
             if (resolved == PlantKind.GraveBuster)
