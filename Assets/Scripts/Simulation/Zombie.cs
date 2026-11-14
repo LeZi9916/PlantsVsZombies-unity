@@ -101,6 +101,8 @@ namespace PlantsVsZombies.Simulation
         public int GraveRiseTicks;
         /// <summary>Stores linked zombie id.</summary>
         public int LinkedZombieId;
+        /// <summary>Stores PC mUseLadderCol so one placed ladder cannot repeatedly retrigger the same crossing.</summary>
+        public int UseLadderColumn = -1;
         /// <summary>Stores target column.</summary>
         public int TargetColumn = -1;
         /// <summary>Stores starting health.</summary>

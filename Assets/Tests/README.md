@@ -545,3 +545,35 @@ These focused checks cover body/shadow pixels, occupied pot frames, normal/small
 cords, burned-body occlusion, near eating targets with/without Pumpkin, and all
 lobber weapons hitting stationary/moving column-nine targets from roof column
 two. They do not establish a full-level Player playthrough or other target devices.
+
+
+## Original ladder placement and traversal
+
+PC `546620` starts the twelve-frame `anim_placeladder` at 24 FPS with blend ten,
+then rechecks the defensive target before `414D10` creates the cell ladder.
+Detaching the shield switches to the ordinary walking clip with zero blend and
+plays the original `ladder_zombie` sample. A missing target retains the carried
+ladder; ice and butter suspend placement, while chill slows its animation clock.
+
+`459610` draws `IMAGE_REANIM_ZOMBIE_LADDER_5` at cell +(25,-4), scale .8, using
+the unscaled image center. The placed object uses row order 302800, after plants
+and before ordinary zombies. PC `546CE0` raises the walking body by .8 per update
+and probes the cell at integer zombie X + 5 + altitude/2; low native velocities
+also receive the original extra .5-pixel leftward movement. Missing the ladder
+or reaching height ninety transitions to `5452B0`'s falling update in the same
+action pass. The original keeps walking artwork during ascent/descent; there is
+no separately authored climb clip. `mUseLadderCol` prevents retriggering the same
+crossing. Plant removal, magnetic removal, body collision heights and falling
+death playback retain the same cell and altitude state.
+
+```powershell
+./Tools/Tests/Run-UnityTests.ps1 -Platform EditMode -TestFilter 'AdventureLadderTests|AdventureMagnetTests.ZombieMetalPrecedesPlacedLaddersAndLadderRangeIncludesSquareCorners|AdventurePogoTests.PlantTriggersPreparationThenAForwardVaultIncludingLadders'
+# Set PVZ_BOARD_STRESS_ASSETS to the read-only original runtime resources.
+./Tools/Tests/Run-UnityTests.ps1 -Platform PlayMode -TestFilter OriginalLadderGraphicsTests
+```
+
+The focused cases exercise original placement timing, interruption, slow/frozen
+clocks, normal/armored/football/ladder/pole followers, ladder removal, corpse
+falling, original shield render groups, day/night and roof ladder occlusion, and
+raised walking-body pixels. These isolated component checks do not replace a
+full-level Player playthrough or target-platform device validation.

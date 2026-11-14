@@ -2207,6 +2207,7 @@ namespace PlantsVsZombies.Game
 
                     DrawAdventureDetachedZombieParts(row, true);
                     DrawAdventureZombieFootsteps(row);
+                    DrawAdventureLadders(row);
                     DrawAdventureCorpses(row);
                     foreach (Zombie zombie in _owner.RequiredGame.Zombies)
                     {
@@ -4023,7 +4024,9 @@ namespace PlantsVsZombies.Game
             var constantGroundClock = zombie.Kind == ZombieKind.Balloon && zombie.Airborne
                 || zombie.Kind == ZombieKind.DolphinRider
                     && (zombie.PresentationNativePhase == 52 || zombie.PresentationNativePhase == 54);
-            var age = zombie.PresentationAnimationAge + (zombie.FrozenRemaining > 0 ? 0
+            var ladderButter = zombie.PresentationButter > 0f && (zombie.Kind == ZombieKind.Ladder
+                || zombie.UseLadderColumn >= 0 && (zombie.PresentationNativeHeight == 6 || zombie.PresentationNativeHeight == 7));
+            var age = zombie.PresentationAnimationAge + (zombie.FrozenRemaining > 0 || ladderButter ? 0
                 : AdventureRenderRemainder * (zombie.ChillRemaining > 0 && !constantGroundClock ? .5f : 1f));
             var rate = _owner.RequiredGame.AdventurePresentationZombieRate(zombie);
             if (zombie.Kind == ZombieKind.Digger && zombie.PresentationNativePhase == 34 && zombie.DiggerState != null)
@@ -4461,6 +4464,27 @@ namespace PlantsVsZombies.Game
                 {
                     using var actor = _owner.RequiredAnimations.Hierarchy.BeginActor("Zombies", zombie.Id, ZombieHierarchyName(zombie.Kind));
                     DrawAdventureBurnedCorpse(corpse);
+                }
+            }
+        }
+
+        /// <summary>Draws PC 459610's placed ladders at row order 302800, between plants and ordinary zombies.</summary>
+        /// <param name="row">The native board row whose surviving ladders are drawn.</param>
+        private void DrawAdventureLadders(int row)
+        {
+            if (!_owner.RequiredAnimations.TryGetNativeSpriteSize("IMAGE_REANIM_ZOMBIE_LADDER_5", out var size))
+            {
+                return;
+            }
+
+            for (var column = 0; column < GameSimulation.Columns; column++)
+            {
+                if (_owner.RequiredGame.AdventureHasLadderAt(row, column))
+                {
+                    // TodDrawImageScaledF adds the unscaled image center before applying scale .8.
+                    var point = new Vector2(BoardLayout.AdventureGridX + column * BoardLayout.CellWidth + 25f + size.x * .5f,
+                        _owner.Layout.AdventureCellY(row, column) - 4f + size.y * .5f);
+                    _owner.RequiredAnimations.DrawResourceSprite("IMAGE_REANIM_ZOMBIE_LADDER_5", point, .8f);
                 }
             }
         }

@@ -825,6 +825,7 @@ namespace PlantsVsZombies.Audio
                 -4 => "zombiesplash",
                 -5 => "mindcontrolled",
                 -6 => "boing",
+                -7 => "ladder_zombie",
                 _ => null
             };
             if (directSample != null)
@@ -890,7 +891,8 @@ namespace PlantsVsZombies.Audio
                 "mindcontrolled",
                 "jackinthebox",
                 "digger_zombie",
-                "boing"
+                "boing",
+                "ladder_zombie"
             };
             foreach (var definition in AdventureZombieFoleyData.Definitions.Values)
             {

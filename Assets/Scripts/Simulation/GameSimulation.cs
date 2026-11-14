@@ -3299,6 +3299,11 @@ namespace PlantsVsZombies.Simulation
         /// <param name = "p">The p.</param>
         private void RemoveAdventurePlantAndStack(Plant p)
         {
+            if (p.Kind != PlantKind.CoffeeBean)
+            {
+                RemoveAdventureLadder(p.Row, p.Column);
+            }
+
             Plants.Remove(p);
             if (p.Kind == PlantKind.TangleKelp && p.TangleKelpPresentation != null)
             {
@@ -5790,7 +5795,11 @@ namespace PlantsVsZombies.Simulation
             {
                 var corpse = Presentation.Corpses[i];
                 corpse.Age += dt;
-                if (corpse.RequiredZombie.Kind == ZombieKind.DolphinRider && corpse.RequiredZombie.PresentationNativeHeight == 7)
+                if (corpse.RequiredZombie.UseLadderColumn >= 0 && corpse.RequiredZombie.PresentationNativeHeight == 7)
+                {
+                    AdvanceAdventureLadderFall(corpse.RequiredZombie);
+                }
+                else if (corpse.RequiredZombie.Kind == ZombieKind.DolphinRider && corpse.RequiredZombie.PresentationNativeHeight == 7)
                 {
                     // PC UpdateDeath 54F4A0 continues the original falling update after a Tall-nut collision.
                     corpse.RequiredZombie.PresentationAltitude = Math.Max(0f, corpse.RequiredZombie.PresentationAltitude - 1f);
@@ -9631,7 +9640,7 @@ namespace PlantsVsZombies.Simulation
 
             if (z.Kind == ZombieKind.Ladder && z.ShieldHealth > 0)
             {
-                var barrier = (p.Kind == PlantKind.Wallnut || p.Kind == PlantKind.TallNut || p.Kind == PlantKind.Pumpkin) && !p.HasLadder;
+                var barrier = (p.Kind == PlantKind.Wallnut || p.Kind == PlantKind.TallNut || p.Kind == PlantKind.Pumpkin) && !AdventureHasLadderAt(p.Row, p.Column);
                 if (attack == global::PlantsVsZombies.Adventure.AdventureBiteAttack.Chew && barrier)
                 {
                     return false;
@@ -9941,6 +9950,11 @@ namespace PlantsVsZombies.Simulation
             // PC PlayDeathAnim replaces every live phase, stops eating, and retains the current pool altitude.
             corpse.RequiredZombie.PresentationNativePhase = 1;
             corpse.RequiredZombie.Eating = false;
+            if (corpse.RequiredZombie.PresentationNativeHeight == 6)
+            {
+                corpse.RequiredZombie.PresentationNativeHeight = 7;
+            }
+
             if (corpse.RequiredZombie.PresentationBodyBlendTicks >= 0)
             {
                 corpse.RequiredZombie.PresentationBodyBlendTicks = 20;
@@ -10116,6 +10130,10 @@ namespace PlantsVsZombies.Simulation
             if (z.Kind == ZombieKind.PoleVaulter)
             {
                 z.PresentationNativePhase = 11;
+            }
+            else if (z.Kind == ZombieKind.Ladder)
+            {
+                z.PresentationNativePhase = z.ShieldHealth > 0f ? 76 : 0;
             }
             else if (z.Kind == ZombieKind.Pogo)
             {
@@ -10499,7 +10517,8 @@ namespace PlantsVsZombies.Simulation
                 z._presentationTickSlow = 1f;
             }
             if (z.FrozenRemaining > 0f || (AdventureDancerRules.IsDancer(z) || z.Kind == ZombieKind.DolphinRider
-                || z.Kind == ZombieKind.JackInTheBox || z.Kind == ZombieKind.Balloon || z.Kind == ZombieKind.Digger || z.Kind == ZombieKind.Pogo) && z.PresentationButter > 0f)
+                || z.Kind == ZombieKind.JackInTheBox || z.Kind == ZombieKind.Balloon || z.Kind == ZombieKind.Digger || z.Kind == ZombieKind.Pogo
+                || z.Kind == ZombieKind.Ladder || z.UseLadderColumn >= 0 && (z.PresentationNativeHeight == 6 || z.PresentationNativeHeight == 7)) && z.PresentationButter > 0f)
             {
                 return;
             }
@@ -10738,7 +10757,8 @@ namespace PlantsVsZombies.Simulation
             }
 
             global::PlantsVsZombies.Adventure.AdventureZombieGroundClip? data;
-            if (z.Kind != ZombieKind.Bungee && !global::PlantsVsZombies.Adventure.AdventureZombieGroundData.TryGet(asset, clip, out data))
+            if (z.Kind != ZombieKind.Bungee && !(z.Kind == ZombieKind.Ladder && z.PresentationNativePhase == 77)
+                && !global::PlantsVsZombies.Adventure.AdventureZombieGroundData.TryGet(asset, clip, out data))
             {
                 clip = global::PlantsVsZombies.Adventure.AdventureZombieGroundData.TryGet(asset, "anim_walk", out data) ? "anim_walk" : "anim_idle";
             }
@@ -10844,6 +10864,11 @@ namespace PlantsVsZombies.Simulation
                 {
                     return 12f;
                 }
+            }
+
+            if (z.Kind == ZombieKind.Ladder && z.PresentationNativePhase == 77)
+            {
+                return 24f;
             }
 
             if (z.Kind == ZombieKind.JackInTheBox && z.PresentationNativePhase == 16)
@@ -12788,6 +12813,215 @@ namespace PlantsVsZombies.Simulation
             return false;
         }
 
+        /// <summary>Checks the original cell-based ladder independently of the targeted plant layer.</summary>
+        /// <param name="row">The native board row.</param>
+        /// <param name="column">The native board column.</param>
+        /// <returns>Whether any surviving plant in this cell retains the placed ladder.</returns>
+        internal bool AdventureHasLadderAt(int row, int column)
+        {
+            foreach (var plant in Plants)
+            {
+                if (plant.Row == row && plant.Column == column && plant.HasLadder && plant.Health > 0f)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>Removes PC Plant::Die's ladder from every plant layer in the cell.</summary>
+        /// <param name="row">The native board row.</param>
+        /// <param name="column">The native board column.</param>
+        private void RemoveAdventureLadder(int row, int column)
+        {
+            foreach (var plant in Plants)
+            {
+                if (plant.Row == row && plant.Column == column)
+                {
+                    plant.HasLadder = false;
+                }
+            }
+        }
+
+        /// <summary>Runs PC 546620's retained twelve-frame placement before detaching the carried shield.</summary>
+        /// <param name="zombie">The live ladder carrier whose original action is being advanced.</param>
+        /// <returns>Whether the placing body must hold its position for this update.</returns>
+        private bool AdvanceAdventureLadderPlacing(Zombie zombie)
+        {
+            if (zombie.Kind != ZombieKind.Ladder)
+            {
+                return false;
+            }
+
+            var phase = AdventureZombieFeedbackPhase(zombie);
+            if (phase == 77 && zombie.ShieldHealth <= 0f)
+            {
+                // Native DetachShield interrupts the placing phase independently of the remaining head state.
+                SetAdventureZombieMotionPhase(zombie, 0);
+                zombie.PresentationBodyBlendTicks = 0;
+                return false;
+            }
+
+            if (zombie.Hypnotized || zombie.Headless || zombie.Health <= 0f)
+            {
+                return phase == 77;
+            }
+
+            if (phase == 77)
+            {
+                if (zombie.PresentationAnimationAge * 24f + .0001f < 12f)
+                {
+                    return true;
+                }
+
+                var target = FindAdventureNativePlantTarget(zombie, AdventureBiteAttack.Ladder);
+                if (target != null)
+                {
+                    target.HasLadder = true;
+                    zombie.UseLadderColumn = target.Column;
+                    zombie.PresentationNativeHeight = 6;
+                    zombie.ShieldHealth = 0f;
+                    zombie.UsedAbility = true;
+                    SetAdventureZombieMotionPhase(zombie, 0);
+                    zombie.PresentationBodyBlendTicks = 0;
+                    RequestAdventureZombieFoley(-7);
+                }
+                else
+                {
+                    SetAdventureZombieMotionPhase(zombie, 76);
+                    zombie.PresentationBodyBlendTicks = 0;
+                }
+
+                return false;
+            }
+
+            if (phase == 76 && zombie.ShieldHealth > 0f && zombie.PresentationNativeHeight == 0
+                && FindAdventureNativePlantTarget(zombie, AdventureBiteAttack.Ladder) != null)
+            {
+                StopAdventureNativeEating(zombie);
+                zombie.PresentationNativePhase = 77;
+                zombie.PresentationAnimation = string.Empty;
+                AdventurePresentationZombieAnimation(zombie);
+                // Playing the placement clip retains the carrier's velocity; StartWalkAnim resamples only on completion.
+                zombie._presentationSpeedPhase = 77;
+                zombie._presentationSpeedKind = (int)zombie.Kind;
+                zombie.PresentationBodyBlendTicks = 10;
+                return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>Updates PC 5452B0's falling height, including the armed pole vaulter's extra pixel.</summary>
+        /// <param name="zombie">The live or retained dead actor falling from a ladder.</param>
+        private static void AdvanceAdventureLadderFall(Zombie zombie)
+        {
+            var ground = zombie.PogoState?.OnHighGround == true ? 30f : 0f;
+            zombie.PresentationAltitude = Math.Max(ground, zombie.PresentationAltitude
+                - (zombie.PresentationNativePhase == 11 ? 2f : 1f));
+            if (zombie.PresentationAltitude <= ground)
+            {
+                zombie.PresentationNativeHeight = 0;
+            }
+
+            if (zombie.PoolState != null)
+            {
+                zombie.PoolState.Altitude = zombie.PresentationAltitude;
+            }
+
+            zombie.PresentationBiteBodyY = (int)-zombie.PresentationAltitude;
+        }
+
+        /// <summary>Runs PC 546CE0's ladder probe, .8-pixel rise, and same-update transition into falling.</summary>
+        /// <param name="zombie">The actor with an active original ladder height state.</param>
+        /// <param name="dt">The fixed one-hundred-hertz update interval.</param>
+        /// <returns>Whether this update belongs to ladder traversal rather than eating or another ability.</returns>
+        private bool AdvanceAdventureLadderTraversal(Zombie zombie, float dt)
+        {
+            if (zombie.UseLadderColumn < 0 || zombie.PresentationNativeHeight != 6 && zombie.PresentationNativeHeight != 7)
+            {
+                return false;
+            }
+
+            if (zombie.PresentationNativeHeight == 6)
+            {
+                var scale = AdventureDancerRules.Scale(zombie);
+                var nativeX = (int)AdventureZombieNativeRules.NativePositionX(zombie.X, scale);
+                var ground = zombie.PogoState?.OnHighGround == true ? 30f : 0f;
+                var probe = (int)(nativeX + 5 + (zombie.PresentationAltitude - ground) * .5f);
+                var column = Math.Max(0, Math.Min(8, (Math.Max(40, probe) - 40) / 80));
+                if (!AdventureHasLadderAt(zombie.Row, column))
+                {
+                    zombie.PresentationNativeHeight = 7;
+                }
+                else
+                {
+                    zombie.PresentationAltitude += .8f;
+                    if (zombie.PresentationNativeVelocity < .5f)
+                    {
+                        zombie.X -= .5f / 80f;
+                    }
+
+                    if (zombie.PresentationAltitude >= ground + 90f)
+                    {
+                        zombie.PresentationNativeHeight = 7;
+                    }
+                }
+            }
+
+            if (zombie.PresentationNativeHeight == 7)
+            {
+                AdvanceAdventureLadderFall(zombie);
+            }
+
+            if (zombie.PoolState != null)
+            {
+                zombie.PoolState.Altitude = zombie.PresentationAltitude;
+            }
+
+            zombie.PresentationBiteBodyY = (int)-zombie.PresentationAltitude;
+            zombie.PresentationBiteClipHeight = -10000;
+            zombie.Eating = false;
+            var slow = zombie.ChillRemaining > 0f ? .5f : 1f;
+            zombie.ChillRemaining = Math.Max(0f, zombie.ChillRemaining - dt);
+            var direction = zombie.PresentationWalkingBackwards ?? zombie.Hypnotized;
+            var previousWalkingX = zombie.X;
+            zombie.X += (direction ? 1f : -1f) * AdventurePresentationWalkingDistance(zombie, dt, zombie.Speed * dt * slow);
+            RecordAdventureZombieFootsteps(zombie, previousWalkingX);
+            return true;
+        }
+
+        /// <summary>Applies the existing escape, mower and loss boundaries to ordinary and ladder movement.</summary>
+        /// <param name="z">The live actor whose horizontal movement has completed.</param>
+        /// <returns>Whether the actor caused the current match to be lost.</returns>
+        private bool CheckAdventureZombieBoardEdge(Zombie z)
+        {
+            if (z.X > 12f && (z.Hypnotized || z.Kind == ZombieKind.Digger && AdventureDiggerState.WalksBackwards(z)))
+            {
+                z.PresentationDeath = AdventureZombieDeathPresentation.Removed;
+                KillAdventureZombie(z);
+                return false;
+            }
+
+            if (!z.Hypnotized && z.X < 0.15f && Mowers[z.Row].Available)
+            {
+                Mowers[z.Row].Available = false;
+                Mowers[z.Row].Active = true;
+                Adventure.RowPicker.LastMowedWave[z.Row] = Adventure.CurrentWave;
+                Raise(GameEvent.Mower);
+            }
+            else if (!z.Hypnotized && z.X < -0.65f && !Mowers[z.Row].Active)
+            {
+                State = MatchState.Lost;
+                Adventure.Phase = AdventurePhase.Lost;
+                Raise(GameEvent.Lost);
+                return true;
+            }
+
+            return false;
+        }
+
         /// <summary>Performs advance adventure zombies.</summary>
         /// <param name = "dt">The dt.</param>
         private void AdvanceAdventureZombies(float dt)
@@ -12893,9 +13127,20 @@ namespace PlantsVsZombies.Simulation
                     continue;
                 }
 
-                if ((z.Kind == ZombieKind.DolphinRider || z.Kind == ZombieKind.JackInTheBox || z.Kind == ZombieKind.Balloon || z.Kind == ZombieKind.Digger || z.Kind == ZombieKind.Pogo || z.Kind == ZombieKind.Bungee)
+                if ((z.Kind == ZombieKind.DolphinRider || z.Kind == ZombieKind.JackInTheBox || z.Kind == ZombieKind.Balloon || z.Kind == ZombieKind.Digger || z.Kind == ZombieKind.Pogo || z.Kind == ZombieKind.Bungee || z.Kind == ZombieKind.Ladder
+                    || z.UseLadderColumn >= 0 && (z.PresentationNativeHeight == 6 || z.PresentationNativeHeight == 7))
                     && z.PresentationButter > 0f)
                 {
+                    continue;
+                }
+
+                if (AdvanceAdventureLadderTraversal(z, dt))
+                {
+                    if (CheckAdventureZombieBoardEdge(z))
+                    {
+                        return;
+                    }
+
                     continue;
                 }
 
@@ -12937,6 +13182,11 @@ namespace PlantsVsZombies.Simulation
 
                 AdvanceAdventureBalloon(z);
                 AdvanceAdventureBobsled(z);
+                if (AdvanceAdventureLadderPlacing(z))
+                {
+                    continue;
+                }
+
                 z.AbilityTimer -= dt * slow;
                 if (z.Kind == ZombieKind.Bungee)
                 {
@@ -13049,8 +13299,16 @@ namespace PlantsVsZombies.Simulation
                     }
                 }
 
-                if (target != null && target.HasLadder && target.Layer != PlantLayer.Support && z.Kind != ZombieKind.Digger)
+                if (target != null && AdventureHasLadderAt(target.Row, target.Column) && target.Layer != PlantLayer.Support && z.Kind != ZombieKind.Digger
+                    && (AdventureNativeChewer(z) || z.Kind == ZombieKind.PoleVaulter && z.PresentationNativePhase == 11))
                 {
+                    StopAdventureNativeEating(z);
+                    if (z.PresentationNativeHeight == 0 && z.UseLadderColumn != target.Column)
+                    {
+                        z.PresentationNativeHeight = 6;
+                        z.UseLadderColumn = target.Column;
+                    }
+
                     target = null;
                 }
 
@@ -13076,16 +13334,6 @@ namespace PlantsVsZombies.Simulation
                         RefreshAdventureZombieNativeSpeed(z);
                     }
 
-                    continue;
-                }
-
-                if (target != null && z.Kind == ZombieKind.Ladder && !z.UsedAbility && (target.Kind == PlantKind.Wallnut || target.Kind == PlantKind.TallNut || target.Kind == PlantKind.Pumpkin))
-                {
-                    target.HasLadder = true;
-                    z.UsedAbility = true;
-                    z.ShieldHealth = 0;
-                    RefreshAdventureZombieNativeSpeed(z);
-                    z.X -= 0.8f;
                     continue;
                 }
 
@@ -13192,25 +13440,8 @@ namespace PlantsVsZombies.Simulation
                     AdvanceAdventurePogo(z, previousX);
                 }
 
-                if (z.X > 12f && (z.Hypnotized || z.Kind == ZombieKind.Digger && AdventureDiggerState.WalksBackwards(z)))
+                if (CheckAdventureZombieBoardEdge(z))
                 {
-                    z.PresentationDeath = AdventureZombieDeathPresentation.Removed;
-                    KillAdventureZombie(z);
-                    continue;
-                }
-
-                if (!z.Hypnotized && z.X < 0.15f && Mowers[z.Row].Available)
-                {
-                    Mowers[z.Row].Available = false;
-                    Mowers[z.Row].Active = true;
-                    Adventure.RowPicker.LastMowedWave[z.Row] = Adventure.CurrentWave;
-                    Raise(GameEvent.Mower);
-                }
-                else if (!z.Hypnotized && z.X < -0.65f && !Mowers[z.Row].Active)
-                {
-                    State = MatchState.Lost;
-                    Adventure.Phase = AdventurePhase.Lost;
-                    Raise(GameEvent.Lost);
                     return;
                 }
             }
@@ -17953,7 +18184,12 @@ namespace PlantsVsZombies.Simulation
                 return;
             }
 
-            if (zombie.PresentationInPool == true)
+            if (zombie.UseLadderColumn >= 0 && (zombie.PresentationNativeHeight == 6 || zombie.PresentationNativeHeight == 7))
+            {
+                zombie.PresentationBiteBodyY = (int)-zombie.PresentationAltitude;
+                zombie.PresentationBiteClipHeight = -10000;
+            }
+            else if (zombie.PresentationInPool == true)
             {
                 zombie.PresentationBiteBodyY = (int)-zombie.PoolState.Altitude;
                 zombie.PresentationBiteClipHeight = (int)(-zombie.PoolState.Altitude - 7f

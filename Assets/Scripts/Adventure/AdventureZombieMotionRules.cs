@@ -37,6 +37,11 @@ namespace PlantsVsZombies.Adventure
                 return "anim_pogo";
             }
 
+            if (zombie.Kind == ZombieKind.Ladder && zombie.PresentationNativePhase == 77)
+            {
+                return "anim_placeladder";
+            }
+
             if (zombie.Kind == ZombieKind.Digger)
             {
                 switch (zombie.PresentationNativePhase)
@@ -113,7 +118,8 @@ namespace PlantsVsZombies.Adventure
         internal static bool PlaysOnce(Zombie zombie)
         {
             var phase = zombie.PresentationNativePhase;
-            return AdventurePogoRules.IsBouncing(zombie)
+            return zombie.Kind == ZombieKind.Ladder && zombie.PresentationNativePhase == 77
+                || AdventurePogoRules.IsBouncing(zombie)
                 || zombie.Kind == ZombieKind.Digger && (phase == 35 || phase == 33 && zombie.DiggerState?.PhaseTicks <= 30)
                 || zombie.Kind == ZombieKind.JackInTheBox && phase == 16
                 || zombie.Kind == ZombieKind.Zomboni && zombie.ZomboniState?.FlatTires == true
