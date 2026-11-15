@@ -1,0 +1,14 @@
+{
+  "name": "PlantsVsZombies.Tests.Shared",
+  "rootNamespace": "PlantsVsZombies.Tests.Shared",
+  "references": [
+    "PlantsVsZombies.Runtime"
+  ],
+  "autoReferenced": false,
+  "defineConstraints": [
+    "UNITY_INCLUDE_TESTS"
+  ],
+  "optionalUnityReferences": [
+    "TestAssemblies"
+  ]
+}

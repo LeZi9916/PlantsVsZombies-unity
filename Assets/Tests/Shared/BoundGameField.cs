@@ -2,7 +2,7 @@
 using System;
 using System.Reflection;
 
-namespace PlantsVsZombies.Diagnostics
+namespace PlantsVsZombies.Tests.Shared
 {
     /// <summary>A field of a game session or one of its collaborators, resolved once and addressed without naming its owner.</summary>
     internal sealed class BoundGameField

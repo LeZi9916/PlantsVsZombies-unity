@@ -2,7 +2,7 @@
   "name": "PlantsVsZombies.Tests.PlayMode",
   "rootNamespace": "PlantsVsZombies.Tests.PlayMode",
   "references": [
-    "PlantsVsZombies.Runtime",
+    "PlantsVsZombies.Runtime", "PlantsVsZombies.Tests.Shared",
     "UnityEngine.UI"
   ],
   "autoReferenced": false,

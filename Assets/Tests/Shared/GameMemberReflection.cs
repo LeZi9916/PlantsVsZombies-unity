@@ -4,7 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.Reflection;
 
-namespace PlantsVsZombies.Diagnostics
+namespace PlantsVsZombies.Tests.Shared
 {
     /// <summary>
     /// Reads, writes and invokes named non-public members of a game session for Player smoke scenarios and tests,

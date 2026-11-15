@@ -285,24 +285,6 @@ namespace PlantsVsZombies.Simulation
             _zombieSystem.Connect(_adventureModeRunner, _balloonZombieActions, _biteSystem, _boardEnvironment, _boardQueries, _bobsledZombieActions, _bungeeZombieActions, _combatSystem, _dancerZombieActions, _diggerZombieActions, _gargantuarActions, _jackZombieActions, _ladderSystem, _legacySimulation, _plantTimingSystem, _plantingSystem, _pogoZombieActions, _rewardSystem, _vaultZombieActions, _vehicleZombieActions, _waterZombieActions, _zombieFeedbackSystem, _zombieLifecycle);
             _simulationSession.Initialize(rules, randomSeed);
         }
-        /// <summary>Locates a collaborator for diagnostics without exposing mutable session state.</summary>
-        /// <param name="name">The member to inspect.</param>
-        /// <returns>The unique member owner.</returns>
-        /// <exception cref="ArgumentException">The name does not identify a collaborator member.</exception>
-        internal object MemberOwner(string name)
-        {
-            const System.Reflection.BindingFlags flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic;
-            foreach (var field in typeof(GameSimulation).GetFields(flags))
-            {
-                var owner = field.GetValue(this);
-                if (owner != null && owner.GetType().GetMember(name, flags).Length > 0)
-                {
-                    return owner;
-                }
-            }
-
-            throw new ArgumentException("Unknown simulation member: " + name, nameof(name));
-        }
         /// <summary>Stores rows.</summary>
         public const int Rows = 5;
         /// <summary>Stores columns.</summary>

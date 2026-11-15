@@ -9,13 +9,16 @@ using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
 using UnityEngine;
+using UnityEngine.TestTools;
+using NUnit.Framework;
+using PlantsVsZombies.Tests.Shared;
+using static UnityEngine.Object;
 using System.Diagnostics.CodeAnalysis;
 
-namespace PlantsVsZombies.Diagnostics
+namespace PlantsVsZombies.Tests.PlayMode.Smoke
 {
-    // Only this explicit QA flag creates these isolated scenarios; never touches the selected real profile.
     /// <summary>Defines feedback player smoke.</summary>
-    internal sealed class FeedbackPlayerSmoke : MonoBehaviour
+    public sealed class FeedbackPlayerSmoke : PlayerSmokeFixture
     {
         /// <summary>Stores controller.</summary>
         private PvZGame? _controller;
@@ -96,74 +99,14 @@ namespace PlantsVsZombies.Diagnostics
             }
         }
 
-        /// <summary>Performs on log.</summary>
-        /// <param name = "message">The message.</param>
-        /// <param name = "stack">The stack.</param>
-        /// <param name = "type">The type.</param>
-        private void OnLog(string message, string stack, LogType type)
+        /// <summary>Runs the migrated scenario through the PlayMode Test Runner.</summary>
+        /// <returns>The original scenario's frame, rendering, and audio waits.</returns>
+        [UnityTest]
+        [Timeout(180000)]
+        public IEnumerator RunsScenario()
         {
-            if (type == LogType.Error || type == LogType.Exception || type == LogType.Assert)
-            {
-                _loggedError = message;
-            }
-        }
-
-        /// <summary>Performs on destroy.</summary>
-        private void OnDestroy()
-        {
-            Application.logMessageReceived -= OnLog;
-        }
-
-        /// <summary>Performs bootstrap.</summary>
-        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
-        private static void Bootstrap()
-        {
-            if (Array.IndexOf(Environment.GetCommandLineArgs(), "-pvz-feedback-smoke") >= 0)
-            {
-                new GameObject("Feedback Player smoke").AddComponent<FeedbackPlayerSmoke>();
-            }
-        }
-
-        /// <summary>Performs start.</summary>
-        /// <returns>The resulting start.</returns>
-        private IEnumerator Start()
-        {
-            yield return null;
-            _controller = FindFirstObjectByType<PvZGame>();
-            Application.logMessageReceived += OnLog;
-            var run = Run();
-            while (true)
-            {
-                bool next;
-                try
-                {
-                    next = run.MoveNext();
-                }
-                catch (Exception error)
-                {
-                    Debug.LogError("PVZ_FEEDBACK_SMOKE_FAIL: " + error);
-                    SmokeTestArtifacts.Quit(1);
-                    yield break;
-                }
-
-                if (!next)
-                {
-                    break;
-                }
-
-                yield return run.Current;
-            }
-
-            if (_loggedError != null)
-            {
-                Debug.LogError("PVZ_FEEDBACK_SMOKE_FAIL: " + _loggedError);
-                SmokeTestArtifacts.Quit(1);
-            }
-            else
-            {
-                Debug.Log("PVZ_FEEDBACK_SMOKE_PASS: " + _checks + " focused integration checks");
-                SmokeTestArtifacts.Quit(0);
-            }
+            _controller = Controller;
+            yield return Run();
         }
 
         /// <summary>Performs capture.</summary>
@@ -171,7 +114,7 @@ namespace PlantsVsZombies.Diagnostics
         /// <returns>The resulting capture.</returns>
         private IEnumerator Capture(string name)
         {
-            yield return new WaitForEndOfFrame();
+            yield return SmokeTestArtifacts.WaitForFrame();
             SmokeTestArtifacts.CaptureFrame(Path.Combine(SmokeTestArtifacts.DirectoryPath, name + ".png"));
         }
 

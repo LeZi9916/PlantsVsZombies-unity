@@ -305,14 +305,17 @@ namespace PlantsVsZombies.Game
             Application.targetFrameRate = 60;
             Application.wantsToQuit += CanQuit;
             var arguments = Environment.GetCommandLineArgs();
-            _smokeMode = Array.IndexOf(arguments, "-pvz-combat-fidelity-smoke") >= 0 || Array.IndexOf(arguments, "-pvz-intro-audio-smoke") >= 0 || Array.IndexOf(arguments, "-pvz-feedback-smoke") >= 0 || Array.IndexOf(arguments, "-pvz-progression-smoke") >= 0 || Array.IndexOf(arguments, "-pvz-smoke") >= 0 || Array.IndexOf(arguments, "-pvz-ui-smoke") >= 0 || Array.IndexOf(arguments, "-pvz-first-user-smoke") >= 0 || Array.IndexOf(arguments, "-pvz-level-one-smoke") >= 0 || Array.IndexOf(arguments, "-pvz-level-one-logic-smoke") >= 0 || Array.IndexOf(arguments, "-pvz-ui-logic-smoke") >= 0 || Array.IndexOf(arguments, "-pvz-first-user-logic-smoke") >= 0 || Array.IndexOf(arguments, "-pvz-ui-review") >= 0 || Array.IndexOf(arguments, "-pvz-adventure-smoke") >= 0;
+            _smokeMode = _smokeMode || Array.IndexOf(arguments, "-pvz-ui-review") >= 0;
             if (_smokeMode)
             {
                 Application.runInBackground = true;
             }
 
-            _experimentalLevelOne = Array.IndexOf(arguments, "-pvz-level-one") >= 0 || Array.IndexOf(arguments, "-pvz-level-one-smoke") >= 0 || Array.IndexOf(arguments, "-pvz-level-one-logic-smoke") >= 0;
-            _root = global::PlantsVsZombies.Infrastructure.RuntimeAssetPaths.ResolveRoot(Application.streamingAssetsPath);
+            _experimentalLevelOne = _experimentalLevelOne || Array.IndexOf(arguments, "-pvz-level-one") >= 0;
+            if (string.IsNullOrEmpty(_root))
+            {
+                _root = global::PlantsVsZombies.Infrastructure.RuntimeAssetPaths.ResolveRoot(Application.streamingAssetsPath);
+            }
             _animations = new ReanimationRenderer(_root);
             _selectorView = new SelectorView(_root);
             _optionsView = new OptionsView(_root);

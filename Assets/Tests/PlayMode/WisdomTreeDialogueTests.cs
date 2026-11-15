@@ -11,7 +11,7 @@ using PlantsVsZombies.Progression;
 using PlantsVsZombies.Reanimation;
 using PlantsVsZombies.UI;
 using UnityEngine;
-using PlantsVsZombies.Diagnostics;
+using PlantsVsZombies.Tests.Shared;
 
 namespace PlantsVsZombies.Tests.PlayMode
 {

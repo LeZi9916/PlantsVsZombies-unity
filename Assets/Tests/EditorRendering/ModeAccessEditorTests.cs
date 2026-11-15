@@ -4,7 +4,7 @@ using System.Globalization;
 using System.IO;
 using NUnit.Framework;
 using PlantsVsZombies.Adventure;
-using PlantsVsZombies.Diagnostics;
+using PlantsVsZombies.Tests.Shared;
 using PlantsVsZombies.Editor;
 using PlantsVsZombies.Game;
 using PlantsVsZombies.Modes;

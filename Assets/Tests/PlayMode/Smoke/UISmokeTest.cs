@@ -10,13 +10,19 @@ using System.Collections;
 using System.IO;
 using System.Reflection;
 using UnityEngine;
+using UnityEngine.TestTools;
+using NUnit.Framework;
+using PlantsVsZombies.Tests.Shared;
+using static UnityEngine.Object;
 
-namespace PlantsVsZombies.Diagnostics
+namespace PlantsVsZombies.Tests.PlayMode.Smoke
 {
-    // Enabled only for explicit player smoke tests.
     /// <summary>Defines uismoke test.</summary>
-    internal sealed class UISmokeTest : MonoBehaviour
+    public sealed class UISmokeTest : PlayerSmokeFixture
     {
+        /// <summary>Preserves the original scenario's legacy board selection.</summary>
+        protected override bool LegacyBoard => true;
+
         /// <summary>Stores controller.</summary>
         private PvZGame? _controller;
         /// <summary>Stores click.</summary>
@@ -69,23 +75,53 @@ namespace PlantsVsZombies.Diagnostics
         private string _session = string.Empty;
         /// <summary>Stores logic only.</summary>
         private bool _logicOnly;
-        /// <summary>Performs start if requested.</summary>
-        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
-        private static void StartIfRequested()
+        /// <summary>Starts first-user cases with an empty temporary catalog.</summary>
+        protected override bool FirstUser => TestContext.CurrentContext.Test.MethodName.StartsWith("FirstUser", StringComparison.Ordinal);
+
+        /// <summary>Checks full UI navigation and screenshots.</summary>
+        /// <returns>The original navigation and capture waits.</returns>
+        [UnityTest]
+        [Timeout(180000)]
+        public IEnumerator NavigationVisualScenario()
         {
-            var arguments = Environment.GetCommandLineArgs();
-            if (Array.IndexOf(arguments, "-pvz-ui-smoke") >= 0 || Array.IndexOf(arguments, "-pvz-first-user-smoke") >= 0 || Array.IndexOf(arguments, "-pvz-ui-logic-smoke") >= 0 || Array.IndexOf(arguments, "-pvz-first-user-logic-smoke") >= 0)
-            {
-                new GameObject("UI smoke test").AddComponent<UISmokeTest>();
-            }
+            yield return Run(false, false);
         }
 
-        /// <summary>Performs start.</summary>
-        /// <returns>The resulting start.</returns>
-        private IEnumerator Start()
+        /// <summary>Checks full UI navigation without captures.</summary>
+        /// <returns>The original navigation waits.</returns>
+        [UnityTest]
+        [Timeout(180000)]
+        public IEnumerator NavigationLogicScenario()
+        {
+            yield return Run(false, true);
+        }
+
+        /// <summary>Checks the empty-catalog prompt and first-user creation with a screenshot.</summary>
+        /// <returns>The original dialog and capture waits.</returns>
+        [UnityTest]
+        [Timeout(180000)]
+        public IEnumerator FirstUserVisualScenario()
+        {
+            yield return Run(true, false);
+        }
+
+        /// <summary>Checks the empty-catalog prompt and first-user creation without captures.</summary>
+        /// <returns>The original dialog waits.</returns>
+        [UnityTest]
+        [Timeout(180000)]
+        public IEnumerator FirstUserLogicScenario()
+        {
+            yield return Run(true, true);
+        }
+
+        /// <summary>Checks the original profile and navigation interactions.</summary>
+        /// <param name="firstUser">Whether to inspect only initial profile creation.</param>
+        /// <param name="logicOnly">Whether to omit screenshot checks.</param>
+        /// <returns>The original interaction and capture waits.</returns>
+        private IEnumerator Run(bool firstUser, bool logicOnly)
         {
             yield return null;
-            _controller = FindFirstObjectByType<PvZGame>();
+            _controller = Controller;
             var flags = BindingFlags.Instance | BindingFlags.NonPublic;
             _click = GameMemberReflection.BindMethod(_controller, "HandleClick");
             _viewField = GameMemberReflection.BindField(_controller, "_currentView");
@@ -123,15 +159,14 @@ namespace PlantsVsZombies.Diagnostics
 
             _directory = SmokeTestArtifacts.DirectoryPath;
             _session = DateTime.UtcNow.ToString("yyyyMMddHHmmssfff");
-            var arguments = Environment.GetCommandLineArgs();
-            _logicOnly = Array.IndexOf(arguments, "-pvz-ui-logic-smoke") >= 0 || Array.IndexOf(arguments, "-pvz-first-user-logic-smoke") >= 0;
+            _logicOnly = logicOnly;
             if (!ViewIs("Selector"))
             {
                 Fail("Startup did not open selector");
                 yield break;
             }
 
-            if (Array.IndexOf(arguments, "-pvz-first-user-smoke") >= 0 || Array.IndexOf(arguments, "-pvz-first-user-logic-smoke") >= 0)
+            if (firstUser)
             {
                 var initialDialog = (ProfileDialog)_profileDialogField.GetValue(_controller);
                 var initialProfiles = (ProfileCatalog)_profilesField.GetValue(_controller);
@@ -157,9 +192,7 @@ namespace PlantsVsZombies.Diagnostics
                     yield break;
                 }
 
-                Debug.Log((_logicOnly ? "PVZ_FIRST_USER_LOGIC_SMOKE_PASS" : "PVZ_FIRST_USER_SMOKE_PASS") + ": first-run prompt and isolated profile creation" + (_logicOnly ? "; no screenshot captured" : ""));
-                _controller.RequestQuit(0);
-                yield break;
+                    yield break;
             }
 
             yield return Capture("selector");
@@ -582,8 +615,6 @@ namespace PlantsVsZombies.Diagnostics
                 yield break;
             }
 
-            Debug.Log((_logicOnly ? "PVZ_UI_LOGIC_SMOKE_PASS" : "PVZ_UI_SMOKE_PASS") + ": selector, profiles, help, modes, corrected store/almanac entries, 75 almanac selections, modal options pause/return, options, restart, main menu and quit cancellation" + (_logicOnly ? "; no screenshots captured" : ""));
-            _controller.RequestQuit(0);
         }
 
         /// <summary>Performs capture.</summary>
@@ -596,7 +627,7 @@ namespace PlantsVsZombies.Diagnostics
                 yield break;
             }
 
-            yield return new WaitForEndOfFrame();
+            yield return SmokeTestArtifacts.WaitForFrame();
             var path = ScreenshotPath(name);
             SmokeTestArtifacts.CaptureFrame(path);
             var deadline = Time.realtimeSinceStartup + 10f;
@@ -648,8 +679,7 @@ namespace PlantsVsZombies.Diagnostics
         /// <param name = "message">The message.</param>
         private static void Fail(string message)
         {
-            Debug.LogError("PVZ_UI_SMOKE_FAIL: " + message);
-            SmokeTestArtifacts.Quit(1);
+            Assert.Fail(message);
         }
     }
 }

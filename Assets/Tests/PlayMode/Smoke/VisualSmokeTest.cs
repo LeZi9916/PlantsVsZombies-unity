@@ -8,29 +8,27 @@ using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using UnityEngine;
+using UnityEngine.TestTools;
+using NUnit.Framework;
+using PlantsVsZombies.Tests.Shared;
+using static UnityEngine.Object;
 
-namespace PlantsVsZombies.Diagnostics
+namespace PlantsVsZombies.Tests.PlayMode.Smoke
 {
-    // This runner is enabled only by the explicit -pvz-smoke command-line switch.
     /// <summary>Defines visual smoke test.</summary>
-    internal sealed class VisualSmokeTest : MonoBehaviour
+    public sealed class VisualSmokeTest : PlayerSmokeFixture
     {
-        /// <summary>Performs start if requested.</summary>
-        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
-        private static void StartIfRequested()
-        {
-            if (Array.IndexOf(Environment.GetCommandLineArgs(), "-pvz-smoke") >= 0)
-            {
-                new GameObject("Visual smoke test").AddComponent<VisualSmokeTest>();
-            }
-        }
+        /// <summary>Preserves the original scenario's legacy board selection.</summary>
+        protected override bool LegacyBoard => true;
 
         /// <summary>Performs start.</summary>
         /// <returns>The resulting start.</returns>
-        private IEnumerator Start()
+        [UnityTest]
+        [Timeout(180000)]
+        public IEnumerator RunsScenario()
         {
             yield return null;
-            var controller = FindFirstObjectByType<PvZGame>();
+            var controller = Controller;
             if (controller == null)
             {
                 Fail("Game controller missing");
@@ -65,7 +63,7 @@ namespace PlantsVsZombies.Diagnostics
             click.Invoke(controller, new object[] { new Vector2(500, 105) });
             var deck = (List<PlantKind>)deckField.GetValue(controller);
             click.Invoke(controller, new object[] { new Vector2(620, 23) });
-            yield return new WaitForEndOfFrame();
+            yield return SmokeTestArtifacts.WaitForFrame();
             var chooserPath = Path.Combine(SmokeTestArtifacts.DirectoryPath, "chooser-" + DateTime.UtcNow.ToString("yyyyMMddHHmmssfff") + ".png");
             SmokeTestArtifacts.CaptureFrame(chooserPath);
             yield return null;
@@ -106,9 +104,9 @@ namespace PlantsVsZombies.Diagnostics
             gameField.SetValue(controller, game);
             foreach (Vector2 point in new[]
             {
-                new Vector2(355, 40),
+                controller.Layout.SeedRect(deck.IndexOf(PlantKind.Jalapeno)).center,
                 new Vector2(110, 130),
-                new Vector2(405, 40),
+                controller.Layout.SeedRect(deck.IndexOf(PlantKind.TallNut)).center,
                 new Vector2(110, 230)
             }
 
@@ -131,15 +129,15 @@ namespace PlantsVsZombies.Diagnostics
                 yield break;
             }
 
-            yield return new WaitForEndOfFrame();
+            yield return SmokeTestArtifacts.WaitForFrame();
             var flamePath = Path.Combine(SmokeTestArtifacts.DirectoryPath, "flame-" + DateTime.UtcNow.ToString("yyyyMMddHHmmssfff") + ".png");
             SmokeTestArtifacts.CaptureFrame(flamePath);
             yield return null;
             click.Invoke(controller, new object[] { new Vector2(620, 23) });
             foreach (Vector2 point in new[]
             {
-                new Vector2(288, 269),
-                new Vector2(353, 269),
+                controller.Layout.SeedRect(deck.IndexOf(PlantKind.TallNut)).center,
+                controller.Layout.SeedRect(deck.IndexOf(PlantKind.Jalapeno)).center,
                 new Vector2(223, 185),
                 new Vector2(288, 185),
                 new Vector2(400, 461)
@@ -165,19 +163,19 @@ namespace PlantsVsZombies.Diagnostics
             gameField.SetValue(controller, game);
             Vector2[] clicks =
             {
-                new Vector2(105, 40),
+                controller.Layout.SeedRect(0).center,
                 new Vector2(110, 130),
-                new Vector2(155, 40),
+                controller.Layout.SeedRect(1).center,
                 new Vector2(190, 230),
-                new Vector2(205, 40),
+                controller.Layout.SeedRect(2).center,
                 new Vector2(270, 330),
-                new Vector2(255, 40),
+                controller.Layout.SeedRect(3).center,
                 new Vector2(350, 430),
-                new Vector2(305, 40),
+                controller.Layout.SeedRect(4).center,
                 new Vector2(430, 530),
-                new Vector2(355, 40),
+                controller.Layout.SeedRect(5).center,
                 new Vector2(110, 530),
-                new Vector2(405, 40),
+                controller.Layout.SeedRect(6).center,
                 new Vector2(190, 130)
             };
             foreach (Vector2 point in clicks)
@@ -281,7 +279,7 @@ namespace PlantsVsZombies.Diagnostics
             }
 
             yield return new WaitForSeconds(1f);
-            yield return new WaitForEndOfFrame();
+            yield return SmokeTestArtifacts.WaitForFrame();
             var fileName = "smoke-" + DateTime.UtcNow.ToString("yyyyMMddHHmmssfff") + ".png";
             var path = Path.Combine(SmokeTestArtifacts.DirectoryPath, fileName);
             SmokeTestArtifacts.CaptureFrame(path);
@@ -297,16 +295,13 @@ namespace PlantsVsZombies.Diagnostics
                 yield break;
             }
 
-            Debug.Log("PVZ_SMOKE_PASS: seed chooser, 9 plant types, lane fire, sun, 14 animation assets, 10 effects and music; screenshot=" + path + "; chooser=" + chooserPath + "; flame=" + flamePath);
-            controller.RequestQuit(0);
         }
 
         /// <summary>Performs fail.</summary>
         /// <param name = "message">The message.</param>
         private static void Fail(string message)
         {
-            Debug.LogError("PVZ_SMOKE_FAIL: " + message);
-            SmokeTestArtifacts.Quit(1);
+            Assert.Fail(message);
         }
     }
 }

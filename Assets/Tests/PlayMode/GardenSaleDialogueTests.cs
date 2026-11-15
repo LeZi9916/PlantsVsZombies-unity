@@ -12,7 +12,7 @@ using PlantsVsZombies.Reanimation;
 using PlantsVsZombies.Simulation;
 using PlantsVsZombies.UI;
 using UnityEngine;
-using PlantsVsZombies.Diagnostics;
+using PlantsVsZombies.Tests.Shared;
 
 namespace PlantsVsZombies.Tests.PlayMode
 {

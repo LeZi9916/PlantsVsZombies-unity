@@ -38,13 +38,19 @@ namespace PlantsVsZombies.Adventure
         private string? _adventureLoadError;
         /// <summary>Stores adventure test board.</summary>
         internal bool _adventureTestBoard;
-        /// <summary>Gets or sets use legacy board.</summary>
+        /// <summary>Stores the explicitly configured legacy demo board choice.</summary>
+        private bool _useLegacyBoard;
+        /// <summary>Gets or sets whether selector input opens the legacy demo instead of the campaign.</summary>
         internal bool UseLegacyBoard
         {
             get
             {
                 var args = Environment.GetCommandLineArgs();
-                return _owner._experimentalLevelOne || Array.IndexOf(args, "-pvz-demo") >= 0 || (_owner._smokeMode && Array.IndexOf(args, "-pvz-combat-fidelity-smoke") < 0 && Array.IndexOf(args, "-pvz-intro-audio-smoke") < 0 && Array.IndexOf(args, "-pvz-feedback-smoke") < 0 && Array.IndexOf(args, "-pvz-progression-smoke") < 0 && Array.IndexOf(args, "-pvz-adventure-smoke") < 0 && Array.IndexOf(args, "-pvz-ui-review") < 0);
+                return _useLegacyBoard || _owner._experimentalLevelOne || Array.IndexOf(args, "-pvz-demo") >= 0;
+            }
+            set
+            {
+                _useLegacyBoard = value;
             }
         }
 

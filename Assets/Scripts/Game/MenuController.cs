@@ -32,12 +32,11 @@ namespace PlantsVsZombies.Game
         {
             try
             {
-                var arguments = Environment.GetCommandLineArgs();
-                var firstUserSmoke = Array.IndexOf(arguments, "-pvz-first-user-smoke") >= 0 || Array.IndexOf(arguments, "-pvz-first-user-logic-smoke") >= 0;
+                var suppliedCatalog = _owner._profiles != null;
                 var path = _owner._smokeMode ? Path.Combine(Application.temporaryCachePath, "pvz-smoke-" + Guid.NewGuid().ToString("N") + ".dat") : Path.Combine(Application.persistentDataPath, "profiles.dat");
-                _owner._profiles = new ProfileCatalog(path);
+                _owner._profiles ??= new ProfileCatalog(path);
                 _owner._profileDialog = new ProfileDialog(_owner._root, _owner._profiles);
-                if (_owner._smokeMode && !firstUserSmoke)
+                if (_owner._smokeMode && !suppliedCatalog)
                 {
                     _owner._profiles.Create("自动测试");
                 }

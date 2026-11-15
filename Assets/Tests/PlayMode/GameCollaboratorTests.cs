@@ -1,6 +1,6 @@
 #nullable enable
 using NUnit.Framework;
-using PlantsVsZombies.Diagnostics;
+using PlantsVsZombies.Tests.Shared;
 using PlantsVsZombies.Game;
 using PlantsVsZombies.Audio;
 using PlantsVsZombies.Reanimation;

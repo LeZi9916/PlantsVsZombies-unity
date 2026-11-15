@@ -8,7 +8,7 @@ using PlantsVsZombies.Audio;
 using PlantsVsZombies.Game;
 using UnityEngine;
 using UnityEngine.TestTools;
-using PlantsVsZombies.Diagnostics;
+using PlantsVsZombies.Tests.Shared;
 
 namespace PlantsVsZombies.Tests.PlayMode
 {

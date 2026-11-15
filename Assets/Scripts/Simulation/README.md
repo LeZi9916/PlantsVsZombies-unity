@@ -99,6 +99,10 @@ clock stopping, nested scratch buffers, read-only queries, and warmed allocation
 checks the real draw path. Existing species tests retain their assertions and use
 explicit fixture synchronization when they deliberately change action state.
 
+Mutable fixture access, simulation inspection, and the `MemberOwner` extension
+now live in the test-only `Assets/Tests/Shared/Simulation` assembly sources.
+Standalone test projects include those helpers through `SimulationSources.props`.
+
 Run Unity tests through `Tools/Tests/Run-UnityTests.ps1` with Unity 7000.0.0a16.
 `Tools/Tests/SimulationParityTests` compares compiled baseline and current pure
 simulation assemblies, including native state and random snapshots. These checks

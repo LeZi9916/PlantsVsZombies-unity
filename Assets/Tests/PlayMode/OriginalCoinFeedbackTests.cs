@@ -12,7 +12,7 @@ using System.IO;
 using UnityEngine;
 using UnityEngine.Networking;
 using UnityEngine.TestTools;
-using PlantsVsZombies.Diagnostics;
+using PlantsVsZombies.Tests.Shared;
 
 namespace PlantsVsZombies.Tests.PlayMode
 {

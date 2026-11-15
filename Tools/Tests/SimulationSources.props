@@ -2,6 +2,7 @@
   <!-- Shared source boundary for the Unity-independent simulation regression suites. -->
   <ItemGroup>
     <Compile Include="$(MSBuildThisFileDirectory)../../Assets/Scripts/Simulation/**/*.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)../../Assets/Tests/Shared/Simulation/**/*.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)../../Assets/Scripts/Adventure/**/*.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)../../Assets/Scripts/BoardUI/**/*.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)../../Assets/Scripts/Levels/**/*.cs" />

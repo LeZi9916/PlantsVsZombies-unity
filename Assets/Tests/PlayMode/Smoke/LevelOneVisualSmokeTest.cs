@@ -7,30 +7,44 @@ using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using UnityEngine;
+using UnityEngine.TestTools;
+using NUnit.Framework;
+using PlantsVsZombies.Tests.Shared;
+using static UnityEngine.Object;
 
-namespace PlantsVsZombies.Diagnostics
+namespace PlantsVsZombies.Tests.PlayMode.Smoke
 {
-    // Only enabled by the explicit isolated Player smoke-test switch.
     /// <summary>Defines level one visual smoke test.</summary>
-    internal sealed class LevelOneVisualSmokeTest : MonoBehaviour
+    public sealed class LevelOneVisualSmokeTest : PlayerSmokeFixture
     {
-        /// <summary>Performs start if requested.</summary>
-        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
-        private static void StartIfRequested()
+        /// <summary>Uses the experimental single-row board for both migrated cases.</summary>
+        protected override bool ExperimentalLevelOne => true;
+
+        /// <summary>Checks the original single-row scenario with captured frames.</summary>
+        /// <returns>The original interaction and capture waits.</returns>
+        [UnityTest]
+        [Timeout(180000)]
+        public IEnumerator VisualScenario()
         {
-            var arguments = Environment.GetCommandLineArgs();
-            if (Array.IndexOf(arguments, "-pvz-level-one-smoke") >= 0 || Array.IndexOf(arguments, "-pvz-level-one-logic-smoke") >= 0)
-            {
-                new GameObject("Level one smoke test").AddComponent<LevelOneVisualSmokeTest>();
-            }
+            yield return Run(false);
         }
 
-        /// <summary>Performs start.</summary>
-        /// <returns>The resulting start.</returns>
-        private IEnumerator Start()
+        /// <summary>Checks the original single-row scenario without captures.</summary>
+        /// <returns>The original interaction waits.</returns>
+        [UnityTest]
+        [Timeout(180000)]
+        public IEnumerator LogicScenario()
+        {
+            yield return Run(true);
+        }
+
+        /// <summary>Checks the original single-row tutorial interactions.</summary>
+        /// <param name="logicOnly">Whether to omit screenshot checks.</param>
+        /// <returns>The original interaction and capture waits.</returns>
+        private IEnumerator Run(bool logicOnly)
         {
             yield return null;
-            var controller = FindFirstObjectByType<PvZGame>();
+            var controller = Controller;
             if (controller == null)
             {
                 Fail("controller missing");
@@ -51,11 +65,9 @@ namespace PlantsVsZombies.Diagnostics
 
             var gameField = GameMemberReflection.BindField(controller, "_game");
             var deckField = GameMemberReflection.BindField(controller, "_deck");
-            var texturesField = GameMemberReflection.BindField(controller, "_textures");
             var click = GameMemberReflection.BindMethod(controller, "HandleClick");
-            var loadTexture = GameMemberReflection.BindMethod(controller, "Load");
             var cancelSelection = GameMemberReflection.BindMethod(controller, "CancelBoardSelection");
-            if (gameField == null || deckField == null || texturesField == null || click == null || loadTexture == null || cancelSelection == null)
+            if (gameField == null || deckField == null || click == null || cancelSelection == null)
             {
                 Fail("controller fields unavailable");
                 yield break;
@@ -71,20 +83,18 @@ namespace PlantsVsZombies.Diagnostics
             }
 
             game.Update(0.02f);
-            var logicOnly = Array.IndexOf(Environment.GetCommandLineArgs(), "-pvz-level-one-logic-smoke") >= 0;
             if (logicOnly)
             {
-                loadTexture.Invoke(controller, new object[] { "background1unsodded.jpg" });
-                loadTexture.Invoke(controller, new object[] { "sod1row.png" });
+                controller.Textures.LoadImage("background1unsodded.jpg");
+                controller.Textures.LoadImage("sod1row.png");
             }
             else
             {
-                yield return new WaitForEndOfFrame();
+                yield return SmokeTestArtifacts.WaitForFrame();
             }
 
-            var textures = (Dictionary<string, Texture2D>)texturesField.GetValue(controller);
-            Texture2D background, grass;
-            if (!textures.TryGetValue("background1unsodded.jpg", out background) || background == null || !textures.TryGetValue("sod1row.png", out grass) || grass == null)
+            if (!SpriteSourceTestUtilities.TryGetImage(controller.Textures, "background1unsodded.jpg", out var background) || background == null
+                || !SpriteSourceTestUtilities.TryGetImage(controller.Textures, "sod1row.png", out var grass) || grass == null)
             {
                 Fail("single-row board images were not loaded");
                 yield break;
@@ -213,16 +223,13 @@ namespace PlantsVsZombies.Diagnostics
                 yield break;
             }
 
-            Debug.Log((logicOnly ? "PVZ_LEVEL_ONE_LOGIC_SMOKE_PASS" : "PVZ_LEVEL_ONE_SMOKE_PASS") + ": single-row image loading, seed cancellation, planting, sun, tutorial gate and first wave; screenshot=" + (screenshot ?? "not captured"));
-            controller.RequestQuit(0);
         }
 
         /// <summary>Performs fail.</summary>
         /// <param name = "message">The message.</param>
         private static void Fail(string message)
         {
-            Debug.LogError("PVZ_LEVEL_ONE_SMOKE_FAIL: " + message);
-            SmokeTestArtifacts.Quit(1);
+            Assert.Fail(message);
         }
     }
 }

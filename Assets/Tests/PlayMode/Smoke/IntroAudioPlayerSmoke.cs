@@ -10,14 +10,20 @@ using System.Collections;
 using System.IO;
 using System.Reflection;
 using UnityEngine;
+using UnityEngine.TestTools;
+using NUnit.Framework;
+using PlantsVsZombies.Tests.Shared;
+using static UnityEngine.Object;
 using System.Diagnostics.CodeAnalysis;
 
-namespace PlantsVsZombies.Diagnostics
+namespace PlantsVsZombies.Tests.PlayMode.Smoke
 {
-    // Explicit isolated opening/audio/card inspection. Normal player never creates these fixtures.
     /// <summary>Defines intro audio player smoke.</summary>
-    internal sealed class IntroAudioPlayerSmoke : MonoBehaviour
+    public sealed class IntroAudioPlayerSmoke : PlayerSmokeFixture
     {
+        /// <summary>Preserves the complete original opening inspected by this scenario.</summary>
+        protected override bool PlayOpening => true;
+
         /// <summary>Stores controller.</summary>
         private PvZGame? _controller;
 
@@ -26,8 +32,6 @@ namespace PlantsVsZombies.Diagnostics
         private PvZGame RequiredController => _controller ?? throw new System.InvalidOperationException("The member '_controller' is not available.");
         /// <summary>Stores checks.</summary>
         private int _checks;
-        /// <summary>Stores error log.</summary>
-        private string? _errorLog;
         /// <summary>Stores private.</summary>
         private const BindingFlags Private = BindingFlags.Instance | BindingFlags.NonPublic;
         /// <summary>Performs field.</summary>
@@ -89,74 +93,14 @@ namespace PlantsVsZombies.Diagnostics
             }
         }
 
-        /// <summary>Performs on log.</summary>
-        /// <param name = "message">The message.</param>
-        /// <param name = "stack">The stack.</param>
-        /// <param name = "type">The type.</param>
-        private void OnLog(string message, string stack, LogType type)
+        /// <summary>Runs the migrated scenario through the PlayMode Test Runner.</summary>
+        /// <returns>The original scenario's frame, rendering, and audio waits.</returns>
+        [UnityTest]
+        [Timeout(180000)]
+        public IEnumerator RunsScenario()
         {
-            if (type == LogType.Error || type == LogType.Exception || type == LogType.Assert)
-            {
-                _errorLog = message;
-            }
-        }
-
-        /// <summary>Performs on destroy.</summary>
-        private void OnDestroy()
-        {
-            Application.logMessageReceived -= OnLog;
-        }
-
-        /// <summary>Performs bootstrap.</summary>
-        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
-        private static void Bootstrap()
-        {
-            if (Array.IndexOf(Environment.GetCommandLineArgs(), "-pvz-intro-audio-smoke") >= 0)
-            {
-                new GameObject("Opening audio inspection").AddComponent<IntroAudioPlayerSmoke>();
-            }
-        }
-
-        /// <summary>Performs start.</summary>
-        /// <returns>The resulting start.</returns>
-        private IEnumerator Start()
-        {
-            yield return null;
-            _controller = FindFirstObjectByType<PvZGame>();
-            Application.logMessageReceived += OnLog;
-            var run = Run();
-            while (true)
-            {
-                bool more;
-                try
-                {
-                    more = run.MoveNext();
-                }
-                catch (Exception error)
-                {
-                    Debug.LogError("PVZ_INTRO_AUDIO_FAIL: " + error);
-                    SmokeTestArtifacts.Quit(1);
-                    yield break;
-                }
-
-                if (!more)
-                {
-                    break;
-                }
-
-                yield return run.Current;
-            }
-
-            if (_errorLog != null)
-            {
-                Debug.LogError("PVZ_INTRO_AUDIO_FAIL: " + _errorLog);
-                SmokeTestArtifacts.Quit(1);
-            }
-            else
-            {
-                Debug.Log("PVZ_INTRO_AUDIO_PASS: " + _checks + " focused host checks");
-                SmokeTestArtifacts.Quit(0);
-            }
+            _controller = Controller;
+            yield return Run();
         }
 
         /// <summary>Performs capture.</summary>
@@ -164,7 +108,7 @@ namespace PlantsVsZombies.Diagnostics
         /// <returns>The resulting capture.</returns>
         private IEnumerator Capture(string name)
         {
-            yield return new WaitForEndOfFrame();
+            yield return SmokeTestArtifacts.WaitForFrame();
             SmokeTestArtifacts.CaptureFrame(Path.Combine(SmokeTestArtifacts.DirectoryPath, name + ".png"));
         }
 
@@ -368,7 +312,6 @@ namespace PlantsVsZombies.Diagnostics
 
             Check(transparentPixels > inkPixels.Length / 2 && blackInkPixels > 100,
                 "Original note glyphs are not black ink over a transparent alpha grid");
-            Check(_errorLog == null, "Player logged an error");
         }
     }
 }

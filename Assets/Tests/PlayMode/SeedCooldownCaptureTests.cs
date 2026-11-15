@@ -6,7 +6,7 @@ using System.IO;
 using System.Reflection;
 using NUnit.Framework;
 using PlantsVsZombies.Adventure;
-using PlantsVsZombies.Diagnostics;
+using PlantsVsZombies.Tests.Shared;
 using PlantsVsZombies.Game;
 using PlantsVsZombies.Reanimation;
 using PlantsVsZombies.Rendering;

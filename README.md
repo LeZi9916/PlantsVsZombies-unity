@@ -38,10 +38,9 @@ python3 -B Tools/PrepareRuntimeAssets.py \
 | `Assets/Scripts/Rendering` | 自定义渲染管线（`Pipeline/`）、相机、对象池、MeshRenderer 和渲染资源生命周期 |
 | `Assets/Scripts/Reanimation` | 原版动画解析、采样与渲染命令生成 |
 | `Assets/Scripts/UI` | Canvas 界面、独立输入路由及位图字体 |
-| `Assets/Scripts/Diagnostics` | 显式命令行触发的冒烟验证组件 |
 | `Assets/Scripts/VerifiedData` | 原版静态数据模型、只读目录与可重生成的数据表 |
 | `Assets/Editor` | 场景、构建、资源导入与渲染管线配置工具 |
-| `Assets/Tests` | Unity EditMode 与 PlayMode 回归 |
+| `Assets/Tests` | Unity Test Runner 的 EditMode、PlayMode 回归与冒烟场景 |
 | `Tools/CSharp` | 独立 C# 开发工具 |
 | `Tools/Tests` | 独立验证项目与隔离 Unity 测试脚本 |
 

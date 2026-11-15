@@ -11,14 +11,20 @@ using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
 using UnityEngine;
+using UnityEngine.TestTools;
+using NUnit.Framework;
+using PlantsVsZombies.Tests.Shared;
+using static UnityEngine.Object;
 using System.Diagnostics.CodeAnalysis;
 
-namespace PlantsVsZombies.Diagnostics
+namespace PlantsVsZombies.Tests.PlayMode.Smoke
 {
-    // This one explicitly requested QA switch creates disposable profiles and uses the actual Canvas and Player audio.
     /// <summary>Defines combat fidelity player smoke.</summary>
-    internal sealed class CombatFidelityPlayerSmoke : MonoBehaviour
+    public sealed class CombatFidelityPlayerSmoke : PlayerSmokeFixture
     {
+        /// <summary>Keeps the loading presentation visible until the scenario explicitly completes it.</summary>
+        protected override bool ShowLoading => TestContext.CurrentContext.Test.MethodName == nameof(RunsLoadingScenario);
+
         /// <summary>Stores private.</summary>
         private const BindingFlags Private = BindingFlags.Instance | BindingFlags.NonPublic;
         /// <summary>Stores controller.</summary>
@@ -27,8 +33,6 @@ namespace PlantsVsZombies.Diagnostics
         /// <summary>Gets the controller, which must already exist wherever it is used.</summary>
         /// <exception cref="System.InvalidOperationException">The member is not available.</exception>
         private PvZGame RequiredController => _controller ?? throw new System.InvalidOperationException("The member '_controller' is not available.");
-        /// <summary>Stores error log.</summary>
-        private string? _errorLog;
         /// <summary>Stores checks.</summary>
         private int _checks;
         /// <summary>Stores observations.</summary>
@@ -44,6 +48,15 @@ namespace PlantsVsZombies.Diagnostics
             }
         }
 
+        /// <summary>Resets accumulated observations because NUnit reuses this fixture for both cases.</summary>
+        [SetUp]
+        public void ResetScenario()
+        {
+            _checks = 0;
+            _observations.Clear();
+            _deferredFailures.Clear();
+        }
+
         /// <summary>Performs field.</summary>
         /// <param name = "name">The name.</param>
         /// <returns>The resulting field.</returns>
@@ -57,6 +70,26 @@ namespace PlantsVsZombies.Diagnostics
 
             var presenter = GameMemberReflection.GetField(RequiredController, "_presenter");
             return presenter.GetType().GetField(name, Private).GetValue(presenter);
+        }
+
+        /// <summary>Checks actual leased voices in the current pooled audio implementation.</summary>
+        /// <param name="group">The original Foley category, or minus one for the separate juicy voice.</param>
+        /// <param name="clip">An optional exact recording required for this check.</param>
+        /// <returns>Whether a matching production source is currently playing.</returns>
+        private bool IsVoicePlaying(int group, AudioClip? clip = null)
+        {
+            var pool = RequiredController.Sounds._soundVoices;
+            var flags = BindingFlags.Instance | BindingFlags.NonPublic;
+            var voices = (AudioSource[])pool.GetType().GetField("_voices", flags)!.GetValue(pool)!;
+            var groups = (int[])pool.GetType().GetField("_groups", flags)!.GetValue(pool)!;
+            for (var index = 0; index < voices.Length; index++)
+            {
+                if (groups[index] == group && voices[index].isPlaying && (clip == null || voices[index].clip == clip))
+                {
+                    return true;
+                }
+            }
+            return false;
         }
 
         /// <summary>Performs set.</summary>
@@ -142,24 +175,6 @@ namespace PlantsVsZombies.Diagnostics
             }
         }
 
-        /// <summary>Performs on log.</summary>
-        /// <param name = "message">The message.</param>
-        /// <param name = "stack">The stack.</param>
-        /// <param name = "type">The type.</param>
-        private void OnLog(string message, string stack, LogType type)
-        {
-            if (type == LogType.Error || type == LogType.Exception || type == LogType.Assert)
-            {
-                _errorLog = message;
-            }
-        }
-
-        /// <summary>Performs on destroy.</summary>
-        private void OnDestroy()
-        {
-            Application.logMessageReceived -= OnLog;
-        }
-
         /// <summary>Performs move pointer.</summary>
         /// <param name = "logical">The logical.</param>
         private void MovePointer(Vector2 logical)
@@ -167,63 +182,28 @@ namespace PlantsVsZombies.Diagnostics
             Set("_smokePointer", (Vector2? )logical);
         }
 
-        /// <summary>Performs bootstrap.</summary>
-        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
-        private static void Bootstrap()
+        /// <summary>Runs the migrated scenario through the PlayMode Test Runner.</summary>
+        /// <returns>The original scenario's frame, rendering, and audio waits.</returns>
+        [UnityTest]
+        [Timeout(180000)]
+        public IEnumerator RunsScenario()
         {
-            if (Array.IndexOf(Environment.GetCommandLineArgs(), "-pvz-combat-fidelity-smoke") >= 0)
-            {
-                new GameObject("Combat fidelity Player scenario").AddComponent<CombatFidelityPlayerSmoke>();
-            }
+            _controller = Controller;
+            yield return Run(false);
+            File.WriteAllLines(Path.Combine(SmokeTestArtifacts.DirectoryPath, "observations.txt"), _observations);
+            Assert.That(_deferredFailures, Is.Empty, string.Join("; ", _deferredFailures));
         }
 
-        /// <summary>Performs start.</summary>
-        /// <returns>The resulting start.</returns>
-        private IEnumerator Start()
+        /// <summary>Includes the original optional loading-art inspection in the scenario.</summary>
+        /// <returns>The loading, interaction, capture, and audio waits.</returns>
+        [UnityTest]
+        [Timeout(180000)]
+        public IEnumerator RunsLoadingScenario()
         {
-            yield return null;
-            _controller = FindFirstObjectByType<PvZGame>();
-            Application.logMessageReceived += OnLog;
-            var run = Run();
-            while (true)
-            {
-                bool next;
-                try
-                {
-                    next = run.MoveNext();
-                }
-                catch (Exception error)
-                {
-                    Debug.LogError("PVZ_COMBAT_FIDELITY_FAIL: " + error);
-                    SmokeTestArtifacts.Quit(1);
-                    yield break;
-                }
-
-                if (!next)
-                {
-                    break;
-                }
-
-                yield return run.Current;
-            }
-
-            if (_errorLog != null)
-            {
-                Debug.LogError("PVZ_COMBAT_FIDELITY_FAIL: " + _errorLog);
-                SmokeTestArtifacts.Quit(1);
-                yield break;
-            }
-
+            _controller = Controller;
+            yield return Run(true);
             File.WriteAllLines(Path.Combine(SmokeTestArtifacts.DirectoryPath, "observations.txt"), _observations);
-            if (_deferredFailures.Count > 0)
-            {
-                Debug.LogError("PVZ_COMBAT_FIDELITY_FAIL: " + string.Join("; ", _deferredFailures));
-                SmokeTestArtifacts.Quit(1);
-                yield break;
-            }
-
-            Debug.Log("PVZ_COMBAT_FIDELITY_PASS: " + _checks + " focused actual Player checks");
-            SmokeTestArtifacts.Quit(0);
+            Assert.That(_deferredFailures, Is.Empty, string.Join("; ", _deferredFailures));
         }
 
         /// <summary>Performs capture.</summary>
@@ -231,15 +211,16 @@ namespace PlantsVsZombies.Diagnostics
         /// <returns>The resulting capture.</returns>
         private IEnumerator Capture(string name)
         {
-            yield return new WaitForEndOfFrame();
+            yield return SmokeTestArtifacts.WaitForFrame();
             SmokeTestArtifacts.CaptureFrame(Path.Combine(SmokeTestArtifacts.DirectoryPath, name + ".png"));
         }
 
-        /// <summary>Performs run.</summary>
-        /// <returns>The resulting run.</returns>
-        private IEnumerator Run()
+        /// <summary>Checks the original combat, feedback, and audio scenario.</summary>
+        /// <param name="showLoading">Whether to include loading-art captures before combat.</param>
+        /// <returns>The original interaction, capture, and audio waits.</returns>
+        private IEnumerator Run(bool showLoading)
         {
-            if (Array.IndexOf(Environment.GetCommandLineArgs(), "-pvz-show-loading") >= 0)
+            if (showLoading)
             {
                 MovePointer(new Vector2(780, 580));
                 bool entry = false, partial = false, flowers = false, complete = false;
@@ -570,8 +551,7 @@ namespace PlantsVsZombies.Diagnostics
             Check(cherry.RequiredCherryBombPresentation.Detonated && !Sim.Plants.Contains(cherry) && !Sim.Zombies.Contains(cherryVictim), "Native Cherry fuse did not detonate and apply its actual blast");
             yield return new WaitForSecondsRealtime(.08f);
             yield return Capture("20-original-cherry-explosion");
-            var juicy = (List<AudioSource>)Field("_adventureCherryJuicyVoices");
-            Check(juicy.Exists(v => v != null && v.isPlaying), "Original juicy voice was not played on actual detonation");
+            Check(IsVoicePlaying(-1, RequiredController.Sounds._presentationSounds["juicy"]), "Original juicy voice was not played on actual detonation");
             _observations.Add("Actual Cherry placement played anim_explode and reverse_explosion PCM; native fuse detonated once and started its separate juicy voice.");
             Check(Sim.Presentation.Explosions.Exists(e => e.Effect == AdventureExplosionEffect.Powie), "Cherry blast omitted its native Powie effect creation");
             SimulationFixture.Zombies(Sim).Clear();
@@ -606,14 +586,20 @@ namespace PlantsVsZombies.Diagnostics
             Sim.Presentation.Explosions.Clear();
             var doom = (Plant)SimCall("PlaceAdventurePlant", PlantKind.DoomShroom, 1, 3);
             doom.Asleep = false;
-            doom.ActionTimer = .01f;
-            Sim.Update(.03f);
+            deadline = Time.unscaledTime + 2f;
+            while (Sim.Plants.Contains(doom) && Time.unscaledTime < deadline)
+            {
+                yield return null;
+            }
             Check(Sim.Presentation.Explosions.Exists(e => e.Effect == AdventureExplosionEffect.Doom), "Doom special omitted its native Doom effect");
             yield return Capture("26-native-doom-explosion");
             Sim.Presentation.Explosions.Clear();
             var jalapeno = (Plant)SimCall("PlaceAdventurePlant", PlantKind.Jalapeno, 2, 3);
-            jalapeno.ActionTimer = .01f;
-            Sim.Update(.03f);
+            deadline = Time.unscaledTime + 2f;
+            while (Sim.Plants.Contains(jalapeno) && Time.unscaledTime < deadline)
+            {
+                yield return null;
+            }
             Check(Sim.Presentation.JalapenoFires.Exists(f => f.Row == 2 && f.Flames.Count == 12), "Native row burn did not create twelve original fire actors");
             yield return Capture("27-native-jalapeno-twelve-flames");
             _observations.Add("Mine used original buried/rise/armed rendering, accelerated its light for nearer zombie bounds, and created its ordinary-death explosion; Cherry, Doom and twelve native Jalapeno fire actors reached actual drawing.");
@@ -710,8 +696,7 @@ namespace PlantsVsZombies.Diagnostics
 
             Check(bitten.PresentationEatenFlashTicks > 0 && Sim.Presentation.ZombieSounds.Exists(s => s.Foley == 6), "Original chew phase did not request plant hit feedback and soft chomp");
             yield return Capture("32-native-chew-and-plant-hit-additive");
-            var foleyVoices = (Dictionary<int, List<AudioSource>>)Field("_zombieFoleyInstances");
-            Check(foleyVoices.ContainsKey(6) && foleyVoices[6].Exists(v => v != null && v.isPlaying), "Chew sound never reached an actual Player voice");
+            Check(IsVoicePlaying(6), "Chew sound never reached an actual Player voice");
             SimCall("HitAdventureZombie", chewing, 200f, false);
             float heldX = chewing.X, heldHealth = bitten.Health;
             Sim.Update(.2f);
@@ -741,7 +726,7 @@ namespace PlantsVsZombies.Diagnostics
             Check(Sim.Presentation.IceLaunchSoundSerial == 1 && Sim.Presentation.SnowTrails.Count == 1, "Real Snow Pea release did not create its original launch event and attached trail");
             snowShooter.ActionTimer = 100000f;
             yield return null;
-            Check(foleyVoices.ContainsKey(3) && foleyVoices[3].Exists(v => v != null && v.isPlaying) && foleyVoices.ContainsKey(27) && foleyVoices[27].Exists(v => v != null && v.isPlaying), "Original Snow Pea launch Foley did not reach actual Player voices");
+            Check(IsVoicePlaying(3) && IsVoicePlaying(27), "Original Snow Pea launch Foley did not reach actual Player voices");
             yield return new WaitForSecondsRealtime(.2f);
             yield return Capture("34-native-snow-pea-trail");
             deadline = Time.unscaledTime + 3f;
@@ -752,7 +737,7 @@ namespace PlantsVsZombies.Diagnostics
 
             Check(snowTarget.ChillRemaining > 9f && Sim.Presentation.ChillOnsetSoundSerial == 1 && Sim.Presentation.Impacts.Exists(i => i.Snow && i.Kind == PlantKind.SnowPea && i.NativeIcePoint), "Snow projectile hit omitted its native chill onset or distinct attached splat");
             yield return null;
-            Check(foleyVoices.ContainsKey(18) && foleyVoices[18].Exists(v => v != null && v.isPlaying), "First cold onset did not play its original frozen Foley");
+            Check(IsVoicePlaying(18), "First cold onset did not play its original frozen Foley");
             yield return Capture("35-native-snow-pea-splat-and-chill");
             var coldSounds = Sim.Presentation.ChillOnsetSoundSerial;
             Sim.ApplyAdventureChill(snowTarget);
@@ -766,6 +751,7 @@ namespace PlantsVsZombies.Diagnostics
             Sim.Presentation.Impacts.Clear();
             Sim.Presentation.SnowTrails.Clear();
             var winter = (Plant)SimCall("PlaceAdventurePlant", PlantKind.WinterMelon, 1, 1);
+            winter.Timing = global::PlantsVsZombies.Timing.PlantTiming.FromRaw(global::PlantsVsZombies.Timing.PlantKind.WinterMelon, 1, 0);
             winter.ActionTimer = .01f;
             var winterTarget = (Zombie)SimCall("SpawnAdventureZombie", ZombieKind.Normal, 1, 6.5f, 0);
             var winterSplash = (Zombie)SimCall("SpawnAdventureZombie", ZombieKind.Normal, 2, 6.5f, 0);
@@ -848,7 +834,6 @@ namespace PlantsVsZombies.Diagnostics
             Call("HandleClick", new Vector2(402, 566));
             Check(Sim.Adventure.Level.Number == 2, "Original introduction next button did not advance the saved campaign");
             _observations.Add("Native Award.xml rendered without resource errors; original introduction music and counter180 controls reached actual Player.");
-            Check(_errorLog == null, "Player logged an error");
         }
     }
 }

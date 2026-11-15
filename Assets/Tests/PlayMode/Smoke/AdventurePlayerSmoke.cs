@@ -9,13 +9,16 @@ using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
 using UnityEngine;
+using UnityEngine.TestTools;
+using NUnit.Framework;
+using PlantsVsZombies.Tests.Shared;
+using static UnityEngine.Object;
 using System.Diagnostics.CodeAnalysis;
 
-namespace PlantsVsZombies.Diagnostics
+namespace PlantsVsZombies.Tests.PlayMode.Smoke
 {
-    // Runs only in an explicitly requested, isolated Player smoke session.
     /// <summary>Defines adventure player smoke.</summary>
-    internal sealed class AdventurePlayerSmoke : MonoBehaviour
+    public sealed class AdventurePlayerSmoke : PlayerSmokeFixture
     {
         /// <summary>Stores controller.</summary>
         private PvZGame? _controller;
@@ -25,8 +28,6 @@ namespace PlantsVsZombies.Diagnostics
         private PvZGame RequiredController => _controller ?? throw new System.InvalidOperationException("The member '_controller' is not available.");
         /// <summary>Stores checks.</summary>
         private int _checks;
-        /// <summary>Stores log error.</summary>
-        private string? _logError;
         /// <summary>Stores private.</summary>
         private const BindingFlags Private = BindingFlags.Instance | BindingFlags.NonPublic;
         /// <summary>Gets or sets sim.</summary>
@@ -89,74 +90,14 @@ namespace PlantsVsZombies.Diagnostics
             }
         }
 
-        /// <summary>Performs start if requested.</summary>
-        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
-        private static void StartIfRequested()
+        /// <summary>Runs the migrated scenario through the PlayMode Test Runner.</summary>
+        /// <returns>The original scenario's frame, rendering, and audio waits.</returns>
+        [UnityTest]
+        [Timeout(180000)]
+        public IEnumerator RunsScenario()
         {
-            if (Array.IndexOf(Environment.GetCommandLineArgs(), "-pvz-adventure-smoke") >= 0)
-            {
-                new GameObject("Adventure Player smoke").AddComponent<AdventurePlayerSmoke>();
-            }
-        }
-
-        /// <summary>Performs start.</summary>
-        /// <returns>The resulting start.</returns>
-        private IEnumerator Start()
-        {
-            yield return null;
-            _controller = FindFirstObjectByType<PvZGame>();
-            Application.logMessageReceived += OnLog;
-            var steps = Run();
-            while (true)
-            {
-                bool next;
-                try
-                {
-                    next = steps.MoveNext();
-                }
-                catch (Exception error)
-                {
-                    Debug.LogError("PVZ_ADVENTURE_SMOKE_FAIL: " + error);
-                    SmokeTestArtifacts.Quit(1);
-                    yield break;
-                }
-
-                if (!next)
-                {
-                    break;
-                }
-
-                yield return steps.Current;
-            }
-
-            if (_logError != null)
-            {
-                Debug.LogError("PVZ_ADVENTURE_SMOKE_FAIL: Player logged " + _logError);
-                SmokeTestArtifacts.Quit(1);
-            }
-            else
-            {
-                Debug.Log("PVZ_ADVENTURE_SMOKE_PASS: " + _checks + " host/campaign/input checks; 22 visible screenshots.");
-                SmokeTestArtifacts.Quit(0);
-            }
-        }
-
-        /// <summary>Performs on log.</summary>
-        /// <param name = "message">The message.</param>
-        /// <param name = "stack">The stack.</param>
-        /// <param name = "type">The type.</param>
-        private void OnLog(string message, string stack, LogType type)
-        {
-            if (type == LogType.Error || type == LogType.Exception || type == LogType.Assert)
-            {
-                _logError = message;
-            }
-        }
-
-        /// <summary>Performs on destroy.</summary>
-        private void OnDestroy()
-        {
-            Application.logMessageReceived -= OnLog;
+            _controller = Controller;
+            yield return Run();
         }
 
         /// <summary>Performs capture.</summary>
@@ -164,10 +105,8 @@ namespace PlantsVsZombies.Diagnostics
         /// <returns>The resulting capture.</returns>
         private IEnumerator Capture(string name)
         {
-            yield return new WaitForEndOfFrame();
-            var image = ScreenCapture.CaptureScreenshotAsTexture();
-            File.WriteAllBytes(Path.Combine(SmokeTestArtifacts.DirectoryPath, name + ".png"), image.EncodeToPNG());
-            Destroy(image);
+            yield return SmokeTestArtifacts.WaitForFrame();
+            SmokeTestArtifacts.CaptureFrame(Path.Combine(SmokeTestArtifacts.DirectoryPath, name + ".png"));
         }
 
         /// <summary>Performs cell y.</summary>
@@ -618,7 +557,6 @@ namespace PlantsVsZombies.Diagnostics
             }
             Check(Sim.Adventure.Coins.Count == coinsBefore - 1 && Sim.Adventure.MoneyCollectedUnits == collectedBefore + value,
                 "Coin arrival did not credit this board exactly once; before=" + collectedBefore + "; value=" + value + "; after=" + Sim.Adventure.MoneyCollectedUnits);
-            Check(_logError == null, "The Player raised an error while drawing adventure terrain/units.");
         }
     }
 }

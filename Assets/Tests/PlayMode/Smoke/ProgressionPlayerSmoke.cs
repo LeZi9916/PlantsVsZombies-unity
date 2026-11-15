@@ -10,14 +10,20 @@ using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
 using UnityEngine;
+using UnityEngine.TestTools;
+using NUnit.Framework;
+using PlantsVsZombies.Tests.Shared;
+using static UnityEngine.Object;
 using System.Diagnostics.CodeAnalysis;
 
-namespace PlantsVsZombies.Diagnostics
+namespace PlantsVsZombies.Tests.PlayMode.Smoke
 {
-    // Explicit isolated Player verification only; never runs in normal play.
     /// <summary>Defines progression player smoke.</summary>
-    internal sealed class ProgressionPlayerSmoke : MonoBehaviour
+    public sealed class ProgressionPlayerSmoke : PlayerSmokeFixture
     {
+        /// <summary>Keeps the loading presentation visible until the scenario explicitly completes it.</summary>
+        protected override bool ShowLoading => true;
+
         /// <summary>Stores controller.</summary>
         private PvZGame? _controller;
 
@@ -85,74 +91,14 @@ namespace PlantsVsZombies.Diagnostics
             }
         }
 
-        /// <summary>Performs bootstrap.</summary>
-        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
-        private static void Bootstrap()
+        /// <summary>Runs the migrated scenario through the PlayMode Test Runner.</summary>
+        /// <returns>The original scenario's frame, rendering, and audio waits.</returns>
+        [UnityTest]
+        [Timeout(180000)]
+        public IEnumerator RunsScenario()
         {
-            if (Array.IndexOf(Environment.GetCommandLineArgs(), "-pvz-progression-smoke") >= 0)
-            {
-                new GameObject("Progression Player smoke").AddComponent<ProgressionPlayerSmoke>();
-            }
-        }
-
-        /// <summary>Performs start.</summary>
-        /// <returns>The resulting start.</returns>
-        private IEnumerator Start()
-        {
-            yield return null;
-            _controller = FindFirstObjectByType<PvZGame>();
-            Application.logMessageReceived += OnLog;
-            var run = Run();
-            while (true)
-            {
-                bool next;
-                try
-                {
-                    next = run.MoveNext();
-                }
-                catch (Exception error)
-                {
-                    Debug.LogError("PVZ_PROGRESSION_SMOKE_FAIL: " + error);
-                    SmokeTestArtifacts.Quit(1);
-                    yield break;
-                }
-
-                if (!next)
-                {
-                    break;
-                }
-
-                yield return run.Current;
-            }
-
-            if (_loggedError != null)
-            {
-                Debug.LogError("PVZ_PROGRESSION_SMOKE_FAIL: " + _loggedError);
-                SmokeTestArtifacts.Quit(1);
-            }
-            else
-            {
-                Debug.Log("PVZ_PROGRESSION_SMOKE_PASS: " + _checks + " integration checks");
-                SmokeTestArtifacts.Quit(0);
-            }
-        }
-
-        /// <summary>Performs on log.</summary>
-        /// <param name = "message">The message.</param>
-        /// <param name = "trace">The trace.</param>
-        /// <param name = "type">The type.</param>
-        private void OnLog(string message, string trace, LogType type)
-        {
-            if (type == LogType.Exception || type == LogType.Error || type == LogType.Assert)
-            {
-                _loggedError = message;
-            }
-        }
-
-        /// <summary>Performs on destroy.</summary>
-        private void OnDestroy()
-        {
-            Application.logMessageReceived -= OnLog;
+            _controller = Controller;
+            yield return Run();
         }
 
         /// <summary>Performs capture.</summary>
@@ -160,7 +106,7 @@ namespace PlantsVsZombies.Diagnostics
         /// <returns>The resulting capture.</returns>
         private IEnumerator Capture(string name)
         {
-            yield return new WaitForEndOfFrame();
+            yield return SmokeTestArtifacts.WaitForFrame();
             SmokeTestArtifacts.CaptureFrame(Path.Combine(SmokeTestArtifacts.DirectoryPath, name + ".png"));
         }
 

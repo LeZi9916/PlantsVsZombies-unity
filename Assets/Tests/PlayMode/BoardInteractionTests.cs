@@ -6,7 +6,7 @@ using PlantsVsZombies.Game;
 using PlantsVsZombies.Simulation;
 using UnityEngine;
 using PlantsVsZombies.BoardUI;
-using PlantsVsZombies.Diagnostics;
+using PlantsVsZombies.Tests.Shared;
 
 namespace PlantsVsZombies.Tests.PlayMode
 {

@@ -1,7 +1,7 @@
 #nullable enable
 using System.Reflection;
 
-namespace PlantsVsZombies.Diagnostics
+namespace PlantsVsZombies.Tests.Shared
 {
     /// <summary>A method of a game session or one of its collaborators, resolved once and invoked without naming its owner.</summary>
     internal sealed class BoundGameMethod

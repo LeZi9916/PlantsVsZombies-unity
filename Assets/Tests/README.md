@@ -4,6 +4,27 @@ Open the project in Unity **7000.0.0a16** and use Window > General > Test Runner
 The EditMode and PlayMode assemblies reference `PlantsVsZombies.Runtime` and are
 enabled only with `UNITY_INCLUDE_TESTS`.
 
+The former runtime diagnostics are now PlayMode fixtures in
+`Assets/Tests/PlayMode/Smoke` (category `PlayerSmoke`). Their original scenario
+checks run with per-case temporary profiles and Test Runner cleanup. Set
+`PVZ_BOARD_STRESS_ASSETS` to complete original runtime resources; without it,
+these opt-in cases are skipped. See `Tools/Tests/PlayerSmokeTests/README.md` for
+case filters, screenshots, and the migrated runner. Shared reflection helpers
+live in `Assets/Tests/Shared`, in a test-only assembly referenced by PlayMode
+and EditorRendering. None of these helpers or smoke cases ships in Runtime.
+
+Unity 7 requires Burst 2.0.0, uGUI 7.0.0, and Test Framework 1.9.0; the manifest
+and Editor-resolved lock file pin those minimum supported versions. Historical
+validation records below retain the Editor version actually used at the time.
+
+The Unity 7 migration passes 100 targeted EditMode cases and 57 unique PlayMode
+cases, including all 13 migrated smoke cases across focused runs. The nine
+parameter cases in `AudioPoolingTests.GameFoleyRoutePlaysEveryRapidProjectileImpact`
+and `GameFoleyRoutePreservesNonImpactSuppressionBoundary` fail identically on the
+unchanged pre-migration `ae4bc4c` with Unity 6000.3.17f1. They retain obsolete
+voice-replacement/admission assertions; this migration preserves those existing
+failures. Packaged Players and other target platforms were not validated.
+
 Run isolated tests from the repository root:
 
 ```powershell
@@ -70,14 +91,13 @@ that it creates on first use, so an inactive test host that never ran `Awake` st
 instances. `GameCollaboratorTests` checks that creation, that the effects, music and Dave
 components adopt their audio sources and follow later volume changes, and that named-member
 lookup finds each member on the collaborator that declares it. Fixtures and the Player smoke
-scripts reach non-public session state through `GameMemberReflection` (`Assets/Scripts/Diagnostics`),
+scripts reach non-public session state through `GameMemberReflection` (`Assets/Tests/Shared`),
 which searches the coordinator and then each collaborator and rejects ambiguous names, so they do
 not depend on which collaborator owns a field or method.
 
 Audio prewarms 64 shared pitched voices and preserves the native eight-voice
-Foley limit per category. Projectile impacts admit consecutive hits and reuse the
-oldest same-category voice when saturated. Other full categories drop the new
-sound while existing sounds finish. Simulation pools grow with concurrent demand and bound retained inactive
+Foley limit per category. Full categories drop new requests while existing
+sounds finish, preserving the original voice admission behavior. Simulation pools grow with concurrent demand and bound retained inactive
 entries; new assets, changed labels, larger bursts, special feedback captures,
 and startup can still allocate. Synthetic steady-state zero-allocation checks
 are not a claim of zero allocation or a CPU-time target for an entire match.
@@ -262,7 +282,7 @@ complete game behavior or performance on other target platforms.
 The spawn regressions use the supplied hash-identified PC executable's machine-code
 results, including all three adventure progress states, local survival selection,
 18-to-50-flag gate reduction, doubled later survival budgets, dynamic weights and
-quotas, and native float stores. Run the focused Unity **6000.3.17f1** suites:
+quotas, and native float stores. Run the focused Unity **7000.0.0a16** suites:
 
 ```powershell
 ./Tools/Tests/Run-UnityTests.ps1 -Platform EditMode -TestFilter 'AdventureWaveSpawnTests;ModeWaveFidelityTests;AdventureSpawnFidelityTests;PuzzleSpawnTests'

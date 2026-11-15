@@ -80,6 +80,9 @@ namespace PlantsVsZombies.Adventure
             }
         }
 
+        /// <summary>Gets or sets whether an isolated session plays the full opening instead of entering its inspected battle.</summary>
+        internal bool PlayOpeningInIsolatedSession { get; set; }
+
         /// <summary>Performs initialize adventure opening.</summary>
         internal void InitializeAdventureOpening()
         {
@@ -106,7 +109,7 @@ namespace PlantsVsZombies.Adventure
             _owner.Dave._crazyDaveVoice.Stop();
             // Older explicitly isolated feature probes start at the battle they are inspecting.
             // The new opening probe and normal player always use the complete original opening.
-            if (_owner._game == null || !_owner._game.IsAdventure || _owner.Campaign._adventureTestBoard || _owner._smokeMode && Array.IndexOf(Environment.GetCommandLineArgs(), "-pvz-intro-audio-smoke") < 0)
+            if (_owner._game == null || !_owner._game.IsAdventure || _owner.Campaign._adventureTestBoard || _owner._smokeMode && !PlayOpeningInIsolatedSession)
             {
                 return;
             }
