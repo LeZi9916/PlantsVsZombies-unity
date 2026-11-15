@@ -186,7 +186,7 @@ namespace PlantsVsZombies.Profiles
         /// <returns>The absolute checkpoint path.</returns>
         internal string SavePath(Guid profile, int mode)
         {
-            return Path.Combine(_directory, "replica-game-" + profile.ToString("N") + "-" + mode + ".dat");
+            return Path.Combine(_directory, "game-" + profile.ToString("N") + "-" + mode + ".dat");
         }
     }
 }
