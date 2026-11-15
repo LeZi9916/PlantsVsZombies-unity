@@ -1313,3 +1313,26 @@ a packaged Player, physical speaker listening, or Linux/macOS/Android/iOS and
 other target ABI verification. The Windows runner invocation used a temporary
 ASCII junction to this repository because this Editor misdecoded the Unicode
 NUnit result path; the source snapshot and results remain in ignored `.unity-runs`.
+
+
+## Survival progress and lower-right input follow-up
+
+The live survival update now calls the same PC `420360` progress calculation as
+adventure. Its native counter, fill, zombie head and flag posts remain unchanged.
+PC `416900` clears the meter when initializing each next stage; the production
+survival handoff now resets its wave and flag animation state as well. The
+prototype lower-right return-button hit area is disabled for survival, matching
+its existing original HUD; the original menu continues to handle leaving play.
+
+```powershell
+$env:PVZ_BOARD_STRESS_ASSETS = (Resolve-Path Assets/StreamingAssets).Path
+./Tools/Tests/Run-UnityTests.ps1 -Platform All -TestFilter 'SurvivalProgressTests;AdventureProgressMeterTests;EndlessProgressIsVisibleAndItsCornerDoesNotExit'
+git diff --check
+```
+
+The selected assertions pass **17 EditMode cases and one original-resource
+PlayMode case** on Unity **7000.0.0a16** / Windows. They cover all five endless
+terrains, finite survival variants, native progress cadence, paused clocks,
+stage reset, actual original FlagMeter submission, lower-right clicks, and the
+menu route. The PlayMode fixture uses the production controller and presenter
+without profiles. Packaged Players and other target devices remain unverified.

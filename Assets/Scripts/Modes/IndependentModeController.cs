@@ -605,7 +605,7 @@ namespace PlantsVsZombies.Modes
             }
 
             var s = _modeSession;
-            if (s_modeBackButton.Contains(point))
+            if (!RequiredModeSession.Definition.Survival && s_modeBackButton.Contains(point))
             {
                 ReturnToModeDirectory();
                 return true;

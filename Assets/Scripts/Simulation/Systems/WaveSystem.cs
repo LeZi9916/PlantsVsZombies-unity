@@ -55,8 +55,9 @@ namespace PlantsVsZombies.Simulation
                 return;
             }
 
-            var hasFlags = global::PlantsVsZombies.Adventure.AdventureProgressMeterState.HasFlags(board.Level.Number, board.Level.IsReplay);
-            var wavesPerFlag = board.Level.IsReplay ? 10 : Math.Min(10, Math.Max(1, board.Waves.Count));
+            var survival = _world.ModeSession?.Definition.Survival == true;
+            var hasFlags = survival || global::PlantsVsZombies.Adventure.AdventureProgressMeterState.HasFlags(board.Level.Number, board.Level.IsReplay);
+            var wavesPerFlag = survival || board.Level.IsReplay ? 10 : Math.Min(10, Math.Max(1, board.Waves.Count));
             _world.Presentation.ProgressMeter.Advance(board._ticks, board.CurrentWave, board.Waves.Count, wavesPerFlag, hasFlags,
                 schedule.InitialCountdownTicks, schedule.CountdownTicks, schedule.HealthAtWaveStart,
                 schedule.HealthToNextWave, ScheduledWaveHealth(board.CurrentWave - 1));

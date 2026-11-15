@@ -16,6 +16,14 @@ namespace PlantsVsZombies.Adventure
         /// <summary>Gets whether the native meter has begun to appear.</summary>
         public bool Visible => Counter > 0;
 
+        /// <summary>Restores PC InitZombieWaves' empty stage meter and flag animation state before survival re-selection.</summary>
+        public void Reset()
+        {
+            _lastWave = 0;
+            _flagRaiseTicks = 0;
+            Counter = 0;
+        }
+
         /// <summary>Advances the PC 0x420360 wave, health, and countdown driven meter by one simulation tick.</summary>
         /// <param name="tick">The board's native 100 Hz main counter.</param>
         /// <param name="wave">The number of waves already spawned.</param>

@@ -698,6 +698,10 @@ namespace PlantsVsZombies.Simulation
             }
 
             _coinSystem.AdvanceAdventureUpgradeWorld(dt);
+            if (d.Survival)
+            {
+                _waveSystem.AdvanceAdventureProgressMeter();
+            }
             _modeZombieActions.TickModeSpecialZombies(dt);
             if (d.Mechanic == ModeMechanic.Portals)
             {
@@ -836,6 +840,7 @@ namespace PlantsVsZombies.Simulation
             _adventureModeRunner.Adventure.CurrentWave = 0;
             _adventureModeRunner.Adventure.TotalWavesSpawned = 0;
             _adventureModeRunner.Adventure.FlagsSpawned = 0;
+            _world.Presentation.ProgressMeter.Reset();
             _adventureModeRunner.Adventure._finalAmbush = false;
             _adventureModeRunner.Adventure._warned = false;
             _adventureModeRunner.Adventure._previousWaveHealth = 0;

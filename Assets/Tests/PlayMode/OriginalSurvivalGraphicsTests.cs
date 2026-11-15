@@ -167,6 +167,46 @@ namespace PlantsVsZombies.Tests.PlayMode
             }
         }
 
+        /// <summary>Checks the live endless HUD displays original progress art and its lower-right area cannot activate the hidden prototype exit.</summary>
+        /// <returns>Original-resource HUD readback frames and native menu interactions.</returns>
+        [UnityTest]
+        public IEnumerator EndlessProgressIsVisibleAndItsCornerDoesNotExit()
+        {
+            using var fixture = new OriginalStormGraphicsTests.StormFixture(28);
+            var owner = fixture.Owner;
+            var session = new ModeSession(13);
+            Assert.That(session.ChooseSeeds(session.Game.Adventure.SelectedSeeds), Is.True);
+            owner._game = session.Game;
+            owner._currentView = PvZGame.ScreenView.Board;
+            owner.IndependentModes._modeSession = session;
+            owner._deck.Clear();
+            owner._deck.AddRange(session.Game.Adventure.SelectedSeeds);
+            owner._selected = -1;
+            owner._presenter = (GamePresenter)typeof(OriginalStormGraphicsTests.StormFixture)
+                .GetField("_presenter", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(fixture)!;
+            session.Game.ResetAdventureWaveSchedule(100000, false, false);
+            session.Game.Adventure.CurrentWave = 1;
+            for (var tick = 0; tick < 20; tick++)
+            {
+                session.Update(.01f);
+            }
+            Assert.That(session.Game.Presentation.ProgressMeter.Visible, Is.True);
+            yield return fixture.Capture(null, () => fixture.DrawPass("DrawModesInterface"));
+            var meter = owner.Textures.RequiredLoadImage("FlagMeter.png");
+            Assert.That(Resources.FindObjectsOfTypeAll<CanvasTextureGraphic>().Any(graphic =>
+                graphic.gameObject.activeInHierarchy && graphic.mainTexture == meter.SourceTexture), Is.True,
+                "The production endless HUD must submit the original FlagMeter, not only a caption.");
+            Save(fixture, "survival-endless-progress");
+            Assert.That(owner.IndependentModes.TryHandleModeClick(new Vector2(700f, 583f)), Is.True);
+            Assert.That(owner._currentView, Is.EqualTo(PvZGame.ScreenView.Board));
+            Assert.That(owner._game, Is.SameAs(session.Game));
+            Assert.That(session.Phase, Is.EqualTo(ModePhase.Playing));
+            Assert.That(owner.IndependentModes.TryHandleModeClick(AdventureBoardController.s_adventureMenuButton.center), Is.True);
+            Assert.That(owner.RequiredOptionsView.IsOpen, Is.True, "The original menu remains the route for leaving a live survival board.");
+            Assert.That(owner.IndependentModes.TryHandleModeClick(new Vector2(700f, 583f)), Is.True);
+            Assert.That(owner._currentView, Is.EqualTo(PvZGame.ScreenView.Board));
+        }
+
         /// <summary>Saves optional real-GPU captures into the explicitly selected ignored output directory.</summary>
         /// <param name="fixture">The captured production presenter.</param>
         /// <param name="name">The original-state capture label.</param>
