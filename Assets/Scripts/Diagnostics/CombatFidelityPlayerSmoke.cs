@@ -83,7 +83,8 @@ namespace PlantsVsZombies.Diagnostics
         /// <returns>The resulting sim call.</returns>
         private object SimCall(string name, params object?[] args)
         {
-            return Invoke(typeof(GameSimulation), Sim, name, args);
+            var owner = Sim.MemberOwner(name);
+            return Invoke(owner.GetType(), owner, name, args);
         }
 
         /// <summary>Performs invoke.</summary>
@@ -302,7 +303,7 @@ namespace PlantsVsZombies.Diagnostics
             }), "Could not prepare native unlocked seed selection");
             Call("AttachAdventureGame", Sim);
             Set("_choosingSeeds", false);
-            typeof(GameSimulation).GetProperty("SunAmount").SetValue(Sim, 500);
+            SimulationInspection.GetProperty("SunAmount").SetValue(Sim, 500);
             Sim.ResetAdventureWaveSchedule(100000, false, false);
             var card = (Rect)Call("AdventureSeedRect", 0, false);
             Call("HandleClick", card.center);
@@ -316,7 +317,7 @@ namespace PlantsVsZombies.Diagnostics
             Check(Sim.Plants.Count == 1 && (int)Field("_selected") == -1, "Preview cell did not place and release the selected plant");
             yield return Capture("01-native-cell-placement");
             global::PlantsVsZombies.Simulation.Sun sun = (global::PlantsVsZombies.Simulation.Sun)SimCall("CreateAdventurePresentationDroppedSun", 4f, 2f, 25);
-            Sim.Suns.Add(sun);
+            SimulationFixture.Suns(Sim).Add(sun);
             var events = new List<GameEvent>();
             var previous = Sim.EventRaised;
             Sim.EventRaised = e =>
@@ -344,17 +345,17 @@ namespace PlantsVsZombies.Diagnostics
             _observations.Add("Sun pickup event and audio started before credit; exactly one pickup event through arrival.");
             Sim.EventRaised = previous;
             // Native PC deliberately makes flying sunlight spendable before the displayed count catches up.
-            typeof(GameSimulation).GetProperty("SunAmount").SetValue(Sim, 75);
+            SimulationInspection.GetProperty("SunAmount").SetValue(Sim, 75);
             Sim.Adventure.SeedFlashes.Clear();
             global::PlantsVsZombies.Simulation.Sun credit = (global::PlantsVsZombies.Simulation.Sun)SimCall("CreateAdventurePresentationDroppedSun", 4f, 2f, 25);
-            Sim.Suns.Add(credit);
+            SimulationFixture.Suns(Sim).Add(credit);
             Check(Sim.CollectSun(credit) && Sim.SunAmount == 75 && Sim.AdventureSunAvailable == 100, "Flying sunlight did not use the native availability budget while retaining the displayed balance");
             Check(Sim.Adventure.SeedFlashes.Exists(f => f.Kind == PlantKind.Peashooter) && Sim.AdventurePacketContext(PlantKind.Peashooter).CanAfford, "Affordability flash and actual packet availability disagree");
             Call("HandleClick", ((Rect)Call("AdventureSeedRect", 1, false)).center);
             MovePointer(new Vector2(195, 155));
             yield return Capture("02b-native-picked-dark-card-and-flight-budget");
             Call("HandleClick", new Vector2(195, 155));
-            Check(Sim.Plants.Exists(p => p.Kind == PlantKind.Peashooter && p.Row == 0 && p.Column == 1) && Sim.SunAmount == 0 && Sim.AdventureSunAvailable == 0, "Native pre-arrival planting failed or counted the incoming sunlight twice");
+            Check(SimulationFixture.Plants(Sim).Exists(p => p.Kind == PlantKind.Peashooter && p.Row == 0 && p.Column == 1) && Sim.SunAmount == 0 && Sim.AdventureSunAvailable == 0, "Native pre-arrival planting failed or counted the incoming sunlight twice");
             deadline = Time.unscaledTime + 3f;
             while (Sim.Suns.Contains(credit) && Time.unscaledTime < deadline)
             {
@@ -367,7 +368,7 @@ namespace PlantsVsZombies.Diagnostics
             var flag = (Zombie)SimCall("SpawnAdventureZombie", ZombieKind.Flag, 3, 9.5f, 0);
             var renderer = (ReanimationRenderer)Field("_animations");
             global::PlantsVsZombies.Reanimation.NativeAnimationInfo info;
-            Check(renderer.TryGetNativeAnimationInfo("Zombie", Sim.AdventurePresentationZombieAnimation(normal), out info), "Original walking clip missing");
+            Check(renderer.TryGetNativeAnimationInfo("Zombie", SimulationFixture.SynchronizeZombieAnimation(Sim, normal), out info), "Original walking clip missing");
             var firstPixel = AdventureZombieNativeRules.ReanimationSourceX(normal.X) + info.Bounds.xMin;
             var nativeBirth = AdventureZombieNativeRules.NativePositionX(normal.X);
             Check(nativeBirth >= 780f && nativeBirth < 820f && AdventureZombieNativeRules.NativePositionX(flag.X) == 800f, "Live right-edge spawns did not use the native PC body coordinates");
@@ -398,9 +399,9 @@ namespace PlantsVsZombies.Diagnostics
             yield return new WaitForSecondsRealtime(.35f);
             yield return Capture("06-detached-parts-in-motion");
             // Newly reported equipment feedback uses real colliding projectiles and original image tracks.
-            Sim.Zombies.Clear();
-            Sim.Plants.Clear();
-            Sim.Peas.Clear();
+            SimulationFixture.Zombies(Sim).Clear();
+            SimulationFixture.Plants(Sim).Clear();
+            SimulationFixture.Peas(Sim).Clear();
             Sim.Presentation.Corpses.Clear();
             Sim.Presentation.ZombiePartDrops.Clear();
             var armored = new List<Zombie>();
@@ -439,7 +440,7 @@ namespace PlantsVsZombies.Diagnostics
                 foreach (Zombie target in armored)
                 {
                     var equipmentMaximum = target.PresentationMaxArmor > 0 ? target.PresentationMaxArmor : target.PresentationMaxShield;
-                    Sim.Peas.Add(new Pea {
+                    SimulationFixture.Peas(Sim).Add(new Pea {
                         SourceKind = PlantKind.Peashooter,
                         Row = target.Row,
                         FlightRow = target.Row,
@@ -477,11 +478,11 @@ namespace PlantsVsZombies.Diagnostics
             Sim.Update(Math.Max(.01f, corpse.Duration - corpse.Age + .02f));
             Check(!Sim.Presentation.Corpses.Contains(corpse), "Native corpse deadline left a permanently retained body");
             _observations.Add("Real projectile collisions rendered two native equipment-damage stages; metal/plastic foley reached audio. Land corpse remained through its native fade and was removed at its deadline.");
-            Sim.Zombies.Clear();
-            Sim.Plants.Clear();
-            Sim.Peas.Clear();
+            SimulationFixture.Zombies(Sim).Clear();
+            SimulationFixture.Plants(Sim).Clear();
+            SimulationFixture.Peas(Sim).Clear();
             Sim.Presentation.Corpses.Clear();
-            typeof(GameSimulation).GetProperty("SunAmount").SetValue(Sim, 500);
+            SimulationInspection.GetProperty("SunAmount").SetValue(Sim, 500);
             var cherryVictim = (Zombie)SimCall("SpawnAdventureZombie", ZombieKind.Normal, 1, 4.5f, 0);
             var cherryIndex = ((List<PlantKind>)Field("_deck")).IndexOf(PlantKind.CherryBomb);
             Require(cherryIndex >= 0, "Cherry is absent from the prepared real deck");
@@ -507,7 +508,7 @@ namespace PlantsVsZombies.Diagnostics
             Call("HandleClick", ((Rect)Call("AdventureSeedRect", cherryIndex, false)).center);
             Call("HandleClick", cell);
             Check(effects.isPlaying, "Cherry placement did not request an actual one-shot sound voice");
-            var cherry = Sim.Plants.Find(p => p.Kind == PlantKind.CherryBomb);
+            var cherry = SimulationFixture.Plants(Sim).Find(p => p.Kind == PlantKind.CherryBomb);
             Require(cherry != null && cherry.CherryBombPresentation != null && cherry.CherryBombPresentation.Rate >= 10f && cherry.CherryBombPresentation.Rate < 15f, "Real card placement did not create the native Cherry fuse playback");
             var growingSamples = new float[1024];
             float growingPeak = 0f, growingListenerPeak = 0f;
@@ -573,9 +574,9 @@ namespace PlantsVsZombies.Diagnostics
             Check(juicy.Exists(v => v != null && v.isPlaying), "Original juicy voice was not played on actual detonation");
             _observations.Add("Actual Cherry placement played anim_explode and reverse_explosion PCM; native fuse detonated once and started its separate juicy voice.");
             Check(Sim.Presentation.Explosions.Exists(e => e.Effect == AdventureExplosionEffect.Powie), "Cherry blast omitted its native Powie effect creation");
-            Sim.Zombies.Clear();
-            Sim.Plants.Clear();
-            Sim.Peas.Clear();
+            SimulationFixture.Zombies(Sim).Clear();
+            SimulationFixture.Plants(Sim).Clear();
+            SimulationFixture.Peas(Sim).Clear();
             Sim.ResetAdventureWaveSchedule(100000, false, false);
             var mine = (Plant)SimCall("PlaceAdventurePlant", PlantKind.PotatoMine, 3, 3);
             yield return Capture("21-native-mine-buried-size");
@@ -616,8 +617,8 @@ namespace PlantsVsZombies.Diagnostics
             Check(Sim.Presentation.JalapenoFires.Exists(f => f.Row == 2 && f.Flames.Count == 12), "Native row burn did not create twelve original fire actors");
             yield return Capture("27-native-jalapeno-twelve-flames");
             _observations.Add("Mine used original buried/rise/armed rendering, accelerated its light for nearer zombie bounds, and created its ordinary-death explosion; Cherry, Doom and twelve native Jalapeno fire actors reached actual drawing.");
-            Sim.Zombies.Clear();
-            Sim.Plants.Clear();
+            SimulationFixture.Zombies(Sim).Clear();
+            SimulationFixture.Plants(Sim).Clear();
             Sim.Presentation.Explosions.Clear();
             Sim.Presentation.JalapenoFires.Clear();
             var flagIndex = -1;
@@ -673,7 +674,7 @@ namespace PlantsVsZombies.Diagnostics
             Check(Sim.Adventure.BowlingNuts.Count > 0 && Sim.Adventure.BowlingNuts[Sim.Adventure.BowlingNuts.Count - 1].Explosive, "Explosive packet preview placed an ordinary Wallnut");
             _observations.Add("Bowling conveyor uses original textures and 4-tick movement; moving red packet retained its explosive type through real selection, held/ghost preview and placement.");
             Sim.Adventure._nuts.Clear();
-            Sim.Zombies.Clear();
+            SimulationFixture.Zombies(Sim).Clear();
             Sim.Presentation.Corpses.Clear();
             var rolling = new AdventureBowlingNut
             {
@@ -759,9 +760,9 @@ namespace PlantsVsZombies.Diagnostics
             Check(Sim.Presentation.SnowTrails.Exists(t => t.Stopped), "Projectile removal deleted the original trail before FadeOut");
             yield return new WaitForSecondsRealtime(.13f);
             yield return Capture("36-native-snow-trail-fadeout");
-            Sim.Zombies.Clear();
-            Sim.Plants.Clear();
-            Sim.Peas.Clear();
+            SimulationFixture.Zombies(Sim).Clear();
+            SimulationFixture.Plants(Sim).Clear();
+            SimulationFixture.Peas(Sim).Clear();
             Sim.Presentation.Impacts.Clear();
             Sim.Presentation.SnowTrails.Clear();
             var winter = (Plant)SimCall("PlaceAdventurePlant", PlantKind.WinterMelon, 1, 1);
@@ -794,7 +795,7 @@ namespace PlantsVsZombies.Diagnostics
             Require(Sim.IsAdventure && Sim.Adventure.Level.Number == 1, "Isolated normal adventure did not start");
             var last = (Zombie)SimCall("SpawnAdventureZombie", ZombieKind.Normal, 2, 5.4f, 0);
             SimCall("HitAdventureZombie", last, 2000f, false);
-            typeof(GameSimulation).GetProperty("State").SetValue(Sim, MatchState.Won);
+            SimulationInspection.GetProperty("State").SetValue(Sim, MatchState.Won);
             Sim.Adventure.Phase = AdventurePhase.Reward;
             SimCall("SpawnAdventureRewardPresentation");
             var reward = Sim.Adventure.RequiredRewardPresentation;

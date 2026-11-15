@@ -41,7 +41,7 @@ internal static class PuffShroomRegressionTests
     /// <returns>The result returned by the hook.</returns>
     private static object? Invoke(GameSimulation game, string method, params object[] arguments)
     {
-        return typeof(GameSimulation).GetMethod(method, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(game, arguments);
+        return SimulationInspection.GetMethod(method, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(game, arguments);
     }
 
     /// <summary>Creates an explicitly isolated night board with no imminent automatic wave.</summary>
@@ -106,7 +106,7 @@ internal static class PuffShroomRegressionTests
         {
             var game = Fixture();
             PlaceMushroom(game);
-            game.Zombies.Add(AtBodyLeft(bodyLeft));
+            SimulationFixture.Zombies(game).Add(AtBodyLeft(bodyLeft));
             Invoke(game, "AdvanceAdventurePlants", .01f);
             Check(game.Peas.Count == 0, "A target must start the original body animation before the first spore exists.");
             Check((game.Plants[0].PresentationShotAge == 0f) == (bodyLeft == 410), "Production Puff-shroom range differs at body-left " + bodyLeft + ".");
@@ -129,7 +129,7 @@ internal static class PuffShroomRegressionTests
         var game = Fixture();
         var zombie = AtBodyLeft(500);
         zombie.FrozenRemaining = 1000f;
-        game.Zombies.Add(zombie);
+        SimulationFixture.Zombies(game).Add(zombie);
         Check(game.TryPlant(PlantKind.PuffShroom, 0, 1), "Public input plants the earned Puff-shroom beside an existing far zombie.");
         var plant = game.AdventurePlantAt(0, 1, PlantLayer.Main)!;
         Check(plant.PresentationShotAge < 0f && plant.ShootAge < 0f,
@@ -163,7 +163,7 @@ internal static class PuffShroomRegressionTests
             plant.Timing = PlantsVsZombies.Timing.PlantTiming.FromRaw(timingKind, 0, 0);
             var zombie = AtBodyLeft(300);
             zombie.FrozenRemaining = 1000f;
-            game.Zombies.Add(zombie);
+            SimulationFixture.Zombies(game).Add(zombie);
             var attacks = 0;
             var launches = 0;
             var attackTick = -1;
@@ -194,7 +194,7 @@ internal static class PuffShroomRegressionTests
                 }
 
                 // Isolate shooting from damage, travel, and any unrelated wave completion.
-                game.Peas.Clear();
+                SimulationFixture.Peas(game).Clear();
             }
 
             Check(attacks >= 3 && launches >= 3, kind + " must cover its first and repeated successful attack cycles.");
@@ -206,10 +206,10 @@ internal static class PuffShroomRegressionTests
     {
         var game = Fixture();
         var plant = PlaceMushroom(game);
-        game.Zombies.Add(AtBodyLeft(300));
+        SimulationFixture.Zombies(game).Add(AtBodyLeft(300));
         Invoke(game, "AdvanceAdventurePlants", .01f);
         Check(plant.PresentationShotAge == 0f && game.Peas.Count == 0, "Target acquisition must first start the body animation.");
-        game.Zombies.Clear();
+        SimulationFixture.Zombies(game).Clear();
         for (var tick = 0; tick < 27; tick++)
         {
             Invoke(game, "AdvanceAdventurePlants", .01f);
@@ -225,7 +225,7 @@ internal static class PuffShroomRegressionTests
     {
         var game = Fixture();
         var plant = PlaceMushroom(game);
-        game.Zombies.Add(AtBodyLeft(300));
+        SimulationFixture.Zombies(game).Add(AtBodyLeft(300));
         plant.Asleep = true;
         Invoke(game, "AdvanceAdventurePlants", .01f);
         Check(plant.PresentationShotAge < 0f && game.Peas.Count == 0, "A sleeping mushroom cannot start an attack animation.");
@@ -267,7 +267,7 @@ internal static class PuffShroomRegressionTests
         var shot = (Pea)Invoke(game, "FireAdventurePea", plant, plant.Row, false, 20f)!;
         shot.Range = float.MaxValue;
         var zombie = AtBodyLeft(200);
-        game.Zombies.Add(zombie);
+        SimulationFixture.Zombies(game).Add(zombie);
         Invoke(game, "AdvanceAdventureProjectiles", .01f, true);
         Check(zombie.Health == 250 && !game.Peas.Contains(shot), "Puff collides using its original forty-pixel box rather than waiting for the actor origin.");
 
@@ -276,7 +276,7 @@ internal static class PuffShroomRegressionTests
         shot = (Pea)Invoke(game, "FireAdventurePea", plant, plant.Row, false, 20f)!;
         shot.X = shot.StartX = 2.5f;
         shot.Range = float.MaxValue;
-        game.Plants.Add(new Plant { Kind = PlantKind.Torchwood, Row = 0, Column = 2 });
+        SimulationFixture.Plants(game).Add(new Plant { Kind = PlantKind.Torchwood, Row = 0, Column = 2 });
         Invoke(game, "AdvanceAdventureProjectiles", .01f, true);
         Check(!shot.Fire && shot.Damage == 20, "A mushroom spore cannot be converted by torchwood into a fire pea.");
     }

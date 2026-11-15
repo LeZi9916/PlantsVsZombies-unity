@@ -49,7 +49,7 @@ namespace PlantsVsZombies.Tests.PlayMode
                 var flags = BindingFlags.Instance | BindingFlags.NonPublic;
                 var effects = typeof(GamePresenter).GetMethod("DrawAdventureDiggerEffects", flags)!;
                 var draw = typeof(GamePresenter).GetMethod("DrawAdventureZombie", flags)!;
-                var update = typeof(GameSimulation).GetMethod("AdvanceAdventureDigger", flags)!;
+                var update = SimulationInspection.GetMethod("AdvanceAdventureDigger", flags)!;
                 var zombie = new Zombie
                 {
                     Id = 81, Kind = ZombieKind.Digger, Row = 2, X = 4f, PresentationPreviousX = 4f,
@@ -57,7 +57,7 @@ namespace PlantsVsZombies.Tests.PlayMode
                     UsedAbility = true, PresentationNativePhase = 34, PresentationWalkingBackwards = true,
                     PresentationInPool = false, DiggerState = new AdventureDiggerState { PhaseTicks = 151 }
                 };
-                owner._game.Zombies.Add(zombie);
+                SimulationFixture.Zombies(owner._game).Add(zombie);
                 SpriteDrawState.Matrix = Matrix4x4.identity;
                 SpriteDrawState.Color = Color.white;
                 SpriteDrawState.Clip = new Rect(0f, 0f, 800f, 600f);

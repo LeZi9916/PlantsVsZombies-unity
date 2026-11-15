@@ -17,7 +17,7 @@ namespace PlantsVsZombies.Tests.EditMode
             var game = new GameSimulation(new GameRules { AdventureLevel = 8 }, 7529);
             Assert.That(game.ChooseDefaultAdventureSeeds(), Is.True);
             game.ResetAdventureWaveSchedule(100000, false, false);
-            var place = typeof(GameSimulation).GetMethod("PlaceAdventurePlant", BindingFlags.Instance | BindingFlags.NonPublic)!;
+            var place = SimulationInspection.GetMethod("PlaceAdventurePlant", BindingFlags.Instance | BindingFlags.NonPublic)!;
             var plant = (Plant)place.Invoke(game, new object[] { PlantKind.Jalapeno, 1, 4 })!;
             var state = plant.JalapenoPresentation!;
             var events = new List<GameEvent>();

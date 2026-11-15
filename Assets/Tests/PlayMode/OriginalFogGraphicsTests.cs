@@ -136,7 +136,7 @@ namespace PlantsVsZombies.Tests.PlayMode
                 Assert.That(changedLeft, Is.Zero, "Stage 4-1 starts its original settled fog grid at native x=465.");
 
                 Assert.That(owner._game.ChooseDefaultAdventureSeeds(), Is.True);
-                owner._game.Mowers.Clear();
+                SimulationFixture.Mowers(owner._game).Clear();
                 owner.AdventureBoard._adventurePointer = new Vector2(-1000f, -1000f);
                 owner._game.Adventure.Fog.BeginIntro(owner._game.AdventureFogLeftColumn);
                 yield return Capture(owner, animations, presenter, target, pixels, true);

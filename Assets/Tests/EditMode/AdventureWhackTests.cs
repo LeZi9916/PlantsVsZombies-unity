@@ -191,7 +191,7 @@ namespace PlantsVsZombies.Tests.EditMode
             Invoke(game, "TickAdventureWhack", .01f);
             Assert.That(game.Zombies, Has.Count.EqualTo(1));
             Assert.That(game.Zombies[0].PresentationNativeVelocity, Is.EqualTo((.5f + maximumSpeed) / 2f).Within(.00001f));
-            var random = (FixedRandom)typeof(GameSimulation).GetField("_random", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(game)!;
+            var random = (FixedRandom)SimulationInspection.GetField("_random", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(game)!;
             Assert.That(random.Minimum, Is.EqualTo(minimumTicks));
             Assert.That(random.ExclusiveMaximum, Is.EqualTo(maximumTicks + 1));
         }
@@ -203,7 +203,7 @@ namespace PlantsVsZombies.Tests.EditMode
             var game = new GameSimulation(new GameRules { AdventureLevel = 15 }, 1570935);
             game.Adventure._graves.Clear();
             game.Adventure._graves.Add(new AdventureCellTimer { Row = 2, Column = 6, Remaining = float.MaxValue });
-            typeof(GameSimulation).GetField("_random", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(game, new FixedRandom());
+            SimulationInspection.GetField("_random", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(game, new FixedRandom());
             return game;
         }
 
@@ -223,7 +223,7 @@ namespace PlantsVsZombies.Tests.EditMode
         /// <returns>The hook result, or null for a void hook.</returns>
         private static object? Invoke(GameSimulation game, string name, params object[] arguments)
         {
-            return typeof(GameSimulation).GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(game, arguments);
+            return SimulationInspection.GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(game, arguments);
         }
 
         /// <summary>Fixes test randomness while recording the production inclusive interval request.</summary>

@@ -441,6 +441,44 @@ namespace PlantsVsZombies.Tests.PlayMode
             }
         }
 
+        /// <summary>Checks repeated production draws do not synchronize or advance live combat state.</summary>
+        [Test]
+        public void RepeatedZombieDrawsDoNotMutateSimulationState()
+        {
+            var ownerObject = new GameObject("Inactive read-only actor regression");
+            ownerObject.SetActive(false);
+            GamePresenter? presenter = null;
+            try
+            {
+                var owner = ownerObject.AddComponent<PvZGame>();
+                owner._root = _root;
+                owner._animations = _renderer;
+                owner._game = new GameSimulation(new GameRules { AdventureLevel = 9 }, 9151);
+                presenter = new GamePresenter(owner);
+                var zombie = new Zombie { Id = 601, Row = 0, X = 3f, Health = 270f, StartingHealth = 270f,
+                    PresentationAnimation = "stale-fixture", PresentationAnimationAge = .35f };
+                SimulationFixture.Zombies(owner._game).Add(zombie);
+                var draw = typeof(GamePresenter).GetMethod("DrawAdventureZombie", BindingFlags.Instance | BindingFlags.NonPublic)!;
+                var random = owner._game.BattleRandomDrawCount;
+                for (var frame = 0; frame < 3; frame++)
+                {
+                    BeginFrame();
+                    draw.Invoke(presenter, new object[] { zombie });
+                    _renderer.EndObjectFrame();
+                    Assert.That(zombie.PresentationAnimation, Is.EqualTo("stale-fixture"));
+                    Assert.That(zombie.PresentationAnimationAge, Is.EqualTo(.35f));
+                    Assert.That(zombie.X, Is.EqualTo(3f));
+                    Assert.That(zombie.Health, Is.EqualTo(270f));
+                    Assert.That(owner._game.BattleRandomDrawCount, Is.EqualTo(random));
+                }
+            }
+            finally
+            {
+                presenter?.Dispose();
+                UnityEngine.Object.DestroyImmediate(ownerObject);
+            }
+        }
+
         /// <summary>Routes the real shovel hover through the presenter and preserves the unselected adjacent plant's pixels.</summary>
         [Test]
         public void ShovelHoverHighlightsOnlyTheCurrentProductionTarget()
@@ -460,8 +498,8 @@ namespace PlantsVsZombies.Tests.PlayMode
                 owner._game.ResetAdventureWaveSchedule(100000, false, false);
                 var first = new Plant { Id = 601, Kind = PlantKind.Wallnut, Layer = PlantLayer.Main, Row = 0, Column = 0, Health = 4000 };
                 var second = new Plant { Id = 602, Kind = PlantKind.Wallnut, Layer = PlantLayer.Main, Row = 0, Column = 1, Health = 4000 };
-                owner._game.Plants.Add(first);
-                owner._game.Plants.Add(second);
+                SimulationFixture.Plants(owner._game).Add(first);
+                SimulationFixture.Plants(owner._game).Add(second);
                 owner._shovel = true;
                 presenter = new GamePresenter(owner);
                 var draw = typeof(GamePresenter).GetMethod("DrawAdventurePlant", BindingFlags.Instance | BindingFlags.NonPublic)!;
@@ -842,7 +880,7 @@ namespace PlantsVsZombies.Tests.PlayMode
                     Id = 700, Kind = ZombieKind.Normal, Row = 2, X = 6f, Health = 270f,
                     StartingHealth = 270f, PresentationAnimation = "anim_walk", PresentationAnimationAge = .1f
                 };
-                game.Zombies.Add(actor);
+                SimulationFixture.Zombies(game).Add(actor);
                 ConfigureAdventureAllocationScenario(game, scenario);
                 if (scenario != "Combat" && scenario != "Conveyor")
                 {
@@ -1014,7 +1052,7 @@ namespace PlantsVsZombies.Tests.PlayMode
                     mower.Active = false;
                 }
 
-                owner._game.Zombies.Add(new Zombie
+                SimulationFixture.Zombies(owner._game).Add(new Zombie
                 {
                     Id = 333,
                     Kind = ZombieKind.Normal,

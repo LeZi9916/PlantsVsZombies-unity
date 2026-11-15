@@ -99,7 +99,7 @@ namespace PlantsVsZombies.Tests.PlayMode
                 owner.AdventureBoard._adventurePointer = new Vector2(-1000f, -1000f);
                 for (var index = 0; index < plantCount; index++)
                 {
-                    owner._game.Plants.Add(new Plant
+                    SimulationFixture.Plants(owner._game).Add(new Plant
                     {
                         Id = index + 1,
                         Kind = plantKinds[index % plantKinds.Length],
@@ -117,7 +117,7 @@ namespace PlantsVsZombies.Tests.PlayMode
                 {
                     var kind = zombieKinds[index % zombieKinds.Length];
                     var armor = kind == ZombieKind.Buckethead ? 1100f : kind == ZombieKind.Conehead ? 370f : 0f;
-                    owner._game.Zombies.Add(new Zombie
+                    SimulationFixture.Zombies(owner._game).Add(new Zombie
                     {
                         Id = 1000 + index,
                         Kind = kind,

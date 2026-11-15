@@ -169,10 +169,10 @@ namespace PlantsVsZombies.Tests.PlayMode
         public IEnumerator EntranceAndSummoningAnimateBeforeBackupsEmerge()
         {
             var game = _owner.RequiredGame;
-            var dancer = (Zombie)typeof(GameSimulation).GetMethod("SpawnAdventureZombie", BindingFlags.Instance | BindingFlags.NonPublic)!
+            var dancer = (Zombie)SimulationInspection.GetMethod("SpawnAdventureZombie", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(game, new object[] { ZombieKind.Dancing, 2, 6.5f, 0 })!;
             Assert.That(dancer.PresentationNativePhase, Is.EqualTo(40));
-            Assert.That(game.AdventurePresentationZombieAnimation(dancer), Is.EqualTo("anim_moonwalk"));
+            Assert.That(SimulationFixture.SynchronizeZombieAnimation(game, dancer), Is.EqualTo("anim_moonwalk"));
             yield return Capture(() => DrawBattleActor(dancer));
             var entrance = _pixels.GetPixels32();
             Assert.That(ArtworkBounds().height, Is.GreaterThan(40f));
@@ -185,19 +185,19 @@ namespace PlantsVsZombies.Tests.PlayMode
             dancer.DancerState!.PhaseTicks = 1;
             game.Update(.01f);
             Assert.That(dancer.PresentationNativePhase, Is.EqualTo(41));
-            Assert.That(game.AdventurePresentationZombieAnimation(dancer), Is.EqualTo("anim_point"));
+            Assert.That(SimulationFixture.SynchronizeZombieAnimation(game, dancer), Is.EqualTo("anim_point"));
             yield return Capture(() => DrawBattleActor(dancer));
             var pointing = _pixels.GetPixels32();
             game.Update(.2f);
             yield return Capture(() => DrawBattleActor(dancer));
             Assert.That(DifferentPixels(pointing, _pixels.GetPixels32()), Is.GreaterThan(20),
                 "The pointing gesture must visibly animate before its nine source frames finish summoning.");
-            for (var tick = 0; tick < 50 && !game.Zombies.Exists(zombie => zombie.Kind == ZombieKind.BackupDancer); tick++)
+            for (var tick = 0; tick < 50 && !SimulationFixture.Zombies(game).Exists(zombie => zombie.Kind == ZombieKind.BackupDancer); tick++)
             {
                 game.Update(.01f);
             }
 
-            var backup = game.Zombies.Find(zombie => zombie.Kind == ZombieKind.BackupDancer);
+            var backup = SimulationFixture.Zombies(game).Find(zombie => zombie.Kind == ZombieKind.BackupDancer);
             Assert.That(backup, Is.Not.Null, "The production pointing gesture must summon a real backup dancer.");
             Assert.That(backup!.PresentationNativePhase, Is.EqualTo(50));
             Assert.That(backup.DancerState!.PhaseTicks, Is.EqualTo(150));
@@ -230,7 +230,7 @@ namespace PlantsVsZombies.Tests.PlayMode
         public IEnumerator SpotlightMatchesOriginalImagesPlacementLayeringAndPalette()
         {
             var game = _owner.RequiredGame;
-            var dancer = (Zombie)typeof(GameSimulation).GetMethod("SpawnAdventureZombie", BindingFlags.Instance | BindingFlags.NonPublic)!
+            var dancer = (Zombie)SimulationInspection.GetMethod("SpawnAdventureZombie", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(game, new object[] { ZombieKind.Dancing, 2, AdventureZombieNativeRules.GridX(400f, .8f), 0 })!;
             dancer.PresentationNativePhase = 43;
             dancer.PresentationAnimation = "anim_point";
@@ -267,7 +267,7 @@ namespace PlantsVsZombies.Tests.PlayMode
         public IEnumerator RaisedArmRestartsBlendFromCurrentPoseAcrossNativeDanceSteps()
         {
             var game = _owner.RequiredGame;
-            var backup = (Zombie)typeof(GameSimulation).GetMethod("SpawnAdventureZombie", BindingFlags.Instance | BindingFlags.NonPublic)!
+            var backup = (Zombie)SimulationInspection.GetMethod("SpawnAdventureZombie", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(game, new object[] { ZombieKind.BackupDancer, 2, 6.5f, 0 })!;
             game.Update(2.39f);
             Assert.That(backup.PresentationNativePhase, Is.EqualTo(44));
@@ -302,7 +302,7 @@ namespace PlantsVsZombies.Tests.PlayMode
         public IEnumerator EatingDuringPointHoldKeepsItsOriginalLoop()
         {
             var game = _owner.RequiredGame;
-            var leader = (Zombie)typeof(GameSimulation).GetMethod("SpawnAdventureZombie", BindingFlags.Instance | BindingFlags.NonPublic)!
+            var leader = (Zombie)SimulationInspection.GetMethod("SpawnAdventureZombie", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(game, new object[] { ZombieKind.Dancing, 2, 6.5f, 0 })!;
             leader.PresentationNativePhase = 43;
             leader.Eating = true;

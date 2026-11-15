@@ -27,9 +27,9 @@ namespace PlantsVsZombies.Tests.PlayMode
                 var game = fixture.Owner.RequiredGame;
                 game.ChooseDefaultAdventureSeeds();
                 var flags = BindingFlags.Instance | BindingFlags.NonPublic;
-                var plant = (Plant)typeof(GameSimulation).GetMethod("PlaceAdventurePlant", flags)!
+                var plant = (Plant)SimulationInspection.GetMethod("PlaceAdventurePlant", flags)!
                     .Invoke(game, new object[] { PlantKind.Wallnut, 2, 3 })!;
-                var zombie = (Zombie)typeof(GameSimulation).GetMethod("SpawnAdventureBoardZombie", flags)!
+                var zombie = (Zombie)SimulationInspection.GetMethod("SpawnAdventureBoardZombie", flags)!
                     .Invoke(game, new object[] { ZombieKind.Bungee, 2, 9.5f, 0 })!;
                 zombie.Row = 2;
                 zombie.TargetColumn = 3;
@@ -95,9 +95,9 @@ namespace PlantsVsZombies.Tests.PlayMode
             SpriteSourceTestUtilities.SetImage(fixture.Owner.Textures, "plantshadow2.png", null!);
             var game = fixture.Owner.RequiredGame;
             var flags = BindingFlags.Instance | BindingFlags.NonPublic;
-            var plant = (Plant)typeof(GameSimulation).GetMethod("PlaceAdventurePlant", flags)!
+            var plant = (Plant)SimulationInspection.GetMethod("PlaceAdventurePlant", flags)!
                 .Invoke(game, new object[] { PlantKind.TallNut, 2, 3 })!;
-            var zombie = (Zombie)typeof(GameSimulation).GetMethod("SpawnAdventureBoardZombie", flags)!
+            var zombie = (Zombie)SimulationInspection.GetMethod("SpawnAdventureBoardZombie", flags)!
                 .Invoke(game, new object[] { ZombieKind.Bungee, 2, 9.5f, 0 })!;
             zombie.Row = 2;
             zombie.TargetColumn = 3;
@@ -108,7 +108,7 @@ namespace PlantsVsZombies.Tests.PlayMode
             zombie.PresentationNativePhase = 6;
             yield return fixture.Capture("DrawAdventureBoard", wholeBoard: true);
             var actual = fixture.Pixels.GetPixels32();
-            game.Plants.Remove(plant);
+            SimulationFixture.Plants(game).Remove(plant);
             zombie.LinkedZombieId = -1;
             yield return fixture.Capture("DrawAdventureBoard", () =>
             {
@@ -130,9 +130,9 @@ namespace PlantsVsZombies.Tests.PlayMode
                 var game = fixture.Owner.RequiredGame;
                 game.ChooseDefaultAdventureSeeds();
                 var flags = BindingFlags.Instance | BindingFlags.NonPublic;
-                var plant = (Plant)typeof(GameSimulation).GetMethod("PlaceAdventurePlant", flags)!
+                var plant = (Plant)SimulationInspection.GetMethod("PlaceAdventurePlant", flags)!
                     .Invoke(game, new object[] { PlantKind.TallNut, 2, 3 })!;
-                var zombie = (Zombie)typeof(GameSimulation).GetMethod("SpawnAdventureBoardZombie", flags)!
+                var zombie = (Zombie)SimulationInspection.GetMethod("SpawnAdventureBoardZombie", flags)!
                     .Invoke(game, new object[] { ZombieKind.Bungee, 2, 9.5f, 0 })!;
                 zombie.Row = 2;
                 zombie.TargetColumn = 3;
@@ -144,14 +144,14 @@ namespace PlantsVsZombies.Tests.PlayMode
                 zombie.PresentationNativePhase = phase;
                 zombie.PresentationAnimation = zombie.BungeeState.Animation;
                 zombie.PresentationAnimationAge = .25f;
-                typeof(GameSimulation).GetMethod("HitAdventureExplosionZombie", flags)!
+                SimulationInspection.GetMethod("HitAdventureExplosionZombie", flags)!
                     .Invoke(game, new object[] { zombie, 1800f, true, 18u });
                 Assert.That(game.Presentation.Corpses.Count, Is.EqualTo(1));
                 var corpse = game.Presentation.Corpses[0];
                 Assert.That(corpse.RequiredBurn.Visual, Is.EqualTo(AdventureBurnVisual.FrozenOriginal));
                 yield return fixture.Capture("DrawAdventureBoard", wholeBoard: true);
                 var actual = fixture.Pixels.GetPixels32();
-                game.Plants.Remove(plant);
+                SimulationFixture.Plants(game).Remove(plant);
                 game.Presentation.Corpses.Clear();
                 yield return fixture.Capture("DrawAdventureBoard", () =>
                 {
@@ -219,7 +219,7 @@ namespace PlantsVsZombies.Tests.PlayMode
             using var fixture = new OriginalStormGraphicsTests.StormFixture(11);
             SpriteSourceTestUtilities.SetImage(fixture.Owner.Textures, "plantshadow2.png", null!);
             var game = fixture.Owner.RequiredGame;
-            typeof(GameSimulation).GetMethod("DropAdventureZombie", BindingFlags.Instance | BindingFlags.NonPublic)!
+            SimulationInspection.GetMethod("DropAdventureZombie", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(game, new object[] { ZombieKind.Normal, 2, 3, 0 });
             var carrier = game.Zombies[0];
             carrier.PresentationAltitude = 200f;

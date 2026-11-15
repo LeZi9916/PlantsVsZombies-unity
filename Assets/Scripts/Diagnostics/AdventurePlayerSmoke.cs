@@ -308,19 +308,25 @@ namespace PlantsVsZombies.Diagnostics
             }
         }
 
-        /// <summary>Performs check gray plant.</summary>
+        /// <summary>Checks opaque pixels from the real imitation draw, independently of its direct or captured submission path.</summary>
         /// <param name = "plantId">The plant id.</param>
         private void CheckGrayPlant(int plantId)
         {
             var renderer = (global::PlantsVsZombies.Reanimation.ReanimationRenderer)Field("_animations");
-            var surfaces = (System.Collections.IDictionary)typeof(global::PlantsVsZombies.Reanimation.ReanimationRenderer).GetField("_nativeSurfaces", Private).GetValue(renderer);
-            var surface = surfaces["producer-plant-" + plantId];
-            Check(surface != null, "The transformed Imitater has no grayscale render surface.");
-            if (surface == null)
+            var plant = SimulationFixture.Plants(Sim).Find(candidate => candidate.Id == plantId);
+            Check(plant != null, "The transformed Imitater is no longer on the board.");
+            var presenter = Field("_presenter");
+            var draw = presenter.GetType().GetMethod("DrawAdventurePlant", Private)!;
+            var captureKey = "smoke-gray-plant-" + plantId;
+            // The normal grayscale path uses vertex data and intentionally owns no actor surface.
+            // Capture the actual production draw without forcing grayscale on the capture itself.
+            Check(renderer.DrawNativeClipped(captureKey, new Rect(0f, 0f, 800f, 600f), () =>
             {
-                throw new System.InvalidOperationException("The value 'surface' is not available.");
-            }
-
+                draw.Invoke(presenter, new object[] { plant! });
+                return true;
+            }), "The transformed Imitater could not be captured for pixel verification.");
+            var surfaces = (System.Collections.IDictionary)typeof(global::PlantsVsZombies.Reanimation.ReanimationRenderer).GetField("_nativeSurfaces", Private)!.GetValue(renderer)!;
+            var surface = surfaces[captureKey]!;
             var target = (RenderTexture)surface.GetType().GetField("Texture").GetValue(surface);
             var previous = RenderTexture.active;
             var pixels = new Texture2D(target.width, target.height, TextureFormat.RGBA32, false);
@@ -330,6 +336,7 @@ namespace PlantsVsZombies.Diagnostics
                 pixels.ReadPixels(new Rect(0, 0, target.width, target.height), 0, 0);
                 pixels.Apply();
                 int opaque = 0, colored = 0;
+                var visibleGray = 0;
                 foreach (Color32 pixel in pixels.GetPixels32())
                 {
                     if (pixel.a > 250)
@@ -339,15 +346,20 @@ namespace PlantsVsZombies.Diagnostics
                         {
                             colored++;
                         }
+                        else if (pixel.r > 16)
+                        {
+                            visibleGray++;
+                        }
                     }
                 }
 
-                Check(opaque > 100 && colored == 0, "Imitater source pixels were not rendered in grayscale.");
+                Check(opaque > 100 && visibleGray > 100 && colored == 0, "Imitater source pixels were not rendered in grayscale.");
             }
             finally
             {
                 RenderTexture.active = previous;
                 Destroy(pixels);
+                renderer.ReleaseNativeSurface(captureKey);
             }
         }
 
@@ -470,7 +482,15 @@ namespace PlantsVsZombies.Diagnostics
                     var before = Sim.Adventure.Vases.Count;
                     var vase = Sim.Adventure.Vases[0];
                     BoardClick(vase.Row, vase.Column);
-                    Check(Sim.Adventure.Vases.Count == before - 1, "Vase pointer input did not break a vase.");
+                    Check(Sim.Presentation.VaseMalletTicks == AdventurePresentationState.VaseMalletDurationTicks,
+                        "Vase pointer input did not start the native hammer.");
+                    for (var tick = 1; tick < AdventurePresentationState.VaseMalletDurationTicks; tick++)
+                    {
+                        Sim.Update(.01f);
+                    }
+                    Check(Sim.Adventure.Vases.Count == before, "The vase opened before the native hammer completed.");
+                    Sim.Update(.01f);
+                    Check(Sim.Adventure.Vases.Count == before - 1, "The completed native hammer did not break exactly one vase.");
                 }
 
                 if (level == 15)
@@ -543,9 +563,9 @@ namespace PlantsVsZombies.Diagnostics
             }
 
             Check(PlantFromCard(PlantKind.Imitater, 0, 0), "Imitater could not be planted through its target-priced card.");
-            Check(Sim.Plants.Exists(p => p.Kind == PlantKind.Imitater), "Imitater transformed without its delay.");
+            Check(SimulationFixture.Plants(Sim).Exists(p => p.Kind == PlantKind.Imitater), "Imitater transformed without its delay.");
             Sim.Update(3.3f);
-            var copied = Sim.Plants.Find(p => p.IsImitated && p.Kind == PlantKind.KernelPult);
+            var copied = SimulationFixture.Plants(Sim).Find(p => p.IsImitated && p.Kind == PlantKind.KernelPult);
             Check(copied != null, "Imitater did not transform into its selected plant.");
             yield return Capture("adventure-imitater-transformed");
             if (copied == null)
@@ -590,8 +610,14 @@ namespace PlantsVsZombies.Diagnostics
             var coinsBefore = Sim.Adventure.Coins.Count;
             var coin = RequiredController.Layout.AdventureCoinRect(produced);
             Click(coin.center.x, coin.center.y);
+            Check(produced.IsBeingCollected && Sim.Adventure.Coins.Count == coinsBefore,
+                "Coin pointer input did not start the native collection flight.");
+            for (var tick = 0; tick < 600 && Sim.Adventure.MoneyCollectedUnits == collectedBefore; tick++)
+            {
+                Sim.Update(.01f);
+            }
             Check(Sim.Adventure.Coins.Count == coinsBefore - 1 && Sim.Adventure.MoneyCollectedUnits == collectedBefore + value,
-                "Coin pointer input did not credit this board; before=" + collectedBefore + "; value=" + value + "; after=" + Sim.Adventure.MoneyCollectedUnits);
+                "Coin arrival did not credit this board exactly once; before=" + collectedBefore + "; value=" + value + "; after=" + Sim.Adventure.MoneyCollectedUnits);
             Check(_logError == null, "The Player raised an error while drawing adventure terrain/units.");
         }
     }

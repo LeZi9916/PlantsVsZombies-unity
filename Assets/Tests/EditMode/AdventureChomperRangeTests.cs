@@ -22,8 +22,8 @@ namespace PlantsVsZombies.Tests.EditMode
         {
             var game = new GameSimulation(new GameRules { AdventureLevel = level }, 7529);
             game.ChooseDefaultAdventureSeeds();
-            game.Plants.Clear();
-            game.Zombies.Clear();
+            SimulationFixture.Plants(game).Clear();
+            SimulationFixture.Zombies(game).Clear();
             if (level == 49)
             {
                 Invoke(game, "PlaceAdventurePlant", PlantKind.FlowerPot, 1, column);
@@ -55,7 +55,7 @@ namespace PlantsVsZombies.Tests.EditMode
         /// <returns>The unmodified production result.</returns>
         private static object? Invoke(GameSimulation game, string method, params object[] arguments)
         {
-            return typeof(GameSimulation).GetMethod(method, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(game, arguments);
+            return SimulationInspection.GetMethod(method, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(game, arguments);
         }
     }
 }

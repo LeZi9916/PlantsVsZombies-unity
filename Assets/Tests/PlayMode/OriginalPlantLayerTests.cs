@@ -22,7 +22,7 @@ namespace PlantsVsZombies.Tests.PlayMode
             using var fixture = new OriginalStormGraphicsTests.StormFixture(11);
             var game = fixture.Owner.RequiredGame;
             SpriteSourceTestUtilities.SetImage(fixture.Owner.Textures, "plantshadow2.png", null!);
-            var place = typeof(GameSimulation).GetMethod("PlaceAdventurePlant", BindingFlags.Instance | BindingFlags.NonPublic)!;
+            var place = SimulationInspection.GetMethod("PlaceAdventurePlant", BindingFlags.Instance | BindingFlags.NonPublic)!;
             var main = (Plant)place.Invoke(game, new object[] { PlantKind.TallNut, 2, 3 })!;
             var shell = (Plant)place.Invoke(game, new object[] { PlantKind.Pumpkin, 2, 3 })!;
             var origin = new Vector2(280f, 280f);
@@ -49,7 +49,7 @@ namespace PlantsVsZombies.Tests.PlayMode
                 Assert.That(fixture.Pixels.GetPixels32(), Is.EqualTo(actual), "Native Pumpkin_back must precede the protected plant; damage only replaces Pumpkin_front.");
             }
 
-            game.Plants.Remove(main);
+            SimulationFixture.Plants(game).Remove(main);
             yield return fixture.Capture(null, () => fixture.DrawPass("DrawAdventurePlant", shell));
             var empty = fixture.Pixels.GetPixels32();
             yield return fixture.Capture(null, () => fixture.Animations.DrawNativePlayback("Pumpkin", shellOrigin, 1f, 0f,
@@ -68,7 +68,7 @@ namespace PlantsVsZombies.Tests.PlayMode
                 var game = fixture.Owner.RequiredGame;
                 SpriteSourceTestUtilities.SetImage(fixture.Owner.Textures, "plantshadow.png", null!);
                 SpriteSourceTestUtilities.SetImage(fixture.Owner.Textures, "plantshadow2.png", null!);
-                var place = typeof(GameSimulation).GetMethod("PlaceAdventurePlant", BindingFlags.Instance | BindingFlags.NonPublic)!;
+                var place = SimulationInspection.GetMethod("PlaceAdventurePlant", BindingFlags.Instance | BindingFlags.NonPublic)!;
                 if (level == 31)
                 {
                     place.Invoke(game, new object[] { PlantKind.LilyPad, 2, 3 });
@@ -122,9 +122,9 @@ namespace PlantsVsZombies.Tests.PlayMode
             using var fixture = new OriginalStormGraphicsTests.StormFixture(11);
             var game = fixture.Owner.RequiredGame;
             var flags = BindingFlags.Instance | BindingFlags.NonPublic;
-            var magnet = (Plant)typeof(GameSimulation).GetMethod("PlaceAdventurePlant", flags)!
+            var magnet = (Plant)SimulationInspection.GetMethod("PlaceAdventurePlant", flags)!
                 .Invoke(game, new object[] { PlantKind.MagnetShroom, 0, 3 })!;
-            typeof(GameSimulation).GetMethod("SpawnAdventureBoardZombie", flags)!
+            SimulationInspection.GetMethod("SpawnAdventureBoardZombie", flags)!
                 .Invoke(game, new object[] { ZombieKind.Normal, 3, 5.7f, 0 });
             var item = new AdventureMagnetItem { NativeKind = 1, X = 464f, Y = 300f, PositionResolved = true };
             var state = new AdventureMagnetState { Item = item };

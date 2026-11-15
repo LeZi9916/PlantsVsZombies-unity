@@ -14,7 +14,7 @@ internal static class ModeCoreProbe
     private static void AddSun(GameSimulation game,int value)
     {
         // Valid native sun values; collection credits only after the flight reaches the counter.
-        while(value>0){int piece=value>=25?25:15;var sun=new Sun{Value=piece};game.Suns.Add(sun);if(!game.CollectSun(sun))throw new Exception("Sun click refused");
+        while(value>0){int piece=value>=25?25:15;var sun=new Sun{Value=piece};SimulationFixture.Suns(game).Add(sun);if(!game.CollectSun(sun))throw new Exception("Sun click refused");
             for(int tick=0;tick<500&&game.Suns.Contains(sun);tick++)game.UpdateMode(.01f);if(game.Suns.Contains(sun))throw new Exception("Collected sun never reached bank");value-=piece;}
     }
     private static void Main()
@@ -23,7 +23,7 @@ internal static class ModeCoreProbe
         PlantsVsZombies.Tests.Modes.ModeWaveRegressionTests.Run();
         int modes=0;foreach(var mode in ModeCatalog.All){Check(mode.RecordIndex==mode.Id-1,"PC record index "+mode.Id);modes++;}Check(modes==55,"55 independent PC catalog entries");
         var survival=new ModeSession(1);Check(survival.ChooseSeeds(survival.Game.Adventure.SelectedSeeds),"survival seed selection");
-        var veteran=new Plant{Kind=PlantKind.Peashooter,Row=2,Column=0,Layer=PlantLayer.Main,Health=211};survival.Game.Plants.Add(veteran);AddSun(survival.Game,200);int sunBefore=survival.Game.SunAmount;survival.Game.Mowers[0].Available=false;
+        var veteran=new Plant{Kind=PlantKind.Peashooter,Row=2,Column=0,Layer=PlantLayer.Main,Health=211};SimulationFixture.Plants(survival.Game).Add(veteran);AddSun(survival.Game,200);int sunBefore=survival.Game.SunAmount;survival.Game.Mowers[0].Available=false;
         survival.Game.Adventure.CurrentWave=survival.Game.Adventure.Waves.Count;survival.Game.Adventure._finalAmbush=true;survival.Update(0.01f);
         Check(survival.HasNextStage&&survival.FlagsCompleted==1,"survival flag/round completion");survival.Game.Adventure.TotalWavesSpawned=80;Check(survival.Continue(),"survival next round");Check(survival.Game.Plants.Contains(veteran)&&veteran.Health==211,"survival preserves actual plants/health");Check(survival.Game.SunAmount==sunBefore&&!survival.Game.Mowers[0].Available&&survival.Game.Adventure.TotalWavesSpawned==0,"survival carries sun and used mower; native wave-loot counter resets");Check(survival.Phase==ModePhase.ChoosingSeeds&&survival.Stage==2,"survival reselects seeds");
         var vase = new ModeSession(52);
@@ -44,15 +44,15 @@ internal static class ModeCoreProbe
         Check(vase.Game.Adventure.Vases.Count == before - 1, "vase actually removed after the native hammer swing");
         var packet = vase.Game.Adventure.Packets[0].Id;
         Check(vase.UsePacket(packet, 0, 0), "free vase packet plant");
-        Check(vase.Game.Plants.Exists(plant => plant.Row == 0 && plant.Column == 0 && plant.ModeFacesLeft), "PC seed52 faces left");
+        Check(SimulationFixture.Plants(vase.Game).Exists(plant => plant.Row == 0 && plant.Column == 0 && plant.ModeFacesLeft), "PC seed52 faces left");
         var iz = new ModeSession(61);
         Check(iz.Game.Plants[0].Kind == PlantKind.Sunflower && iz.Game.Plants[0].Column == 3 && iz.Game.Plants[0].Row == 2,
             "PC 0x435C3F first fixed sunflower uses zero-based row two");
         Check(!iz.PlaceZombie(ZombieKind.Normal, 0, 3), "I Zombie planting boundary");
         Check(iz.PlaceZombie(ZombieKind.Normal, 0, 4) && iz.Game.SunAmount == 100, "I Zombie purchase debits sun");
-        var flower=iz.Game.Plants.Find(p=>p.Kind==PlantKind.Sunflower);flower.Health-=80;iz.Update(0.01f);Check(iz.Game.Suns.Count==2&&iz.Game.SunAmount==100,"I Zombie chewing releases collectible sun");AddSun(iz.Game,25);Check(iz.Game.SunAmount==125,"I Zombie sun collection economy");
-        iz.Game.Plants.RemoveAll(p=>p.Row==0);var brainZombie=iz.Game.Zombies[0];brainZombie.X=0.16f;iz.Update(0.72f);Check(iz.Brains[0],"I Zombie brain eaten via actual zombie arrival");
-        var match=new ModeSession(20);match.Game.Plants.RemoveAll(p=>p.Row==0&&p.Column<3||p.Row==1&&p.Column==1);match.Game.Plants.Add(new Plant{Kind=PlantKind.Peashooter,Row=0,Column=0,Layer=PlantLayer.Main,Health=300});match.Game.Plants.Add(new Plant{Kind=PlantKind.SnowPea,Row=0,Column=1,Layer=PlantLayer.Main,Health=300});match.Game.Plants.Add(new Plant{Kind=PlantKind.Peashooter,Row=0,Column=2,Layer=PlantLayer.Main,Health=300});match.Game.Plants.Add(new Plant{Kind=PlantKind.Peashooter,Row=1,Column=1,Layer=PlantLayer.Main,Health=300});match._matchDelay=0;Check(match.ClickMatchCell(1,1)&&match.ClickMatchCell(0,1),"Beghouled playable adjacent swap");Check(match.Score>=1&&match.Game.Plants.Count==40,"matching scores and refills board");
+        var flower=SimulationFixture.Plants(iz.Game).Find(p=>p.Kind==PlantKind.Sunflower);flower.Health-=80;iz.Update(0.01f);Check(iz.Game.Suns.Count==2&&iz.Game.SunAmount==100,"I Zombie chewing releases collectible sun");AddSun(iz.Game,25);Check(iz.Game.SunAmount==125,"I Zombie sun collection economy");
+        SimulationFixture.Plants(iz.Game).RemoveAll(p=>p.Row==0);var brainZombie=iz.Game.Zombies[0];brainZombie.X=0.16f;iz.Update(0.72f);Check(iz.Brains[0],"I Zombie brain eaten via actual zombie arrival");
+        var match=new ModeSession(20);SimulationFixture.Plants(match.Game).RemoveAll(p=>p.Row==0&&p.Column<3||p.Row==1&&p.Column==1);SimulationFixture.Plants(match.Game).Add(new Plant{Kind=PlantKind.Peashooter,Row=0,Column=0,Layer=PlantLayer.Main,Health=300});SimulationFixture.Plants(match.Game).Add(new Plant{Kind=PlantKind.SnowPea,Row=0,Column=1,Layer=PlantLayer.Main,Health=300});SimulationFixture.Plants(match.Game).Add(new Plant{Kind=PlantKind.Peashooter,Row=0,Column=2,Layer=PlantLayer.Main,Health=300});SimulationFixture.Plants(match.Game).Add(new Plant{Kind=PlantKind.Peashooter,Row=1,Column=1,Layer=PlantLayer.Main,Health=300});match._matchDelay=0;Check(match.ClickMatchCell(1,1)&&match.ClickMatchCell(0,1),"Beghouled playable adjacent swap");Check(match.Score>=1&&match.Game.Plants.Count==40,"matching scores and refills board");
         var slot=new ModeSession(18);Check(slot.Spin()&&slot.Game.SunAmount==25,"native 25-sun slot purchase");Check(!slot.Spin(),"slot cannot pay twice while rolling");slot.Update(4.01f);Check(slot.SlotRollingRemaining<=0,"native slot roll resolves");
         var aqua=new ModeSession(23);Check(aqua.Fish.Count==2,"aquarium initial fish");Check(aqua.Feed(150,200)&&aqua.Game.SunAmount==45,"aquarium five-sun feeding");Check(aqua.Feed(200,250)&&aqua.Feed(250,250)&&!aqua.Feed(300,300),"native maximum three brains");AddSun(aqua.Game,150);Check(aqua.BuyFish()&&aqua.Fish.Count==3,"aquarium purchasing adds real fish");
         int starCells=0;for(int r=0;r<5;r++)for(int c=0;c<9;c++)if(GameSimulation.IsModeStarCell(r,c))starCells++;Check(starCells==14,"PC 0x74ED00 star pattern");
@@ -96,12 +96,12 @@ internal static class ModeCoreProbe
         Check(vase.UsePacket(nextNut, 1, 0) && vase.Game.AdventurePlantAt(1, 0, PlantLayer.Main).Health == 4000,
             "purchased first-aid heals through mode packet planting");
         var variants=new ModeSession(32);variants.ChooseSeeds(variants.Game.Adventure.SelectedSeeds);int nextId=5000;
-        Func<int,int,Zombie> addVariant=(kind,row)=>{var z=new Zombie{Id=++nextId,Kind=(ZombieKind)kind,Row=row,X=8f,Health=270,StartingHealth=270,Speed=.18f};variants.Game.Zombies.Add(z);return z;};
+        Func<int,int,Zombie> addVariant=(kind,row)=>{var z=new Zombie{Id=++nextId,Kind=(ZombieKind)kind,Row=row,X=8f,Health=270,StartingHealth=270,Speed=.18f};SimulationFixture.Zombies(variants.Game).Add(z);return z;};
         var jalapeno=addVariant(28,0);var gatling=addVariant(29,1);var squash=addVariant(30,2);var tall=addVariant(31,3);variants.Update(.01f);
         Check(jalapeno.ModeHead==28&&jalapeno.Health==500&&jalapeno._modeHeadTimer>1.5f,"PC28 is jalapeno, not tall-nut");
         Check(tall.ModeHead==31&&tall.ArmorHealth==2200,"PC31 is tall-nut armor");gatling._modeHeadTimer=.7f;int shots=variants.HeadShots.Count;variants.Update(.02f);Check(variants.HeadShots.Count>shots,"PC29 fires gatling burst");
-        var crush=new Plant{Kind=PlantKind.Wallnut,Row=2,Column=7,Health=4000,Layer=PlantLayer.Main};variants.Game.Plants.Add(crush);variants.Update(.01f);Check(!variants.Game.Plants.Contains(crush)&&!variants.Game.Zombies.Contains(squash),"PC30 performs squash impact");
-        var burnedRowPlant=new Plant{Kind=PlantKind.Wallnut,Row=0,Column=0,Health=4000,Layer=PlantLayer.Main};variants.Game.Plants.Add(burnedRowPlant);jalapeno._modeHeadTimer=.001f;variants.Update(.01f);Check(!variants.Game.Plants.Contains(burnedRowPlant)&&!variants.Game.Zombies.Contains(jalapeno),"PC28 explodes its lane");
+        var crush=new Plant{Kind=PlantKind.Wallnut,Row=2,Column=7,Health=4000,Layer=PlantLayer.Main};SimulationFixture.Plants(variants.Game).Add(crush);variants.Update(.01f);Check(!variants.Game.Plants.Contains(crush)&&!variants.Game.Zombies.Contains(squash),"PC30 performs squash impact");
+        var burnedRowPlant=new Plant{Kind=PlantKind.Wallnut,Row=0,Column=0,Health=4000,Layer=PlantLayer.Main};SimulationFixture.Plants(variants.Game).Add(burnedRowPlant);jalapeno._modeHeadTimer=.001f;variants.Update(.01f);Check(!variants.Game.Plants.Contains(burnedRowPlant)&&!variants.Game.Zombies.Contains(jalapeno),"PC28 explodes its lane");
         Console.WriteLine("PASS: "+count+" targeted assertions; no Unity build, no whole-mode playthrough.");
     }
 }

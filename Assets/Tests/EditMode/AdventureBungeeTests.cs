@@ -35,7 +35,7 @@ namespace PlantsVsZombies.Tests.EditMode
         {
             var game = Board();
             var sunflower = new Plant { Id = 1, Kind = PlantKind.Sunflower, Row = 1, Column = 3, Layer = PlantLayer.Main, Health = 300f };
-            game.Plants.Add(sunflower);
+            SimulationFixture.Plants(game).Add(sunflower);
             for (var index = 0; index < 12; index++)
             {
                 var zombie = Spawn(game);
@@ -208,7 +208,7 @@ namespace PlantsVsZombies.Tests.EditMode
         public void UmbrellaBouncesAtFortyPixelsAndPreservesItsOriginalDropPose()
         {
             var game = Board();
-            game.Plants.Add(new Plant { Id = 1, Kind = PlantKind.UmbrellaLeaf, Row = 1, Column = 3, Health = 300f, Layer = PlantLayer.Main });
+            SimulationFixture.Plants(game).Add(new Plant { Id = 1, Kind = PlantKind.UmbrellaLeaf, Row = 1, Column = 3, Health = 300f, Layer = PlantLayer.Main });
             var zombie = SpawnAtTarget(game);
             zombie.PresentationAltitude = 56f;
             Tick(game, 1);
@@ -267,13 +267,13 @@ namespace PlantsVsZombies.Tests.EditMode
             var game = Board();
             var repeater = new Plant { Id = 1, Kind = PlantKind.Repeater, Row = 1, Column = 3,
                 Layer = PlantLayer.Main, Health = 300f, BungeeState = 1 };
-            game.Plants.Add(repeater);
+            SimulationFixture.Plants(game).Add(repeater);
             Assert.That(Invoke(game, "CheckAdventureUpgrade", PlantKind.GatlingPea, 1, 3), Is.EqualTo(AdventurePlantingFailure.NeedsUpgrade));
             repeater.BungeeState = 0;
             Assert.That(Invoke(game, "CheckAdventureUpgrade", PlantKind.GatlingPea, 1, 3), Is.EqualTo(AdventurePlantingFailure.None));
             var wallnut = new Plant { Id = 2, Kind = PlantKind.Wallnut, Row = 1, Column = 4,
                 Layer = PlantLayer.Main, Health = 1000f, BungeeState = 1 };
-            game.Plants.Add(wallnut);
+            SimulationFixture.Plants(game).Add(wallnut);
             game.Rules.AdventureFirstAid = true;
             Assert.That(Invoke(game, "IsAdventureFirstAid", PlantKind.Wallnut, 1, 4), Is.False);
             wallnut.BungeeState = 0;
@@ -287,7 +287,7 @@ namespace PlantsVsZombies.Tests.EditMode
             var game = Board();
             var plant = new Plant { Id = 1, Kind = PlantKind.UmbrellaLeaf, Row = 1, Column = 3,
                 Layer = PlantLayer.Main, Health = 300f, BungeeState = 1 };
-            game.Plants.Add(plant);
+            SimulationFixture.Plants(game).Add(plant);
             Assert.That(Invoke(game, "HasUmbrellaNear", 1, 3), Is.True);
             plant.BungeeState = 2;
             Assert.That(Invoke(game, "HasUmbrellaNear", 1, 3), Is.False);
@@ -350,7 +350,7 @@ namespace PlantsVsZombies.Tests.EditMode
         /// <returns>The original method result.</returns>
         private static object? Invoke(GameSimulation game, string name, params object[] arguments)
         {
-            return typeof(GameSimulation).GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(game, arguments);
+            return SimulationInspection.GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(game, arguments);
         }
     }
 }

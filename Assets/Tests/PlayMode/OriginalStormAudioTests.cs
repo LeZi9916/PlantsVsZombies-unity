@@ -115,7 +115,7 @@ namespace PlantsVsZombies.Tests.PlayMode
                 Assert.That(loop.isPlaying, Is.True);
                 effects.SetVolume(.3f);
                 Assert.That(loop.volume, Is.EqualTo(.3f).Within(.001f));
-                typeof(GameSimulation).GetProperty(nameof(GameSimulation.State))!.SetValue(owner._game, MatchState.Lost);
+                SimulationInspection.GetProperty(nameof(GameSimulation.State))!.SetValue(owner._game, MatchState.Lost);
                 effects.UpdateAdventureZombiePartAudio();
                 Assert.That(loop.isPlaying, Is.True, "The original rain continues over the loss sequence.");
                 for (var tick = 0; tick < 1100; tick++)

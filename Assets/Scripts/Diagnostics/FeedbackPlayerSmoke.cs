@@ -68,8 +68,8 @@ namespace PlantsVsZombies.Diagnostics
         /// <returns>The resulting sim call.</returns>
         private object SimCall(string name, params object[] args)
         {
-            var method = typeof(GameSimulation).GetMethod(name, Private);
-            var parameters = method.GetParameters();
+            var method = SimulationInspection.GetMethod(name, Private);
+            var parameters = method.GetParameters(Sim);
             if (args.Length < parameters.Length)
             {
                 var supplied = args.Length;
@@ -238,7 +238,7 @@ namespace PlantsVsZombies.Diagnostics
             var final = (Zombie)SimCall("SpawnAdventureZombie", ZombieKind.Normal, 2, 5.4f, 0);
             SimCall("HitAdventureZombie", final, 2000f, false);
             // Force only the end-of-level condition to inspect the real reward UI without replaying a whole level.
-            typeof(GameSimulation).GetProperty("State").SetValue(Sim, MatchState.Won);
+            SimulationInspection.GetProperty("State").SetValue(Sim, MatchState.Won);
             Sim.Adventure.Phase = AdventurePhase.Reward;
             SimCall("SpawnAdventureRewardPresentation");
             var campaign = (AdventureCampaign)Field("_adventureCampaign");
@@ -277,7 +277,7 @@ namespace PlantsVsZombies.Diagnostics
             Call("HandleSelector", SelectorAction.Adventure);
             Check(Sim.Adventure.Level.IsReplay && Sim.ChooseDefaultAdventureSeeds(), "Replay setup failed");
             GameMemberReflection.SetField(RequiredController, "_choosingSeeds", false);
-            typeof(GameSimulation).GetProperty("State").SetValue(Sim, MatchState.Won);
+            SimulationInspection.GetProperty("State").SetValue(Sim, MatchState.Won);
             Sim.Adventure.Phase = AdventurePhase.Reward;
             SimCall("SpawnAdventureRewardPresentation");
             reward = Sim.Adventure.RewardPresentation;

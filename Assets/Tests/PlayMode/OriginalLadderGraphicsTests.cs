@@ -28,7 +28,7 @@ namespace PlantsVsZombies.Tests.PlayMode
                 using var fixture = new OriginalStormGraphicsTests.StormFixture(level);
                 var game = fixture.Owner.RequiredGame;
                 game.ChooseDefaultAdventureSeeds();
-                game.Plants.Clear();
+                SimulationFixture.Plants(game).Clear();
                 var plant = (Plant)Invoke(game, "PlaceAdventurePlant", PlantKind.TallNut, 1, column)!;
                 plant.HasLadder = true;
                 var zombie = Spawn(game, ZombieKind.Normal);
@@ -42,7 +42,7 @@ namespace PlantsVsZombies.Tests.PlayMode
                 yield return fixture.Capture("DrawAdventureBoard", wholeBoard: true);
                 var actual = fixture.Pixels.GetPixels32();
                 plant.HasLadder = false;
-                game.Zombies.Remove(zombie);
+                SimulationFixture.Zombies(game).Remove(zombie);
                 yield return fixture.Capture("DrawAdventureBoard", () =>
                 {
                     // PC 527EF0 preserves the requested top-left while scaling the original source dimensions.
@@ -162,7 +162,7 @@ namespace PlantsVsZombies.Tests.PlayMode
         /// <returns>The original method result.</returns>
         private static object? Invoke(GameSimulation game, string method, params object[] arguments)
         {
-            return typeof(GameSimulation).GetMethod(method, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(game, arguments);
+            return SimulationInspection.GetMethod(method, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(game, arguments);
         }
     }
 }

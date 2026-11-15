@@ -42,7 +42,7 @@ namespace PlantsVsZombies.Tests.EditMode
                     Assert.That(AdventurePlantShadowRules.DrawHeight(plant, game.Plants, false, 0), Is.EqualTo(expected), kind + " shadow");
                     if (plant != pot)
                     {
-                        game.Plants.Remove(plant);
+                        SimulationFixture.Plants(game).Remove(plant);
                     }
                 }
             }
@@ -99,7 +99,7 @@ namespace PlantsVsZombies.Tests.EditMode
                 plant.PresentationButter = weapon.Item2;
                 plant._kernelWeaponPrepared = true;
                 var target = new Zombie { Id = 500, Row = 1, X = 6f, Health = targetAtLaunch ? 270f : 0f, Speed = .3f };
-                game.Zombies.Add(target);
+                SimulationFixture.Zombies(game).Add(target);
                 Invoke(game, "FireAdventureNativeTimedProjectile", plant);
                 var shot = game.Peas[0];
                 var launchX = 40d + shot.PresentationLobX * 80d;
@@ -112,7 +112,7 @@ namespace PlantsVsZombies.Tests.EditMode
                     Assert.That(initialVelocity, Is.EqualTo(-7f));
                 }
 
-                game.Zombies.Clear();
+                SimulationFixture.Zombies(game).Clear();
                 var expectedTick = OriginalContactTick((float)Math.Round(launchX), shot.PresentationLobNativeVelocityX, initialVelocity, level == 42, weapon.Item2, shot.Splash, null, out var landingX);
 
                 Assert.That(expectedTick, Is.GreaterThan(0));
@@ -150,7 +150,7 @@ namespace PlantsVsZombies.Tests.EditMode
                     X = AdventureZombieNativeRules.GridX(nativeX), Health = 270f, StartingHealth = 270f,
                     Eating = true, PresentationNativePhase = 0, PresentationNativeVelocity = .3f,
                     Speed = AdventureZombieNativeRules.GridSpeed(.3f) };
-                game.Zombies.Add(zombie);
+                SimulationFixture.Zombies(game).Add(zombie);
                 Assert.That(Invoke(game, "FindAdventureNativePlantTarget", zombie, AdventureBiteAttack.Chew), Is.SameAs(eaten));
                 Assert.That(Invoke(game, "FindAdventureLobberTarget", 1, 1), Is.SameAs(zombie));
                 Invoke(game, "FireAdventureNativeTimedProjectile", plant);
@@ -230,8 +230,8 @@ namespace PlantsVsZombies.Tests.EditMode
                     X = AdventureZombieNativeRules.GridX(210f), Health = 850f };
                 var walker = new Zombie { Id = 2, Kind = ZombieKind.Normal, Row = 1,
                     X = AdventureZombieNativeRules.GridX(200f), Health = 270f };
-                game.Zombies.Add(vehicle);
-                game.Zombies.Add(walker);
+                SimulationFixture.Zombies(game).Add(vehicle);
+                SimulationFixture.Zombies(game).Add(walker);
                 Assert.That(Invoke(game, "FindAdventureLobberTarget", 1, 1), Is.SameAs(vehicle), "The wide vehicle's body begins farther left.");
                 Invoke(game, "FireAdventureNativeTimedProjectile", plant);
                 var shot = game.Peas[0];
@@ -255,7 +255,7 @@ namespace PlantsVsZombies.Tests.EditMode
         {
             var game = Board(42);
             var zombie = new Zombie { Id = 1, Row = 1, Health = 270f, X = AdventureZombieNativeRules.GridX(102f) };
-            game.Zombies.Add(zombie);
+            SimulationFixture.Zombies(game).Add(zombie);
             Assert.That(Invoke(game, "FindAdventureLobberTarget", 1, 1), Is.SameAs(zombie), "Body right edge 180 touches attack left 180.");
             zombie.X = AdventureZombieNativeRules.GridX(101f);
             Assert.That(Invoke(game, "FindAdventureLobberTarget", 1, 1), Is.Null);
@@ -313,8 +313,8 @@ namespace PlantsVsZombies.Tests.EditMode
             var game = new GameSimulation(new GameRules { AdventureLevel = level }, 7529);
             Assert.That(game.ChooseDefaultAdventureSeeds(), Is.True);
             game.ResetAdventureWaveSchedule(100000, false, false);
-            game.Plants.Clear();
-            game.Zombies.Clear();
+            SimulationFixture.Plants(game).Clear();
+            SimulationFixture.Zombies(game).Clear();
             game.Adventure._graves.Clear();
             return game;
         }
@@ -335,7 +335,7 @@ namespace PlantsVsZombies.Tests.EditMode
         /// <returns>The production method's result.</returns>
         private static object? Invoke(GameSimulation game, string method, params object[] arguments)
         {
-            return typeof(GameSimulation).GetMethod(method, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(game, arguments);
+            return SimulationInspection.GetMethod(method, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(game, arguments);
         }
     }
 }

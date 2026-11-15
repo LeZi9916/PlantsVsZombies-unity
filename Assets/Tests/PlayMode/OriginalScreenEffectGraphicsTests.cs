@@ -408,7 +408,7 @@ namespace PlantsVsZombies.Tests.PlayMode
                 owner._game = game;
                 Assert.That(game.ChooseDefaultAdventureSeeds(), Is.True);
                 game.ResetAdventureWaveSchedule(100000, false, false);
-                var plant = (Plant)typeof(GameSimulation).GetMethod("PlaceAdventurePlant", BindingFlags.Instance | BindingFlags.NonPublic)!
+                var plant = (Plant)SimulationInspection.GetMethod("PlaceAdventurePlant", BindingFlags.Instance | BindingFlags.NonPublic)!
                     .Invoke(game, new object[] { PlantKind.DoomShroom, 1, 4 })!;
                 var shadow = owner.Textures.Load("plantshadow.png");
                 Assert.That(shadow, Is.Not.Null);

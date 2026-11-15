@@ -40,7 +40,7 @@ internal static class FumeShroomRegressionTests
     /// <returns>The hook's result.</returns>
     private static object? Invoke(GameSimulation game, string method, params object[] arguments)
     {
-        return typeof(GameSimulation).GetMethod(method, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(game, arguments);
+        return SimulationInspection.GetMethod(method, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(game, arguments);
     }
 
     /// <summary>Creates an isolated night board with no imminent automatic wave.</summary>
@@ -115,7 +115,7 @@ internal static class FumeShroomRegressionTests
         {
             var game = Fixture();
             var plant = PlaceMushroom(game);
-            game.Zombies.Add(AtBodyLeft(bodyLeft));
+            SimulationFixture.Zombies(game).Add(AtBodyLeft(bodyLeft));
             Invoke(game, "AdvanceAdventurePlants", .01f);
             Check((plant.PresentationShotAge == 0f) == (bodyLeft == 520),
                 "Production Fume-shroom aiming differs at body-left " + bodyLeft + ".");
@@ -150,10 +150,10 @@ internal static class FumeShroomRegressionTests
             PlantsVsZombies.Simulation.PlantKind.SunShroom
         }), "The public Fume-shroom fixture chooses a legal earned deck.");
         game.ResetAdventureWaveSchedule(100000, false, false);
-        typeof(GameSimulation).GetProperty(nameof(GameSimulation.SunAmount))!.SetValue(game, 1000);
+        SimulationInspection.GetProperty(nameof(GameSimulation.SunAmount))!.SetValue(game, 1000);
         var zombie = AtBodyLeft(600);
         zombie.FrozenRemaining = 1000f;
-        game.Zombies.Add(zombie);
+        SimulationFixture.Zombies(game).Add(zombie);
         Check(game.TryPlant(PlantsVsZombies.Simulation.PlantKind.FumeShroom, 0, 1),
             "Public input plants the earned Fume-shroom while a distant zombie is present.");
         var plant = game.AdventurePlantAt(0, 1, PlantLayer.Main)!;
@@ -188,9 +188,9 @@ internal static class FumeShroomRegressionTests
         var front = AtBodyLeft(300, ZombieKind.ScreenDoor);
         var rear = AtBodyLeft(400);
         var edge = AtBodyLeft(520);
-        game.Zombies.Add(front);
-        game.Zombies.Add(rear);
-        game.Zombies.Add(edge);
+        SimulationFixture.Zombies(game).Add(front);
+        SimulationFixture.Zombies(game).Add(rear);
+        SimulationFixture.Zombies(game).Add(edge);
         Invoke(game, "AdvanceAdventurePlants", .01f);
         Check(plant.PresentationShotAge == 0f && plant.Timing!.Value.ShootingCountdown == 50,
             "A target starts the body animation and original 50-count shooting counter.");
@@ -215,17 +215,17 @@ internal static class FumeShroomRegressionTests
         var game = Fixture();
         var plant = PlaceMushroom(game);
         var original = AtBodyLeft(300);
-        game.Zombies.Add(original);
+        SimulationFixture.Zombies(game).Add(original);
         Invoke(game, "AdvanceAdventurePlants", .01f);
         Check(plant.Timing!.Value.ShootingCountdown == 50, "An original target schedules the first attack.");
-        game.Zombies.Remove(original);
+        SimulationFixture.Zombies(game).Remove(original);
         for (var tick = 0; tick < 48; tick++)
         {
             Invoke(game, "AdvanceAdventurePlants", .01f);
         }
 
         var replacement = AtBodyLeft(400);
-        game.Zombies.Add(replacement);
+        SimulationFixture.Zombies(game).Add(replacement);
         Invoke(game, "AdvanceAdventurePlants", .01f);
         Check(original.Health == 270 && replacement.Health == 250 && game.Peas.Count == 0,
             "A pending attack completes against the current overlapping target without reacquiring its original target.");

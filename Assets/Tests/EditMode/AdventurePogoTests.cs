@@ -28,7 +28,7 @@ namespace PlantsVsZombies.Tests.EditMode
             Assert.That(zombie.PogoState!.PhaseTicks, Is.InRange(1, 80));
             Assert.That(zombie.Health, Is.EqualTo(500f));
             Assert.That(zombie.PresentationNativeVelocity, Is.EqualTo(.45f));
-            Assert.That(game.AdventurePresentationZombieAnimation(zombie), Is.EqualTo("anim_pogo"));
+            Assert.That(SimulationFixture.SynchronizeZombieAnimation(game, zombie), Is.EqualTo("anim_pogo"));
             Assert.That(game.AdventurePresentationZombieRate(zombie), Is.EqualTo(40f));
             Invoke(game, "AdvanceAdventureZombieClock", zombie, .01f);
             Assert.That(zombie.PresentationAnimationAge, Is.EqualTo(11f / 40f));
@@ -152,7 +152,7 @@ namespace PlantsVsZombies.Tests.EditMode
             Assert.That(zombie.PresentationNativePhase, Is.Zero);
             Assert.That(zombie.PresentationNativeHeight, Is.EqualTo(7));
             Assert.That(zombie.PresentationAltitude, Is.EqualTo(12f));
-            Assert.That(game.AdventurePresentationZombieAnimation(zombie), Is.EqualTo("anim_walk"));
+            Assert.That(SimulationFixture.SynchronizeZombieAnimation(game, zombie), Is.EqualTo("anim_walk"));
             Assert.That(game.Presentation.ZombiePartDrops.Exists(part => part.ParticleId == 16), Is.False);
             Invoke(game, "AdvanceAdventurePogoFalling", zombie);
             Assert.That(zombie.PresentationAltitude, Is.EqualTo(11f));
@@ -167,7 +167,7 @@ namespace PlantsVsZombies.Tests.EditMode
             Assert.That(zombie.PresentationAltitude, Is.Zero);
             Assert.That(zombie.Eating, Is.True);
             Assert.That(plant.Health, Is.LessThan(health));
-            Assert.That(game.AdventurePresentationZombieAnimation(zombie), Is.EqualTo("anim_eat"));
+            Assert.That(SimulationFixture.SynchronizeZombieAnimation(game, zombie), Is.EqualTo("anim_eat"));
             Assert.That(game.AdventurePresentationZombieRate(zombie), Is.EqualTo(36f));
         }
 
@@ -250,7 +250,7 @@ namespace PlantsVsZombies.Tests.EditMode
             var game = Board();
             var zombie = Spawn(game, 600f);
             var shot = new Pea { Row = 1, FlightRow = 1, X = zombie.X, Butter = true, VelocityX = 0f, SourceKind = PlantKind.KernelPult };
-            game.Peas.Add(shot);
+            SimulationFixture.Peas(game).Add(shot);
             Invoke(game, "AdvanceAdventureProjectiles", .01f, true);
             Assert.That(zombie.PresentationButter, Is.Zero);
             Assert.That(zombie.FrozenRemaining, Is.Zero);
@@ -356,7 +356,7 @@ namespace PlantsVsZombies.Tests.EditMode
         /// <returns>The original operation result.</returns>
         private static object? Invoke(GameSimulation game, string name, params object[] arguments)
         {
-            return typeof(GameSimulation).GetMethod(name, BindingFlags.Instance | BindingFlags.Static | BindingFlags.NonPublic)!.Invoke(game, arguments);
+            return SimulationInspection.GetMethod(name, BindingFlags.Instance | BindingFlags.Static | BindingFlags.NonPublic)!.Invoke(game, arguments);
         }
     }
 }

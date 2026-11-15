@@ -28,7 +28,7 @@ namespace PlantsVsZombies.Tests.EditMode
             Assert.That(zombie.PresentationNativePhase, Is.EqualTo(67));
             Assert.That(zombie.CatapultState.PhaseTicks, Is.EqualTo(300));
             Assert.That(zombie.PresentationBodyBlendTicks, Is.Zero);
-            Assert.That(game.AdventurePresentationZombieAnimation(zombie), Is.EqualTo("anim_shoot"));
+            Assert.That(SimulationFixture.SynchronizeZombieAnimation(game, zombie), Is.EqualTo("anim_shoot"));
             Assert.That(game.AdventurePresentationZombieRate(zombie), Is.EqualTo(24f));
             var x = zombie.X;
             Tick(game, 72);
@@ -41,7 +41,7 @@ namespace PlantsVsZombies.Tests.EditMode
             Tick(game, 61);
             Assert.That(zombie.CatapultState.Ammunition, Is.EqualTo(19));
             Assert.That(zombie.PresentationNativePhase, Is.EqualTo(68));
-            Assert.That(game.AdventurePresentationZombieAnimation(zombie), Is.EqualTo("anim_idle"));
+            Assert.That(SimulationFixture.SynchronizeZombieAnimation(game, zombie), Is.EqualTo("anim_idle"));
             Assert.That(game.AdventurePresentationZombieRate(zombie), Is.EqualTo(12f));
             Assert.That(zombie.PresentationBodyBlendTicks, Is.EqualTo(20));
             Tick(game, 165);
@@ -65,11 +65,11 @@ namespace PlantsVsZombies.Tests.EditMode
             Tick(game, 1);
             Assert.That(game.Plants, Has.No.Member(crushed));
             Assert.That(zombie.Eating, Is.False);
-            Assert.That(game.AdventurePresentationZombieAnimation(zombie), Is.EqualTo("anim_shoot"));
+            Assert.That(SimulationFixture.SynchronizeZombieAnimation(game, zombie), Is.EqualTo("anim_shoot"));
             var age = zombie.PresentationAnimationAge;
             Tick(game, 5);
             Assert.That(zombie.PresentationAnimationAge, Is.GreaterThan(age));
-            Assert.That(game.AdventurePresentationZombieAnimation(zombie), Is.EqualTo("anim_shoot"));
+            Assert.That(SimulationFixture.SynchronizeZombieAnimation(game, zombie), Is.EqualTo("anim_shoot"));
         }
 
         /// <summary>Checks all twenty actual shots complete before the vehicle resumes its six-FPS walk.</summary>
@@ -119,7 +119,7 @@ namespace PlantsVsZombies.Tests.EditMode
             Assert.That(Invoke(game, "FindAdventureCatapultTarget", zombie), Is.SameAs(target));
             target.BungeeState = 2;
             Assert.That(Invoke(game, "FindAdventureCatapultTarget", zombie), Is.SameAs(shell));
-            game.Plants.Clear();
+            SimulationFixture.Plants(game).Clear();
             Place(game, PlantKind.Wallnut, 7);
             Tick(game, 1);
             Assert.That(zombie.PresentationNativePhase, Is.Zero);
@@ -267,7 +267,7 @@ namespace PlantsVsZombies.Tests.EditMode
             Invoke(game, "HitAdventureZombie", zombie, 20f, true, 32u);
             Assert.That(zombie.CatapultState!.FlatTires, Is.True);
             Assert.That(zombie.CatapultState.DeathTicks, Is.EqualTo(280));
-            Assert.That(game.AdventurePresentationZombieAnimation(zombie), Is.EqualTo("anim_bounce"));
+            Assert.That(SimulationFixture.SynchronizeZombieAnimation(game, zombie), Is.EqualTo("anim_bounce"));
             Assert.That(game.AdventurePresentationZombieRate(zombie), Is.EqualTo(12f));
             Assert.That(zombie.PresentationBodyBlendTicks, Is.EqualTo(10));
             Assert.That(zombie.CatapultState.SmokeStartAge, Is.GreaterThanOrEqualTo(0f));
@@ -367,8 +367,8 @@ namespace PlantsVsZombies.Tests.EditMode
             var game = new GameSimulation(new GameRules { AdventureLevel = level }, 7529);
             game.ChooseDefaultAdventureSeeds();
             game.ResetAdventureWaveSchedule(100000, false, false);
-            game.Plants.Clear();
-            game.Zombies.Clear();
+            SimulationFixture.Plants(game).Clear();
+            SimulationFixture.Zombies(game).Clear();
             return game;
         }
 
@@ -422,7 +422,7 @@ namespace PlantsVsZombies.Tests.EditMode
         /// <returns>The original action result.</returns>
         private static object? Invoke(GameSimulation game, string method, params object[] arguments)
         {
-            return typeof(GameSimulation).GetMethod(method, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(game, arguments);
+            return SimulationInspection.GetMethod(method, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(game, arguments);
         }
     }
 }

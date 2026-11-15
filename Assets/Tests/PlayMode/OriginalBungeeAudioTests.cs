@@ -65,7 +65,7 @@ namespace PlantsVsZombies.Tests.PlayMode
                 }
 
                 var flags = BindingFlags.Instance | BindingFlags.NonPublic;
-                var zombie = (Zombie)typeof(GameSimulation).GetMethod("SpawnAdventureBoardZombie", flags)!
+                var zombie = (Zombie)SimulationInspection.GetMethod("SpawnAdventureBoardZombie", flags)!
                     .Invoke(owner._game, new object[] { ZombieKind.Bungee, 1, 9.5f, 0 })!;
                 effects.UpdateAdventureZombiePartAudio();
                 Assert.That(owner._game.Presentation.ZombieSounds.Exists(sound => sound.Foley == 44), Is.False,
@@ -96,7 +96,7 @@ namespace PlantsVsZombies.Tests.PlayMode
 
                 effects.UpdateAdventureZombiePartAudio();
                 Assert.That(owner._game.Presentation.ZombieSounds.FindAll(sound => sound.Foley == 44).Count, Is.EqualTo(1));
-                var plant = (Plant)typeof(GameSimulation).GetMethod("PlaceAdventurePlant", flags)!
+                var plant = (Plant)SimulationInspection.GetMethod("PlaceAdventurePlant", flags)!
                     .Invoke(owner._game, new object[] { PlantKind.Wallnut, zombie.Row, zombie.TargetColumn })!;
                 zombie.BungeeState!.TargetPlant = plant;
                 zombie.BungeeState.Enter(7);
@@ -108,9 +108,9 @@ namespace PlantsVsZombies.Tests.PlayMode
                 effects.UpdateAdventureZombiePartAudio();
                 yield return null;
                 Assert.That(Playing(audio, effects._presentationSounds["floop"]), Is.EqualTo(1));
-                var second = (Zombie)typeof(GameSimulation).GetMethod("SpawnAdventureBoardZombie", flags)!
+                var second = (Zombie)SimulationInspection.GetMethod("SpawnAdventureBoardZombie", flags)!
                     .Invoke(owner._game, new object[] { ZombieKind.Bungee, 1, 9.5f, 0 })!;
-                owner._game.Plants.Add(new Plant { Id = 1000, Kind = PlantKind.UmbrellaLeaf, Row = second.Row,
+                SimulationFixture.Plants(owner._game).Add(new Plant { Id = 1000, Kind = PlantKind.UmbrellaLeaf, Row = second.Row,
                     Column = second.TargetColumn, Layer = PlantLayer.Main, Health = 300f });
                 second.PresentationAltitude = 48f;
                 source.Stop();

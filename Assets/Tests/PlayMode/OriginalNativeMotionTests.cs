@@ -50,8 +50,8 @@ namespace PlantsVsZombies.Tests.PlayMode
                     Health = 270f, StartingHealth = 270f, PresentationInPool = true,
                     PresentationAltitude = 10f, Eating = true, PresentationNativePhase = 60
                 };
-                owner._game.Zombies.Add(zombie);
-                owner._game.AdventurePresentationZombieAnimation(zombie);
+                SimulationFixture.Zombies(owner._game).Add(zombie);
+                SimulationFixture.SynchronizeZombieAnimation(owner._game, zombie);
                 zombie.PresentationAnimationAge = .2f;
                 Submit(animations, presenter, draw, zombie);
                 Read(animations, target, pixels);
@@ -68,7 +68,7 @@ namespace PlantsVsZombies.Tests.PlayMode
 
                 zombie.PresentationNativePhase = 61;
                 zombie.Eating = true;
-                owner._game.AdventurePresentationZombieAnimation(zombie);
+                SimulationFixture.SynchronizeZombieAnimation(owner._game, zombie);
                 foreach (var age in new[] { 0f, .3f, .6f, 1.1f })
                 {
                     zombie.PresentationAnimationAge = age;
@@ -82,7 +82,7 @@ namespace PlantsVsZombies.Tests.PlayMode
                 zombie.Eating = false;
                 zombie.PresentationNativePhase = 58;
                 zombie.PresentationInPool = false;
-                owner._game.AdventurePresentationZombieAnimation(zombie);
+                SimulationFixture.SynchronizeZombieAnimation(owner._game, zombie);
                 zombie.PresentationAnimationAge = 0f;
                 Submit(animations, presenter, draw, zombie);
                 zombie.PresentationAnimationAge = .7f;
@@ -93,7 +93,7 @@ namespace PlantsVsZombies.Tests.PlayMode
 
                 zombie.PresentationNativePhase = 61;
                 zombie.PresentationInPool = true;
-                typeof(GameSimulation).GetMethod("AdventurePresentationZombieDeath", flags)!.Invoke(owner._game, new object[] { zombie, 0U });
+                SimulationInspection.GetMethod("AdventurePresentationZombieDeath", flags)!.Invoke(owner._game, new object[] { zombie, 0U });
                 owner._game.Presentation.Corpses[0].Age = .8f;
                 var corpse = typeof(GamePresenter).GetMethod("DrawAdventureCorpses", flags)!;
                 ObjectSpriteRenderer.BeginSceneFrame();
@@ -154,15 +154,15 @@ namespace PlantsVsZombies.Tests.PlayMode
                 var flags = BindingFlags.Instance | BindingFlags.NonPublic;
                 typeof(GamePresenter).GetField("_renderingBoardObjects", flags)!.SetValue(presenter, true);
                 var draw = typeof(GamePresenter).GetMethod("DrawAdventureZombie", flags)!;
-                var begin = typeof(GameSimulation).GetMethod("BeginAdventurePoleVault", flags)!;
-                var clock = typeof(GameSimulation).GetMethod("AdvanceAdventureZombieClock", flags)!;
-                var jump = typeof(GameSimulation).GetMethod("AdvanceAdventurePoleVault", flags)!;
+                var begin = SimulationInspection.GetMethod("BeginAdventurePoleVault", flags)!;
+                var clock = SimulationInspection.GetMethod("AdvanceAdventureZombieClock", flags)!;
+                var jump = SimulationInspection.GetMethod("AdvanceAdventurePoleVault", flags)!;
                 var zombie = new Zombie
                 {
                     Id = 81, Kind = ZombieKind.PoleVaulter, Row = 2, X = 6.5f,
                     Health = 500f, StartingHealth = 500f, PresentationInPool = false
                 };
-                owner._game.Zombies.Add(zombie);
+                SimulationFixture.Zombies(owner._game).Add(zombie);
                 begin.Invoke(owner._game, new object[] { zombie, new Plant { Kind = PlantKind.Wallnut, Row = 2, Column = 5 } });
                 for (var tick = 0; tick < 179; tick++)
                 {
@@ -222,7 +222,7 @@ namespace PlantsVsZombies.Tests.PlayMode
                 Assert.That(owner._game.ChooseDefaultAdventureSeeds(), Is.True);
                 owner._game.ResetAdventureWaveSchedule(100000, false, false);
                 typeof(GamePresenter).GetField("_renderingBoardObjects", flags)!.SetValue(presenter, true);
-                var spawn = typeof(GameSimulation).GetMethod("SpawnAdventureZombie", flags)!;
+                var spawn = SimulationInspection.GetMethod("SpawnAdventureZombie", flags)!;
                 var draw = typeof(GamePresenter).GetMethod("DrawAdventureZombie", flags)!;
                 var origin = typeof(GamePresenter).GetMethod("AdventureZombieOrigin", flags)!;
                 var zombie = (Zombie)spawn.Invoke(owner._game, new object[] { ZombieKind.Balloon, 1, 5f, 0 })!;
@@ -231,7 +231,7 @@ namespace PlantsVsZombies.Tests.PlayMode
                 Read(animations, target, pixels);
                 var flying = pixels.GetPixels32();
                 Assert.That(VisiblePixels(flying, 0, 600), Is.GreaterThan(100));
-                typeof(GameSimulation).GetMethod("HitAdventureZombie", flags)!.Invoke(owner._game, new object[] { zombie, 20f, false, 0U });
+                SimulationInspection.GetMethod("HitAdventureZombie", flags)!.Invoke(owner._game, new object[] { zombie, 20f, false, 0U });
                 owner._game.Update(.1f);
                 Assert.That(zombie.PresentationNativePhase, Is.EqualTo(74));
                 var fallingOrigin = (Vector2)origin.Invoke(presenter, new object[] { zombie, zombie.X })!;
@@ -252,11 +252,11 @@ namespace PlantsVsZombies.Tests.PlayMode
                 Read(animations, target, pixels);
                 Assert.That(pixels.GetPixels32(), Is.EqualTo(walking), "PC StartWalkAnim(0) must not blend the final balloon pop into the landed walk.");
 
-                owner._game.Zombies.Clear();
+                SimulationFixture.Zombies(owner._game).Clear();
                 zombie = (Zombie)spawn.Invoke(owner._game, new object[] { ZombieKind.Balloon, 1, 5f, 0 })!;
                 var before = zombie.X;
                 var velocity = zombie.PresentationNativeVelocity;
-                typeof(GameSimulation).GetMethod("BlowAdventureFliersAway", flags)!.Invoke(owner._game, null);
+                SimulationInspection.GetMethod("BlowAdventureFliersAway", flags)!.Invoke(owner._game, null);
                 owner._game.Update(.05f);
                 Assert.That(owner._game.Zombies.Contains(zombie), Is.True);
                 Assert.That((zombie.X - before) * 80f, Is.EqualTo(5f * (10f - velocity)).Within(.01f));

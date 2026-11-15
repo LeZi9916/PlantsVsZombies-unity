@@ -66,7 +66,7 @@ namespace PlantsVsZombies.Tests.EditMode
             giant.FrozenRemaining = .5f;
             Tick(game, 40);
             Assert.That(giant.PresentationAnimationAge, Is.EqualTo(age));
-            game.Plants.Remove(main);
+            SimulationFixture.Plants(game).Remove(main);
             giant.FrozenRemaining = 0f;
             Tick(game, 32);
             Assert.That(Sounds(game, 40), Is.EqualTo(1));
@@ -273,8 +273,8 @@ namespace PlantsVsZombies.Tests.EditMode
             var game = new GameSimulation(new GameRules { AdventureLevel = level }, 7529);
             Assert.That(game.ChooseDefaultAdventureSeeds(), Is.True);
             game.ResetAdventureWaveSchedule(100000, false, false);
-            game.Plants.Clear();
-            game.Zombies.Clear();
+            SimulationFixture.Plants(game).Clear();
+            SimulationFixture.Zombies(game).Clear();
             game.Adventure._graves.Clear();
             return game;
         }
@@ -324,7 +324,7 @@ namespace PlantsVsZombies.Tests.EditMode
         /// <returns>The entry point result.</returns>
         internal static object? Invoke(GameSimulation game, string method, params object[] arguments)
         {
-            return typeof(GameSimulation).GetMethod(method, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(game, arguments);
+            return SimulationInspection.GetMethod(method, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(game, arguments);
         }
     }
 }

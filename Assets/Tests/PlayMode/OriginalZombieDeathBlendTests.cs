@@ -47,7 +47,7 @@ namespace PlantsVsZombies.Tests.PlayMode
                 var flags = BindingFlags.Instance | BindingFlags.NonPublic;
                 var living = typeof(GamePresenter).GetMethod("DrawAdventureZombie", flags)!;
                 var dead = typeof(GamePresenter).GetMethod("DrawAdventureCorpses", flags)!;
-                var initialize = typeof(GameSimulation).GetMethod("InitializeAdventureZombieCorpse", flags)!;
+                var initialize = SimulationInspection.GetMethod("InitializeAdventureZombieCorpse", flags)!;
                 var load = typeof(ReanimationRenderer).GetMethod("LoadTexture", flags)!;
                 Assert.That(animations.TryGetNativeAnimationInfo("Zombie", "anim_superlongdeath", out var death), Is.True, animations.LastError);
                 Assert.That(death.Count, Is.EqualTo(137));
@@ -67,7 +67,7 @@ namespace PlantsVsZombies.Tests.PlayMode
                     StartingHealth = 270f,
                     PresentationAnimation = "anim_walk"
                 };
-                owner._game.Zombies.Add(zombie);
+                SimulationFixture.Zombies(owner._game).Add(zombie);
                 Begin(animations);
                 living.Invoke(presenter, new object[] { zombie });
                 End(animations);
@@ -76,7 +76,7 @@ namespace PlantsVsZombies.Tests.PlayMode
                 {
                     new AdventureZombieCorpse { Zombie = zombie, Animation = "anim_superlongdeath", Rate = 14f }
                 })!;
-                owner._game.Zombies.Clear();
+                SimulationFixture.Zombies(owner._game).Clear();
                 owner._game.Presentation.Corpses.Add(corpse);
                 var actual = new Vector2[5];
                 for (var tick = 0; tick <= 20; tick++)

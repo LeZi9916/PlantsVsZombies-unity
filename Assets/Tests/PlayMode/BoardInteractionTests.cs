@@ -45,7 +45,7 @@ namespace PlantsVsZombies.Tests.PlayMode
         {
             _owner._deck.Clear();
             _owner._deck.Add(PlantKind.Repeater);
-            var cooldowns = (int[])typeof(GameSimulation).GetField("_seedCooldownTicks", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(_owner._game)!;
+            var cooldowns = (int[])SimulationInspection.GetField("_seedCooldownTicks", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(_owner._game)!;
             cooldowns[(int)PlantKind.Repeater] = 0;
             Click(_owner.Layout.AdventureSeedRect(0).center);
             Assert.That(_owner._selected, Is.EqualTo(-1));
@@ -66,7 +66,7 @@ namespace PlantsVsZombies.Tests.PlayMode
         {
             _owner._deck.Clear();
             _owner._deck.Add(PlantKind.Repeater);
-            var cooldowns = (int[])typeof(GameSimulation).GetField("_seedCooldownTicks", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(_owner._game)!;
+            var cooldowns = (int[])SimulationInspection.GetField("_seedCooldownTicks", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(_owner._game)!;
             cooldowns[(int)PlantKind.Repeater] = 25;
             Click(_owner.Layout.AdventureSeedRect(0).center);
             _owner.RequiredGame.Adventure._ticks += 11;
@@ -80,8 +80,8 @@ namespace PlantsVsZombies.Tests.PlayMode
         {
             var main = new Plant { Kind = PlantKind.Wallnut, Layer = PlantLayer.Main, Row = 2, Column = 3, Health = 4000 };
             var shell = new Plant { Kind = PlantKind.Pumpkin, Layer = PlantLayer.Armor, Row = 2, Column = 3, Health = 4000 };
-            _owner.RequiredGame.Plants.Add(main);
-            _owner.RequiredGame.Plants.Add(shell);
+            SimulationFixture.Plants(_owner.RequiredGame).Add(main);
+            SimulationFixture.Plants(_owner.RequiredGame).Add(shell);
             var center = new Vector2(BoardLayout.AdventureGridX + 3 * BoardLayout.CellWidth + 40, _owner.Layout.AdventureCellY(2, 3) + 40);
             Assert.That(_owner.Layout.AdventureShovelTarget(center), Is.SameAs(main));
             var rim = center + new Vector2(35, 0);
@@ -98,7 +98,7 @@ namespace PlantsVsZombies.Tests.PlayMode
         public void GraveBusterIsExcludedFromTheShovelTarget()
         {
             var plant = new Plant { Kind = PlantKind.GraveBuster, Layer = PlantLayer.Main, Row = 2, Column = 3, Health = 300 };
-            _owner.RequiredGame.Plants.Add(plant);
+            SimulationFixture.Plants(_owner.RequiredGame).Add(plant);
             Assert.That(_owner.Layout.AdventureShovelTarget(new Vector2(320, 320)), Is.Null);
             Assert.That(_owner.RequiredGame.TryShovelAdventurePlant(plant), Is.False);
             Assert.That(_owner.RequiredGame.Plants.Contains(plant), Is.True);

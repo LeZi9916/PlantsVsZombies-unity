@@ -15,7 +15,7 @@ namespace PlantsVsZombies.Tests.EditMode
         {
             var game = CreateGame();
             var plant = Place(game);
-            game.Zombies.Add(Target(true));
+            SimulationFixture.Zombies(game).Add(Target(true));
             Tick(game, plant, 1);
             var pose = plant.CactusPresentation!;
             Assert.That(pose.NativePhase, Is.EqualTo(31));
@@ -47,10 +47,10 @@ namespace PlantsVsZombies.Tests.EditMode
             var game = CreateGame();
             var plant = Place(game);
             plant.Timing = PlantsVsZombies.Timing.PlantTiming.FromRaw(PlantsVsZombies.Timing.PlantKind.Cactus, 1, 0);
-            game.Zombies.Add(Target(false));
+            SimulationFixture.Zombies(game).Add(Target(false));
             Tick(game, plant, 1);
             Assert.That(plant.RequiredTiming.ShootingCountdown, Is.EqualTo(35));
-            game.Zombies.Add(Target(true));
+            SimulationFixture.Zombies(game).Add(Target(true));
             Tick(game, plant, 34);
             Assert.That(plant.CactusPresentation!.NativePhase, Is.EqualTo(30));
             Assert.That(game.Peas, Has.Count.EqualTo(1));
@@ -73,7 +73,7 @@ namespace PlantsVsZombies.Tests.EditMode
             var game = CreateGame();
             var plant = Place(game);
             var balloon = Target(true);
-            game.Zombies.Add(balloon);
+            SimulationFixture.Zombies(game).Add(balloon);
             Tick(game, plant, 126);
             balloon.PresentationNativePhase = 74;
             Tick(game, plant, 39);
@@ -97,9 +97,9 @@ namespace PlantsVsZombies.Tests.EditMode
         {
             var game = CreateGame();
             var plant = Place(game);
-            game.Zombies.Add(Target(true));
+            SimulationFixture.Zombies(game).Add(Target(true));
             Tick(game, plant, 1);
-            game.Zombies.Clear();
+            SimulationFixture.Zombies(game).Clear();
             Tick(game, plant, 125);
             Assert.That(plant.CactusPresentation!.NativePhase, Is.EqualTo(32));
             Assert.That(plant.RequiredTiming.ShootingCountdown, Is.Zero);
@@ -135,13 +135,13 @@ namespace PlantsVsZombies.Tests.EditMode
         {
             var game = CreateGame();
             var plant = Place(game);
-            game.Zombies.Add(Target(true));
+            SimulationFixture.Zombies(game).Add(Target(true));
             Tick(game, plant, 148);
             var spike = game.Peas[0];
             var ground = Target(false);
             ground.X = spike.X;
-            game.Zombies.Add(ground);
-            typeof(GameSimulation).GetMethod("AdvanceAdventureProjectiles", BindingFlags.Instance | BindingFlags.NonPublic)!
+            SimulationFixture.Zombies(game).Add(ground);
+            SimulationInspection.GetMethod("AdvanceAdventureProjectiles", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(game, new object[] { .01f, true });
             Assert.That(ground.Health, Is.EqualTo(270f));
             Assert.That(game.Peas, Has.Count.EqualTo(1));
@@ -161,7 +161,7 @@ namespace PlantsVsZombies.Tests.EditMode
         /// <returns>The planted cactus with its original native timing state.</returns>
         private static Plant Place(GameSimulation game)
         {
-            return (Plant)typeof(GameSimulation).GetMethod("PlaceAdventurePlant", BindingFlags.Instance | BindingFlags.NonPublic)!
+            return (Plant)SimulationInspection.GetMethod("PlaceAdventurePlant", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(game, new object[] { PlantKind.Cactus, 1, 3 })!;
         }
 
@@ -189,7 +189,7 @@ namespace PlantsVsZombies.Tests.EditMode
         /// <param name="ticks">The number of original hundred-Hz updates.</param>
         private static void Tick(GameSimulation game, Plant plant, int ticks)
         {
-            var update = typeof(GameSimulation).GetMethod("AdvanceAdventureNativeTimedPlant", BindingFlags.Instance | BindingFlags.NonPublic)!;
+            var update = SimulationInspection.GetMethod("AdvanceAdventureNativeTimedPlant", BindingFlags.Instance | BindingFlags.NonPublic)!;
             for (var tick = 0; tick < ticks; tick++)
             {
                 update.Invoke(game, new object[] { plant });

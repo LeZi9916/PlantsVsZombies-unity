@@ -123,7 +123,7 @@ namespace PlantsVsZombies.Diagnostics
                 yield break;
             }
 
-            game.Zombies.Add(new Zombie { Row = 0, X = 2.5f, Health = 270f });
+            SimulationFixture.Zombies(game).Add(new Zombie { Row = 0, X = 2.5f, Health = 270f });
             game.Update(1.1f);
             if (game.Zombies.Count != 0 || game.Flames.Count != 1)
             {
@@ -193,37 +193,37 @@ namespace PlantsVsZombies.Diagnostics
 
             game.PlantAt(3, 3).ActionTimer = 100f;
             game.PlantAt(2, 2).Health = 2000f;
-            game.Zombies.Add(new Zombie { Row = 0, X = 6.5f, Health = 270f });
-            game.Zombies.Add(new Zombie {
+            SimulationFixture.Zombies(game).Add(new Zombie { Row = 0, X = 6.5f, Health = 270f });
+            SimulationFixture.Zombies(game).Add(new Zombie {
                 Row = 1,
                 X = 7.5f,
                 Health = 270f,
                 ArmorHealth = 370f,
                 Kind = ZombieKind.Conehead
             });
-            game.Zombies.Add(new Zombie {
+            SimulationFixture.Zombies(game).Add(new Zombie {
                 Row = 2,
                 X = 7.5f,
                 Health = 270f,
                 ArmorHealth = 1100f,
                 Kind = ZombieKind.Buckethead
             });
-            game.Zombies.Add(new Zombie {
+            SimulationFixture.Zombies(game).Add(new Zombie {
                 Row = 3,
                 X = 7.5f,
                 Health = 270f,
                 Kind = ZombieKind.Flag
             });
-            game.Zombies.Add(new Zombie {
+            SimulationFixture.Zombies(game).Add(new Zombie {
                 Row = 3,
                 X = 5.7f,
                 Health = 270f,
                 ShieldHealth = 1100f,
                 Kind = ZombieKind.ScreenDoor
             });
-            game.Zombies.Add(new Zombie { Row = 4, X = 7.5f, Health = 270f });
-            game.Suns.Add(new global::PlantsVsZombies.Simulation.Sun { X = 6.5f, Y = 2f, TargetY = 2f });
-            game.Suns.Add(new global::PlantsVsZombies.Simulation.Sun { X = 5.5f, Y = 1.5f, TargetY = 1.5f });
+            SimulationFixture.Zombies(game).Add(new Zombie { Row = 4, X = 7.5f, Health = 270f });
+            SimulationFixture.Suns(game).Add(new global::PlantsVsZombies.Simulation.Sun { X = 6.5f, Y = 2f, TargetY = 2f });
+            SimulationFixture.Suns(game).Add(new global::PlantsVsZombies.Simulation.Sun { X = 5.5f, Y = 1.5f, TargetY = 1.5f });
             click.Invoke(controller, new object[] { new Vector2(510, 230) });
             if (game.Suns.Count != 1 || game.SunAmount != 275)
             {

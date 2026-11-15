@@ -72,7 +72,7 @@ namespace PlantsVsZombies.Tests.PlayMode
                     PresentationAnimation = "anim_gasp",
                     PresentationAnimationAge = .5f
                 };
-                owner._game.Zombies.Add(zombie);
+                SimulationFixture.Zombies(owner._game).Add(zombie);
                 Submit(animations, presenter, draw, zombie);
                 var question = (SpriteImage)load.Invoke(animations, new object[] { "IMAGE_REANIM_ZOMBIE_QUESTIONMARK" })!;
                 var angryHead = (SpriteImage)load.Invoke(animations, new object[] { "IMAGE_REANIM_ZOMBIE_PAPER_MADHEAD" })!;
@@ -137,8 +137,8 @@ namespace PlantsVsZombies.Tests.PlayMode
                 Assert.That(animations.TryGetNativeAnimationInfo("Zombie", "anim_walk", out _), Is.True, animations.LastError);
                 var flags = BindingFlags.Instance | BindingFlags.NonPublic;
                 typeof(GamePresenter).GetField("_renderingBoardObjects", flags)!.SetValue(presenter, true);
-                var spawn = typeof(GameSimulation).GetMethod("SpawnAdventureZombie", flags)!;
-                var hit = typeof(GameSimulation).GetMethod("HitAdventureZombie", flags)!;
+                var spawn = SimulationInspection.GetMethod("SpawnAdventureZombie", flags)!;
+                var hit = SimulationInspection.GetMethod("HitAdventureZombie", flags)!;
                 var begin = typeof(GamePresenter).GetMethod("BeginAdventurePresentation", flags)!;
                 var end = typeof(GamePresenter).GetMethod("EndAdventurePresentation", flags)!;
                 var draw = typeof(GamePresenter).GetMethod("DrawAdventureDetachedZombieParts", flags)!;
@@ -148,7 +148,7 @@ namespace PlantsVsZombies.Tests.PlayMode
                     owner._game = new GameSimulation(new GameRules { AdventureLevel = 11 }, 7529);
                     var zombie = (Zombie)spawn.Invoke(owner._game, new object[] { kind, 2, 4f, 0 })!;
                     zombie.Headless = true;
-                    owner._game.AdventurePresentationZombieAnimation(zombie);
+                    SimulationFixture.SynchronizeZombieAnimation(owner._game, zombie);
                     zombie.PresentationAnimationAge = .35f;
                     hit.Invoke(owner._game, new object[] { zombie, 1000f, true, 0U });
                     Assert.That(owner._game.Presentation.ZombiePartDrops, Has.Count.EqualTo(1), kind.ToString());
@@ -186,7 +186,7 @@ namespace PlantsVsZombies.Tests.PlayMode
 
                     Save(pixels, "shield-death-" + kind + ".png");
                     drop.Age = .4f;
-                    typeof(GameSimulation).GetMethod("AdvanceAdventureZombieParts", flags)!.Invoke(owner._game, new object[] { 0f });
+                    SimulationInspection.GetMethod("AdvanceAdventureZombieParts", flags)!.Invoke(owner._game, new object[] { 0f });
                     Assert.That(owner._game.Presentation.ZombiePartDrops, Is.Empty, "Original shield systems end after 40 ticks.");
                 }
             }

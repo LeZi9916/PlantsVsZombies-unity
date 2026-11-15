@@ -156,7 +156,7 @@ namespace PlantsVsZombies.Tests.EditMode
             TickPlants(game, 1);
             Assert.That(door.PresentationBodyBlendTicks, Is.Zero);
             door.Eating = true;
-            Assert.That(game.AdventurePresentationZombieAnimation(door), Is.EqualTo("anim_eat"));
+            Assert.That(SimulationFixture.SynchronizeZombieAnimation(game, door), Is.EqualTo("anim_eat"));
             Assert.That(door.PresentationBodyBlendTicks, Is.EqualTo(20));
             door.PresentationBodyBlendTicks = 0;
             Invoke(game, "KillAdventureZombie", door, 0U);
@@ -188,7 +188,7 @@ namespace PlantsVsZombies.Tests.EditMode
             TickPlants(game, 1);
             Assert.That(bucket.ArmorHealth, Is.Zero);
             Assert.That(ladder.HasLadder, Is.True);
-            game.Plants.Remove(magnet);
+            SimulationFixture.Plants(game).Remove(magnet);
             magnet = Place(game, PlantKind.MagnetShroom, 2, 4);
             TickPlants(game, 1);
             Assert.That(ladder.HasLadder, Is.False);
@@ -341,7 +341,7 @@ namespace PlantsVsZombies.Tests.EditMode
         /// <returns>The production operation result.</returns>
         private static object? Invoke(GameSimulation game, string name, params object[] arguments)
         {
-            return typeof(GameSimulation).GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(game, arguments);
+            return SimulationInspection.GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(game, arguments);
         }
     }
 }

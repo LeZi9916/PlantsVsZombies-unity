@@ -114,7 +114,7 @@ namespace PlantsVsZombies.Tests.EditMode
         /// <returns>The created fixture plant.</returns>
         private static Plant Place(GameSimulation game, PlantKind kind, int row)
         {
-            return (Plant)typeof(GameSimulation).GetMethod("PlaceAdventurePlant", BindingFlags.Instance | BindingFlags.NonPublic)!
+            return (Plant)SimulationInspection.GetMethod("PlaceAdventurePlant", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(game, new object[] { kind, row, 4 })!;
         }
     }

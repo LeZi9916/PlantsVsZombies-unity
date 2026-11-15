@@ -4163,12 +4163,6 @@ namespace PlantsVsZombies.Game
                 DrawImage(shadowName, AdventureZombieShadowBounds(zombie, x, floor, new Vector2(shadow.Width, shadow.Height), inPool));
             }
             string name = AdventureAnimationCatalog.AdventureZombieAnimation(zombie.Kind), clip = _owner.RequiredGame.AdventurePresentationZombieAnimation(zombie);
-            if (!string.Equals(zombie.PresentationAnimation, clip, StringComparison.Ordinal))
-            {
-                zombie.PresentationAnimation = clip;
-                zombie.PresentationAnimationAge = 0;
-            }
-
             // PC UpdateAnimSpeed leaves flat-ground flying and jump animation clocks unaffected by chill.
             var constantGroundClock = zombie.Kind == ZombieKind.Balloon && zombie.Airborne
                 || zombie.Kind == ZombieKind.DolphinRider

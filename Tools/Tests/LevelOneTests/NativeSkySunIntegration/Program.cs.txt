@@ -305,7 +305,7 @@ internal static class Program
         for (int i = 0; i < 2; i++)
         {
             var legacy = new Sun();
-            game.Suns.Add(legacy);
+            SimulationFixture.Suns(game).Add(legacy);
             Check(game.CollectSun(legacy), "fund replacement seed");
         }
         game.Update(5.51f);
@@ -325,7 +325,7 @@ internal static class Program
     {
         var game = NewGame(new Draws());
         var sun = FirstSun(game);
-        game.Zombies.Add(new Zombie { Row = 2, X = -1f, Health = 270f });
+        SimulationFixture.Zombies(game).Add(new Zombie { Row = 2, X = -1f, Health = 270f });
         game.Update(0.01f);
         Equal(MatchState.Lost, game.State, "zombie ends experimental match");
         float y = sun.PixelY;
@@ -354,7 +354,7 @@ internal static class Program
         for (int i = 0; i < 398; i++)
         {
             var legacy = new Sun();
-            game.Suns.Add(legacy);
+            SimulationFixture.Suns(game).Add(legacy);
             Check(game.CollectSun(legacy), "legacy collection while native enabled");
         }
         Equal(10000, game.SunAmount, "legacy balance may exceed native cap");
@@ -507,7 +507,7 @@ internal static class Program
             Health = 300f,
             Timing = OriginalTiming.PlantTiming.Initialize(OriginalTiming.PlantKind.Sunflower, 0)
         };
-        game.Plants.Add(plant);
+        SimulationFixture.Plants(game).Add(plant);
         game.Update(2.99f);
         Equal(0, game.Suns.Count, "existing PlantTiming has not produced early");
         game.Update(0.01f);

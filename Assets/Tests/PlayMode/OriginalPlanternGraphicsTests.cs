@@ -50,7 +50,7 @@ namespace PlantsVsZombies.Tests.PlayMode
                 owner._game.ChooseDefaultAdventureSeeds();
                 owner._game.ResetAdventureWaveSchedule(100000, false, false);
                 typeof(GamePresenter).GetField("_renderingBoardObjects", flags)!.SetValue(presenter, true);
-                var plant = (Plant)typeof(GameSimulation).GetMethod("PlaceAdventurePlant", flags)!
+                var plant = (Plant)SimulationInspection.GetMethod("PlaceAdventurePlant", flags)!
                     .Invoke(owner._game, new object[] { PlantKind.Plantern, 1, 5 })!;
                 plant.Age = .25f;
                 var pool = Submit(animations, presenter, false);
@@ -105,7 +105,7 @@ namespace PlantsVsZombies.Tests.PlayMode
                 Assert.That(firstLight, Is.GreaterThan(lastFog));
                 Assert.That(lastLight, Is.LessThan(firstMoney));
                 Assert.That(firstMoney, Is.LessThan(int.MaxValue));
-                owner._game.Plants.Remove(plant);
+                SimulationFixture.Plants(owner._game).Remove(plant);
                 pool = Submit(animations, presenter, false);
                 AssertLights(pool, 0);
                 Read(pool, target, pixels);

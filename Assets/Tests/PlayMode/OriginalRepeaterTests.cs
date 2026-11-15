@@ -46,11 +46,11 @@ namespace PlantsVsZombies.Tests.PlayMode
                 Assert.That(game.ChooseDefaultAdventureSeeds(), Is.True);
                 game.ResetAdventureWaveSchedule(100000, false, false);
                 var flags = BindingFlags.Instance | BindingFlags.NonPublic;
-                var plant = (Plant)typeof(GameSimulation).GetMethod("PlaceAdventurePlant", flags)!
+                var plant = (Plant)SimulationInspection.GetMethod("PlaceAdventurePlant", flags)!
                     .Invoke(game, new object[] { PlantKind.Repeater, 0, 1 })!;
                 plant.Timing = PlantsVsZombies.Timing.PlantTiming.FromRaw(PlantsVsZombies.Timing.PlantKind.Repeater, 26, 0);
                 plant.ActionTimer = .26f;
-                game.Zombies.Add(new Zombie
+                SimulationFixture.Zombies(game).Add(new Zombie
                 {
                     Id = 91, Kind = ZombieKind.Normal, Row = 0,
                     X = AdventureZombieNativeRules.GridX(600f), Health = 10000f, StartingHealth = 10000f,

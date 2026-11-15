@@ -48,7 +48,7 @@ namespace PlantsVsZombies.Tests.PlayMode
                 var flags = BindingFlags.Instance | BindingFlags.NonPublic;
                 typeof(GamePresenter).GetField("_renderingBoardObjects", flags)!.SetValue(presenter, true);
                 var draw = typeof(GamePresenter).GetMethod("DrawAdventurePlant", flags)!;
-                var place = typeof(GameSimulation).GetMethod("PlaceAdventurePlant", flags)!;
+                var place = SimulationInspection.GetMethod("PlaceAdventurePlant", flags)!;
                 var plant = (Plant)place.Invoke(owner._game, new object[] { PlantKind.Jalapeno, 1, 4 })!;
                 var state = plant.JalapenoPresentation!;
                 Assert.That(animations.TryGetNativeAnimationInfo("Jalapeno", "anim_explode", out var info), Is.True);

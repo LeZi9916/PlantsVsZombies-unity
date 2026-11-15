@@ -68,7 +68,7 @@ namespace PlantsVsZombies.Tests.PlayMode
                         TargetZombieId = zombie.Id, OffsetX = snorkel ? -43 : -13, OffsetY = snorkel ? 55 : 15
                     };
                     zombie.TangleKelpGrab = state;
-                    owner._game.Zombies.Add(zombie);
+                    SimulationFixture.Zombies(owner._game).Add(zombie);
                     var waterline = snorkel ? 338f : 340f;
                     Color32[]? held = null;
                     foreach (var countdown in new[] { 90, 75, 60, 40 })
@@ -136,7 +136,7 @@ namespace PlantsVsZombies.Tests.PlayMode
                         }
                     }
 
-                    owner._game.Zombies.Remove(zombie);
+                    SimulationFixture.Zombies(owner._game).Remove(zombie);
                 }
             }
             finally

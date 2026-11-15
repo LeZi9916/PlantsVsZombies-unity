@@ -113,7 +113,7 @@ namespace PlantsVsZombies.Tests.PlayMode
             _owner._game = new GameSimulation(new GameRules { AdventureLevel = 11 }, 7529);
             Assert.That(_owner._game.ChooseDefaultAdventureSeeds(), Is.True);
             var plant = new Plant { Id = 81, Kind = PlantKind.PuffShroom, Row = 0, Column = 1, Health = 300f };
-            var fire = typeof(GameSimulation).GetMethod("FireAdventurePea", BindingFlags.Instance | BindingFlags.NonPublic)!;
+            var fire = SimulationInspection.GetMethod("FireAdventurePea", BindingFlags.Instance | BindingFlags.NonPublic)!;
             var shot = (Pea)fire.Invoke(_owner._game, new object[] { plant, 0, false, 20f })!;
             var draw = typeof(GamePresenter).GetMethod("DrawAdventureProjectile", BindingFlags.Instance | BindingFlags.NonPublic)!;
             yield return Capture(() => draw.Invoke(_presenter, new object[] { shot }));
@@ -148,10 +148,10 @@ namespace PlantsVsZombies.Tests.PlayMode
             _owner._game = game;
             Assert.That(game.ChooseDefaultAdventureSeeds(), Is.True);
             game.ResetAdventureWaveSchedule(100000, false, false);
-            var place = typeof(GameSimulation).GetMethod("PlaceAdventurePlant", BindingFlags.Instance | BindingFlags.NonPublic)!;
+            var place = SimulationInspection.GetMethod("PlaceAdventurePlant", BindingFlags.Instance | BindingFlags.NonPublic)!;
             var plant = (Plant)place.Invoke(game, new object[] { PlantKind.PuffShroom, 0, 1 })!;
             plant.Timing = PlantsVsZombies.Timing.PlantTiming.FromRaw(PlantsVsZombies.Timing.PlantKind.PuffShroom, 0, 0);
-            game.Zombies.Add(new Zombie
+            SimulationFixture.Zombies(game).Add(new Zombie
             {
                 Id = 91,
                 Kind = ZombieKind.Normal,
@@ -195,7 +195,7 @@ namespace PlantsVsZombies.Tests.PlayMode
             _owner._game = game;
             Assert.That(game.ChooseDefaultAdventureSeeds(), Is.True);
             game.ResetAdventureWaveSchedule(100000, false, false);
-            var place = typeof(GameSimulation).GetMethod("PlaceAdventurePlant", BindingFlags.Instance | BindingFlags.NonPublic)!;
+            var place = SimulationInspection.GetMethod("PlaceAdventurePlant", BindingFlags.Instance | BindingFlags.NonPublic)!;
             var plant = (Plant)place.Invoke(game, new object[] { PlantKind.FumeShroom, 0, 1 })!;
             plant.Timing = PlantsVsZombies.Timing.PlantTiming.FromRaw(PlantsVsZombies.Timing.PlantKind.FumeShroom, 0, 0);
             var zombie = new Zombie
@@ -208,7 +208,7 @@ namespace PlantsVsZombies.Tests.PlayMode
                 StartingHealth = 270f,
                 FrozenRemaining = 1000f
             };
-            game.Zombies.Add(zombie);
+            SimulationFixture.Zombies(game).Add(zombie);
             game.Update(.01f);
             game.Update(.14f);
             Assert.That(zombie.Health, Is.EqualTo(270f));
@@ -240,9 +240,9 @@ namespace PlantsVsZombies.Tests.PlayMode
             game.ResetAdventureWaveSchedule(100000, false, false);
             SpriteSourceTestUtilities.SetImage(_owner.Textures, "plantshadow.png", null!);
             SpriteSourceTestUtilities.SetImage(_owner.Textures, "plantshadow2.png", null!);
-            var plant = (Plant)typeof(GameSimulation).GetMethod("PlaceAdventurePlant", BindingFlags.Instance | BindingFlags.NonPublic)!
+            var plant = (Plant)SimulationInspection.GetMethod("PlaceAdventurePlant", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(game, new object[] { PlantKind.Squash, 1, 4 })!;
-            game.Zombies.Add(new Zombie
+            SimulationFixture.Zombies(game).Add(new Zombie
             {
                 Id = 1000, Kind = ZombieKind.Normal, Row = 1,
                 X = AdventureZombieNativeRules.GridX(390), Health = 270f, StartingHealth = 270f,
@@ -310,7 +310,7 @@ namespace PlantsVsZombies.Tests.PlayMode
                 PresentationRate = 12f,
                 ScaredyShroomPresentation = state
             };
-            game.Plants.Add(plant);
+            SimulationFixture.Plants(game).Add(plant);
             var draw = typeof(GamePresenter).GetMethod("DrawAdventurePlant", BindingFlags.Instance | BindingFlags.NonPublic)!;
             var origin = new Vector2(120f, 80f + AlmanacPortraitLayout.PlantHeightOffset(13));
             state.Tick(true, false, 0f);
@@ -383,7 +383,7 @@ namespace PlantsVsZombies.Tests.PlayMode
                 PresentationRate = 12f,
                 Asleep = level == 9
             };
-            _owner._game.Plants.Add(plant);
+            SimulationFixture.Plants(_owner._game).Add(plant);
             var method = typeof(GamePresenter).GetMethod("DrawAdventurePlant", BindingFlags.Instance | BindingFlags.NonPublic)!;
             Action draw = () => method.Invoke(_presenter, new object[] { plant });
             yield return Capture(draw);

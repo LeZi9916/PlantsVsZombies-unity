@@ -12,6 +12,21 @@ namespace PlantsVsZombies.Tests.Architecture
         /// <exception cref="InvalidOperationException">A scanner rule does not behave as expected.</exception>
         internal static void Run()
         {
+            RequirePresentationRule("private void Tick() { Forward(); } private void Forward() {}", null, "simulation delegation", "GameSimulation");
+            RequirePresentationRule("private void Tick(int kind) { switch (kind) { case 1: break; } }", "species dispatch", "simulation species switch", "GameSimulation");
+            RequirePresentationRule("private object Spawn() { return new Zombie(); }", "actor creation", "simulation actor factory", "GameSimulation");
+            RequirePresentationRule("private bool Has(object value) { if (value == null) { return false; } return true; }", null, "simulation lifecycle guard", "GameSimulation");
+            RequirePresentationRule("private void Tick(PlantKind kind) { _plants.Tick(kind); }", null, "simulation kind forwarding", "GameSimulation");
+            RequirePresentationRule("private void Tick(PlantKind kind) { if (kind == PlantKind.Peashooter) { return; } }", "species dispatch", "simulation plant if dispatch", "GameSimulation");
+            RequirePresentationRule("private void Tick(ZombieKind kind) { if (kind == global::PlantsVsZombies.Simulation.ZombieKind.Normal) { return; } }", "species dispatch", "qualified zombie if dispatch", "GameSimulation");
+            RequirePresentationRule("private bool Has(PlantKind kind) { if (kind == default) { return true; } return false; }", "species dispatch", "simulation typed kind branch", "GameSimulation");
+            RequirePresentationRule("private bool Has(ZombieKind kind) { return kind == ZombieKind.Normal ? true : false; }", "species dispatch", "simulation conditional dispatch", "GameSimulation");
+            RequirePresentationRule("private object Spawn() { return new PlantsVsZombies.Simulation.Plant(); }", "actor creation", "qualified plant factory", "GameSimulation");
+            RequirePresentationRule("private object Spawn() { return new global::PlantsVsZombies.Simulation.Zombie(); }", "actor creation", "global zombie factory", "GameSimulation");
+            var aliasedSimulation = "#nullable enable\r\nusing Species = PlantsVsZombies.Simulation.ZombieKind;\r\nusing Actor = PlantsVsZombies.Simulation.Zombie;\r\nnamespace PlantsVsZombies.Example\r\n{\r\n    public class GameSimulation\r\n    {\r\n        private bool Has(Species kind) { if (kind == Species.Normal) { return true; } return false; }\r\n    }\r\n}\r\n";
+            Require(ProjectArchitecture.InspectSource("GameSimulation.cs", aliasedSimulation).Any(message => message.Contains("species dispatch", StringComparison.Ordinal)), "aliased simulation kind dispatch");
+            var aliasedFactory = aliasedSimulation.Replace("private bool Has(Species kind) { if (kind == Species.Normal) { return true; } return false; }", "private object Spawn() { return new Actor(); }", StringComparison.Ordinal);
+            Require(ProjectArchitecture.InspectSource("GameSimulation.cs", aliasedFactory).Any(message => message.Contains("actor creation", StringComparison.Ordinal)), "aliased simulation actor factory");
             var valid = "#nullable enable\r\nnamespace PlantsVsZombies.Example\r\n{\r\n    public class Sample\r\n    {\r\n        private void Execute(bool enabled)\r\n        {\r\n            if (enabled)\r\n            {\r\n                return;\r\n            }\r\n        }\r\n    }\r\n}\r\n";
             Require(ProjectArchitecture.InspectSource("Sample.cs", valid).Count == 0, "valid source");
             Require(ProjectArchitecture.InspectSource("Sample.cs", valid.Replace("PlantsVsZombies.Example", "Legacy.Example", StringComparison.Ordinal)).Any(message => message.Contains("namespace", StringComparison.Ordinal)), "legacy namespace");

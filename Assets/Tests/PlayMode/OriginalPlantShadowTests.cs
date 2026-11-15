@@ -66,14 +66,14 @@ namespace PlantsVsZombies.Tests.PlayMode
                     {
                         foreach (var small in new[] { false, true })
                         {
-                            owner._game.Plants.Clear();
+                            SimulationFixture.Plants(owner._game).Clear();
                             var plant = new Plant
                             {
                                 Id = 1, Kind = (PlantKind)id, Column = 1, Row = level == 22 ? 2 : 0,
                                 Health = 8000f, IsSmall = small, Age = .5f,
                                 PresentationAwakeAge = id == 9 && small ? 120.5f : 0f
                             };
-                            owner._game.Plants.Add(plant);
+                            SimulationFixture.Plants(owner._game).Add(plant);
                             var expected = exceptions.TryGetValue(id, out var species) ? species : (-3f, 51f, 1f);
                             if (id == 9 && small)
                             {
@@ -92,7 +92,7 @@ namespace PlantsVsZombies.Tests.PlayMode
                                 cellY += 70f;
                                 if (id != 33)
                                 {
-                                    owner._game.Plants.Add(new Plant { Id = 2, Kind = PlantKind.FlowerPot, Row = 0, Column = 1, Layer = PlantLayer.Support });
+                                    SimulationFixture.Plants(owner._game).Add(new Plant { Id = 2, Kind = PlantKind.FlowerPot, Row = 0, Column = 1, Layer = PlantLayer.Support });
                                     height -= id == 13 ? 0f : id == 6 || id == 25 ? 10f : 5f;
                                 }
                             }
@@ -135,7 +135,7 @@ namespace PlantsVsZombies.Tests.PlayMode
         {
             using var fixture = new OriginalStormGraphicsTests.StormFixture(42);
             var game = fixture.Owner.RequiredGame;
-            game.Plants.Clear();
+            SimulationFixture.Plants(game).Clear();
             var shadow = fixture.Owner.Textures.RequiredLoadImage("plantshadow.png");
             foreach (var species in new[] { (PlantKind.CabbagePult, "Cabbagepult", -5f, -3f, 47f, 1f),
                 (PlantKind.PuffShroom, "Puffshroom", 0f, -3f, 42f, .5f),
@@ -143,14 +143,14 @@ namespace PlantsVsZombies.Tests.PlayMode
                 (PlantKind.ScaredyShroom, "ScaredyShroom", -14f, -9f, 55f, 1f),
                 (PlantKind.Plantern, "Plantern", -10f, -3f, 57f, 1f) })
             {
-                game.Plants.Clear();
+                SimulationFixture.Plants(game).Clear();
                 var pot = new Plant { Id = 1, Kind = PlantKind.FlowerPot, Row = 1, Column = 1,
                     Layer = PlantLayer.Support, PresentationRate = 12f, PresentationFlowerPotPaused = true,
                     PresentationBodyFrames = 2f, Health = 300f };
                 var plant = new Plant { Id = 2, Kind = species.Item1, Row = 1, Column = 1,
                     Layer = PlantLayer.Main, PresentationRate = 12f, Age = .25f, Health = 300f };
-                game.Plants.Add(pot);
-                game.Plants.Add(plant);
+                SimulationFixture.Plants(game).Add(pot);
+                SimulationFixture.Plants(game).Add(plant);
                 yield return fixture.Capture(null, () =>
                 {
                     fixture.DrawPass("DrawAdventurePlant", pot);

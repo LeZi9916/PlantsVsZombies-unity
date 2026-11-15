@@ -22,7 +22,7 @@ namespace PlantsVsZombies.Tests.EditMode
             Assert.That(zombie.ArmorHealth, Is.EqualTo(100f));
             Assert.That(zombie.Health, Is.EqualTo(270f));
             Assert.That(zombie.PresentationNativeVelocity, Is.InRange(.66f, .68f));
-            Assert.That(game.AdventurePresentationZombieAnimation(zombie), Is.EqualTo("anim_dig"));
+            Assert.That(SimulationFixture.SynchronizeZombieAnimation(game, zombie), Is.EqualTo("anim_dig"));
             Assert.That(AdventureZombieEquipmentRules.TrackVisible(zombie, "Zombie_digger_pickaxe"), Is.True);
         }
 
@@ -54,24 +54,24 @@ namespace PlantsVsZombies.Tests.EditMode
             var x = zombie.X;
             Assert.That(zombie.PresentationAltitude, Is.EqualTo(-120f));
             Assert.That(state.PhaseTicks, Is.EqualTo(130));
-            Assert.That(game.AdventurePresentationZombieAnimation(zombie), Is.EqualTo("anim_drill"));
+            Assert.That(SimulationFixture.SynchronizeZombieAnimation(game, zombie), Is.EqualTo("anim_drill"));
             Assert.That(game.AdventurePresentationZombieRate(zombie), Is.EqualTo(20f));
             Assert.That(AdventureDiggerState.WalksBackwards(zombie), Is.True);
             Assert.That(CountSound(game, 80), Is.EqualTo(1));
             Assert.That(CountSound(game, 83), Is.EqualTo(1));
             DiggerTicks(game, zombie, 99);
             Assert.That(state.PhaseTicks, Is.EqualTo(31));
-            Assert.That(game.AdventurePresentationZombieAnimation(zombie), Is.EqualTo("anim_drill"));
+            Assert.That(SimulationFixture.SynchronizeZombieAnimation(game, zombie), Is.EqualTo("anim_drill"));
             DiggerTicks(game, zombie, 1);
             Assert.That(state.PhaseTicks, Is.EqualTo(30));
             Assert.That(zombie.PresentationAltitude, Is.EqualTo(20f));
-            Assert.That(game.AdventurePresentationZombieAnimation(zombie), Is.EqualTo("anim_landing"));
+            Assert.That(SimulationFixture.SynchronizeZombieAnimation(game, zombie), Is.EqualTo("anim_landing"));
             Assert.That(game.AdventurePresentationZombieRate(zombie), Is.EqualTo(12f));
             Assert.That(AdventureZombieMotionRules.PlaysOnce(zombie), Is.True);
             DiggerTicks(game, zombie, 30);
             Assert.That(zombie.PresentationNativePhase, Is.EqualTo(36));
             Assert.That(zombie.PresentationAltitude, Is.Zero);
-            Assert.That(game.AdventurePresentationZombieAnimation(zombie), Is.EqualTo("anim_dizzy"));
+            Assert.That(SimulationFixture.SynchronizeZombieAnimation(game, zombie), Is.EqualTo("anim_dizzy"));
             Assert.That(game.AdventurePresentationZombieRate(zombie), Is.EqualTo(12f));
             Assert.That(state.AnimationBlendTicks, Is.EqualTo(10));
             Tick(game, 349);
@@ -105,7 +105,7 @@ namespace PlantsVsZombies.Tests.EditMode
             Assert.That(zombie.PresentationNativePhase, Is.EqualTo(35));
             Assert.That(state.PhaseTicks, Is.EqualTo(130));
             Assert.That(zombie.PresentationAltitude, Is.EqualTo(-120f));
-            Assert.That(game.AdventurePresentationZombieAnimation(zombie), Is.EqualTo("anim_landing"));
+            Assert.That(SimulationFixture.SynchronizeZombieAnimation(game, zombie), Is.EqualTo("anim_landing"));
             Assert.That(game.AdventurePresentationZombieRate(zombie), Is.Zero);
             Assert.That(AdventureDiggerState.WalksBackwards(zombie), Is.False);
             Assert.That(CountSound(game, 80), Is.EqualTo(1));
@@ -217,13 +217,13 @@ namespace PlantsVsZombies.Tests.EditMode
             Tick(game, 80);
             Assert.That(zombie.Eating, Is.True);
             Assert.That(plant.Health, Is.LessThan(health), "An overlap must deliver the original native bite damage.");
-            Assert.That(game.AdventurePresentationZombieAnimation(zombie), Is.EqualTo("anim_eat"));
+            Assert.That(SimulationFixture.SynchronizeZombieAnimation(game, zombie), Is.EqualTo("anim_eat"));
             Assert.That(CountSound(game, 5) + CountSound(game, 6), Is.GreaterThan(0), "The native chew cycle requests its original Foley.");
             var x = zombie.X;
-            game.Plants.Clear();
+            SimulationFixture.Plants(game).Clear();
             Tick(game, 12);
             Assert.That(zombie.Eating, Is.False);
-            Assert.That(game.AdventurePresentationZombieAnimation(zombie), Is.EqualTo("anim_walk"));
+            Assert.That(SimulationFixture.SynchronizeZombieAnimation(game, zombie), Is.EqualTo("anim_walk"));
             Assert.That(zombie.X, phase == 37 ? Is.GreaterThan(x) : Is.LessThan(x));
         }
 
@@ -256,7 +256,7 @@ namespace PlantsVsZombies.Tests.EditMode
                 Row = zombie.Row, FlightRow = zombie.Row, X = zombie.X, Damage = 20f,
                 VelocityX = 4.5f, SourceKind = PlantKind.Peashooter
             };
-            game.Peas.Add(pea);
+            SimulationFixture.Peas(game).Add(pea);
             Assert.That(AdventureZombieTargetingRules.CanBeAutoTargeted(zombie), Is.False);
             Invoke(game, "AdvanceAdventureProjectiles", .01f, true);
             Assert.That(zombie.ArmorHealth, Is.EqualTo(100f));
@@ -355,7 +355,7 @@ namespace PlantsVsZombies.Tests.EditMode
         /// <returns>The original operation's result.</returns>
         private static object? Invoke(GameSimulation game, string name, params object[] arguments)
         {
-            return typeof(GameSimulation).GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(game, arguments);
+            return SimulationInspection.GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(game, arguments);
         }
     }
 }

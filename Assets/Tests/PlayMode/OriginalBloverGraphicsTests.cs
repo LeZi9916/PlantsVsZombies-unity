@@ -50,8 +50,8 @@ namespace PlantsVsZombies.Tests.PlayMode
                 SpriteSourceTestUtilities.SetImage(owner.Textures, "plantshadow2.png", null);
                 typeof(GamePresenter).GetField("_renderingBoardObjects", flags)!.SetValue(presenter, true);
                 var draw = typeof(GamePresenter).GetMethod("DrawAdventurePlant", flags)!;
-                var advance = typeof(GameSimulation).GetMethod("AdvanceAdventurePlants", flags)!;
-                var plant = (Plant)typeof(GameSimulation).GetMethod("PlaceAdventurePlant", flags)!
+                var advance = SimulationInspection.GetMethod("AdvanceAdventurePlants", flags)!;
+                var plant = (Plant)SimulationInspection.GetMethod("PlaceAdventurePlant", flags)!
                     .Invoke(owner._game, new object[] { PlantKind.Blover, 0, 4 })!;
                 Assert.That(animations.TryGetNativeAnimationInfo("Blover", "anim_blow", out var blow), Is.True);
                 Assert.That(blow.Count, Is.EqualTo(20));

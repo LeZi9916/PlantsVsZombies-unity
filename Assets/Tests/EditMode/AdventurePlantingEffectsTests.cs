@@ -76,7 +76,7 @@ namespace PlantsVsZombies.Tests.EditMode
         public void VaseCherryButtonCreatesOneBurstAfterSpendingSun()
         {
             var game = new ModeSession(51, randomSeed: 7529).Game;
-            typeof(GameSimulation).GetProperty(nameof(GameSimulation.SunAmount))!.SetValue(game, GameSimulation.Cost(PlantKind.CherryBomb));
+            SimulationInspection.GetProperty(nameof(GameSimulation.SunAmount))!.SetValue(game, GameSimulation.Cost(PlantKind.CherryBomb));
             Assert.That(game.PlantModeVaseCherry(0, 0), Is.True);
             Assert.That(game.SunAmount, Is.Zero);
             Assert.That(game.Presentation.PlantingEffects, Has.Count.EqualTo(1));
@@ -90,7 +90,7 @@ namespace PlantsVsZombies.Tests.EditMode
         {
             var game = Fixture(49, PlantKind.CoffeeBean);
             // Fund only this isolated coffee action; ordinary first-play sunlight starts below its price.
-            typeof(GameSimulation).GetProperty(nameof(GameSimulation.SunAmount))!.SetValue(game, GameSimulation.Cost(PlantKind.CoffeeBean));
+            SimulationInspection.GetProperty(nameof(GameSimulation.SunAmount))!.SetValue(game, GameSimulation.Cost(PlantKind.CoffeeBean));
             Invoke(game, "PlaceAdventurePlant", PlantKind.FlowerPot, 0, 4);
             var mushroom = (Plant)Invoke(game, "PlaceAdventurePlant", PlantKind.PuffShroom, 0, 4)!;
             Assert.That(mushroom.Asleep, Is.True);
@@ -137,7 +137,7 @@ namespace PlantsVsZombies.Tests.EditMode
         /// <exception cref="TargetInvocationException">The invoked production method throws.</exception>
         private static object? Invoke(GameSimulation game, string name, params object[] arguments)
         {
-            return typeof(GameSimulation).GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(game, arguments);
+            return SimulationInspection.GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(game, arguments);
         }
     }
 }

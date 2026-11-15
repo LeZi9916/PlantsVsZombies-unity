@@ -37,11 +37,11 @@ namespace PlantsVsZombies.Tests.PlayMode
                 var plant = new Plant { Id = 91, Kind = sample.Item1, Row = 1, Column = 2, Asleep = true,
                     Health = 300f, Age = .37f, PresentationRate = 12f, IsSmall = sample.Item4 < 1f,
                     SleepingPresentation = new AdventureSleepingState { Rate = 7f, AnimationSeconds = .4f } };
-                fixture.Owner.RequiredGame.Plants.Clear();
-                fixture.Owner.RequiredGame.Plants.Add(plant);
+                SimulationFixture.Plants(fixture.Owner.RequiredGame).Clear();
+                SimulationFixture.Plants(fixture.Owner.RequiredGame).Add(plant);
                 if (sample.Item3 == 49)
                 {
-                    fixture.Owner.RequiredGame.Plants.Add(new Plant { Kind = PlantKind.FlowerPot,
+                    SimulationFixture.Plants(fixture.Owner.RequiredGame).Add(new Plant { Kind = PlantKind.FlowerPot,
                         Layer = PlantLayer.Support, Row = 1, Column = 2, Health = 300f });
                 }
 
@@ -79,11 +79,11 @@ namespace PlantsVsZombies.Tests.PlayMode
         public IEnumerator LiftedSleepingPlantKeepsItsOriginalFreeZOnTheBoard()
         {
             using var fixture = new OriginalStormGraphicsTests.StormFixture(9);
-            fixture.Owner.RequiredGame.Plants.Clear();
+            SimulationFixture.Plants(fixture.Owner.RequiredGame).Clear();
             var plant = new Plant { Id = 91, Kind = PlantKind.PuffShroom, Row = 1, Column = 2,
                 Asleep = true, BungeeState = 2, Health = 300f,
                 SleepingPresentation = new AdventureSleepingState { Rate = 7f, AnimationSeconds = .4f } };
-            fixture.Owner.RequiredGame.Plants.Add(plant);
+            SimulationFixture.Plants(fixture.Owner.RequiredGame).Add(plant);
             yield return fixture.Capture("DrawAdventureBoard", wholeBoard: true);
             var actual = fixture.Pixels.GetPixels32();
             plant.Asleep = false;

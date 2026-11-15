@@ -46,7 +46,7 @@ namespace PlantsVsZombies.Tests.EditMode
         public void SpawnedFootballZombieHasOriginalDurability()
         {
             var game = new GameSimulation(new GameRules { AdventureLevel = 11 }, 7529);
-            var zombie = (Zombie)typeof(GameSimulation).GetMethod("SpawnAdventureZombie", BindingFlags.Instance | BindingFlags.NonPublic)!
+            var zombie = (Zombie)SimulationInspection.GetMethod("SpawnAdventureZombie", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(game, new object[] { ZombieKind.Football, 2, 6.5f, 0 })!;
             Assert.That(zombie.ArmorHealth, Is.EqualTo(1400f));
             Assert.That(zombie.Health, Is.EqualTo(270f));
@@ -62,7 +62,7 @@ namespace PlantsVsZombies.Tests.EditMode
         {
             var game = new GameSimulation(new GameRules { AdventureLevel = 11 }, 7529);
             var zombie = SpawnShieldCarrier(game, kind);
-            var clip = game.AdventurePresentationZombieAnimation(zombie);
+            var clip = SimulationFixture.SynchronizeZombieAnimation(game, zombie);
             zombie.PresentationAnimationAge = .35f;
             Hit(game, zombie, 1000f, true);
             Assert.That(game.Zombies.Contains(zombie), Is.False);
@@ -115,7 +115,7 @@ namespace PlantsVsZombies.Tests.EditMode
             var game = new GameSimulation(new GameRules { AdventureLevel = 11 }, 7529);
             var zombie = SpawnShieldCarrier(game, kind);
             zombie.PresentationDeath = AdventureZombieDeathPresentation.Mowed;
-            typeof(GameSimulation).GetMethod("KillAdventureZombie", BindingFlags.Instance | BindingFlags.NonPublic)!
+            SimulationInspection.GetMethod("KillAdventureZombie", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(game, new object[] { zombie, 0U });
             Assert.That(zombie.ShieldHealth, Is.Zero);
             Assert.That(game.Presentation.ZombiePartDrops.Count(part => part.ParticleId == AdventureZombieEquipmentRules.ShieldParticle(zombie)), Is.EqualTo(1));
@@ -135,7 +135,7 @@ namespace PlantsVsZombies.Tests.EditMode
             var zombie = SpawnShieldCarrier(game, ZombieKind.ScreenDoor);
             zombie.PresentationDeath = death;
             zombie.Health = 0f;
-            typeof(GameSimulation).GetMethod("KillAdventureZombie", BindingFlags.Instance | BindingFlags.NonPublic)!
+            SimulationInspection.GetMethod("KillAdventureZombie", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(game, new object[] { zombie, flags });
             Assert.That(game.Presentation.ZombiePartDrops, Is.Empty);
         }
@@ -146,7 +146,7 @@ namespace PlantsVsZombies.Tests.EditMode
         /// <returns>The spawned live zombie with its original body and shield health.</returns>
         private static Zombie SpawnShieldCarrier(GameSimulation game, ZombieKind kind)
         {
-            return (Zombie)typeof(GameSimulation).GetMethod("SpawnAdventureZombie", BindingFlags.Instance | BindingFlags.NonPublic)!
+            return (Zombie)SimulationInspection.GetMethod("SpawnAdventureZombie", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(game, new object[] { kind, 2, 4f, 0 })!;
         }
 
@@ -157,7 +157,7 @@ namespace PlantsVsZombies.Tests.EditMode
         /// <param name="piercing">Whether the hit bypasses held shields.</param>
         private static void Hit(GameSimulation game, Zombie zombie, float damage, bool piercing)
         {
-            typeof(GameSimulation).GetMethod("HitAdventureZombie", BindingFlags.Instance | BindingFlags.NonPublic)!
+            SimulationInspection.GetMethod("HitAdventureZombie", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(game, new object[] { zombie, damage, piercing, 0U });
         }
 
@@ -181,7 +181,7 @@ namespace PlantsVsZombies.Tests.EditMode
             game.Adventure.GravesEnabled = true;
             typeof(AdventureBoard).GetProperty("Phase")!.GetSetMethod(true)!.Invoke(game.Adventure, new object[] { AdventurePhase.Playing });
             var grave = game.Adventure.Graves[0];
-            var plant = (Plant)typeof(GameSimulation).GetMethod("PlaceAdventurePlant", BindingFlags.Instance | BindingFlags.NonPublic)!
+            var plant = (Plant)SimulationInspection.GetMethod("PlaceAdventurePlant", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(game, new object[] { PlantKind.GraveBuster, grave.Row, grave.Column })!;
             Assert.That(game.Presentation.GraveBusterChompSoundSerial, Is.EqualTo(1));
             Assert.That(game.Presentation.Explosions.Exists(e => e.Effect == AdventureExplosionEffect.GraveBuster), Is.False);

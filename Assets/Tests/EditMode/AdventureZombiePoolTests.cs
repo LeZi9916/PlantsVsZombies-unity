@@ -38,7 +38,7 @@ namespace PlantsVsZombies.Tests.EditMode
         public void ActualRowPickerUsesNativeGroundAquaticAndWaveGates()
         {
             var game = Fixture();
-            var pick = typeof(GameSimulation).GetMethod("ChooseAdventureZombieRow", BindingFlags.Instance | BindingFlags.NonPublic)!;
+            var pick = SimulationInspection.GetMethod("ChooseAdventureZombieRow", BindingFlags.Instance | BindingFlags.NonPublic)!;
             for (var wave = 0; wave < 5; wave++)
             {
                 game.Adventure.CurrentWave = wave;
@@ -98,7 +98,7 @@ namespace PlantsVsZombies.Tests.EditMode
             Assert.That(zombie.ArmorHealth, Is.EqualTo(armor));
             Assert.That(zombie.PresentationNativeHeight, Is.Zero);
             Assert.That(zombie.PoolState.Altitude, Is.EqualTo(-40f));
-            Assert.That(game.AdventurePresentationZombieAnimation(zombie), Is.EqualTo("anim_swim"));
+            Assert.That(SimulationFixture.SynchronizeZombieAnimation(game, zombie), Is.EqualTo("anim_swim"));
             Assert.That(zombie.PresentationBiteBodyY, Is.EqualTo(40));
             Assert.That(zombie.PresentationBiteClipHeight, Is.EqualTo(33));
             Assert.That(game.Presentation.ZombieSounds.FindAll(sound => sound.Foley == 19), Has.Count.EqualTo(1));
@@ -116,7 +116,7 @@ namespace PlantsVsZombies.Tests.EditMode
             Assert.That(zombie.PoolState!.HasDuckyTube, Is.False);
             Assert.That(zombie.PoolState.Altitude, Is.EqualTo(25f));
             Assert.That(zombie.PresentationAltitude, Is.EqualTo(25f));
-            Assert.That(game.AdventurePresentationZombieAnimation(zombie), Is.EqualTo("anim_idle"));
+            Assert.That(SimulationFixture.SynchronizeZombieAnimation(game, zombie), Is.EqualTo("anim_idle"));
         }
 
         /// <summary>Checks the original pool rise curve retains native integer rounding before applying the body scale.</summary>
@@ -139,7 +139,7 @@ namespace PlantsVsZombies.Tests.EditMode
         public void FinalAmbushEmergesFromPoolWithSeaweedAndNativeSwimBody()
         {
             var game = Fixture();
-            typeof(GameSimulation).GetMethod("SpawnScheduledFinalAmbush", BindingFlags.Instance | BindingFlags.NonPublic)!
+            SimulationInspection.GetMethod("SpawnScheduledFinalAmbush", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(game, null);
             Assert.That(game.Zombies, Has.Count.EqualTo(3));
             var zombies = game.Zombies.ToArray();
@@ -163,7 +163,7 @@ namespace PlantsVsZombies.Tests.EditMode
                 Assert.That(zombie.PoolState.SplashNativeX,
                     Is.EqualTo((int)AdventureZombieNativeRules.NativePositionX(zombie.X) + 23f));
                 Assert.That(zombie.PoolState.SplashNativeY, Is.EqualTo(128f + zombie.Row * 85f));
-                Assert.That(game.AdventurePresentationZombieAnimation(zombie), Is.EqualTo("anim_swim"));
+                Assert.That(SimulationFixture.SynchronizeZombieAnimation(game, zombie), Is.EqualTo("anim_swim"));
                 Assert.That(AdventureZombieTargetingRules.CanBeAutoTargeted(zombie), Is.False);
             }
 
@@ -197,14 +197,14 @@ namespace PlantsVsZombies.Tests.EditMode
         {
             var game = Fixture();
             var zombie = Spawn(game, ZombieKind.Normal, 2, 6f);
-            typeof(GameSimulation).GetMethod("InitializeAdventurePoolZombie", BindingFlags.Instance | BindingFlags.NonPublic)!
+            SimulationInspection.GetMethod("InitializeAdventurePoolZombie", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(game, new object[] { zombie, 6 });
             game.Update(.5f);
             Assert.That(zombie.GraveRiseTicks, Is.Zero);
             var pool = zombie.PoolState!;
             var seaweed = pool.SeaweedAge;
             var splash = pool.SplashAge;
-            typeof(GameSimulation).GetMethod("HitAdventureZombie", BindingFlags.Instance | BindingFlags.NonPublic)!
+            SimulationInspection.GetMethod("HitAdventureZombie", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(game, new object[] { zombie, 1000f, true, 0U });
             Assert.That(game.Zombies.Contains(zombie), Is.False);
             Assert.That(game.Presentation.Corpses, Has.Count.EqualTo(1));
@@ -228,7 +228,7 @@ namespace PlantsVsZombies.Tests.EditMode
         {
             var game = Fixture();
             game.NotifyAdventureIceTrap();
-            typeof(GameSimulation).GetMethod("SpawnScheduledFinalAmbush", BindingFlags.Instance | BindingFlags.NonPublic)!
+            SimulationInspection.GetMethod("SpawnScheduledFinalAmbush", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(game, null);
             Assert.That(game.Zombies, Is.Empty);
         }
@@ -251,7 +251,7 @@ namespace PlantsVsZombies.Tests.EditMode
         /// <returns>The newly initialized live actor.</returns>
         private static Zombie Spawn(GameSimulation game, ZombieKind kind, int row, float x)
         {
-            return (Zombie)typeof(GameSimulation).GetMethod("SpawnAdventureZombie", BindingFlags.Instance | BindingFlags.NonPublic)!
+            return (Zombie)SimulationInspection.GetMethod("SpawnAdventureZombie", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(game, new object[] { kind, row, x, 0 })!;
         }
     }

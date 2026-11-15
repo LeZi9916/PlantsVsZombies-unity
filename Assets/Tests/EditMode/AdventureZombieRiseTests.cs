@@ -72,7 +72,7 @@ namespace PlantsVsZombies.Tests.EditMode
         /// <param name="arguments">The production hook arguments.</param>
         private static void Invoke(GameSimulation game, string name, params object[] arguments)
         {
-            typeof(GameSimulation).GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(game, arguments);
+            SimulationInspection.GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(game, arguments);
         }
     }
 }

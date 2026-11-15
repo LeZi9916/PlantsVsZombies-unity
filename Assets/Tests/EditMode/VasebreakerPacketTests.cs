@@ -59,7 +59,7 @@ namespace PlantsVsZombies.Tests.EditMode
             Assert.That(game.SmashAdventureVase(2, 6), Is.True);
             game.Update(.19f);
             var random = new PacketRandom();
-            typeof(GameSimulation).GetField("_random", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(game, random);
+            SimulationInspection.GetField("_random", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(game, random);
             game.Update(.01f);
             var packet = game.Adventure.Packets.Single();
             Assert.That(random.Calls, Is.EqualTo(new[] { "float", "float", "20" }));
@@ -226,7 +226,7 @@ namespace PlantsVsZombies.Tests.EditMode
             if (stage != 0)
             {
                 game.Adventure.VaseStage = stage;
-                typeof(GameSimulation).GetMethod("InitializeVaseStage", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(game, null);
+                SimulationInspection.GetMethod("InitializeVaseStage", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(game, null);
             }
 
             return game;

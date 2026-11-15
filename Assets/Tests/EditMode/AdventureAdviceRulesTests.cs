@@ -86,7 +86,7 @@ namespace PlantsVsZombies.Tests.EditMode
             }), Is.True);
             if (lilyPad)
             {
-                game.Plants.Add(new Plant { Kind = PlantKind.LilyPad, Row = 2, Column = 3, Layer = PlantLayer.Support });
+                SimulationFixture.Plants(game).Add(new Plant { Kind = PlantKind.LilyPad, Row = 2, Column = 3, Layer = PlantLayer.Support });
             }
 
             var failure = game.CanPlantAdventure(PlantKind.PotatoMine, 2, 3);

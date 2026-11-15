@@ -38,7 +38,7 @@ namespace PlantsVsZombies.Tests.EditMode
             Invoke(game, "AdvanceAdventureZombiePool", zombie, .01f);
             Assert.That(zombie.PresentationInPool, Is.True);
             Assert.That(zombie.PresentationNativeHeight, Is.EqualTo(1));
-            Assert.That(game.AdventurePresentationZombieAnimation(zombie), Does.StartWith("anim_walk"));
+            Assert.That(SimulationFixture.SynchronizeZombieAnimation(game, zombie), Does.StartWith("anim_walk"));
             Assert.That(game.Presentation.ZombieSplashes, Is.Empty, "Plain swimmers must use one actor-local splash, without a second global effect.");
             Assert.That(zombie.PoolState!.SplashAge, Is.Zero);
             Assert.That(zombie.PoolState.SplashNativeX, Is.EqualTo(702f));
@@ -53,7 +53,7 @@ namespace PlantsVsZombies.Tests.EditMode
 
             Assert.That(AdventureZombiePoolRules.BodyAltitude(zombie), Is.EqualTo(-40f));
             Assert.That(zombie.PresentationNativeHeight, Is.Zero);
-            Assert.That(game.AdventurePresentationZombieAnimation(zombie), Is.EqualTo("anim_swim"));
+            Assert.That(SimulationFixture.SynchronizeZombieAnimation(game, zombie), Is.EqualTo("anim_swim"));
             Assert.That(game.Presentation.ZombieSplashes, Is.Empty);
             Assert.That(game.Presentation.ZombieSounds.Count(sound => sound.Foley == 19), Is.EqualTo(1));
         }
@@ -65,11 +65,11 @@ namespace PlantsVsZombies.Tests.EditMode
             var game = Board(1);
             var zombie = Spawn(game, ZombieKind.PoleVaulter, 2, 6.5f);
             var target = new Plant { Kind = PlantKind.Wallnut, Row = 2, Column = 5, Health = 4000f };
-            game.Plants.Add(target);
+            SimulationFixture.Plants(game).Add(target);
             var startX = zombie.X;
             Invoke(game, "BeginAdventurePoleVault", zombie, target);
             Assert.That(zombie.X, Is.EqualTo(startX), "Starting the jump must not teleport across the plant.");
-            Assert.That(game.AdventurePresentationZombieAnimation(zombie), Is.EqualTo("anim_jump"));
+            Assert.That(SimulationFixture.SynchronizeZombieAnimation(game, zombie), Is.EqualTo("anim_jump"));
             for (var tick = 0; tick < 179; tick++)
             {
                 Invoke(game, "AdvanceAdventureZombieClock", zombie, .01f);
@@ -85,14 +85,14 @@ namespace PlantsVsZombies.Tests.EditMode
             Invoke(game, "AdvanceAdventurePoleVault", zombie, .01f);
             Assert.That(zombie.PresentationNativePhase, Is.EqualTo(13));
             Assert.That(beforeLanding - zombie.X, Is.EqualTo(150f / 80f).Within(.0001f));
-            Assert.That(game.AdventurePresentationZombieAnimation(zombie), Is.EqualTo("anim_walk"));
+            Assert.That(SimulationFixture.SynchronizeZombieAnimation(game, zombie), Is.EqualTo("anim_walk"));
             Assert.That(zombie.PresentationPreviousX, Is.EqualTo(zombie.X).Within(.0001f), "The landing origin handoff must also rebase interpolation history.");
             Assert.That(zombie.PresentationPoleVaultBlendTicks, Is.Zero, "PC StartWalkAnim(0) must discard the jump artwork's horizontal displacement.");
             zombie.Eating = true;
-            Assert.That(game.AdventurePresentationZombieAnimation(zombie), Is.EqualTo("anim_eat"));
+            Assert.That(SimulationFixture.SynchronizeZombieAnimation(game, zombie), Is.EqualTo("anim_eat"));
             Assert.That(zombie.PresentationPoleVaultBlendTicks, Is.EqualTo(20));
             zombie.Eating = false;
-            Assert.That(game.AdventurePresentationZombieAnimation(zombie), Is.EqualTo("anim_walk"));
+            Assert.That(SimulationFixture.SynchronizeZombieAnimation(game, zombie), Is.EqualTo("anim_walk"));
             Assert.That(zombie.PresentationPoleVaultBlendTicks, Is.EqualTo(20), "Later meal transitions retain the original ordinary blend.");
             Assert.That(AdventureZombieFoleyData.Definitions[78].Samples, Is.EqualTo(new[] { "polevault" }));
         }
@@ -114,7 +114,7 @@ namespace PlantsVsZombies.Tests.EditMode
         {
             var game = Board(41);
             var target = new Plant { Kind = PlantKind.Wallnut, Row = 2, Column = 3, Health = 4000f };
-            game.Plants.Add(target);
+            SimulationFixture.Plants(game).Add(target);
             var zombie = Spawn(game, ZombieKind.PoleVaulter, 2, AdventureZombieNativeRules.GridX(420f));
             Invoke(game, "BeginAdventurePoleVault", zombie, target);
             game.Update(.9f);
@@ -138,7 +138,7 @@ namespace PlantsVsZombies.Tests.EditMode
         {
             var game = Board(1);
             var target = new Plant { Kind = PlantKind.TallNut, Row = 2, Column = 5, Health = 8000f };
-            game.Plants.Add(target);
+            SimulationFixture.Plants(game).Add(target);
             var zombie = Spawn(game, ZombieKind.PoleVaulter, 2, AdventureZombieNativeRules.GridX(520f));
             Invoke(game, "BeginAdventurePoleVault", zombie, target);
             for (var tick = 0; tick < 130 && zombie.PresentationNativePhase == 12; tick++)
@@ -168,7 +168,7 @@ namespace PlantsVsZombies.Tests.EditMode
             zombie.PresentationNativePhase = 57;
             zombie.Submerged = false;
             Invoke(game, "AdvanceAdventureSnorkel", zombie, .01f);
-            Assert.That(game.AdventurePresentationZombieAnimation(zombie), Is.EqualTo("anim_jumpinpool"));
+            Assert.That(SimulationFixture.SynchronizeZombieAnimation(game, zombie), Is.EqualTo("anim_jumpinpool"));
             Assert.That(game.AdventurePresentationZombieRate(zombie), Is.EqualTo(16f));
             for (var tick = 0; tick < 119; tick++)
             {
@@ -183,7 +183,7 @@ namespace PlantsVsZombies.Tests.EditMode
             Assert.That(game.Presentation.ZombieSounds.Count(sound => sound.Foley == 53), Is.EqualTo(1));
             zombie.Eating = true;
             Invoke(game, "AdvanceAdventureSnorkel", zombie, .01f);
-            Assert.That(game.AdventurePresentationZombieAnimation(zombie), Is.EqualTo("anim_uptoeat"));
+            Assert.That(SimulationFixture.SynchronizeZombieAnimation(game, zombie), Is.EqualTo("anim_uptoeat"));
             Assert.That(AdventureZombieMotionRules.PlaysOnce(zombie), Is.True);
             for (var tick = 0; tick < 51; tick++)
             {
@@ -205,7 +205,7 @@ namespace PlantsVsZombies.Tests.EditMode
             }
 
             Assert.That(zombie.PresentationNativePhase, Is.EqualTo(59));
-            Assert.That(game.AdventurePresentationZombieAnimation(zombie), Is.EqualTo("anim_swim"));
+            Assert.That(SimulationFixture.SynchronizeZombieAnimation(game, zombie), Is.EqualTo("anim_swim"));
         }
 
         /// <summary>Checks the first moving tick after a meal already samples reverse submergence.</summary>
@@ -220,7 +220,7 @@ namespace PlantsVsZombies.Tests.EditMode
             zombie.Eating = true;
             zombie.Submerged = false;
             zombie.Age = .03f;
-            game.AdventurePresentationZombieAnimation(zombie);
+            SimulationFixture.SynchronizeZombieAnimation(game, zombie);
             zombie.PresentationAnimationAge = .2f;
             var startX = zombie.X;
 
@@ -228,7 +228,7 @@ namespace PlantsVsZombies.Tests.EditMode
             Invoke(game, "AdvanceAdventureZombies", .01f);
             Assert.That(zombie.Eating, Is.False);
             Assert.That(zombie.PresentationNativePhase, Is.EqualTo(62));
-            Assert.That(game.AdventurePresentationZombieAnimation(zombie), Is.EqualTo("anim_uptoeat"));
+            Assert.That(SimulationFixture.SynchronizeZombieAnimation(game, zombie), Is.EqualTo("anim_uptoeat"));
             Assert.That(zombie.PresentationAnimationAge, Is.Zero, "Reverse playback must begin at the authored final rise frame.");
             Assert.That(AdventureZombieMotionRules.PlaybackSeconds(zombie, 0f), Is.EqualTo(.5f));
             Assert.That(game.AdventurePresentationZombieRate(zombie), Is.EqualTo(24f));
@@ -242,7 +242,7 @@ namespace PlantsVsZombies.Tests.EditMode
             Invoke(game, "AdvanceAdventureZombieClock", zombie, .26f);
             Invoke(game, "AdvanceAdventureZombies", .01f);
             Assert.That(zombie.PresentationNativePhase, Is.EqualTo(59));
-            Assert.That(game.AdventurePresentationZombieAnimation(zombie), Is.EqualTo("anim_swim"));
+            Assert.That(SimulationFixture.SynchronizeZombieAnimation(game, zombie), Is.EqualTo("anim_swim"));
         }
 
         /// <summary>Checks water death retains the native snorkel pose and the death-only waterline clip.</summary>
@@ -314,7 +314,7 @@ namespace PlantsVsZombies.Tests.EditMode
         {
             var lawn = Board(1);
             var barrier = new Plant { Kind = PlantKind.TallNut, Row = 2, Column = 5, Health = 8000f };
-            lawn.Plants.Add(barrier);
+            SimulationFixture.Plants(lawn).Add(barrier);
             var vaulter = Spawn(lawn, ZombieKind.PoleVaulter, 2, AdventureZombieNativeRules.GridX(520f));
             Invoke(lawn, "AdvanceAdventureZombies", .01f);
             Assert.That(vaulter.PresentationNativePhase, Is.EqualTo(12), "The old generic ability countdown must not delay a native vault.");
@@ -322,7 +322,7 @@ namespace PlantsVsZombies.Tests.EditMode
 
             var pool = Board(21);
             var target = new Plant { Kind = PlantKind.Wallnut, Row = 2, Column = 5, Health = 4000f };
-            pool.Plants.Add(target);
+            SimulationFixture.Plants(pool).Add(target);
             var snorkel = Spawn(pool, ZombieKind.Snorkel, 2, AdventureZombieNativeRules.GridX(460f));
             snorkel.Age = .03f;
             Invoke(pool, "AdvanceAdventureZombies", .01f);
@@ -363,7 +363,7 @@ namespace PlantsVsZombies.Tests.EditMode
         /// <returns>The hook result, or null for a void method.</returns>
         private static object? Invoke(GameSimulation game, string name, params object[] arguments)
         {
-            return typeof(GameSimulation).GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(game, arguments);
+            return SimulationInspection.GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(game, arguments);
         }
     }
 }

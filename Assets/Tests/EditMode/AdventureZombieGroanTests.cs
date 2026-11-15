@@ -84,7 +84,7 @@ namespace PlantsVsZombies.Tests.EditMode
         {
             var game = Board();
             var zombie = new Zombie { Kind = kind, Health = 270f, GroanTicks = 1, Headless = headless, PresentationNativePhase = phase, Wave = wave };
-            game.Zombies.Add(zombie);
+            SimulationFixture.Zombies(game).Add(zombie);
             Attach(game);
             Groan(game, zombie);
             Assert.That(game.Presentation.ZombieSounds, Is.Empty);
@@ -149,7 +149,7 @@ namespace PlantsVsZombies.Tests.EditMode
         /// <returns>The initialized actor.</returns>
         private static Zombie Spawn(GameSimulation game, ZombieKind kind)
         {
-            return (Zombie)typeof(GameSimulation).GetMethod("SpawnAdventureZombie", BindingFlags.Instance | BindingFlags.NonPublic)!
+            return (Zombie)SimulationInspection.GetMethod("SpawnAdventureZombie", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(game, new object[] { kind, 1, 6f, 0 })!;
         }
 
@@ -158,7 +158,7 @@ namespace PlantsVsZombies.Tests.EditMode
         /// <param name="zombie">The actor whose counter is advanced.</param>
         private static void Groan(GameSimulation game, Zombie zombie)
         {
-            typeof(GameSimulation).GetMethod("AdvanceAdventureZombieGroan", BindingFlags.Instance | BindingFlags.NonPublic)!
+            SimulationInspection.GetMethod("AdvanceAdventureZombieGroan", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(game, new object[] { zombie });
         }
 
@@ -169,7 +169,7 @@ namespace PlantsVsZombies.Tests.EditMode
         private static VocalRandom Attach(GameSimulation game, bool lastTicket = false)
         {
             var random = new VocalRandom(lastTicket);
-            typeof(GameSimulation).GetField("_random", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(game, random);
+            SimulationInspection.GetField("_random", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(game, random);
             return random;
         }
 

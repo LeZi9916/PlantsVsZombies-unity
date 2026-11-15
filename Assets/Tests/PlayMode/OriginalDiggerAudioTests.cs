@@ -68,8 +68,8 @@ namespace PlantsVsZombies.Tests.PlayMode
                 Assert.That(owner._game.ChooseDefaultAdventureSeeds(), Is.True);
                 var first = new Zombie { Kind = ZombieKind.Digger, Health = 270f, PresentationNativePhase = 32 };
                 var second = new Zombie { Kind = ZombieKind.Digger, Health = 270f, PresentationNativePhase = 32 };
-                owner._game.Zombies.Add(first);
-                owner._game.Zombies.Add(second);
+                SimulationFixture.Zombies(owner._game).Add(first);
+                SimulationFixture.Zombies(owner._game).Add(second);
                 update.Invoke(effects, null);
                 yield return null;
                 var loop = (AudioSource)typeof(GameSoundEffects).GetField("_diggerTunnelingSound", flags)!.GetValue(effects)!;

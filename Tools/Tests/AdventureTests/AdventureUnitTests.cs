@@ -21,8 +21,8 @@ internal static class AdventureUnitTests
     /// <returns>The hook's result.</returns>
     private static object? Invoke(GameSimulation game, string name, params object[] args)
     {
-        var method = typeof(GameSimulation).GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic)!;
-        var parameters = method.GetParameters();
+        var method = SimulationInspection.GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic)!;
+        var parameters = method.GetParameters(game);
         if (args.Length == parameters.Length)
         {
             return method.Invoke(game, args);
@@ -51,7 +51,7 @@ internal static class AdventureUnitTests
     /// <param name="g">The isolated unit simulation; public-action playthroughs do not call this helper.</param>
     private static void CreditFixture(GameSimulation g)
     {
-        typeof(GameSimulation).GetProperty(nameof(GameSimulation.SunAmount))!.SetValue(g, 9990);
+        SimulationInspection.GetProperty(nameof(GameSimulation.SunAmount))!.SetValue(g, 9990);
         Check(g.SunAmount == 9990, "explicit unit fixture sun credit");
     }
     private static Zombie SpawnFixture(GameSimulation g,ZombieKind kind,int row,float x)
@@ -149,10 +149,10 @@ internal static class AdventureUnitTests
         var vaultFixture=Fixture(9);
         var vault=SpawnFixture(vaultFixture,ZombieKind.PoleVaulter,2,5f);
         vault.UsedAbility=true;vault.AbilityTimer=.75f;
-        Check(vaultFixture.AdventurePresentationZombieAnimation(vault)=="anim_jump","pole vaulter uses the native jump animation during the vault");
+        Check(SimulationFixture.SynchronizeZombieAnimation(vaultFixture, vault)=="anim_jump","pole vaulter uses the native jump animation during the vault");
         Check(Math.Abs(vaultFixture.AdventurePresentationZombieRate(vault)-24f)<0.00001f,"pole vaulter jump uses the native 24 fps rate");
         Check(AdventureZombieGroundData.TryGet("Zombie_polevaulter","anim_jump",out var jump)&&jump.Count==43&&Math.Abs(jump.SourceRate-24f)<0.00001f&&Math.Abs(jump.GroundDistance)<0.00001f,"pole vaulter jump ground clip matches the native marker interval");
-        vault.AbilityTimer=0;Check(vaultFixture.AdventurePresentationZombieAnimation(vault)=="anim_walk","pole vaulter returns to walking after the vault");
+        vault.AbilityTimer=0;Check(SimulationFixture.SynchronizeZombieAnimation(vaultFixture, vault)=="anim_walk","pole vaulter returns to walking after the vault");
         var bowling=Fixture(5);var packet=bowling.Adventure.Packets[0];Check(!bowling.TryUseAdventurePacket(packet.Id,2,3),"bowling placement line enforced");Check(bowling.TryUseAdventurePacket(packet.Id,2,2),"bowling emits moving nut");Check(!bowling.TryUseAdventurePacket(packet.Id,2,2),"packet cannot be spent twice");var victim=SpawnFixture(bowling,ZombieKind.Normal,2,4);bowling.Update(1);Check(!bowling.Zombies.Contains(victim),"bowling collision kills actual zombie");
         var hammer=Fixture(15);var cone=SpawnFixture(hammer,ZombieKind.Conehead,2,5);hammer.Update(0.5f);Check(hammer.HammerAdventureZombie(cone.Id),"hammer accepts live emerged zombie");
         var whackOpening=new GameSimulation(new GameRules{AdventureLevel=15},1570935);Check(whackOpening.Adventure.Graves.Count==9,"2-5 starts with nine native graves");Check(whackOpening.Adventure.Waves.Count==8,"2-5 uses eight Whack waves");whackOpening.Update(2.03f);Check(whackOpening.Adventure.CurrentWave==1&&whackOpening.Zombies.Count>0,"2-5 starts its first grave spawn on the native timer");Check(whackOpening.Zombies[0].GraveRiseTicks>=48,"2-5 grave zombies use the native fifty-tick Whack rise duration");

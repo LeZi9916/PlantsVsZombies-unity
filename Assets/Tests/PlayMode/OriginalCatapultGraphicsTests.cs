@@ -48,8 +48,8 @@ namespace PlantsVsZombies.Tests.PlayMode
                     PresentationAnimationAge = sample.Item4, PresentationBodyBlendTicks = 0,
                     CatapultState = new AdventureCatapultState { Ammunition = sample.Item3,
                         WalkingRate = sample.Item6, FlatTires = sample.Item7 } };
-                fixture.Owner.RequiredGame.Zombies.Clear();
-                fixture.Owner.RequiredGame.Zombies.Add(zombie);
+                SimulationFixture.Zombies(fixture.Owner.RequiredGame).Clear();
+                SimulationFixture.Zombies(fixture.Owner.RequiredGame).Add(zombie);
                 yield return fixture.Capture(null, () => fixture.DrawPass("DrawAdventureZombie", zombie));
                 var actual = fixture.Pixels.GetPixels32();
                 yield return fixture.Capture(null, () =>

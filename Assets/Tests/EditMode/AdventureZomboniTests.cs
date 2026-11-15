@@ -67,7 +67,7 @@ namespace PlantsVsZombies.Tests.EditMode
             var game = Board();
             var zombie = Spawn(game);
             var projectile = new Pea { Row = 1, FlightRow = 1f, X = 5.35f, VelocityX = -4.5f, Damage = 20f };
-            game.Peas.Add(projectile);
+            SimulationFixture.Peas(game).Add(projectile);
             Invoke(game, "AdvanceAdventureProjectiles", .01f, true);
             Assert.That(zombie.Health, Is.EqualTo(1330f), "The original 153-pixel body includes the visible rear, far beyond grid-center +/- 0.25.");
             Assert.That(game.Peas, Has.No.Member(projectile));
@@ -103,19 +103,19 @@ namespace PlantsVsZombies.Tests.EditMode
             Assert.That(state.DeathTicks, Is.EqualTo(280));
             Assert.That(CountSound(game, 22), Is.EqualTo(1));
             Assert.That(game.Presentation.ZomboniParticles.Single().Particle, Is.EqualTo("ZamboniTire"));
-            Assert.That(game.AdventurePresentationZombieAnimation(zombie), Is.EqualTo(state.Animation));
+            Assert.That(SimulationFixture.SynchronizeZombieAnimation(game, zombie), Is.EqualTo(state.Animation));
             Assert.That(game.AdventurePresentationZombieRate(zombie), Is.EqualTo(state.Rate));
             Assert.That(AdventureZombieMotionRules.PlaysOnce(zombie), Is.True);
             var projectile = new Pea { Row = 1, FlightRow = 1f, X = 5.35f, VelocityX = -4.5f, Damage = 20f };
-            game.Peas.Add(projectile);
+            SimulationFixture.Peas(game).Add(projectile);
             var spore = new Pea { Row = 1, FlightRow = 1f, X = 5.2f, VelocityX = -4.5f, Damage = 20f, SourceKind = PlantKind.PuffShroom };
-            game.Peas.Add(spore);
+            SimulationFixture.Peas(game).Add(spore);
             var health = zombie.Health;
             Invoke(game, "AdvanceAdventureProjectiles", .01f, true);
             Assert.That(game.Peas, Has.Member(projectile), "PC EffectedByDamage lets a projectile pass a dying punctured vehicle.");
             Assert.That(game.Peas, Has.Member(spore), "The same original dying-state exclusion applies to short-range spores.");
             Assert.That(zombie.Health, Is.EqualTo(health));
-            game.Peas.Clear();
+            SimulationFixture.Peas(game).Clear();
             var initial = zombie.X;
             for (var tick = 0; tick < 279; tick++)
             {
@@ -156,7 +156,7 @@ namespace PlantsVsZombies.Tests.EditMode
         public void CriticalVehiclesLoseHealthWithoutIncomingAttacks(ZombieKind kind)
         {
             var game = Board();
-            var zombie = (Zombie)typeof(GameSimulation).GetMethod("SpawnAdventureZombie", BindingFlags.Instance | BindingFlags.NonPublic)!
+            var zombie = (Zombie)SimulationInspection.GetMethod("SpawnAdventureZombie", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(game, new object[] { kind, 1, 4f, 5 })!;
             zombie.Health = 200f;
             for (var tick = 0; tick < 100; tick++)
@@ -224,7 +224,7 @@ namespace PlantsVsZombies.Tests.EditMode
         /// <returns>The production-created ice vehicle.</returns>
         private static Zombie Spawn(GameSimulation game)
         {
-            return (Zombie)typeof(GameSimulation).GetMethod("SpawnAdventureZombie", BindingFlags.Instance | BindingFlags.NonPublic)!
+            return (Zombie)SimulationInspection.GetMethod("SpawnAdventureZombie", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(game, new object[] { ZombieKind.Zomboni, 1, 4f, 5 })!;
         }
 
@@ -244,7 +244,7 @@ namespace PlantsVsZombies.Tests.EditMode
         /// <param name="arguments">The production method arguments.</param>
         private static void Invoke(GameSimulation game, string name, params object[] arguments)
         {
-            typeof(GameSimulation).GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(game, arguments);
+            SimulationInspection.GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(game, arguments);
         }
 
         /// <summary>Counts explicit original Foley requests emitted by this board.</summary>

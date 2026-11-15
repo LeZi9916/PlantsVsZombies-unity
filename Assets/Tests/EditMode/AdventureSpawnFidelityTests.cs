@@ -262,7 +262,7 @@ namespace PlantsVsZombies.Tests.EditMode
         public void UmbrellaInterceptionFollowsCarrierAndPassengerCreation()
         {
             var game = Fixture(48);
-            game.Plants.Add(new Plant { Kind = PlantKind.UmbrellaLeaf, Row = 2, Column = 5, Layer = PlantLayer.Main, Health = 300f });
+            SimulationFixture.Plants(game).Add(new Plant { Kind = PlantKind.UmbrellaLeaf, Row = 2, Column = 5, Layer = PlantLayer.Main, Health = 300f });
             var random = AttachRandom(game);
             Invoke(game, "DropAdventureZombie", ZombieKind.Normal, 2, 5, 0);
             Assert.That(game.Zombies, Has.Count.EqualTo(2));
@@ -305,7 +305,7 @@ namespace PlantsVsZombies.Tests.EditMode
         /// <returns>The boundary's result, or null for a void method.</returns>
         private static object? Invoke(GameSimulation game, string method, params object[] arguments)
         {
-            return typeof(GameSimulation).GetMethod(method, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(game, arguments);
+            return SimulationInspection.GetMethod(method, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(game, arguments);
         }
 
         /// <summary>Installs a recording stream so draw order can be checked separately from unrelated constructor draws.</summary>
@@ -314,7 +314,7 @@ namespace PlantsVsZombies.Tests.EditMode
         private static RecordingRandom AttachRandom(GameSimulation game)
         {
             var random = new RecordingRandom();
-            typeof(GameSimulation).GetField("_random", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(game, random);
+            SimulationInspection.GetField("_random", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(game, random);
             return random;
         }
 

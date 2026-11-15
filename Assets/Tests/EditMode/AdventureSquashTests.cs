@@ -95,7 +95,7 @@ namespace PlantsVsZombies.Tests.EditMode
             var state = plant.SquashPresentation!;
             Assert.That(state.Animation, Is.EqualTo("anim_lookleft"));
             var firstX = state.TargetX;
-            game.Zombies.Remove(first);
+            SimulationFixture.Zombies(game).Remove(first);
             var replacement = Target(game, ZombieKind.Normal, 430);
             game.Update(.8f);
             Assert.That(state.TargetX, Is.EqualTo(firstX));
@@ -205,8 +205,8 @@ namespace PlantsVsZombies.Tests.EditMode
             var game = new GameSimulation(new GameRules { AdventureLevel = level }, 4231);
             Assert.That(game.ChooseDefaultAdventureSeeds(), Is.True);
             game.ResetAdventureWaveSchedule(100000, false, false);
-            game.Plants.Clear();
-            game.Zombies.Clear();
+            SimulationFixture.Plants(game).Clear();
+            SimulationFixture.Zombies(game).Clear();
             game.Adventure._graves.Clear();
             return game;
         }
@@ -232,7 +232,7 @@ namespace PlantsVsZombies.Tests.EditMode
                 X = AdventureZombieNativeRules.GridX(nativeX), Health = 270f, StartingHealth = 270f,
                 FrozenRemaining = 100f
             };
-            game.Zombies.Add(zombie);
+            SimulationFixture.Zombies(game).Add(zombie);
             return zombie;
         }
 
@@ -266,7 +266,7 @@ namespace PlantsVsZombies.Tests.EditMode
         /// <returns>The method's optional result.</returns>
         private static object? Invoke(GameSimulation game, string name, params object[] arguments)
         {
-            return typeof(GameSimulation).GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(game, arguments);
+            return SimulationInspection.GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(game, arguments);
         }
     }
 }

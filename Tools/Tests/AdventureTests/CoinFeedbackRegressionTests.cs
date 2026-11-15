@@ -127,7 +127,7 @@ internal static class CoinFeedbackRegressionTests
         var game = Fixture();
         var coin = game.SpawnAdventureCoin(AdventureCoinKind.Diamond, 5f, 2f);
         Check(game.CollectAdventureCoin(coin), "The completed-board fixture begins a normal pickup flight.");
-        typeof(GameSimulation).GetProperty(nameof(GameSimulation.State), BindingFlags.Instance | BindingFlags.Public)!
+        SimulationInspection.GetProperty(nameof(GameSimulation.State), BindingFlags.Instance | BindingFlags.Public)!
             .SetValue(game, MatchState.Won);
         game.Adventure.Phase = AdventurePhase.Reward;
         game.Adventure.RewardPresentation = new AdventureRewardPresentation(15, 400f, 300f, 91, 78, .5f, .5f, 0);

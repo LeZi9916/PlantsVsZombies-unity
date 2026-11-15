@@ -45,6 +45,8 @@ python3 -B Tools/PrepareRuntimeAssets.py \
 | `Tools/CSharp` | 独立 C# 开发工具 |
 | `Tools/Tests` | 独立验证项目与隔离 Unity 测试脚本 |
 
+模拟器的职责划分、行为组合、只读实体接口和迁移约定见 [`Assets/Scripts/Simulation/README.md`](Assets/Scripts/Simulation/README.md)；重构前后状态对照、性能数据与验证限制见 [`Assets/Tests/SimulationRefactor.md`](Assets/Tests/SimulationRefactor.md)。
+
 运行时代码属于 `PlantsVsZombies.Runtime`，编辑器工具属于仅限 Editor 的 `PlantsVsZombies.Editor`。项目类型使用单文件声明，原来的 partial 声明已经合并，公开嵌套数据类型已提升到各自职责目录。脚本移动保留原 `.meta`，尤其保留场景引用的 `PvZGame` 脚本 GUID。
 
 ## 渲染

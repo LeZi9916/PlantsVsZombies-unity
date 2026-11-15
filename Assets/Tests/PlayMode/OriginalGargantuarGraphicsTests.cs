@@ -41,8 +41,8 @@ namespace PlantsVsZombies.Tests.PlayMode
                     PresentationAnimationAge = sample.Item7, PresentationMovementRate = sample.Item8,
                     _presentationMovementAnimation = sample.Item6, PresentationBodyBlendTicks = 0,
                     ThrownImp = sample.Item3, GargantuarState = new AdventureGargantuarState { Weapon = sample.Item4 } };
-                fixture.Owner.RequiredGame.Zombies.Clear();
-                fixture.Owner.RequiredGame.Zombies.Add(giant);
+                SimulationFixture.Zombies(fixture.Owner.RequiredGame).Clear();
+                SimulationFixture.Zombies(fixture.Owner.RequiredGame).Add(giant);
                 yield return fixture.Capture(null, () => fixture.DrawPass("DrawAdventureZombie", giant));
                 var actual = fixture.Pixels.GetPixels32();
                 yield return fixture.Capture(null, () =>
@@ -101,7 +101,7 @@ namespace PlantsVsZombies.Tests.PlayMode
             {
                 using var fixture = new OriginalStormGraphicsTests.StormFixture(sample.Item1);
                 var game = fixture.Owner.RequiredGame;
-                game.Zombies.Clear();
+                SimulationFixture.Zombies(game).Clear();
                 var zombie = (Zombie)Invoke(game, "SpawnAdventureBoardZombie", ZombieKind.Catapult, 1,
                     AdventureZombieNativeRules.GridX(sample.Item2), 0)!;
                 Invoke(game, "HitAdventureExplosionZombie", zombie, 1800f, true, 0x12U);
@@ -132,7 +132,7 @@ namespace PlantsVsZombies.Tests.PlayMode
         {
             using var fixture = new OriginalStormGraphicsTests.StormFixture(49);
             var game = fixture.Owner.RequiredGame;
-            game.Plants.Clear();
+            SimulationFixture.Plants(game).Clear();
             var pot = (Plant)Invoke(game, "PlaceAdventurePlant", PlantKind.FlowerPot, 1, 3)!;
             var plant = (Plant)Invoke(game, "PlaceAdventurePlant", PlantKind.Peashooter, 1, 3)!;
             Invoke(game, "CrushAdventurePlantCell", 1, 3, false);
@@ -170,8 +170,8 @@ namespace PlantsVsZombies.Tests.PlayMode
             var particles = new OriginalParticleRenderer(fixture.Root, fixture.Animations);
             foreach (var kind in new[] { PlantKind.Peashooter, PlantKind.SnowPea, PlantKind.GatlingPea, PlantKind.Cactus, PlantKind.ScaredyShroom })
             {
-                game.Plants.Clear();
-                game.Peas.Clear();
+                SimulationFixture.Plants(game).Clear();
+                SimulationFixture.Peas(game).Clear();
                 game.Presentation.Impacts.Clear();
                 Invoke(game, "PlaceAdventurePlant", PlantKind.FlowerPot, 1, 1);
                 var plant = (Plant)Invoke(game, "PlaceAdventurePlant", kind, 1, 1)!;
@@ -229,8 +229,8 @@ namespace PlantsVsZombies.Tests.PlayMode
             var game = fixture.Owner.RequiredGame;
             Assert.That(game.ChooseDefaultAdventureSeeds(), Is.True);
             game.ResetAdventureWaveSchedule(100000, false, false);
-            game.Plants.Clear();
-            game.Zombies.Clear();
+            SimulationFixture.Plants(game).Clear();
+            SimulationFixture.Zombies(game).Clear();
             var giant = (Zombie)Invoke(game, "SpawnAdventureBoardZombie", ZombieKind.Gargantuar, 1,
                 AdventureZombieNativeRules.GridX(401f), 0)!;
             giant.Health = 1499f;
@@ -267,7 +267,7 @@ namespace PlantsVsZombies.Tests.PlayMode
         /// <returns>The production method result.</returns>
         private static object? Invoke(GameSimulation game, string method, params object[] arguments)
         {
-            return typeof(GameSimulation).GetMethod(method, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(game, arguments);
+            return SimulationInspection.GetMethod(method, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(game, arguments);
         }
     }
 }

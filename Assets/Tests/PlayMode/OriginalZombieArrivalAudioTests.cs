@@ -65,13 +65,13 @@ namespace PlantsVsZombies.Tests.PlayMode
                 Assert.That(owner._game.ChooseDefaultAdventureSeeds(), Is.True);
                 owner._game.ResetAdventureWaveSchedule(100000, false, false);
                 var flags = BindingFlags.Instance | BindingFlags.NonPublic;
-                typeof(GameSimulation).GetMethod("SpawnScheduledAdventureWave", flags)!.Invoke(owner._game,
+                SimulationInspection.GetMethod("SpawnScheduledAdventureWave", flags)!.Invoke(owner._game,
                     new object[] { new AdventureWave { Index = 0, Zombies = new[] { ZombieKind.Balloon } } });
                 Assert.That(owner._game.Presentation.ZombieSounds.FindAll(sound => sound.Foley == 60), Has.Count.EqualTo(1));
                 effects.UpdateAdventureZombiePartAudio();
                 yield return null;
                 AssertPlaying(audio, balloonClip, 1.79f);
-                var pogo = (Zombie)typeof(GameSimulation).GetMethod("SpawnAdventureBoardZombie", flags)!
+                var pogo = (Zombie)SimulationInspection.GetMethod("SpawnAdventureBoardZombie", flags)!
                     .Invoke(owner._game, new object[] { ZombieKind.Pogo, 1, 9.5f, 0 })!;
                 pogo.PogoState!.PhaseTicks = 6;
                 owner._game.Update(.01f);

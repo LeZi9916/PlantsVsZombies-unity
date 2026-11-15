@@ -66,7 +66,7 @@ namespace PlantsVsZombies.Tests.EditMode
             game.Update(.01f);
             Assert.That(jack.PresentationNativePhase, Is.EqualTo(16));
             Assert.That(jack.JackInTheBoxTicks, Is.EqualTo(110));
-            Assert.That(game.AdventurePresentationZombieAnimation(jack), Is.EqualTo("anim_pop"));
+            Assert.That(SimulationFixture.SynchronizeZombieAnimation(game, jack), Is.EqualTo("anim_pop"));
             Assert.That(game.AdventurePresentationZombieRate(jack), Is.EqualTo(28f));
             Assert.That(AdventureZombieMotionRules.PlaysOnce(jack), Is.True);
             Assert.That(jack.X, Is.EqualTo(x));
@@ -111,8 +111,8 @@ namespace PlantsVsZombies.Tests.EditMode
             friendly.Hypnotized = true;
             var near = new Plant { Id = 1, Kind = PlantKind.Peashooter, Row = 2, Column = 4, Health = 300f };
             var far = new Plant { Id = 2, Kind = PlantKind.Peashooter, Row = 2, Column = 7, Health = 300f };
-            game.Plants.Add(near);
-            game.Plants.Add(far);
+            SimulationFixture.Plants(game).Add(near);
+            SimulationFixture.Plants(game).Add(far);
             Invoke(game, "AdvanceAdventureZombies", .01f);
             Assert.That(game.Zombies.Contains(normal), Is.EqualTo(!hypnotized));
             Assert.That(game.Zombies.Contains(friendly), Is.EqualTo(hypnotized));
@@ -198,7 +198,7 @@ namespace PlantsVsZombies.Tests.EditMode
         /// <returns>The live spawned zombie.</returns>
         private static Zombie Spawn(GameSimulation game, ZombieKind kind, float x)
         {
-            return (Zombie)typeof(GameSimulation).GetMethod("SpawnAdventureZombie", BindingFlags.Instance | BindingFlags.NonPublic)!
+            return (Zombie)SimulationInspection.GetMethod("SpawnAdventureZombie", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(game, new object[] { kind, 2, x, 5 })!;
         }
 
@@ -208,7 +208,7 @@ namespace PlantsVsZombies.Tests.EditMode
         /// <param name="arguments">The original boundary arguments.</param>
         private static void Invoke(GameSimulation game, string name, params object[] arguments)
         {
-            typeof(GameSimulation).GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(game, arguments);
+            SimulationInspection.GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(game, arguments);
         }
     }
 }

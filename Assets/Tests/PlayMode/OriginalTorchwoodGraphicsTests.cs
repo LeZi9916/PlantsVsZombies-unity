@@ -70,15 +70,15 @@ namespace PlantsVsZombies.Tests.PlayMode
                 SpriteDrawState.Color = Color.white;
                 SpriteDrawState.Clip = new Rect(0f, 0f, 800f, 600f);
                 var flags = BindingFlags.Instance | BindingFlags.NonPublic;
-                var fire = typeof(GameSimulation).GetMethod("FireAdventurePea", flags)!;
-                var plants = typeof(GameSimulation).GetMethod("AdvanceAdventurePlants", flags)!;
-                var move = typeof(GameSimulation).GetMethod("AdvanceAdventureProjectiles", flags)!;
+                var fire = SimulationInspection.GetMethod("FireAdventurePea", flags)!;
+                var plants = SimulationInspection.GetMethod("AdvanceAdventurePlants", flags)!;
+                var move = SimulationInspection.GetMethod("AdvanceAdventureProjectiles", flags)!;
                 var draw = typeof(GamePresenter).GetMethod("DrawAdventureProjectile", flags)!;
                 foreach (var backward in new[] { false, true })
                 {
                     owner._game = new GameSimulation(new GameRules { AdventureLevel = 41 }, 7529);
                     owner._game.ChooseDefaultAdventureSeeds();
-                    typeof(GameSimulation).GetMethod("PlaceAdventurePlant", flags)!
+                    SimulationInspection.GetMethod("PlaceAdventurePlant", flags)!
                         .Invoke(owner._game, new object[] { PlantKind.Torchwood, 2, 4 });
                     var plant = new Plant { Kind = backward ? PlantKind.SplitPea : PlantKind.Peashooter, Row = 2, Column = 2 };
                     var shot = (Pea)fire.Invoke(owner._game, new object[] { plant, plant.Row, backward, 20f })!;

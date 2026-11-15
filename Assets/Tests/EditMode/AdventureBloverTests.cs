@@ -95,7 +95,7 @@ namespace PlantsVsZombies.Tests.EditMode
         /// <returns>The actual initialized plant.</returns>
         private static Plant Place(GameSimulation game)
         {
-            return (Plant)typeof(GameSimulation).GetMethod("PlaceAdventurePlant", BindingFlags.Instance | BindingFlags.NonPublic)!
+            return (Plant)SimulationInspection.GetMethod("PlaceAdventurePlant", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(game, new object[] { PlantKind.Blover, 0, 4 })!;
         }
 
@@ -105,7 +105,7 @@ namespace PlantsVsZombies.Tests.EditMode
         /// <returns>The live balloon actor.</returns>
         private static Zombie Spawn(GameSimulation game, int phase)
         {
-            var zombie = (Zombie)typeof(GameSimulation).GetMethod("SpawnAdventureZombie", BindingFlags.Instance | BindingFlags.NonPublic)!
+            var zombie = (Zombie)SimulationInspection.GetMethod("SpawnAdventureZombie", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(game, new object[] { ZombieKind.Balloon, 0, 6f, 0 })!;
             zombie.PresentationNativePhase = phase;
             return zombie;
@@ -115,7 +115,7 @@ namespace PlantsVsZombies.Tests.EditMode
         /// <param name="game">The production board whose plants are advanced.</param>
         private static void Tick(GameSimulation game)
         {
-            typeof(GameSimulation).GetMethod("AdvanceAdventurePlants", BindingFlags.Instance | BindingFlags.NonPublic)!
+            SimulationInspection.GetMethod("AdvanceAdventurePlants", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(game, new object[] { .01f });
         }
     }

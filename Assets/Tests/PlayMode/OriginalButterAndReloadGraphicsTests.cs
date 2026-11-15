@@ -24,15 +24,15 @@ namespace PlantsVsZombies.Tests.PlayMode
             using var fixture = new OriginalStormGraphicsTests.StormFixture(49);
             SpriteSourceTestUtilities.SetImage(fixture.Owner.Textures, "plantshadow.png", null!);
             var game = fixture.Owner.RequiredGame;
-            game.Plants.Clear();
+            SimulationFixture.Plants(game).Clear();
             var id = 0;
             foreach (var species in new[] { (PlantKind.CabbagePult, "Cabbagepult", 38), (PlantKind.KernelPult, "Cornpult", 34),
                 (PlantKind.MelonPult, "Melonpult", 38), (PlantKind.WinterMelon, "WinterMelon", 38) })
             {
                 var plant = new Plant { Id = ++id, Kind = species.Item1, Row = 1, Column = 2, Health = 300f,
                     Age = 9.2f, PresentationRate = 12f, PresentationShotAge = 2f, PresentationLobberIdleAge = .14f };
-                game.Plants.Clear();
-                game.Plants.Add(plant);
+                SimulationFixture.Plants(game).Clear();
+                SimulationFixture.Plants(game).Add(plant);
                 Assert.That(fixture.Animations.TryGetNativeAnimationInfo(species.Item2, "anim_shooting", out var clip), Is.True);
                 Assert.That(clip.Count, Is.EqualTo(species.Item3));
                 Assert.That(AdventurePresentationRules.LobberShootingFrames(species.Item1), Is.EqualTo(clip.Count));
@@ -55,10 +55,10 @@ namespace PlantsVsZombies.Tests.PlayMode
             using var fixture = new OriginalStormGraphicsTests.StormFixture(49);
             SpriteSourceTestUtilities.SetImage(fixture.Owner.Textures, "plantshadow.png", null!);
             var game = fixture.Owner.RequiredGame;
-            game.Plants.Clear();
+            SimulationFixture.Plants(game).Clear();
             var plant = new Plant { Id = 9, Kind = PlantKind.CabbagePult, Row = 1, Column = 2,
                 Health = 300f, PresentationRate = 12f, PresentationShotAge = .30f };
-            game.Plants.Add(plant);
+            SimulationFixture.Plants(game).Add(plant);
             yield return fixture.Capture(null, () => fixture.DrawPass("DrawAdventurePlant", plant));
             plant.PresentationShotAge = 1.08f;
             yield return fixture.Capture(null, () => fixture.DrawPass("DrawAdventurePlant", plant));
@@ -91,7 +91,7 @@ namespace PlantsVsZombies.Tests.PlayMode
             using var fixture = new OriginalStormGraphicsTests.StormFixture(49);
             SpriteSourceTestUtilities.SetImage(fixture.Owner.Textures, "plantshadow.png", null!);
             var game = fixture.Owner.RequiredGame;
-            game.Plants.Clear();
+            SimulationFixture.Plants(game).Clear();
             var plant = (Plant)Invoke(game, "PlaceAdventurePlant", PlantKind.KernelPult, 1, 2)!;
             plant.PresentationButter = true;
             plant._kernelWeaponPrepared = true;
@@ -209,7 +209,7 @@ namespace PlantsVsZombies.Tests.PlayMode
         /// <returns>The original method result.</returns>
         private static object? Invoke(GameSimulation game, string method, params object[] arguments)
         {
-            return typeof(GameSimulation).GetMethod(method, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(game, arguments);
+            return SimulationInspection.GetMethod(method, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(game, arguments);
         }
     }
 }

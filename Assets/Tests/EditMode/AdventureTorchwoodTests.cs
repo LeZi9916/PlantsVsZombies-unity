@@ -93,12 +93,12 @@ namespace PlantsVsZombies.Tests.EditMode
             foreach (var kind in new[] { PlantKind.Starfruit, PlantKind.PuffShroom, PlantKind.Cactus, PlantKind.Cattail, PlantKind.CabbagePult, PlantKind.KernelPult })
             {
                 var shot = new Pea { SourceKind = kind, Row = 2, X = 4.45f };
-                game.Peas.Add(shot);
+                SimulationFixture.Peas(game).Add(shot);
                 Assert.That(AdventureTorchwoodRules.Overlaps(torch, shot), Is.False, kind + " does not create an original normal/snow pea.");
             }
 
             var differentRow = new Pea { Row = 3, X = 4.45f };
-            game.Peas.Add(differentRow);
+            SimulationFixture.Peas(game).Add(differentRow);
             Invoke(game, "AdvanceAdventurePlants", .01f);
             Assert.That(game.Peas.TrueForAll(shot => !shot.Fire), Is.True);
             Assert.That(CountSound(game, 39), Is.Zero);
@@ -155,7 +155,7 @@ namespace PlantsVsZombies.Tests.EditMode
             }
 
             var arguments = new object[] { shot, 0f, 0f };
-            typeof(GameSimulation).GetMethod("AdventureIceProjectileTopLeft", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(game, arguments);
+            SimulationInspection.GetMethod("AdventureIceProjectileTopLeft", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(game, arguments);
             Assert.That((float)arguments[2], Is.EqualTo(launchY - 14f));
             Torch(game, 2, 6);
             var x = shot.X;
@@ -219,7 +219,7 @@ namespace PlantsVsZombies.Tests.EditMode
         /// <returns>The original operation result.</returns>
         private static object? Invoke(GameSimulation game, string name, params object[] arguments)
         {
-            return typeof(GameSimulation).GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(game, arguments);
+            return SimulationInspection.GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(game, arguments);
         }
     }
 }

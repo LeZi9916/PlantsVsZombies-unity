@@ -98,7 +98,7 @@ namespace PlantsVsZombies.Tests.EditMode
         {
             var game = CreateGame();
             Assert.That(game.TryPlant(PlantKind.Peashooter, 2, 0), Is.True);
-            game.Zombies.Add(new Zombie { Row = 2, X = 9f, Health = 100000f });
+            SimulationFixture.Zombies(game).Add(new Zombie { Row = 2, X = 9f, Health = 100000f });
             game.Update(2f);
             Assert.That(game.Peas.Count, Is.GreaterThan(0));
             var original = game.Peas[0];
@@ -132,7 +132,7 @@ namespace PlantsVsZombies.Tests.EditMode
         {
             var game = CreateGame();
             game.TryPlant(PlantKind.Peashooter, 2, 0);
-            game.Zombies.Add(new Zombie { Row = 2, X = 9f, Health = 100000f });
+            SimulationFixture.Zombies(game).Add(new Zombie { Row = 2, X = 9f, Health = 100000f });
             var plants = game.Plants;
             RunWarmTicks(game, plants, 200);
 
@@ -229,7 +229,7 @@ namespace PlantsVsZombies.Tests.EditMode
         /// <param name="game">The active legacy simulation with a shooter and stationary target.</param>
         /// <param name="plants">The source used for mutation-safe snapshots.</param>
         /// <param name="count">The number of fixed simulation steps.</param>
-        private static void RunWarmTicks(GameSimulation game, List<Plant> plants, int count)
+        private static void RunWarmTicks(GameSimulation game, IReadOnlyList<Plant> plants, int count)
         {
             for (var i = 0; i < count; i++)
             {

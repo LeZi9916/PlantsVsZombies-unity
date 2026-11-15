@@ -11,11 +11,11 @@ namespace PlantsVsZombies.Simulation
     internal readonly struct PooledSnapshot<T> where T : class
     {
         /// <summary>The list copied when enumeration begins.</summary>
-        private readonly List<T> _source;
+        private readonly IReadOnlyList<T> _source;
 
         /// <summary>Captures the source without allocating a snapshot until enumeration begins.</summary>
         /// <param name="source">The list whose original ordering and membership must be preserved.</param>
-        public PooledSnapshot(List<T> source)
+        public PooledSnapshot(IReadOnlyList<T> source)
         {
             _source = source;
         }
@@ -39,14 +39,17 @@ namespace PlantsVsZombies.Simulation
 
             /// <summary>Copies the source entries into a pooled buffer.</summary>
             /// <param name="source">The list whose entries are captured.</param>
-            internal Enumerator(List<T> source)
+            internal Enumerator(IReadOnlyList<T> source)
             {
                 _count = source.Count;
                 _items = _count == 0 ? null : ArrayPool<T>.Shared.Rent(_count);
                 _index = -1;
                 if (_items != null)
                 {
-                    source.CopyTo(_items);
+                    for (var i = 0; i < _count; i++)
+                    {
+                        _items[i] = source[i];
+                    }
                 }
             }
 

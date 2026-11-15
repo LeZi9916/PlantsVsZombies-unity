@@ -47,7 +47,7 @@ namespace PlantsVsZombies.Tests.PlayMode
                 owner._game.ChooseDefaultAdventureSeeds();
                 var flags = BindingFlags.Instance | BindingFlags.NonPublic;
                 var plant = new Plant { Kind = PlantKind.Starfruit, Row = 2, Column = 3 };
-                typeof(GameSimulation).GetMethod("FireAdventureStarfruit", flags)!
+                SimulationInspection.GetMethod("FireAdventureStarfruit", flags)!
                     .Invoke(owner._game, new object[] { plant });
                 Assert.That(owner._game.Peas, Has.Count.EqualTo(5));
                 foreach (var shot in owner._game.Peas)
@@ -61,7 +61,7 @@ namespace PlantsVsZombies.Tests.PlayMode
 
                 var star = owner._game.Peas[3];
                 var draw = typeof(GamePresenter).GetMethod("DrawAdventureProjectile", flags)!;
-                var move = typeof(GameSimulation).GetMethod("AdvanceAdventureProjectiles", flags)!;
+                var move = SimulationInspection.GetMethod("AdvanceAdventureProjectiles", flags)!;
                 SpriteDrawState.Matrix = Matrix4x4.identity;
                 SpriteDrawState.Color = Color.white;
                 SpriteDrawState.Clip = new Rect(0f, 0f, 800f, 600f);

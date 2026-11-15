@@ -20,7 +20,7 @@ namespace PlantsVsZombies.Tests.EditMode
         {
             var game = new GameSimulation(new GameRules { AdventureLevel = 35 }, 7529);
             game.Adventure.VaseStage = stage;
-            typeof(GameSimulation).GetMethod("InitializeVaseStage", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(game, null);
+            SimulationInspection.GetMethod("InitializeVaseStage", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(game, null);
             AssertMalletTiming(game);
         }
 
