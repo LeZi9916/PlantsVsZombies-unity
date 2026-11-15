@@ -325,6 +325,10 @@ namespace PlantsVsZombies.Game
                 return;
             }
 
+            if (game.IsAdventure && game.Adventure.Boss != null)
+            {
+                hierarchy.MarkAlive("Zombies", -1, "Boss");
+            }
             foreach (var plant in game.Plants)
             {
                 hierarchy.MarkAlive("Plants", plant.Id, AdventurePlantAnimation(plant.Kind));
@@ -2199,10 +2203,6 @@ namespace PlantsVsZombies.Game
                     Fill(new Rect(278, 90, 4, 475), new Color(0.9f, 0.08f, 0.04f));
                 }
 
-                if (level.Mode == AdventureMode.Boss)
-                {
-                    _owner.RequiredAnimations.DrawBossNative(new Vector2(0, 0), 1f, _owner.RequiredGame.Elapsed, _owner.RequiredGame.Adventure.BossHeadVulnerable, _owner.RequiredGame.Adventure.Boss);
-                }
 
                 for (var row = 0; row < _owner.RequiredGame.RowCount; row++)
                 {
@@ -2232,7 +2232,7 @@ namespace PlantsVsZombies.Game
 
                     foreach (Mower mower in _owner.RequiredGame.Mowers)
                     {
-                        if (mower.Row != row || !mower.Available && !mower.Active)
+                        if (mower.Row != row || !mower.Available && !mower.Active && mower.SquishedTicks <= 0)
                         {
                             continue;
                         }
@@ -2293,6 +2293,7 @@ namespace PlantsVsZombies.Game
                         }
                     }
 
+                    DrawAdventureBossParts(row);
                     DrawAdventureBungees(row, true);
                     DrawAdventureBungeeCorpses(row, 303004);
                     DrawAdventureBungeeCorpses(row, 305000);
@@ -2394,12 +2395,9 @@ namespace PlantsVsZombies.Game
                     for (var ballIndex = 0; ballIndex < _owner.RequiredGame.Adventure.BossBalls.Count; ballIndex++)
                     {
                         var ball = _owner.RequiredGame.Adventure.BossBalls[ballIndex];
-                        if (ball.Row == row)
+                        if (ball.Row == row && ball.Rolling)
                         {
-                            var y = AdventureFloorYAtPixel(row, ball.NativeX + 75f) - 90f;
-                            _owner.RequiredAnimations.DrawNativePlayback(ball.IsIce ? "Zombie_boss_iceball" : "Zombie_boss_fireball",
-                                new Vector2(ball.NativeX, y), 1f, ball.AnimationSeconds + AdventureRenderRemainder,
-                                ball.Animation, ball.Rolling, ball.AnimationRate);
+                            _owner.RequiredAnimations.DrawBossBallNative(ball, AdventureRenderRemainder);
                         }
                     }
 
@@ -2434,6 +2432,17 @@ namespace PlantsVsZombies.Game
                     }
                 }
                 DrawAdventureBungeeCorpses(-1, 400001);
+                foreach (var ball in _owner.RequiredGame.Adventure.BossBalls)
+                {
+                    if (!ball.Rolling)
+                    {
+                        _owner.RequiredAnimations.DrawBossBallNative(ball, AdventureRenderRemainder);
+                    }
+                }
+                if (_owner.RequiredGame.Adventure.Boss != null)
+                {
+                    _owner.RequiredAnimations.DrawBossEffects(_owner.RequiredGame.Adventure.Boss, RequiredAdventureParticles, AdventureRenderRemainder);
+                }
                 foreach (var effect in _owner.RequiredGame.Presentation.ZomboniParticles)
                 {
                     if (effect.Foreground && _adventureParticles != null)
@@ -2981,6 +2990,41 @@ namespace PlantsVsZombies.Game
             return origin;
         }
 
+        /// <summary>Interleaves PC Board::AddBossRenderItem's four boss groups after native zombies and before row projectiles.</summary>
+        /// <param name="row">The native row layer being submitted.</param>
+        private void DrawAdventureBossParts(int row)
+        {
+            var boss = _owner.RequiredGame.Adventure.Boss;
+            if (boss == null)
+            {
+                return;
+            }
+            using var actor = _owner.RequiredAnimations.Hierarchy.BeginActor("Zombies", -1, "Boss");
+            var backRow = 1;
+            var frontRow = 3;
+            if (boss.Phase == 81 && boss.Time > .25f && boss.Time < .75f)
+            {
+                backRow = boss.TargetRow == 1 ? 2 : 1;
+                frontRow = boss.TargetRow == 3 ? 4 : 3;
+            }
+            if (row == backRow)
+            {
+                _owner.RequiredAnimations.DrawBossPartNative(boss, AdventureBossPart.BackLeg, RequiredAdventureParticles);
+            }
+            if (row == frontRow)
+            {
+                _owner.RequiredAnimations.DrawBossPartNative(boss, AdventureBossPart.FrontLeg, RequiredAdventureParticles);
+            }
+            if (row == 4)
+            {
+                _owner.RequiredAnimations.DrawBossPartNative(boss, AdventureBossPart.Main, RequiredAdventureParticles);
+            }
+            if (row == (boss.Phase == 1 ? 1 : 4))
+            {
+                _owner.RequiredAnimations.DrawBossPartNative(boss, AdventureBossPart.BackArm, RequiredAdventureParticles);
+            }
+        }
+
         /// <summary>Performs draw adventure mower.</summary>
         /// <param name = "mower">The mower.</param>
         private void DrawAdventureMower(Mower mower)
@@ -2991,7 +3035,7 @@ namespace PlantsVsZombies.Game
             var clip = pool ? mower.X > .125f ? "anim_water" : "anim_land" : roof ? null : "anim_normal";
             float age;
             _owner.RequiredGame.Presentation.MowerTimes.TryGetValue(mower, out age);
-            if (mower.Active)
+            if (mower.Active || mower.SquishedTicks > 0 && mower.SquishedWhileActive)
             {
                 age += AdventureRenderRemainder;
             }
@@ -3022,7 +3066,16 @@ namespace PlantsVsZombies.Game
                 }
             }
 
-            _owner.RequiredAnimations.DrawNativePlayback(name, origin, pool ? .8f : .85f, age, clip, true, mower.Active ? pool ? 35f : 70f : 0f);
+            if (mower.SquishedTicks > 0)
+            {
+                origin += new Vector2(-11f, 46f);
+                _owner.RequiredAnimations.DrawNativePlayback(name, origin, .85f, age, clip, true,
+                    mower.SquishedWhileActive ? pool ? 35f : 70f : 0f, verticalScale: .22f);
+            }
+            else
+            {
+                _owner.RequiredAnimations.DrawNativePlayback(name, origin, pool ? .8f : .85f, age, clip, true, mower.Active ? pool ? 35f : 70f : 0f);
+            }
         }
 
         /// <summary>Draws one original crater atlas cell with its native terrain, aging and fade.</summary>

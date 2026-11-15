@@ -1309,7 +1309,25 @@ namespace PlantsVsZombies.Reanimation
         public bool DrawBossNative(Vector2 origin, float scale, float seconds, bool headLowered, AdventureBossState? state = null)
         {
             using var objectScope = BeginObjectScope();
-            return DrawBossComposite(origin, scale, seconds, false, state?.Animation ?? (headLowered ? "anim_head_idle" : "anim_idle"), false, state);
+            if (state != null)
+            {
+                var previous = SpriteMatrix;
+                try
+                {
+                    SpriteMatrix = previous * NativeMatrix(origin, scale);
+                    var drawn = false;
+                    for (var part = 0; part < 4; part++)
+                    {
+                        drawn |= DrawBossPartNative(state, (AdventureBossPart)part);
+                    }
+                    return drawn;
+                }
+                finally
+                {
+                    SpriteMatrix = previous;
+                }
+            }
+            return DrawBossComposite(origin, scale, seconds, false, headLowered ? "anim_head_idle" : "anim_idle", false);
         }
 
         /// <summary>Performs draw boss composite.</summary>
@@ -1380,6 +1398,354 @@ namespace PlantsVsZombies.Reanimation
             {
                 SpriteMatrix = previous;
                 SpriteDrawState.Color = tint;
+            }
+        }
+
+        /// <summary>The original boss state active only while its source tracks or attached driver are submitted.</summary>
+        private AdventureBossState? _drawingBoss;
+        /// <summary>The active source body and separate driver definitions.</summary>
+        private Reanimation? _bossBodyAsset, _bossDriverAsset;
+        /// <summary>The active body and driver source frame ranges.</summary>
+        private Clip? _bossBodyClip, _bossDriverClip;
+        /// <summary>The inherited scene transform and the original body overlay used by boss attachments.</summary>
+        private Matrix4x4 _bossInheritedMatrix, _bossBodyMatrix;
+        /// <summary>The native parent tint propagated to the driver.</summary>
+        private Color _bossTint;
+        /// <summary>The retained attachment notification, initialized only when a live boss is first drawn.</summary>
+        private Action<string>? _bossAttachmentDrawn;
+        /// <summary>The original source color added by a cold boss's feedback pass.</summary>
+        private Color _bossAddColor;
+        /// <summary>The native particles active for the current boss draw.</summary>
+        private OriginalParticleRenderer? _bossParticles;
+        /// <summary>Filters the PC's four independent original render groups without allocating per-frame delegates.</summary>
+        private static readonly Func<string, bool>[] s_bossGroups =
+        {
+            track => BossTrackGroup(track) == AdventureBossPart.BackLeg,
+            track => BossTrackGroup(track) == AdventureBossPart.FrontLeg,
+            track => BossTrackGroup(track) == AdventureBossPart.Main,
+            track => BossTrackGroup(track) == AdventureBossPart.BackArm
+        };
+
+        /// <summary>Resolves the original BossSetupReanim prefix groups from PC 552610.</summary>
+        /// <param name="track">The original source track name.</param>
+        /// <returns>The original separated boss part containing the track.</returns>
+        internal static AdventureBossPart BossTrackGroup(string track)
+        {
+            if (track.StartsWith("Boss_innerleg", StringComparison.OrdinalIgnoreCase))
+            {
+                return AdventureBossPart.BackLeg;
+            }
+            if (track.StartsWith("Boss_outerleg", StringComparison.OrdinalIgnoreCase) || track.StartsWith("Boss_body2", StringComparison.OrdinalIgnoreCase))
+            {
+                return AdventureBossPart.FrontLeg;
+            }
+            if (track.StartsWith("Boss_innerarm", StringComparison.OrdinalIgnoreCase) || track.StartsWith("Boss_RV", StringComparison.OrdinalIgnoreCase))
+            {
+                return AdventureBossPart.BackArm;
+            }
+            return AdventureBossPart.Main;
+        }
+
+        /// <summary>Draws one PC boss render group at its actual board row layer, with the driver attached after Boss_head2.</summary>
+        /// <param name="state">The original boss action, cold and damage state.</param>
+        /// <param name="part">The native separated render group.</param>
+        /// <param name="particles">The board particle owner used by original attached smoke.</param>
+        /// <returns>Whether original source artwork was submitted.</returns>
+        internal bool DrawBossPartNative(AdventureBossState state, AdventureBossPart part, OriginalParticleRenderer? particles = null)
+        {
+            using var scope = BeginObjectScope();
+            if (!TryGetClip("Zombie_boss", state.Animation, out var asset, out var clip)
+                || !TryGetClip("Zombie_Boss_driver", state.DriverAnimation, out var driver, out var driverClip))
+            {
+                return false;
+            }
+            var previous = SpriteMatrix;
+            var color = SpriteDrawState.Color;
+            var additive = _nativeSurfaceAdditive;
+            _drawingBoss = state;
+            _bossParticles = particles;
+            _bossBodyAsset = asset;
+            _bossBodyClip = clip;
+            _bossDriverAsset = driver;
+            _bossDriverClip = driverClip;
+            _bossInheritedMatrix = previous;
+            var offset = Vector2.zero;
+            if (part == AdventureBossPart.BackArm)
+            {
+                if (state.Phase == 85)
+                {
+                    offset = new Vector2(state.TargetColumn * 80f, (state.TargetRow - 1) * 85f - state.TargetColumn * 20f);
+                }
+                else if (state.Phase >= 82 && state.Phase <= 84)
+                {
+                    offset.x = state.TargetColumn * 80f - 23f;
+                }
+            }
+            // PC 547FF0 body overlay at mPos +(15,-8); Zomboss's native mPos is (0,0).
+            _bossBodyMatrix = previous * NativeMatrix(new Vector2(15f, -8f) + offset, 1f);
+            var cold = state.ChilledTicks > 0 || state.FrozenTicks > 0;
+            _bossAddColor = cold ? new Color(75f / 255f, 75f / 255f, 1f) : Color.clear;
+            var tint = cold ? new Color(color.r * 75f / 255f, color.g * 75f / 255f, color.b, color.a) : color;
+            if (state.Critical && state.Phase != 1)
+            {
+                // PC UpdateReanimColor uses Bounce over board main-counter modulo forty.
+                var phase = state.ColorTick % 40 / 39f;
+                var bounce = 1f - Math.Abs(phase * 2f - 1f);
+                var brightness = (int)(155f + bounce * 100f + .5f) / 255f;
+                var channel = cold ? (int)(65f + bounce * 10f + .5f) / 255f : brightness;
+                tint = new Color(color.r * channel, color.g * channel, color.b * brightness, color.a);
+                _bossAddColor = Color.clear;
+            }
+            _bossTint = tint;
+            _nativeSurfaceAdditive = Math.Min(255, state.FlashTicks * 10) / 255f;
+            try
+            {
+                var sample = NativeSeconds(clip, state.AnimationSeconds, state.AnimationRate, asset.Fps, state.Animation == "anim_idle" || state.Animation == "anim_head_idle");
+                _bossAttachmentDrawn ??= DrawBossAttachment;
+                return DrawClipPose(asset, clip, sample, asset.Fps, false, _bossBodyMatrix, tint, trackVisible: s_bossGroups[(int)part],
+                    blend: PrepareNativeBlend("native-boss-body", state.Animation, state.AnimationTicks * .01f, state.BlendTicks),
+                    trackDrawn: part == AdventureBossPart.Main ? _bossAttachmentDrawn : null);
+            }
+            finally
+            {
+                _drawingBoss = null;
+                _bossParticles = null;
+                _bossAddColor = Color.clear;
+                _nativeSurfaceAdditive = additive;
+                SpriteMatrix = previous;
+                SpriteDrawState.Color = color;
+            }
+        }
+
+        /// <summary>Draws original attachments immediately after their source track, including the hidden-parent gate.</summary>
+        /// <param name="track">The original body track just sampled.</param>
+        private void DrawBossAttachment(string track)
+        {
+            var state = _drawingBoss;
+            if (state == null || _bossBodyAsset == null || _bossBodyClip == null)
+            {
+                return;
+            }
+            var anchor = FindTrack(_bossBodyAsset, track);
+            if (anchor == null)
+            {
+                return;
+            }
+            var sample = SampleFrame(_bossBodyClip, NativeSeconds(_bossBodyClip, state.AnimationSeconds, state.AnimationRate, _bossBodyAsset.Fps,
+                state.Animation == "anim_idle" || state.Animation == "anim_head_idle"), _bossBodyAsset.Fps, false);
+            var pose = Interpolate(GetFrame(anchor, sample.Current), GetFrame(anchor, sample.Next), sample.Fraction);
+            if (_nativePoseBlends.TryGetValue("native-boss-body", out var bodyBlend) && bodyBlend.Current.TryGetValue(anchor.PoseId, out var displayed))
+            {
+                pose = displayed;
+            }
+            if (pose.Visibility < 0f || !TryInverseAffine(PartMatrix(GetFrame(anchor, 0)), out var inverse))
+            {
+                return;
+            }
+            var matrix = _bossBodyMatrix * PartMatrix(pose) * inverse;
+            if (TrackIs(track, "Boss_head2") && _bossDriverAsset != null && _bossDriverClip != null)
+            {
+                var loops = state.DriverAnimation != "anim_death" && state.DriverAnimation != "anim_flag";
+                var seconds = NativeSeconds(_bossDriverClip, state.DriverFrames, 1f, _bossDriverAsset.Fps, loops);
+                using var attachment = Hierarchy.BeginAttachment(1);
+                DrawClipPose(_bossDriverAsset, _bossDriverClip, seconds, _bossDriverAsset.Fps, false,
+                    matrix * NativeMatrix(new Vector2(28f, -84f), 1.2f), _bossTint,
+                    blend: PrepareNativeBlend("native-boss-driver", state.DriverAnimation, state.DriverTicks * .01f, state.DriverBlendTicks));
+            }
+            DrawBossSmokeAtTrack(track, matrix);
+        }
+
+        /// <summary>Applies only original boss source-image substitutions while leaving every other definition unchanged.</summary>
+        /// <param name="asset">The source definition currently being drawn.</param>
+        /// <param name="track">The original source track.</param>
+        /// <param name="image">The original image after generic actor substitutions.</param>
+        /// <returns>The native boss damage/glow image, or the unchanged source image.</returns>
+        private SpriteImage NativeBossImage(Reanimation asset, string track, SpriteImage image)
+        {
+            var state = _drawingBoss;
+            if (state == null || !string.Equals(asset.Name, "Zombie_boss", StringComparison.OrdinalIgnoreCase))
+            {
+                return image;
+            }
+            if (state.BallIsIce && (TrackIs(track, "Boss_eyeglow_red") || TrackIs(track, "Boss_mouthglow_red")))
+            {
+                return LoadTexture(TrackIs(track, "Boss_eyeglow_red") ? "IMAGE_REANIM_ZOMBIE_BOSS_EYEGLOW_BLUE" : "IMAGE_REANIM_ZOMBIE_BOSS_MOUTHGLOW_BLUE");
+            }
+            var stage = state.DamageIndex;
+            if (stage > 0)
+            {
+                if (TrackIs(track, "Boss_head"))
+                {
+                    return LoadTexture(stage == 1 ? "IMAGE_REANIM_ZOMBIE_BOSS_HEAD_DAMAGE1" : "IMAGE_REANIM_ZOMBIE_BOSS_HEAD_DAMAGE2");
+                }
+                if (TrackIs(track, "Boss_jaw"))
+                {
+                    return LoadTexture(stage == 1 ? "IMAGE_REANIM_ZOMBIE_BOSS_JAW_DAMAGE1" : "IMAGE_REANIM_ZOMBIE_BOSS_JAW_DAMAGE2");
+                }
+                if (TrackIs(track, "Boss_outerarm_hand"))
+                {
+                    return LoadTexture(stage == 1 ? "IMAGE_REANIM_ZOMBIE_BOSS_OUTERARM_HAND_DAMAGE1" : "IMAGE_REANIM_ZOMBIE_BOSS_OUTERARM_HAND_DAMAGE2");
+                }
+                if (TrackIs(track, "Boss_outerarm_thumb2"))
+                {
+                    return LoadTexture(stage == 1 ? "IMAGE_REANIM_ZOMBIE_BOSS_OUTERARM_THUMB_DAMAGE1" : "IMAGE_REANIM_ZOMBIE_BOSS_OUTERARM_THUMB_DAMAGE2");
+                }
+                if (TrackIs(track, "Boss_innerleg_foot") && state.DamagedInnerFoot)
+                {
+                    return LoadTexture("IMAGE_REANIM_ZOMBIE_BOSS_FOOT_DAMAGE1");
+                }
+                if (TrackIs(track, "Boss_outerleg_foot") && stage == 2)
+                {
+                    return LoadTexture("IMAGE_REANIM_ZOMBIE_BOSS_FOOT_DAMAGE2");
+                }
+            }
+            return image;
+        }
+
+        /// <summary>Draws original head smoke at its attachment boundary without inheriting zombie hit or cold color.</summary>
+        /// <param name="track">The original body attachment track.</param>
+        /// <param name="matrix">The sampled world attachment matrix, including the original base-pose inverse.</param>
+        private void DrawBossSmokeAtTrack(string track, Matrix4x4 matrix)
+        {
+            if (_drawingBoss == null || _bossParticles == null)
+            {
+                return;
+            }
+            if (!TryInverseAffine(_bossInheritedMatrix, out var inverseRoot))
+            {
+                return;
+            }
+            var local = inverseRoot * matrix;
+            var previous = SpriteMatrix;
+            var color = SpriteDrawState.Color;
+            var additive = _nativeSurfaceAdditive;
+            var cold = _bossAddColor;
+            try
+            {
+                SpriteMatrix = _bossInheritedMatrix;
+                SpriteDrawState.Color = Color.white;
+                _nativeSurfaceAdditive = 0f;
+                _bossAddColor = Color.clear;
+                foreach (var effect in _drawingBoss.Effects)
+                {
+                    if (effect.LiveAttachment && TrackIs(track, effect.Track))
+                    {
+                        var point = local.MultiplyPoint3x4(new Vector3(effect.X, effect.Y));
+                        _bossParticles.Draw(ParticleKey("boss-effect-", effect.Id), "ZamboniSmoke", effect.Ticks * .01f,
+                            new Vector2(point.x, point.y), effect.Id);
+                    }
+                }
+            }
+            finally
+            {
+                SpriteMatrix = previous;
+                SpriteDrawState.Color = color;
+                _nativeSurfaceAdditive = additive;
+                _bossAddColor = cold;
+            }
+        }
+
+        /// <summary>Draws the PC's separate normal, additive and foreground fire/ice ball render groups.</summary>
+        /// <param name="ball">The native free ball reanimation state.</param>
+        /// <param name="remainder">The render-only fixed-step remainder.</param>
+        /// <returns>Whether original ball artwork was submitted.</returns>
+        internal bool DrawBossBallNative(AdventureBossBall ball, float remainder)
+        {
+            using var scope = BeginObjectScope();
+            var name = ball.IsIce ? "Zombie_boss_iceball" : "Zombie_boss_fireball";
+            if (!TryGetClip(name, ball.Animation, out var asset, out var clip))
+            {
+                return false;
+            }
+            var previous = SpriteMatrix;
+            var color = SpriteDrawState.Color;
+            var additive = _nativeSpriteAdditive;
+            try
+            {
+                var x = ball.NativeX;
+                var y = 70f + ball.Row * 85f + Math.Max(0f, 440f - x - 75f) * .25f - 90f;
+                var matrix = previous * NativeMatrix(new Vector2(x, y), 1f);
+                var seconds = NativeSeconds(clip, ball.AnimationSeconds + remainder, ball.AnimationRate, asset.Fps, ball.Rolling);
+                var drawn = DrawClipPose(asset, clip, seconds, asset.Fps, false, matrix, color, trackVisible: s_bossBallNormal);
+                _nativeSpriteAdditive = true;
+                drawn |= DrawClipPose(asset, clip, seconds, asset.Fps, false, matrix, color, trackVisible: s_bossBallAdditive);
+                return drawn;
+            }
+            finally
+            {
+                SpriteMatrix = previous;
+                SpriteDrawState.Color = color;
+                _nativeSpriteAdditive = additive;
+            }
+        }
+
+        /// <summary>Tests original ball tracks retained in normal group zero.</summary>
+        private static readonly Func<string, bool> s_bossBallNormal = track => !TrackIs(track, "additive") && !TrackIs(track, "superglow") && !TrackIs(track, "ice_highlight");
+        /// <summary>Tests original ball glow/highlight tracks assigned to the additive render group.</summary>
+        private static readonly Func<string, bool> s_bossBallAdditive = track => TrackIs(track, "additive") || TrackIs(track, "superglow") || TrackIs(track, "ice_highlight");
+
+        /// <summary>Draws native free boss particles, detached head smoke and six original fire reanimations.</summary>
+        /// <param name="state">The boss retaining the original simulation-owned effect contacts.</param>
+        /// <param name="particles">The board's source particle renderer.</param>
+        /// <param name="remainder">The render-only interpolation remainder.</param>
+        internal void DrawBossEffects(AdventureBossState state, OriginalParticleRenderer particles, float remainder)
+        {
+            using var scope = BeginObjectScope();
+            foreach (var effect in state.Effects)
+            {
+                if (effect.LiveAttachment)
+                {
+                    continue;
+                }
+                var point = new Vector2(effect.X, effect.Y);
+                if (effect.JawAnimation != null && TryGetClip("Zombie_boss", effect.JawAnimation, out var body, out var clip))
+                {
+                    var track = FindTrack(body, effect.Track ?? "Boss_jaw");
+                    if (track != null)
+                    {
+                        var sample = SampleFrame(clip, NativeSeconds(clip, effect.JawSeconds, effect.JawRate, body.Fps, false), body.Fps, false);
+                        var pose = Interpolate(GetFrame(track, sample.Current), GetFrame(track, sample.Next), sample.Fraction);
+                        if (effect.Track != null && TryInverseAffine(PartMatrix(GetFrame(track, 0)), out var inverse))
+                        {
+                            var matrix = NativeMatrix(new Vector2(15f, -8f), 1f) * PartMatrix(pose) * inverse;
+                            point = matrix.MultiplyPoint3x4(new Vector3(effect.X, effect.Y));
+                        }
+                        else
+                        {
+                            point += new Vector2(pose.X + 100f, pose.Y + 50f);
+                        }
+                    }
+                }
+                var oldImage = _nativeResourceImageOverride;
+                var color = SpriteDrawState.Color;
+                try
+                {
+                    _nativeResourceImageOverride = effect.Image;
+                    SpriteDrawState.Color = Color.white;
+                    if (effect.Particle != null)
+                    {
+                        particles.Draw(ParticleKey("boss-effect-", effect.Id), effect.Particle, effect.Ticks * .01f + remainder, point,
+                            effect.Id, stopAge: effect.StopTick < 0 ? -1f : effect.StopTick * .01f);
+                    }
+                    else if (TryGetNativeDefinitionClip("fire", out var fire, out var definition))
+                    {
+                        var previous = SpriteMatrix;
+                        try
+                        {
+                            DrawClipPose(fire, definition, (definition.Count * .2f + (effect.Ticks * .01f + remainder) * effect.Rate) / fire.Fps,
+                                fire.Fps, false, previous * NativeMatrix(point, 1f), Color.white);
+                        }
+                        finally
+                        {
+                            SpriteMatrix = previous;
+                        }
+                    }
+                }
+                finally
+                {
+                    _nativeResourceImageOverride = oldImage;
+                    SpriteDrawState.Color = color;
+                }
             }
         }
 
@@ -2156,7 +2522,7 @@ namespace PlantsVsZombies.Reanimation
                     var alpha = tint.a * Math.Max(0f, Math.Min(1f, frame.Alpha));
                     SpriteDrawState.Color = _nativeCombatZombie == null ? new Color(tint.r, tint.g, tint.b, alpha) : NativeZombieTrackColor(isCombatBody, track.Name, group, alpha);
                     var image = imageOverride != null && TrackIs(track.Name, overrideTrack) ? imageOverride : from.Texture;
-                    var nativeImage = NativeZombieImage(asset, isCombatBody, track.Name, image);
+                    var nativeImage = NativeBossImage(asset, track.Name, NativeZombieImage(asset, isCombatBody, track.Name, image));
                     var substituted = imageOverride != null && TrackIs(track.Name, overrideTrack);
                     DrawTexturePart(nativeImage, nativeImage == image && !substituted ? from.Texture.Width : nativeImage.Width, nativeImage == image && !substituted ? from.Texture.Height : nativeImage.Height);
                     drawn = true;
@@ -4591,7 +4957,7 @@ namespace PlantsVsZombies.Reanimation
                 throw new System.InvalidOperationException("The value 'renderer' is not available.");
             }
 
-            renderer.EnqueueQuad(texture, width, height, uv, matrix, SpriteDrawState.Color, pass, _nativeGrayscale, _nativeProducerAdditive, _nativeCombatZombie == null ? _nativeSurfaceAdditive : 0f, _nativeCombatZombie == null ? Color.clear : _nativeTrackAdditive, _nativeSpriteClip, combineHit);
+            renderer.EnqueueQuad(texture, width, height, uv, matrix, SpriteDrawState.Color, pass, _nativeGrayscale, _nativeProducerAdditive, _nativeCombatZombie == null ? _nativeSurfaceAdditive : 0f, _nativeCombatZombie == null ? _drawingBoss != null ? _bossAddColor : Color.clear : _nativeTrackAdditive, _nativeSpriteClip, combineHit);
         }
 
         /// <summary>Performs draw native surface composite.</summary>
