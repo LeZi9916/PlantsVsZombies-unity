@@ -283,10 +283,8 @@ namespace PlantsVsZombies.Simulation
         internal string? _presentationBiteClip;
         /// <summary>Stores presentation bite cycle.</summary>
         internal double _presentationBiteCycle;
-        /// <summary>Stores presentation garlic plant.</summary>
-        internal Plant? _presentationGarlicPlant;
-        /// <summary>Stores presentation garlic held age,  presentation garlic held head age.</summary>
-        internal float _presentationGarlicHeldAge, _presentationGarlicHeldHeadAge;
+        /// <summary>Retains the native vertical displacement while garlic redirects this actor into an adjacent lane.</summary>
+        public float PresentationGarlicRowOffset { get; internal set; }
         /// <summary>Stores presentation max armor, presentation max shield, presentation newspaper gasp remaining.</summary>
         public float PresentationMaxArmor { get; internal set; }
         /// <summary>Gets the PresentationMaxShield state maintained by simulation capabilities.</summary>

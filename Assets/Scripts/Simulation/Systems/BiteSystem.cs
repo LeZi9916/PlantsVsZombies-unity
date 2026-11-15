@@ -92,7 +92,7 @@ namespace PlantsVsZombies.Simulation
             {
                 return 0f;
             }
-            return 80f + z.Row * (_adventureModeRunner.Adventure.Level.HasPool || _adventureModeRunner.Adventure.Level.HasRoof ? 85f : 100f) + (_adventureModeRunner.Adventure.Level.HasRoof ? Math.Max(0f, 5f - x / 80f) * 20f - 10f : 0f) - 30f - (z.Kind == ZombieKind.Balloon ? 30f : 0f) - (z.Kind == ZombieKind.Pogo ? 16f : 0f) + z.PresentationVaultPositionY + (z.ModeHead == 31 ? 30f : 0f);
+            return 80f + z.Row * (_adventureModeRunner.Adventure.Level.HasPool || _adventureModeRunner.Adventure.Level.HasRoof ? 85f : 100f) + (_adventureModeRunner.Adventure.Level.HasRoof ? Math.Max(0f, 5f - x / 80f) * 20f - 10f : 0f) - 30f - (z.Kind == ZombieKind.Balloon ? 30f : 0f) - (z.Kind == ZombieKind.Pogo ? 16f : 0f) + z.PresentationVaultPositionY + z.PresentationGarlicRowOffset + (z.ModeHead == 31 ? 30f : 0f);
         }
 
         /// <summary>Performs adventure plant eating rectangle.</summary>
@@ -299,7 +299,7 @@ namespace PlantsVsZombies.Simulation
                 return z.Eating;
             }
 
-            if (z.Headless || !AdventureNativeChewer(z) || z.PresentationGarlicCounter >= 0)
+            if (z.Headless || !AdventureNativeChewer(z) || z.PresentationGarlicCounter >= 0 && z.PresentationGarlicCounter < 170)
             {
                 return false;
             }
@@ -346,7 +346,7 @@ namespace PlantsVsZombies.Simulation
                 z._presentationBiteCycle = cycle;
             }
 
-            if (target != null && checks > 0 && _world.Plants.Contains(target) && !AdventurePlantBiteImmune(target) && z.PresentationGarlicCounter < 0)
+            if (target != null && checks > 0 && _world.Plants.Contains(target) && !AdventurePlantBiteImmune(target) && (z.PresentationGarlicCounter < 0 || z.PresentationGarlicCounter >= 170))
             {
                 target.Health -= 4f * checks;
                 target.RecentlyEatenTicks = 50;
@@ -424,14 +424,16 @@ namespace PlantsVsZombies.Simulation
                 return;
             }
 
+            if (target?.Kind == PlantKind.Garlic && z.PresentationGarlicCounter >= 0)
+            {
+                return;
+            }
+
             _zombieFeedbackSystem.RequestAdventureZombieFoley(global::PlantsVsZombies.Adventure.AdventureZombieBiteRules.ChewFoley(target == null ? -1 : (int)target.Kind, z.Hypnotized));
             _plantTimingSystem.RecordAdventureChewEffect(z, target);
             if (target != null && target.Kind == PlantKind.Garlic)
             {
                 z.PresentationGarlicCounter = 0;
-                z._presentationGarlicPlant = target;
-                z._presentationGarlicHeldAge = z.PresentationAnimationAge;
-                z._presentationGarlicHeldHeadAge = z.PresentationPlantHeadAge;
             }
         }
 
@@ -450,69 +452,68 @@ namespace PlantsVsZombies.Simulation
             for (var i = 0; i < ticks && z.PresentationGarlicCounter >= 0; i++)
             {
                 var c = ++z.PresentationGarlicCounter;
-                if (c > 20 && c < 170 && (z._presentationGarlicPlant == null || !_world.Plants.Contains(z._presentationGarlicPlant)))
+                // PC 547380 tests HasYuckyFaceImage, not whether the bitten garlic still exists.
+                if (c > 20 && c < 170 && !AdventureGarlicRules.HasFace(z))
                 {
+                    StopAdventureNativeEating(z);
                     c = 170;
                     z.PresentationGarlicCounter = c;
-                    z.Eating = false;
+                    RequestGarlicVoice(z);
                 }
 
                 if (c == 70)
                 {
-                    z.Eating = false;
-                    _zombieFeedbackSystem.SynchronizeAdventureZombieAnimation(z);
-                    z._presentationGarlicHeldAge = 0;
-                    if (_world.Zombies.Count <= 5 || _world.Zombies.Count <= 10 && _world._random.Next(2) == 0)
-                    {
-                        _zombieFeedbackSystem.RequestAdventureZombieFoley(72);
-                    }
+                    StopAdventureNativeEating(z);
+                    z.PresentationBodyBlendTicks = 0;
+                    RequestGarlicVoice(z);
                 }
 
                 if (c == 170)
                 {
                     z.Eating = false;
-                    var rows = new System.Collections.Generic.List<int>();
-                    for (var row = Math.Max(0, z.Row - 1); row <= Math.Min(_world.RowCount - 1, z.Row + 1); row++)
-                    {
-                        if (row != z.Row && _adventureModeRunner.Adventure.Level.IsLawnRow(row) && _adventureModeRunner.Adventure.Level.IsWaterRow(row) == _adventureModeRunner.Adventure.Level.IsWaterRow(z.Row))
-                        {
-                            rows.Add(row);
-                        }
-                    }
-
-                    if (rows.Count > 0)
-                    {
-                        z.Row = rows[_world._random.Next(rows.Count)];
-                    }
-
+                    _zombieFeedbackSystem.PickAdventureZombieNativeSpeed(z, _zombieFeedbackSystem.AdventureZombieFeedbackPhase(z));
+                    var level = _adventureModeRunner.Adventure.Level;
+                    var up = z.Row > 0 && level.IsLawnRow(z.Row - 1) && level.IsWaterRow(z.Row - 1) == level.IsWaterRow(z.Row);
+                    var down = z.Row + 1 < _world.RowCount && level.IsLawnRow(z.Row + 1) && level.IsWaterRow(z.Row + 1) == level.IsWaterRow(z.Row);
+                    var nextRow = up && (!down || _world._random.Next(2) != 0) ? z.Row - 1 : down ? z.Row + 1 : z.Row;
+                    z.PresentationGarlicRowOffset = (z.Row - nextRow) * (level.HasPool || level.HasRoof ? 85f : 100f);
+                    z.Row = nextRow;
                     z._presentationBiteClip = null;
                     _zombieFeedbackSystem.SynchronizeAdventureZombieAnimation(z);
+                    z.PresentationBodyBlendTicks = 20;
+                }
+
+                // PC UpdatePosition approaches GetPosYBasedOnRow by one pixel per native update.
+                if (c >= 170)
+                {
+                    z.PresentationGarlicRowOffset -= Math.Sign(z.PresentationGarlicRowOffset) * Math.Min(1f, Math.Abs(z.PresentationGarlicRowOffset));
                 }
 
                 if (c > 270)
                 {
                     z.PresentationGarlicCounter = -1;
-                    z._presentationGarlicPlant = null;
                 }
             }
 
-            if (z.PresentationGarlicCounter >= 0 && z.PresentationGarlicCounter < 170)
+            return z.PresentationGarlicCounter >= 0 && z.PresentationGarlicCounter < 170;
+        }
+
+        /// <summary>Requests PC 547380's crowd-limited garlic reaction only while the actor has a head.</summary>
+        /// <param name="zombie">The actor reacting to its garlic bite.</param>
+        private void RequestGarlicVoice(Zombie zombie)
+        {
+            var count = 0;
+            foreach (var actor in _world.Zombies)
             {
-                z.PresentationAnimationAge = z._presentationGarlicHeldAge;
-                z.PresentationPlantHeadAge = z._presentationGarlicHeldHeadAge;
-                global::PlantsVsZombies.Adventure.AdventureZombieGroundClip? data;
-                var clip = _zombieFeedbackSystem.SynchronizeAdventureZombieAnimation(z);
-                if (global::PlantsVsZombies.Adventure.AdventureZombieGroundData.TryGet(ZombieFeedbackSystem.AdventureZombiePresentationAsset(z), clip, out data))
+                if (actor.Health > 0f && actor.X >= 0f && actor.X <= 9.5f)
                 {
-                    var phase = z.PresentationAnimationAge * _zombieFeedbackSystem.SynchronizeAdventureZombieRate(z) / data.Count;
-                    z._presentationWalkLoops = (int)Math.Floor(phase);
-                    z._presentationWalkPhase = phase - z._presentationWalkLoops;
+                    count++;
                 }
-
-                return true;
             }
-
-            return false;
+            if (!zombie.Headless && (count <= 5 || count <= 10 && _world._random.Next(2) == 0))
+            {
+                _zombieFeedbackSystem.RequestAdventureZombieFoley(72);
+            }
         }
     }
 }

@@ -798,6 +798,11 @@ namespace PlantsVsZombies.Simulation
                 return;
             }
 
+            if (z.PresentationGarlicCounter >= 0 && z.PresentationGarlicCounter < 170)
+            {
+                return;
+            }
+
             var step = dt * z._presentationTickSlow;
             if (AdventurePogoRules.IsBouncing(z))
             {
@@ -947,7 +952,9 @@ namespace PlantsVsZombies.Simulation
             }
             else if (AdventureDancerRules.IsDancer(z))
             {
-                clip = AdventureDancerRules.Animation(z);
+                // PC StopEating starts a walking pose even when garlic holds a dancer in a raised-arm phase.
+                clip = z.PresentationGarlicCounter >= 70 && z.PresentationGarlicCounter < 170
+                    ? "anim_walk" : AdventureDancerRules.Animation(z);
             }
             else if (z.PresentationNewspaperGaspRemaining > 0f)
             {

@@ -12,13 +12,13 @@ namespace PlantsVsZombies.Adventure
         /// <returns>Zero for intact or unsupported plants, one for damaged, or two for heavily damaged.</returns>
         public static int DamageStage(PlantKind kind, float health)
         {
-            if (kind != PlantKind.Wallnut && kind != PlantKind.TallNut && kind != PlantKind.Pumpkin)
+            if (kind != PlantKind.Wallnut && kind != PlantKind.TallNut && kind != PlantKind.Pumpkin && kind != PlantKind.Garlic)
             {
                 return 0;
             }
 
             // PC 0x4728D0 and 0x472BB0 use strict comparisons after integer division.
-            var maximum = kind == PlantKind.TallNut ? 8000 : 4000;
+            var maximum = kind == PlantKind.Garlic ? 400 : kind == PlantKind.TallNut ? 8000 : 4000;
             return health < maximum / 3 ? 2 : health < maximum * 2 / 3 ? 1 : 0;
         }
 
@@ -30,6 +30,7 @@ namespace PlantsVsZombies.Adventure
             switch (kind)
             {
                 case PlantKind.Wallnut:
+                case PlantKind.Garlic:
                     return "anim_face";
                 case PlantKind.TallNut:
                     return "anim_idle";
@@ -58,6 +59,8 @@ namespace PlantsVsZombies.Adventure
                     return stage == 1 ? "IMAGE_REANIM_WALLNUT_CRACKED1" : "IMAGE_REANIM_WALLNUT_CRACKED2";
                 case PlantKind.TallNut:
                     return stage == 1 ? "IMAGE_REANIM_TALLNUT_CRACKED1" : "IMAGE_REANIM_TALLNUT_CRACKED2";
+                case PlantKind.Garlic:
+                    return stage == 1 ? "IMAGE_REANIM_GARLIC_BODY2" : "IMAGE_REANIM_GARLIC_BODY3";
                 case PlantKind.Pumpkin:
                     return stage == 1 ? "IMAGE_REANIM_PUMPKIN_DAMAGE1" : "IMAGE_REANIM_PUMPKIN_DAMAGE3";
                 default:

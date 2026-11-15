@@ -327,7 +327,7 @@ namespace PlantsVsZombies.Game
         private bool DrawPlantPose()
         {
             var visible = _plant.BlinkAnimation != null || _plant.Kind == PlantKind.KernelPult || _plant.Kind == PlantKind.PotatoMine
-                || _plant.Kind == PlantKind.Pumpkin && _pumpkinGroup >= 0 ? _plantVisible : null;
+                || _plant.Kind == PlantKind.Garlic || _plant.Kind == PlantKind.Pumpkin && _pumpkinGroup >= 0 ? _plantVisible : null;
             var blinking = _plant.BlinkAnimation != null;
             _plantBlinkAnchor = blinking ? RequiredRenderer.NativePlantBlinkAnchor(_plant, _name!) : null;
             _plantInheritedMatrix = RequiredRenderer.CurrentSpriteMatrix;
@@ -367,6 +367,12 @@ namespace PlantsVsZombies.Game
         private bool IsPlantTrackVisible(string track)
         {
             if (_plant.BlinkAnimation != null && track.StartsWith("anim_eye", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            if (_plant.Kind == PlantKind.Garlic && AdventureDefensivePlantRules.DamageStage(_plant.Kind, _plant.Health) == 2
+                && track.StartsWith("Garlic_stem", StringComparison.OrdinalIgnoreCase))
             {
                 return false;
             }
@@ -414,6 +420,11 @@ namespace PlantsVsZombies.Game
                 return false;
             }
 
+            if (AdventureGarlicRules.ShowsFace(_zombie) && !AdventureGarlicRules.FaceTrackVisible(track))
+            {
+                return false;
+            }
+
             if (_zombie.Headless && !AdventureZombiePartsRules.HeadTrackVisible(_zombie.ModeHead >= 26 ? _zombie.ModeHead : (int)_zombie.Kind, track))
             {
                 return false;
@@ -447,10 +458,11 @@ namespace PlantsVsZombies.Game
 
             _zombieInheritedColor = SpriteDrawState.Color;
             var painted = string.Equals(_name, "Zombie", StringComparison.OrdinalIgnoreCase) && !_zombie.Headless && !_plantHead
-                && !_backwards && _zombie.Kind != ZombieKind.Flag && _zombie.Kind != ZombieKind.DuckyTube
+                && !AdventureGarlicRules.ShowsFace(_zombie) && !_backwards && _zombie.Kind != ZombieKind.Flag && _zombie.Kind != ZombieKind.DuckyTube
                 && _zombie.PoolState == null && _zombie.PresentationInPool != true && !_zombie.PresentationPoolRow
                 ? RequiredRenderer.DrawZombiePlayback(_origin, _scale, _seconds, _variant, _clip, _loop, _rate, true, null, _key)
-                : RequiredRenderer.DrawNativePlayback(_name, _origin, _scale, _seconds, _clip, _loop, _rate, _zombieVisible, null, null,
+                : RequiredRenderer.DrawNativePlayback(_name, _origin, _scale, _seconds, _clip, _loop, _rate, _zombieVisible, AdventureGarlicRules.ShowsFace(_zombie) ? "anim_head1" : null,
+                    AdventureGarlicRules.ShowsFace(_zombie) ? "IMAGE_REANIM_ZOMBIE_HEAD_GROSSOUT" : null,
                     _backwards, _key, _zombie.PresentationBodyBlendTicks >= 0 ? _zombie.PresentationBodyBlendTicks
                         : _zombie.Kind == ZombieKind.Balloon ? _zombie.PresentationBalloonBlendTicks
                         : _zombie.Kind == ZombieKind.Bobsled && _zombie.BobsledState != null ? 0

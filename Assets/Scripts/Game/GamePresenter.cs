@@ -3104,7 +3104,7 @@ namespace PlantsVsZombies.Game
             var nativeX = AdventureZombieNativeRules.NativePositionX(x, size);
             // PC 0x547FF0 applies the body overlay eight pixels above mPosY.
             var y = zombie.PresentationNativePhase == 71 && zombie.ThrownImpState != null
-                ? zombie.ThrownImpState.NativeY - 8f : AdventureFloorYAtPixel(zombie.Row, nativeX + 40f) - 38f;
+                ? zombie.ThrownImpState.NativeY - 8f : AdventureFloorYAtPixel(zombie.Row, nativeX + 40f) - 38f + zombie.PresentationGarlicRowOffset;
             if (zombie.Kind == ZombieKind.Balloon)
             {
                 y -= 30f;
@@ -4455,7 +4455,7 @@ namespace PlantsVsZombies.Game
             {
                 var nativeX = AdventureZombieNativeRules.NativePositionX(x, size);
                 var floor = zombie.PresentationNativePhase == 71 && zombie.ThrownImpState != null
-                    ? zombie.ThrownImpState.NativeY + 30f : AdventureFloorYAtPixel(zombie.Row, nativeX + 40f);
+                    ? zombie.ThrownImpState.NativeY + 30f : AdventureFloorYAtPixel(zombie.Row, nativeX + 40f) + zombie.PresentationGarlicRowOffset;
                 using var hierarchyShadow = _owner.RequiredAnimations.Hierarchy.BeginNamedSprite("Shadow");
                 DrawImage(shadowName, AdventureZombieShadowBounds(zombie, x, floor, new Vector2(shadow.Width, shadow.Height), inPool));
             }
@@ -4464,7 +4464,8 @@ namespace PlantsVsZombies.Game
             var constantGroundClock = zombie.Kind == ZombieKind.Balloon && zombie.Airborne
                 || zombie.Kind == ZombieKind.DolphinRider
                     && (zombie.PresentationNativePhase == 52 || zombie.PresentationNativePhase == 54);
-            var age = zombie.PresentationAnimationAge + (zombie.FrozenRemaining > 0 || zombie.PresentationButter > 0f ? 0
+            var age = zombie.PresentationAnimationAge + (zombie.FrozenRemaining > 0 || zombie.PresentationButter > 0f
+                || zombie.PresentationGarlicCounter >= 0 && zombie.PresentationGarlicCounter < 170 ? 0
                 : AdventureRenderRemainder * (zombie.ChillRemaining > 0 && !constantGroundClock ? .5f : 1f));
             var rate = _owner.RequiredGame.AdventurePresentationZombieRate(zombie);
             if (zombie.Kind == ZombieKind.Digger && zombie.PresentationNativePhase == 34 && zombie.DiggerState != null)
