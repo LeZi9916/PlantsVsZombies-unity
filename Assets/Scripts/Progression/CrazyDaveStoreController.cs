@@ -260,10 +260,10 @@ namespace PlantsVsZombies.Progression
             }
 
             _owner._currentView = _storeReturnView;
-            if (_storeReturnView == PvZGame.ScreenView.Board && _owner._game?.ModeSession?.Definition.Survival == true)
+            if (_storeReturnView == PvZGame.ScreenView.Board && _owner._game?.ModeSession?.Definition.ChoosesSeeds == true)
             {
                 var account = _owner.Accounts.RequiredGetSelectedAccount();
-                _owner.RequiredGame.RequiredModeSession.RefreshSurvivalSeedAccess(account.SeedAccess(), account.PacketSlots);
+                _owner.RequiredGame.RequiredModeSession.RefreshChooserSeedAccess(account.SeedAccess(), account.PacketSlots);
             }
             if (_owner._currentView == PvZGame.ScreenView.Garden && _owner.Garden._gardenTutorialStage == 5)
             {

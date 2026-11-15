@@ -268,6 +268,10 @@ namespace PlantsVsZombies.Simulation
                 available.RemoveAll(k => k == PlantKind.Sunflower || k == PlantKind.SunShroom || k == PlantKind.TwinSunflower);
             }
 
+            if (d.Mechanic == ModeMechanic.Stars && !available.Contains(PlantKind.Starfruit))
+            {
+                available.Add(PlantKind.Starfruit);
+            }
             a.AvailableSeeds = available.AsReadOnly();
             var defaults = new List<PlantKind>
             {
@@ -406,7 +410,10 @@ namespace PlantsVsZombies.Simulation
             if (d.Mechanic == ModeMechanic.Boss)
             {
                 a.BossMaxHealth = a.BossHealth = 60000f;
-                _bossSystem.InitializeAdventureBoss();
+                if (!_world.Rules.DeferAdventureBossEntrance)
+                {
+                    _bossSystem.InitializeAdventureBoss();
+                }
             }
             _waveSystem.ResetAdventureWaveSchedule((int)Math.Round(a.WaveCountdown * 100), ModeNeedsFinalAmbush);
             if (d.Mechanic == ModeMechanic.Whack)

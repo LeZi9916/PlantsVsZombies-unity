@@ -1,4 +1,6 @@
 #nullable enable
+using PlantsVsZombies.VerifiedData;
+using PlantsVsZombies.Modes;
 using PlantsVsZombies.BoardUI;
 using PlantsVsZombies.Progression;
 using PlantsVsZombies.Simulation;
@@ -116,14 +118,7 @@ namespace PlantsVsZombies.Adventure
 
             if (_owner._game.ModeSession != null)
             {
-                if (_owner.RequiredGame.RequiredModeSession.Definition.Survival)
-                {
-                    InitializeIndependentSurvivalOpening();
-                }
-                else
-                {
-                    InitializeIndependentPuzzleOpening();
-                }
+                InitializeIndependentOpening();
                 return;
             }
 
@@ -195,30 +190,59 @@ namespace PlantsVsZombies.Adventure
             }
 
             // PC street actors consume the existing global stream; drawing their cached preview never resamples it.
-            _adventurePreview.AddRange(AdventureIntroPresentation.CreateStreetPreview(context, waves, _owner._game.DrawAdventureRandomInt, _owner._game.DrawAdventureRandomFloat, (kind, clip) => kind < 26 && _owner.AnimationCatalog.AdventureClipExists(AdventureAnimationCatalog.AdventureZombieAnimation((ZombieKind)kind), clip)));
+            _adventurePreview.AddRange(AdventureIntroPresentation.CreateStreetPreview(context, waves, _owner._game.DrawAdventureRandomInt, _owner._game.DrawAdventureRandomFloat, (kind, clip) => kind < VerifiedDataCatalog.Zombies.Count && _owner.AnimationCatalog.AdventureClipExists(AdventureAnimationCatalog.AdventureZombieAnimation((ZombieKind)kind), clip)));
             _adventurePreview.Sort((a, b) => a.RenderOrder.CompareTo(b.RenderOrder));
         }
 
-        /// <summary>Runs PC CutScene's original terrain preview and bank/chooser timing for all survival identifiers.</summary>
-        private void InitializeIndependentSurvivalOpening()
+        /// <summary>Runs PC CutScene's original mode predicates, preview actors and chooser timing.</summary>
+        private void InitializeIndependentOpening()
         {
             var game = _owner.RequiredGame;
             var session = game.RequiredModeSession;
+            var definition = session.Definition;
+            var mode = definition.Id;
+            // PC 446520: I, Zombie's first board always speaks; the first vase board speaks before its first trophy.
+            var start = mode == 61 ? 2200 : mode == 51 && _owner.IndependentModes._modeFirstClear ? 3000 : -1;
+            if (start >= 0)
+            {
+                var key = "CRAZY_DAVE_" + start;
+                var first = _owner._presenter.OriginalProgressionText(key);
+                if (!string.IsNullOrEmpty(first) && first != key)
+                {
+                    _crazyDaveStartIndex = start;
+                }
+                else
+                {
+                    Debug.LogWarning($"{nameof(PvZGame)}: Original Crazy Dave text {key} is missing.");
+                }
+            }
+            _bowlingLineVisible = definition.Mechanic == ModeMechanic.Bowling;
             var context = new AdventureIntroContext
             {
                 Level = 0,
-                NativeMode = session.Definition.Id,
+                NativeMode = mode,
                 NativeBackground = (int)game.Adventure.Level.Terrain,
                 FirstAdventure = false,
-                SurvivalRepick = session.Stage > 1,
+                SurvivalRepick = definition.Survival && session.Stage > 1,
                 HasGraveStones = game.Adventure.Graves.Count > 0,
+                IsConveyor = game.UsesNativeAdventureConveyor,
+                IsFinalBoss = definition.Mechanic == ModeMechanic.Boss,
+                IsLittleTrouble = definition.Mechanic == ModeMechanic.LittleZombies,
                 CanShowAlmanacOrStore = true,
-                ChooseSeedsOverride = true
+                HasCrazyDaveDialog = _crazyDaveStartIndex >= 0
             };
             _adventureIntro = new AdventureIntroClock(AdventureIntroPresentation.CreatePlan(context));
             _adventureIntroFrame = _adventureIntro.Frame;
-            _owner._pendingSeeds = new AdventureSeedChooserState(session.Stage == 1 ? Array.Empty<PlantKind>() : game.Adventure.SelectedSeeds);
-            _owner._choosingSeeds = true;
+            if (_adventureIntro.Plan.ChooseSeeds)
+            {
+                _owner._pendingSeeds = new AdventureSeedChooserState(context.SurvivalRepick ? game.Adventure.SelectedSeeds : Array.Empty<PlantKind>());
+                // PC 499170 preselects Starfruit in bank slot zero for Seeing Stars.
+                if (mode == 22)
+                {
+                    _owner.RequiredPendingSeeds.Add(PlantKind.Starfruit);
+                }
+            }
+            _owner._choosingSeeds = _adventureIntro.Plan.ChooseSeeds;
             game.Adventure.GravesEnabled = _adventureIntro.Plan.GraveStoneTime == 0;
             game.BeginAdventureFogIntro();
             var waves = new List<int[]>();
@@ -233,42 +257,9 @@ namespace PlantsVsZombies.Adventure
             }
             _adventurePreview.AddRange(AdventureIntroPresentation.CreateStreetPreview(context, waves,
                 game.DrawAdventureRandomInt, game.DrawAdventureRandomFloat,
-                (kind, clip) => kind < 26 && _owner.AnimationCatalog.AdventureClipExists(AdventureAnimationCatalog.AdventureZombieAnimation((ZombieKind)kind), clip)));
+                (kind, clip) => kind < VerifiedDataCatalog.Zombies.Count && _owner.AnimationCatalog.AdventureClipExists(AdventureAnimationCatalog.AdventureZombieAnimation((ZombieKind)kind), clip),
+                game.Adventure.EnabledZombieTypes));
             _adventurePreview.Sort((a, b) => a.RenderOrder.CompareTo(b.RenderOrder));
-        }
-
-        /// <summary>Starts original dialogue for the first independent puzzle levels.</summary>
-        private void InitializeIndependentPuzzleOpening()
-        {
-            var mode = _owner.RequiredGame.RequiredModeSession.Definition.Id;
-            // PC CutScene::StartLevelIntro 0x43A900: I, Zombie always speaks;
-            // Vasebreaker speaks only while its first level has not been beaten.
-            var start = mode == 61 ? 2200 : mode == 51 && _owner.IndependentModes._modeFirstClear ? 3000 : -1;
-            if (start < 0)
-            {
-                return;
-            }
-
-            var key = "CRAZY_DAVE_" + start;
-            var first = _owner._presenter.OriginalProgressionText(key);
-            if (string.IsNullOrEmpty(first) || first == key)
-            {
-                Debug.LogWarning($"{nameof(PvZGame)}: Original Crazy Dave text {key} is missing.");
-                return;
-            }
-
-            _crazyDaveStartIndex = start;
-            var context = new AdventureIntroContext
-            {
-                Level = 0,
-                NativeMode = mode,
-                NativeBackground = (int)_owner.RequiredGame.Adventure.Level.Terrain,
-                FirstAdventure = false,
-                ChooseSeedsOverride = false,
-                HasCrazyDaveDialog = true
-            };
-            _adventureIntro = new AdventureIntroClock(AdventureIntroPresentation.CreatePlan(context));
-            _adventureIntroFrame = _adventureIntro.Frame;
         }
 
         /// <summary>Reuses the intro event callback across native simulation ticks.</summary>
@@ -546,7 +537,7 @@ namespace PlantsVsZombies.Adventure
                 _owner._choosingSeeds = false;
                 _adventurePreview.Clear();
                 var session = _owner.RequiredGame.ModeSession;
-                if (session?.Definition.Survival == true && session.Stage == 1)
+                if (session != null && session.Stage == 1)
                 {
                     _owner.AdventureBoard.AdventureFeedback(session.Advice, 5f);
                 }

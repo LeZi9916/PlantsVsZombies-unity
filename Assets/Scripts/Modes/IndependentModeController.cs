@@ -250,7 +250,7 @@ namespace PlantsVsZombies.Modes
                 var waveContext = new ModeWaveContext(unchecked((uint)battleSeed),
                     profileProgress: progress.CompletedRuns, profileLevel: progress.NextLevel);
                 _modeSession = new ModeSession(originalModeId, account.SeedAccess(), account.PacketSlots, battleSeed,
-                    account.PurchaseCount(23) > 0, account.PurchaseCount(22) > 0, basicSeeds, waveContext);
+                    account.PurchaseCount(23) > 0, account.PurchaseCount(22) > 0, basicSeeds, waveContext, deferBossEntrance: !_owner._smokeMode || _owner.Opening.PlayOpeningInIsolatedSession);
                 var coinProfile = _modeProfileId;
                 var coinReceipt = _modeSession.RunId.ToString("N");
                 _modeSession.Game.Rules.AdventurePacketSlots = account.PacketSlots;
@@ -331,13 +331,15 @@ namespace PlantsVsZombies.Modes
                 _owner.Campaign.AttachAdventureGame(_modeSession.Game);
                 _owner._deck.Clear();
                 _owner._deck.AddRange(_owner.RequiredGame.Adventure.SelectedSeeds);
-                if (!definition.Survival || !_owner.Opening.AdventureIntroActive)
+                if (!_owner.Opening.AdventureIntroActive)
                 {
                     _owner.AdventureBoard.AdventureFeedback(_modeSession.Advice, 8f);
                 }
                 _owner._choosingSeeds = _modeSession.Phase == ModePhase.ChoosingSeeds;
-                _owner._pendingSeeds = new AdventureSeedChooserState(definition.Survival && _owner.Opening.AdventureIntroActive
-                    ? Array.Empty<PlantKind>() : _owner.RequiredGame.Adventure.SelectedSeeds);
+                if (!_owner.Opening.AdventureIntroActive)
+                {
+                    _owner._pendingSeeds = new AdventureSeedChooserState(_owner.RequiredGame.Adventure.SelectedSeeds);
+                }
                 _owner._currentView = PvZGame.ScreenView.Board;
                 return true;
             }
@@ -538,9 +540,9 @@ namespace PlantsVsZombies.Modes
 
             if (_owner.Opening.AdventureIntroActive)
             {
-                if (RequiredModeSession.Definition.Survival && _owner.Opening.AdventureIntroAwaitingSeeds)
+                if (_owner.Opening.AdventureIntroAwaitingSeeds)
                 {
-                    HandleNativeSurvivalChooser(point);
+                    HandleNativeModeChooser(point);
                 }
                 return true;
             }
@@ -923,7 +925,7 @@ namespace PlantsVsZombies.Modes
 
         /// <summary>Uses the original eight-column chooser and re-selection lawn view instead of the prototype mode panel.</summary>
         /// <param name="point">The logical top-left pointer position.</param>
-        private void HandleNativeSurvivalChooser(Vector2 point)
+        private void HandleNativeModeChooser(Vector2 point)
         {
             var opening = _owner.Opening;
             var clock = opening.RequiredAdventureIntro;

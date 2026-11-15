@@ -96,7 +96,9 @@ namespace PlantsVsZombies.Tests.PlayMode
             StartOpening(mode, firstClear);
             if (expected < 0)
             {
-                Assert.That(_game.Opening._adventureIntro, Is.Null);
+                Assert.That(_game.Opening._adventureIntro, Is.Not.Null);
+                Assert.That(GetField<int>("_crazyDaveStartIndex"), Is.EqualTo(-1));
+                Assert.That(_game.Opening.RequiredAdventureIntro.Plan.ChooseSeeds, Is.False);
                 return;
             }
 

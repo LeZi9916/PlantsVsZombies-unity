@@ -564,9 +564,9 @@ namespace PlantsVsZombies.Game
                 }
 
                 var index = simple ? Array.IndexOf(_owner._availablePlants, kind) : mode ? AdventureAvailableSeedIndex(kind) : -1;
-                var nativeSurvival = mode && _owner.Opening.AdventureIntroActive && _owner.IndependentModes.RequiredModeSession.Definition.Survival;
-                var home = simple ? BoardLayout.ChooserSeedRect(index) : mode && !nativeSurvival ? BoardLayout.AdventureChooserRect(index) : _owner.Opening.AdventureCampaignChooserRect(kind);
-                if (nativeSurvival)
+                var nativeMode = mode && _owner.Opening.AdventureIntroActive;
+                var home = simple ? BoardLayout.ChooserSeedRect(index) : mode && !nativeMode ? BoardLayout.AdventureChooserRect(index) : _owner.Opening.AdventureCampaignChooserRect(kind);
+                if (nativeMode)
                 {
                     home.y += _owner.Opening.RequiredAdventureIntroFrame.ChooserY;
                 }
@@ -654,7 +654,7 @@ namespace PlantsVsZombies.Game
                 {
                     if (_owner._choosingSeeds)
                     {
-                        if (_owner.IndependentModes.IsModeBoard && _owner.IndependentModes.RequiredModeSession.Definition.Survival)
+                        if (_owner.IndependentModes.IsModeBoard && _owner.Opening.AdventureIntroActive)
                         {
                             _owner.Menus.OpenOptions();
                         }

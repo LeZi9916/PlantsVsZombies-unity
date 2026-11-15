@@ -1138,3 +1138,19 @@ pages hide the developer-only page tabs. Endless puzzle records use the original
 The focused directory run passes 38 EditMode and four PlayMode cases with the
 original artwork and a real graphics device. These are native layout/resource
 checks, not executable screenshot pixel equivalence or target-device validation.
+
+`OriginalChallengeOpeningTests` renders the original opening for all 20 mini-games
+and all 20 puzzles. It checks PC `417A70/446380/4463F0/446520` chooser/scrolling
+predicates, `499170`'s preselected Starfruit, plant-headed street zombies, and
+Zomboss revenge allocation at the original entrance boundary. Puzzle dialogue
+coverage retains the original 51/61 completion conditions; a non-dialogue board
+now still owns its native short CutScene. Store returns refresh chooser capacity
+and entitlements for all independent modes which choose plants.
+
+```powershell
+./Tools/Tests/Run-UnityTests.ps1 -Platform EditMode -TestFilter 'AdventureIntroPerformanceTests;ModeWaveFidelityTests;AdventureSeedChooserTests;AdventureBossTests'
+./Tools/Tests/Run-UnityTests.ps1 -Platform PlayMode -TestFilter 'OriginalChallengeOpeningTests;IndependentPuzzleDialogueTests;OriginalSurvivalGraphicsTests'
+```
+
+This opening run passes 47 EditMode and 16 PlayMode cases. Packaged Player,
+other target platforms and native executable pixel equivalence remain unverified.

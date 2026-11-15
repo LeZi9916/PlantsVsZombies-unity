@@ -124,9 +124,9 @@ namespace PlantsVsZombies.Modes
         /// <summary>Refreshes native re-selection purchases after returning from the original store.</summary>
         /// <param name="access">The newly persisted upgrade and Imitater entitlements.</param>
         /// <param name="packetSlots">The newly persisted bank capacity.</param>
-        internal void RefreshSurvivalSeedAccess(AdventureSeedAccess access, int packetSlots)
+        internal void RefreshChooserSeedAccess(AdventureSeedAccess access, int packetSlots)
         {
-            if (!Definition.Survival || Phase != ModePhase.ChoosingSeeds)
+            if (!Definition.ChoosesSeeds || Phase != ModePhase.ChoosingSeeds)
             {
                 return;
             }
@@ -164,7 +164,8 @@ namespace PlantsVsZombies.Modes
         /// <param name = "poolCleaners">The pool cleaners.</param>
         /// <param name = "unlockedBasicSeeds">The unlocked basic seeds.</param>
         /// <param name="waveContext">The explicit native seed and profile inputs; null uses the supplied seed and first-run progress.</param>
-        public ModeSession(int originalModeId, AdventureSeedAccess? access = null, int packetSlots = 6, int randomSeed = 12345, bool roofCleaners = false, bool poolCleaners = false, int unlockedBasicSeeds = 40, ModeWaveContext? waveContext = null)
+        /// <param name="deferBossEntrance">Whether CutScene allocates Zomboss at the original entrance boundary.</param>
+        public ModeSession(int originalModeId, AdventureSeedAccess? access = null, int packetSlots = 6, int randomSeed = 12345, bool roofCleaners = false, bool poolCleaners = false, int unlockedBasicSeeds = 40, ModeWaveContext? waveContext = null, bool deferBossEntrance = false)
         {
             Definition = ModeCatalog.Get(originalModeId);
             WaveContext = waveContext ?? new ModeWaveContext(unchecked((uint)randomSeed));
@@ -175,6 +176,7 @@ namespace PlantsVsZombies.Modes
             Game = new GameSimulation(new GameRules {
                 AdventureLevel = Definition.BoardLevel,
                 DeferAdventureWaveInitialization = true,
+                DeferAdventureBossEntrance = deferBossEntrance,
                 AdventureRoofCleaners = roofCleaners,
                 AdventurePoolCleaners = poolCleaners,
                 MowersEnabled = !Definition.Puzzle
