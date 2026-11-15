@@ -16,6 +16,17 @@ namespace PlantsVsZombies.Reanimation
     /// <summary>Samples original PopCap animations and submits their textured tracks to pooled scene renderers.</summary>
     public sealed class ReanimationRenderer : IDisposable
     {
+        /// <summary>Bounds fixed-pose caches independently of caller-provided animation names.</summary>
+        private const int MaximumThumbnailPoses = 64;
+        /// <summary>Retains sampled card poses in original painter order.</summary>
+        private readonly Dictionary<(string Name, string? Animation), List<NativeThumbnailPart>> _thumbnailPoses = new Dictionary<(string, string?), List<NativeThumbnailPart>>();
+        /// <summary>Receives local sampled images while a fixed thumbnail pose is built.</summary>
+        private List<NativeThumbnailPart>? _recordingThumbnail;
+        /// <summary>Gets how often a fixed thumbnail needed its original animation sampler.</summary>
+        internal int ThumbnailPoseBuildCount { get; private set; }
+        /// <summary>Gets the bounded number of retained fixed thumbnail poses.</summary>
+        internal int ThumbnailPoseCount => _thumbnailPoses.Count;
+
         /// <summary>Limits dictionary buffers retained after actors leave the visible presentation.</summary>
         private const int MaximumRetainedPoseBlends = 256;
         /// <summary>Bounds inactive capture textures after temporary combat feedback ends.</summary>
@@ -45,12 +56,20 @@ namespace PlantsVsZombies.Reanimation
         {
             /// <summary>Stores name.</summary>
             public string Name = string.Empty;
+            /// <summary>The renderer-local identity shared by exactly equal track names across source assets.</summary>
+            public int PoseId;
             /// <summary>Caches immutable default visibility for every variant and equipment state.</summary>
             public int VariantVisibility;
             /// <summary>Identifies tracks whose default visibility follows the ground-zombie variant rules.</summary>
             public bool GroundZombie;
             /// <summary>Stores frames.</summary>
             public Frame[] Frames = System.Array.Empty<Frame>();
+            /// <summary>The last exact rotation/scale tuple used to construct this track's affine basis.</summary>
+            public Vector4 BasisInput;
+            /// <summary>The last exact 2D affine basis (m00, m10, m01, m11).</summary>
+            public Vector4 Basis;
+            /// <summary>Whether the local affine basis has been computed at least once.</summary>
+            public bool HasBasis;
         }
 
         /// <summary>Defines clip.</summary>
@@ -80,17 +99,17 @@ namespace PlantsVsZombies.Reanimation
             /// <summary>Identifies the last simulation-owned zero-blend pose reset sampled by this renderer.</summary>
             public int SourcePoseVersion;
             /// <summary>Stores from.</summary>
-            public Dictionary<string, Frame> From = new Dictionary<string, Frame>();
+            public Dictionary<int, Frame> From = new Dictionary<int, Frame>();
             /// <summary>Stores current.</summary>
-            public readonly Dictionary<string, Frame> Current = new Dictionary<string, Frame>();
+            public readonly Dictionary<int, Frame> Current = new Dictionary<int, Frame>();
         }
 
         /// <summary>Performs blend native pose.</summary>
         /// <param name = "blend">The blend.</param>
-        /// <param name = "track">The track.</param>
+        /// <param name = "track">The exact-name track identity shared across this renderer's source assets.</param>
         /// <param name = "pose">The pose.</param>
         /// <returns>The resulting blend native pose.</returns>
-        private static Frame BlendNativePose(NativePoseBlend? blend, string track, Frame pose)
+        private static Frame BlendNativePose(NativePoseBlend? blend, int track, Frame pose)
         {
             if (blend == null)
             {
@@ -689,13 +708,13 @@ namespace PlantsVsZombies.Reanimation
                             if (blend != null)
                             {
                                 // Retain the current hidden pose so a later reload cannot blend from a stale visible projectile.
-                                blend.Current[track.Name] = from;
+                                blend.Current[track.PoseId] = from;
                             }
 
                             continue;
                         }
 
-                        var frame = BlendNativePose(blend, track.Name, Interpolate(from, GetFrame(track, next), fraction));
+                        var frame = BlendNativePose(blend, track.PoseId, Interpolate(from, GetFrame(track, next), fraction));
                         if (frame.Alpha <= 0f)
                         {
                             continue;
@@ -703,7 +722,7 @@ namespace PlantsVsZombies.Reanimation
 
                         using var hierarchySprite = Hierarchy.BeginSprite(asset, trackIndex, track.Name);
 
-                        var part = PartMatrix(frame);
+                        var part = PartMatrix(frame, track);
                         if (trackOffset != null)
                         {
                             var offset = trackOffset(track.Name);
@@ -820,6 +839,75 @@ namespace PlantsVsZombies.Reanimation
             }
 
             return DrawInternal(name, new Rect(0, 0, 1, 1), seconds, animation, true, ZombieVariant.Normal, false, trackVisible, null, null, placement);
+        }
+
+        /// <summary>Replays a fixed UI thumbnail while keeping current placement, tint, clipping, and composition live.</summary>
+        /// <param name="name">The original plant animation resource.</param>
+        /// <param name="origin">The current logical thumbnail origin.</param>
+        /// <param name="scale">The current native thumbnail scale.</param>
+        /// <param name="animation">The optional fixed clip, sampled at time zero.</param>
+        /// <returns>Whether a visible fixed pose was submitted.</returns>
+        internal bool DrawNativeThumbnail(string name, Vector2 origin, float scale, string? animation = null)
+        {
+            using var profile = SpriteRenderingProfiler.Measure(SpriteRenderingProfiler.Thumbnail);
+            using var objectScope = BeginObjectScope();
+            LastError = null;
+            if (!IsFinite(origin.x) || !IsFinite(origin.y) || !IsFinite(scale) || scale <= 0f)
+            {
+                return Fail("Native origin and scale must be finite, with a positive scale.");
+            }
+            // Actor inspection and combat callbacks require their live per-track context.
+            if (SpriteHierarchy.CurrentSpriteObject != null || _nativeCombatZombie != null || _nativeSpriteAdditive)
+            {
+                return DrawNative(name, origin, scale, 0f, animation);
+            }
+            var matrix = SpriteMatrix;
+            var color = SpriteDrawState.Color;
+            try
+            {
+                if (!_thumbnailPoses.TryGetValue((name, animation), out var parts))
+                {
+                    parts = new List<NativeThumbnailPart>();
+                    _recordingThumbnail = parts;
+                    SpriteMatrix = Matrix4x4.identity;
+                    SpriteDrawState.Color = Color.white;
+                    var drawn = false;
+                    try
+                    {
+                        ThumbnailPoseBuildCount++;
+                        drawn = DrawNative(name, Vector2.zero, 1f, 0f, animation);
+                    }
+                    finally
+                    {
+                        _recordingThumbnail = null;
+                        SpriteMatrix = matrix;
+                        SpriteDrawState.Color = color;
+                    }
+                    if (!drawn || parts.Count == 0)
+                    {
+                        return false;
+                    }
+                    if (_thumbnailPoses.Count >= MaximumThumbnailPoses)
+                    {
+                        _thumbnailPoses.Clear();
+                    }
+                    _thumbnailPoses.Add((name, animation), parts);
+                }
+                var placement = matrix * NativeMatrix(origin, scale);
+                for (var index = 0; index < parts.Count; index++)
+                {
+                    var part = parts[index];
+                    SpriteDrawState.Color = color * part.Color;
+                    DrawNativeSpritePass(part.Image, part.Width, part.Height, part.Uv, part.Pass,
+                        placement * part.Matrix, part.CombineHit);
+                }
+                return true;
+            }
+            finally
+            {
+                SpriteMatrix = matrix;
+                SpriteDrawState.Color = color;
+            }
         }
 
         /// <summary>Performs draw zombie native.</summary>
@@ -1447,7 +1535,7 @@ namespace PlantsVsZombies.Reanimation
 
                 using var hierarchySprite = Hierarchy.BeginSprite(asset, trackIndex, track.Name);
 
-                var sprite = parent * PartMatrix(frame);
+                var sprite = parent * PartMatrix(frame, track);
                 if (!HasDrawableArea(sprite))
                 {
                     continue;
@@ -1633,8 +1721,11 @@ namespace PlantsVsZombies.Reanimation
 
             _objectRenderer?.Dispose();
             Hierarchy.Dispose();
+            _thumbnailPoses.Clear();
+            _recordingThumbnail = null;
             _texturesById.Clear();
             _animations.Clear();
+            _poseTrackIds.Clear();
             _nativePoseBlends.Clear();
             _inactiveNativePoseBlends.Clear();
             _expiredNativePoseBlends.Clear();
@@ -1927,13 +2018,13 @@ namespace PlantsVsZombies.Reanimation
                         if (blend != null)
                         {
                             // PC StartBlend 4827D0 skips invisible tracks; do not reuse their last visible throwing pose.
-                            blend.Current[track.Name] = from;
+                            blend.Current[track.PoseId] = from;
                         }
 
                         continue;
                     }
 
-                    var frame = BlendNativePose(blend, track.Name, Interpolate(from, GetFrame(track, time.Next), time.Fraction));
+                    var frame = BlendNativePose(blend, track.PoseId, Interpolate(from, GetFrame(track, time.Next), time.Fraction));
                     if (frame.Alpha <= 0f)
                     {
                         continue;
@@ -1941,7 +2032,7 @@ namespace PlantsVsZombies.Reanimation
 
                     using var hierarchySprite = Hierarchy.BeginSprite(asset, trackIndex, track.Name);
 
-                    var sprite = NativeZombieTrackMatrix(parent * PartMatrix(frame), group);
+                    var sprite = NativeZombieTrackMatrix(parent * PartMatrix(frame, track), group);
                     if (!HasDrawableArea(sprite))
                     {
                         continue;
@@ -2121,7 +2212,13 @@ namespace PlantsVsZombies.Reanimation
                     continue;
                 }
 
-                var track = new Track { Name = trackName.InnerText, Frames = frames.ToArray() };
+                var poseName = trackName.InnerText;
+                if (!_poseTrackIds.TryGetValue(poseName, out var poseId))
+                {
+                    poseId = _poseTrackIds.Count;
+                    _poseTrackIds.Add(poseName, poseId);
+                }
+                var track = new Track { Name = poseName, PoseId = poseId, Frames = frames.ToArray() };
                 asset.Tracks.Add(track);
                 if (!asset.TracksByName.ContainsKey(track.Name))
                 {
@@ -2287,10 +2384,42 @@ namespace PlantsVsZombies.Reanimation
             var x = frame.Kx * (Math.PI / 180d);
             var y = frame.Ky * (Math.PI / 180d);
             var matrix = Matrix4x4.identity;
-            matrix.m00 = frame.ScaleX * (float)Math.Cos(x);
-            matrix.m10 = frame.ScaleX * (float)Math.Sin(x);
-            matrix.m01 = -frame.ScaleY * (float)Math.Sin(y);
-            matrix.m11 = frame.ScaleY * (float)Math.Cos(y);
+            var cosineX = (float)Math.Cos(x);
+            var sineX = (float)Math.Sin(x);
+            // Equal authored axes describe a rotation; reuse the identical trig results without changing skewed poses.
+            var sineY = frame.Kx == frame.Ky ? sineX : (float)Math.Sin(y);
+            var cosineY = frame.Kx == frame.Ky ? cosineX : (float)Math.Cos(y);
+            matrix.m00 = frame.ScaleX * cosineX;
+            matrix.m10 = frame.ScaleX * sineX;
+            matrix.m01 = -frame.ScaleY * sineY;
+            matrix.m11 = frame.ScaleY * cosineY;
+            matrix.m03 = frame.X;
+            matrix.m13 = frame.Y;
+            return matrix;
+        }
+
+        /// <summary>Reuses an exact local rotation/scale basis while keeping each sampled translation live.</summary>
+        /// <param name="frame">The final sampled pose, including any actor-specific blending.</param>
+        /// <param name="track">The immutable source track retaining one bounded basis cache.</param>
+        /// <returns>The same affine matrix as the uncached constructor for this exact pose.</returns>
+        private static Matrix4x4 PartMatrix(Frame frame, Track track)
+        {
+            var input = track.BasisInput;
+            if (!track.HasBasis || input.x != frame.Kx || input.y != frame.Ky
+                || input.z != frame.ScaleX || input.w != frame.ScaleY)
+            {
+                var sampled = PartMatrix(frame);
+                track.BasisInput = new Vector4(frame.Kx, frame.Ky, frame.ScaleX, frame.ScaleY);
+                track.Basis = new Vector4(sampled.m00, sampled.m10, sampled.m01, sampled.m11);
+                track.HasBasis = true;
+                return sampled;
+            }
+            var basis = track.Basis;
+            var matrix = Matrix4x4.identity;
+            matrix.m00 = basis.x;
+            matrix.m10 = basis.y;
+            matrix.m01 = basis.z;
+            matrix.m11 = basis.w;
             matrix.m03 = frame.X;
             matrix.m13 = frame.Y;
             return matrix;
@@ -2400,6 +2529,9 @@ namespace PlantsVsZombies.Reanimation
             LastError = message;
             return false;
         }
+
+        /// <summary>Assigns exact-name pose identities once, preserving cross-asset and duplicate-name blend semantics.</summary>
+        private readonly Dictionary<string, int> _poseTrackIds = new Dictionary<string, int>(StringComparer.Ordinal);
 
         /// <summary>Stores native pose blends.</summary>
         private readonly Dictionary<string, NativePoseBlend> _nativePoseBlends = new Dictionary<string, NativePoseBlend>();
@@ -2554,7 +2686,7 @@ namespace PlantsVsZombies.Reanimation
                 var pose = GetFrame(track, clip.Start);
                 if (pose.Visibility >= 0f && pose.Texture != null)
                 {
-                    blend.Current[track.Name] = pose;
+                    blend.Current[track.PoseId] = pose;
                 }
             }
 
@@ -3137,7 +3269,7 @@ namespace PlantsVsZombies.Reanimation
             if (pose.Texture != null && pose.Visibility >= 0f && instanceKey != null
                 && _nativePoseBlends.TryGetValue(instanceKey, out var blend) && blend.LastSeenFrame == _nativeBlendFrame
                 && string.Equals(blend.Animation, animation, StringComparison.OrdinalIgnoreCase)
-                && blend.Current.TryGetValue(track.Name, out var displayed))
+                && blend.Current.TryGetValue(track.PoseId, out var displayed))
             {
                 pose = displayed;
             }
@@ -3648,6 +3780,14 @@ namespace PlantsVsZombies.Reanimation
         private int _nativeCombatShieldType;
         /// <summary>Stores native combat tint.</summary>
         private Color _nativeCombatTint = Color.white;
+        /// <summary>The inherited body tint computed once for the active synchronous combat draw.</summary>
+        private Color _nativeBodyTrackTint = Color.white;
+        /// <summary>The body highlight computed once for the active synchronous combat draw.</summary>
+        private Color _nativeBodyTrackAdditive = Color.clear;
+        /// <summary>The inherited shield tint computed once for the active synchronous combat draw.</summary>
+        private Color _nativeShieldTrackTint = Color.white;
+        /// <summary>The shield highlight computed once for the active synchronous combat draw.</summary>
+        private Color _nativeShieldTrackAdditive = Color.clear;
         /// <summary>Stores native track additive.</summary>
         private Color _nativeTrackAdditive = Color.clear;
         /// <summary>Stores native surface additive.</summary>
@@ -3684,6 +3824,10 @@ namespace PlantsVsZombies.Reanimation
             var previousBodyClip = _nativeCombatBodyClipBottom;
             var previousBodyBounds = _nativeCombatBodyClipBounds;
             Color previousTint = _nativeCombatTint, previousAdd = _nativeTrackAdditive, color = SpriteDrawState.Color;
+            var previousBodyTint = _nativeBodyTrackTint;
+            var previousBodyAdditive = _nativeBodyTrackAdditive;
+            var previousShieldTint = _nativeShieldTrackTint;
+            var previousShieldAdditive = _nativeShieldTrackAdditive;
             try
             {
                 _nativeCombatZombie = zombie;
@@ -3692,6 +3836,8 @@ namespace PlantsVsZombies.Reanimation
                 _nativeCombatBodyClipBottom = bodyClipBottom;
                 _nativeCombatBodyClipBounds = bodyClipBounds;
                 _nativeCombatTint = color;
+                _nativeBodyTrackTint = PrepareNativeZombieTrackColor(0, out _nativeBodyTrackAdditive);
+                _nativeShieldTrackTint = PrepareNativeZombieTrackColor(1, out _nativeShieldTrackAdditive);
                 SpriteDrawState.Color = Color.white;
                 if (CanDrawZombieDirect(color, viewport))
                 {
@@ -3708,6 +3854,10 @@ namespace PlantsVsZombies.Reanimation
                 _nativeCombatBodyClipBottom = previousBodyClip;
                 _nativeCombatBodyClipBounds = previousBodyBounds;
                 _nativeCombatTint = previousTint;
+                _nativeBodyTrackTint = previousBodyTint;
+                _nativeBodyTrackAdditive = previousBodyAdditive;
+                _nativeShieldTrackTint = previousShieldTint;
+                _nativeShieldTrackAdditive = previousShieldAdditive;
                 _nativeTrackAdditive = previousAdd;
                 SpriteDrawState.Color = color;
             }
@@ -3911,14 +4061,26 @@ namespace PlantsVsZombies.Reanimation
             return NativeZombieTrackColor(group, alpha);
         }
 
-        /// <summary>Performs native zombie track color.</summary>
-        /// <param name = "group">The group.</param>
-        /// <param name = "alpha">The alpha.</param>
-        /// <returns>The resulting native zombie track color.</returns>
+        /// <summary>Applies a track's independent opacity to the active combat draw's retained group feedback.</summary>
+        /// <param name="group">The native render group; one selects shield feedback and all others select body feedback.</param>
+        /// <param name="alpha">The sampled opacity of this individual source track.</param>
+        /// <returns>The retained inherited group tint with this source track's opacity.</returns>
         private Color NativeZombieTrackColor(int group, float alpha)
         {
+            var tint = group == 1 ? _nativeShieldTrackTint : _nativeBodyTrackTint;
+            _nativeTrackAdditive = group == 1 ? _nativeShieldTrackAdditive : _nativeBodyTrackAdditive;
+            return new Color(tint.r, tint.g, tint.b, alpha * tint.a);
+        }
+
+        /// <summary>Samples feedback shared by every source track in one synchronous zombie draw.</summary>
+        /// <param name="group">The native body or shield render group.</param>
+        /// <param name="additive">Receives the source-colored highlight for this group.</param>
+        /// <returns>The inherited group tint before an individual track's opacity is applied.</returns>
+        private Color PrepareNativeZombieTrackColor(int group, out Color additive)
+        {
             var z = RequiredNativeCombatZombie;
-            Color tint = Color.white, additive = Color.clear;
+            var tint = Color.white;
+            additive = Color.clear;
             if (group == 1)
             {
                 var flash = AdventureZombieFeedbackRules.FlashChannel(z.PresentationArmorFlash) / 255f;
@@ -3956,8 +4118,7 @@ namespace PlantsVsZombies.Reanimation
                 additive = Color.clear;
             }
 
-            _nativeTrackAdditive = additive;
-            return new Color(tint.r * _nativeCombatTint.r, tint.g * _nativeCombatTint.g, tint.b * _nativeCombatTint.b, alpha * _nativeCombatTint.a);
+            return new Color(tint.r * _nativeCombatTint.r, tint.g * _nativeCombatTint.g, tint.b * _nativeCombatTint.b, _nativeCombatTint.a);
         }
 
         /// <summary>Performs native zombie track matrix.</summary>
@@ -4157,6 +4318,15 @@ namespace PlantsVsZombies.Reanimation
         /// <param name="combineHit">Whether normal alpha and source-textured hit addition share one draw.</param>
         private void DrawNativeSpritePass(SpriteImage texture, float width, float height, Rect uv, int pass, Matrix4x4 matrix, bool combineHit = false)
         {
+            if (_recordingThumbnail != null)
+            {
+                _recordingThumbnail.Add(new NativeThumbnailPart
+                {
+                    Image = texture, Width = width, Height = height, Uv = uv, Matrix = matrix,
+                    Color = SpriteDrawState.Color, Pass = pass, CombineHit = combineHit
+                });
+                return;
+            }
             var renderer = _renderingNativeSurface ? _nativeObjectRenderer : GetObjectRenderer();
             if (renderer == null)
             {

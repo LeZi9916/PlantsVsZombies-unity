@@ -66,6 +66,30 @@ namespace PlantsVsZombies.Tests.EditMode
             Assert.That(calls, Is.EqualTo(1));
         }
 
+        /// <summary>Resolves aliases once and keeps metadata and pages resident across alternating frame queries.</summary>
+        [Test]
+        public void StableImageHandlesAvoidMetadataRebindingAcrossFrames()
+        {
+            var calls = 0;
+            var page = CreateTexture(4, 4);
+            using var provider = new SpriteAssetProvider(Catalog(Layout(256, "small", false)), 1024, _ =>
+            {
+                calls++;
+                return page;
+            }, IgnoreReleasedTexture);
+            var image = provider.LoadImage("image_fixture");
+            Assert.That(provider.LoadImage("IMAGES/FIXTURE.PNG"), Is.SameAs(image));
+            for (var frame = 0; frame < 20; frame++)
+            {
+                SpriteDrawState.BeginFrame();
+                Assert.That(image.GetRegionCount(new Rect(0f, 0f, 1f, 1f)), Is.EqualTo(1));
+                image.GetRegionCount(new Rect(.1f, 0f, .5f, 1f));
+            }
+            Assert.That(calls, Is.EqualTo(1), "A continuously visible image must keep its page resident.");
+            Assert.That(provider.ImageMetadataRebindCount, Is.Zero, "Stable layouts must not re-resolve source names every frame.");
+            Assert.That(provider.PreparedRegionCacheCount, Is.EqualTo(2));
+        }
+
         /// <summary>Checks arbitrary original sheet crops map independently to multiple losslessly tiled pages.</summary>
         [Test]
         public void PartialSourceUvCrossingTilesPreservesOriginalCoordinates()
@@ -474,6 +498,8 @@ namespace PlantsVsZombies.Tests.EditMode
             original.GetRegionCount(source);
             Assert.That(original.TryGetRegion(source, 0, out var before), Is.True);
             Assert.That(before.Texture, Is.SameAs(large));
+            SpriteDrawState.BeginFrame();
+            Assert.That(original.GetRegions(source)[0].Texture, Is.SameAs(large));
             otherImage.GetRegionCount(source);
             Assert.That(provider.MaxPageSize, Is.EqualTo(256));
             original.GetRegionCount(source);
@@ -507,6 +533,86 @@ namespace PlantsVsZombies.Tests.EditMode
             var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
             Assert.That(allocated, Is.Zero);
             Assert.That(provider.PreparedRegionCacheCount, Is.EqualTo(150));
+        }
+
+        /// <summary>Rejects a retained slot after the bounded cache reassigns it to another image with different visible pixels.</summary>
+        [Test]
+        public void RecentRegionReferencesRejectSlotsReassignedByEviction()
+        {
+            var texture = CreateTexture(4, 4);
+            var layout = ManyImageLayout(513);
+            layout.Images[0].VisiblePixels = new[] { new Rect(0f, 0f, 2f, 4f) };
+            layout.Images[512].VisiblePixels = new[] { new Rect(6f, 0f, 2f, 4f) };
+            using var provider = new SpriteAssetProvider(Catalog(layout), 256, _ => texture, IgnoreReleasedTexture);
+            var original = provider.LoadImage(layout.Images[0].SourceIdentity);
+            var source = new Rect(0f, 0f, 1f, 1f);
+            Assert.That(original.GetRegions(source)[0].SourcePixels, Is.EqualTo(new Rect(0f, 0f, 2f, 4f)));
+            for (var index = 1; index < layout.Images.Length; index++)
+            {
+                provider.LoadImage(layout.Images[index].SourceIdentity).GetRegionCount(source);
+            }
+            Assert.That(provider.PreparedRegionCacheCount, Is.EqualTo(512));
+            SpriteDrawState.BeginFrame();
+            var restored = original.GetRegions(source);
+            Assert.That(restored.Count, Is.EqualTo(1));
+            Assert.That(restored[0].SourcePixels, Is.EqualTo(new Rect(0f, 0f, 2f, 4f)),
+                "An evicted image must not borrow the replacement image's cached source pixels.");
+            Assert.That(provider.PreparedRegionCacheCount, Is.EqualTo(512));
+        }
+
+        /// <summary>Keeps crop and geometry policy independent when direct references are reused across intervening images and frames.</summary>
+        [Test]
+        public void RecentRegionReferencesRespectCropAndGeometryPolicy()
+        {
+            var texture = CreateTexture(4, 4);
+            var layout = ManyImageLayout(2);
+            layout.Images[0].VisiblePixels = new[] { new Rect(0f, 0f, 2f, 4f) };
+            using var provider = new SpriteAssetProvider(Catalog(layout), 256, _ => texture, IgnoreReleasedTexture);
+            var original = provider.LoadImage(layout.Images[0].SourceIdentity);
+            var other = provider.LoadImage(layout.Images[1].SourceIdentity);
+            var full = new Rect(0f, 0f, 1f, 1f);
+            var right = new Rect(.5f, 0f, .5f, 1f);
+            for (var frame = 0; frame < 4; frame++)
+            {
+                SpriteDrawState.BeginFrame();
+                other.GetRegionCount(full);
+                var tight = original.GetRegions(full);
+                Assert.That(tight.Count, Is.EqualTo(1));
+                Assert.That(tight[0].SourcePixels, Is.EqualTo(new Rect(0f, 0f, 2f, 4f)));
+                other.GetRegionCount(full);
+                var loose = original.GetRegions(full, false);
+                Assert.That(loose.Count, Is.EqualTo(2));
+                Assert.That(loose[1].SourcePixels, Is.EqualTo(new Rect(4f, 0f, 4f, 4f)));
+                other.GetRegionCount(full);
+                var crop = original.GetRegions(right, false);
+                Assert.That(crop.Count, Is.EqualTo(1));
+                Assert.That(crop[0].SourcePixels, Is.EqualTo(new Rect(4f, 0f, 4f, 4f)));
+                other.GetRegionCount(full);
+                Assert.That(original.GetRegions(right).Count, Is.Zero,
+                    "The same crop can be empty under tight geometry and drawable under the complete-tile policy.");
+            }
+            Assert.That(provider.PreparedRegionCacheCount, Is.EqualTo(5));
+            Assert.That(provider.LoadedPageCount, Is.EqualTo(2), "Direct hits must continue touching active pages each complete frame.");
+        }
+
+        /// <summary>Releases page references from retained recent slots even when a logical image outlives its provider.</summary>
+        [Test]
+        public void DisposedProviderClearsRecentRegionPageReferences()
+        {
+            var texture = CreateTexture(4, 4);
+            using var provider = new SpriteAssetProvider(Catalog(Layout(256, "small", false)), 256,
+                _ => texture, IgnoreReleasedTexture);
+            var image = provider.LoadImage("IMAGE_FIXTURE");
+            var source = new Rect(0f, 0f, 1f, 1f);
+            image.GetRegionCount(source);
+            var bindingField = typeof(SpriteImage).GetField("_binding", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
+            var binding = (SpriteImageBinding)bindingField.GetValue(image)!;
+            var entry = binding.RecentRegions!;
+            Assert.That(entry.Count, Is.EqualTo(1));
+            provider.Dispose();
+            Assert.That(entry.Regions, Is.Empty, "A live logical handle must not retain released native page wrappers.");
+            Assert.That(entry.Count, Is.Zero);
+            Assert.Throws<ObjectDisposedException>(() => image.GetRegionCount(source));
         }
 
         /// <summary>Checks the cache remains bounded and reuses evicted arrays when a larger warmed working set cycles through it.</summary>

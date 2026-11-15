@@ -1,6 +1,7 @@
 #nullable enable
 using System.Collections.Generic;
 using PlantsVsZombies.Rendering;
+using PlantsVsZombies.UI.BitmapFonts;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
@@ -60,6 +61,13 @@ namespace PlantsVsZombies.UI
         private static readonly List<Canvas> s_layers = new List<Canvas>();
         /// <summary>The retained texture graphics reused by each presentation traversal.</summary>
         private static readonly List<CanvasTextureGraphic> s_images = new List<CanvasTextureGraphic>();
+        /// <summary>The retained contiguous bitmap-font page runs.</summary>
+        private static readonly List<CanvasBitmapGraphic> s_bitmapRuns = new List<CanvasBitmapGraphic>();
+        /// <summary>The number of bitmap page runs submitted in the current frame.</summary>
+        private static int s_bitmapRunCount;
+        /// <summary>Gets the number of bitmap page runs retained for reuse.</summary>
+        internal static int PooledBitmapRunCount => s_bitmapRuns.Count;
+
         /// <summary>The retained native text graphics reused by each presentation traversal.</summary>
         private static readonly List<CanvasTextGraphic> s_labels = new List<CanvasTextGraphic>();
         /// <summary>The retained native buttons used by utility screens.</summary>
@@ -131,6 +139,7 @@ namespace PlantsVsZombies.UI
 
             s_layerCount = 0;
             s_imageCount = 0;
+            s_bitmapRunCount = 0;
             s_labelCount = 0;
             s_buttonCount = 0;
             s_fieldCount = 0;
@@ -146,6 +155,11 @@ namespace PlantsVsZombies.UI
         /// <summary>Hides unused retained objects so removed screens and controls disappear immediately.</summary>
         public static void EndFrame()
         {
+            for (var index = s_bitmapRunCount; index < s_bitmapRuns.Count; index++)
+            {
+                s_bitmapRuns[index].gameObject.SetActive(false);
+            }
+
             for (var index = s_imageCount; index < s_images.Count; index++)
             {
                 s_images[index].gameObject.SetActive(false);
@@ -278,6 +292,29 @@ namespace PlantsVsZombies.UI
                     source.height * verticalScale);
                 DrawTextureRegion(piece, region.Texture, region.TextureUv);
             }
+        }
+
+        /// <summary>Publishes consecutive glyphs from one font page at a single painter-order boundary.</summary>
+        /// <param name="layout">The immutable glyph positions.</param>
+        /// <param name="first">The first glyph in this contiguous page run.</param>
+        /// <param name="count">The number of glyphs in the run.</param>
+        /// <param name="texture">The page sampled by all glyphs in this run.</param>
+        /// <param name="origin">The layout origin before the current screen transform.</param>
+        internal static void DrawBitmapRun(BitmapTextLayout layout, int first, int count, Texture texture, Vector2 origin)
+        {
+            if (!IsFrameActive || Color.a <= 0f || count == 0 || texture == null)
+            {
+                return;
+            }
+            var layer = NextLayer();
+            if (s_bitmapRunCount == s_bitmapRuns.Count)
+            {
+                var owner = CreateGraphicObject("Original bitmap text", layer.transform);
+                s_bitmapRuns.Add(owner.AddComponent<CanvasBitmapGraphic>());
+            }
+            var graphic = s_bitmapRuns[s_bitmapRunCount++];
+            PrepareGraphic(graphic.rectTransform, layer.transform, true);
+            graphic.Configure(layout, first, count, texture, origin, Matrix, Color, SpriteDrawState.Clip);
         }
 
         /// <summary>Publishes one atlas piece using the existing native Canvas batching path.</summary>
@@ -498,6 +535,7 @@ namespace PlantsVsZombies.UI
             s_currentLayer = null;
             s_layers.Clear();
             s_images.Clear();
+            s_bitmapRuns.Clear();
             s_labels.Clear();
             s_buttons.Clear();
             s_fields.Clear();

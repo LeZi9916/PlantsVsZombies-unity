@@ -626,6 +626,32 @@ namespace PlantsVsZombies.Tests.PlayMode
             }
         }
 
+        /// <summary>Checks a reused batch uploads only live array prefixes after shrinking and retains full precision.</summary>
+        [Test]
+        public void ReusedBatchDropsStaleVerticesIndicesAndColorsAfterShrinking()
+        {
+            _renderer.BeginBatch();
+            for (var index = 0; index < 160; index++)
+            {
+                _renderer.DrawQuad(_image, 8f, 8f, new Rect(0f, 0f, 1f, 1f),
+                    Matrix4x4.Translate(new Vector3(index, 0f)), Color.red, 0);
+            }
+            var batch = Batches(_renderer)[0];
+            batch.Publish();
+            Assert.That(batch.Mesh.vertexCount, Is.EqualTo(640));
+            _renderer.BeginBatch();
+            var tint = new Color(1.25f, -.125f, .1234567f, .8123456f);
+            _renderer.DrawQuad(_image, 3f, 2f, new Rect(0f, 0f, 1f, 1f),
+                Matrix4x4.Translate(new Vector3(3f, 4f)), tint, 0);
+            batch.Publish();
+            Assert.That(batch.Mesh.vertexCount, Is.EqualTo(4));
+            Assert.That(batch.Mesh.triangles.Length, Is.EqualTo(6));
+            Assert.That(batch.Mesh.colors[0], Is.EqualTo(tint));
+            Assert.That(batch.Mesh.bounds.min.x, Is.EqualTo(3f).Within(.00001f));
+            Assert.That(batch.Mesh.bounds.max.x, Is.EqualTo(6f).Within(.00001f));
+            Assert.That(batch.Mesh.indexFormat, Is.EqualTo(IndexFormat.UInt16));
+        }
+
         /// <summary>Checks portable mesh capacity splits happen at 65532 vertices independently of numeric chunks.</summary>
         [Test]
         public void MeshCapacityBoundaryKeepsPortableIndicesAndOneAdditionalBatch()

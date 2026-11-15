@@ -14,6 +14,8 @@ namespace PlantsVsZombies.Rendering
         private static readonly ConditionalWeakTable<Texture, SpriteImage>.CreateValueCallback s_createExternalImage = CreateExternalImage;
         /// <summary>The provider resolving the selected layout, or null for an external texture.</summary>
         private readonly SpriteAssetProvider? _provider;
+        /// <summary>The baked metadata and residency handle, absent for external textures.</summary>
+        private readonly SpriteImageBinding? _binding;
         /// <summary>Gets the original image width before atlas trimming or tiling.</summary>
         public int Width { get; }
         /// <summary>Gets the original image height before atlas trimming or tiling.</summary>
@@ -29,6 +31,7 @@ namespace PlantsVsZombies.Rendering
         internal SpriteImage(SpriteAssetProvider provider, SpriteAtlasImage image)
         {
             _provider = provider;
+            _binding = provider.CreateBinding(image);
             Width = image.Width;
             Height = image.Height;
             SourceIdentity = image.SourceIdentity;
@@ -74,7 +77,7 @@ namespace PlantsVsZombies.Rendering
         {
             if (_provider != null)
             {
-                return _provider.GetRegions(SourceIdentity, sourceUv, useTightGeometry);
+                return _provider.GetRegions(_binding!, sourceUv, useTightGeometry);
             }
             return TryGetRegion(sourceUv, 0, useTightGeometry, out var region) ? new SpriteRegionView(region) : default;
         }
@@ -101,7 +104,7 @@ namespace PlantsVsZombies.Rendering
             {
                 return SourceTexture != null && sourceUv.width != 0f && sourceUv.height != 0f ? 1 : 0;
             }
-            return _provider.GetRegionCount(SourceIdentity, sourceUv, useTightGeometry);
+            return _provider.GetRegionCount(_binding!, sourceUv, useTightGeometry);
         }
 
         /// <summary>Reads a cropped visible region without allocating an iterator or temporary collection.</summary>
@@ -129,7 +132,7 @@ namespace PlantsVsZombies.Rendering
             region = default;
             if (_provider != null)
             {
-                return _provider.TryGetRegion(SourceIdentity, sourceUv, index, useTightGeometry, out region);
+                return _provider.TryGetRegion(_binding!, sourceUv, index, useTightGeometry, out region);
             }
             if (index != 0 || SourceTexture == null || sourceUv.width == 0f || sourceUv.height == 0f)
             {

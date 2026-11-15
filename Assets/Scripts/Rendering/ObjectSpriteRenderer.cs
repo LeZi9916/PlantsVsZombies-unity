@@ -23,6 +23,10 @@ namespace PlantsVsZombies.Rendering
         private readonly List<SpriteMeshBatch> _batches = new List<SpriteMeshBatch>();
         /// <summary>The shared blend materials whose native texture bindings are refreshed per submission batch.</summary>
         private readonly Dictionary<Texture, SpriteMaterialBinding> _materials = new Dictionary<Texture, SpriteMaterialBinding>();
+        /// <summary>The last texture selected within this batch, avoiding repeated native-object dictionary hashes.</summary>
+        private Texture? _recentMaterialTexture;
+        /// <summary>The retained material variants for the last selected texture.</summary>
+        private SpriteMaterialBinding? _recentMaterialBinding;
         /// <summary>The monotonically increasing batch identity used to refresh native sampler bindings once per active texture.</summary>
         private ulong _batchVersion;
         /// <summary>The reused list of destroyed texture bindings awaiting safe batch-boundary retirement.</summary>
@@ -184,10 +188,14 @@ namespace PlantsVsZombies.Rendering
             }
         }
 
+        /// <summary>Gets the number of nonempty numeric segments completed during the current scene frame.</summary>
+        internal static int CompletedGeometrySegments { get; private set; }
+
         /// <summary>Retires the previous presentation and resets painter order before submitting the next complete frame.</summary>
         public static void BeginSceneFrame()
         {
             SpriteDrawState.BeginFrame();
+            CompletedGeometrySegments = 0;
             foreach (var pool in s_scenePools)
             {
                 pool.SetRenderersEnabled(false);
@@ -315,6 +323,8 @@ namespace PlantsVsZombies.Rendering
             _painterSplits = 0;
             _capacitySplits = 0;
             _batchVersion++;
+            _recentMaterialTexture = null;
+            _recentMaterialBinding = null;
             RetireDestroyedTextureBindings();
         }
 
@@ -550,11 +560,12 @@ namespace PlantsVsZombies.Rendering
                 using (SpriteRenderingProfiler.Measure(SpriteRenderingProfiler.Geometry))
                 {
                     arena.Execute(GeometryExecution);
+                    CompletedGeometrySegments++;
                 }
                 using var commit = SpriteRenderingProfiler.Measure(SpriteRenderingProfiler.Commit);
                 for (var index = 0; index < arena.CommandCount; index++)
                 {
-                    owner.CommitDeferred(arena, arena.Commands[index]);
+                    owner.CommitDeferred(arena, in arena.Commands[index]);
                 }
             }
             finally
@@ -566,7 +577,7 @@ namespace PlantsVsZombies.Rendering
         /// <summary>Appends one command's computed polygons in their original region order.</summary>
         /// <param name="arena">The shared completed numeric buffers and managed texture snapshots.</param>
         /// <param name="command">The immutable logical source state recorded at submission.</param>
-        private void CommitDeferred(SpriteGeometryArena arena, DeferredSpriteCommand command)
+        private void CommitDeferred(SpriteGeometryArena arena, in DeferredSpriteCommand command)
         {
             if (_used >= short.MaxValue)
             {
@@ -753,6 +764,8 @@ namespace PlantsVsZombies.Rendering
             }
 
             _materials.Clear();
+            _recentMaterialTexture = null;
+            _recentMaterialBinding = null;
             _batches.Clear();
 
             if (_scenePool)
@@ -792,7 +805,7 @@ namespace PlantsVsZombies.Rendering
         /// <param name="clipEnabled">Whether destination clipping applies.</param>
         /// <param name="order">The shared source painter order.</param>
         /// <param name="node">The cached logical source object associated with this command.</param>
-        private void RecordSource(SpriteImage image, float width, float height, Rect uv, Matrix4x4 matrix, Color color,
+        private void RecordSource(SpriteImage image, float width, float height, Rect uv, in Matrix4x4 matrix, Color color,
             int mode, float grayscale, float producerAdditive, float additive, Color addColor, Rect clip, bool clipEnabled, int order, GameObject? node)
         {
             if (_used == _sprites.Count)
@@ -852,6 +865,10 @@ namespace PlantsVsZombies.Rendering
         /// <returns>The shared material for this texture and blend state.</returns>
         private Material GetMaterial(Texture texture, int blend)
         {
+            if (ReferenceEquals(_recentMaterialTexture, texture) && _recentMaterialBinding != null)
+            {
+                return _recentMaterialBinding.Materials[blend];
+            }
             if (!_materials.TryGetValue(texture, out var binding))
             {
                 var materials = new Material[3];
@@ -892,6 +909,8 @@ namespace PlantsVsZombies.Rendering
                 binding.LastBatchVersion = _batchVersion;
             }
 
+            _recentMaterialTexture = texture;
+            _recentMaterialBinding = binding;
             return binding.Materials[blend];
         }
 
@@ -1127,7 +1146,7 @@ namespace PlantsVsZombies.Rendering
         /// <param name = "y">The source vertical coordinate.</param>
         /// <param name = "color">The vertex tint.</param>
         /// <param name="depth">The depth preserving the original painter order across render queues.</param>
-        private static void SetCorner(ObjectSprite sprite, int index, Matrix4x4 matrix, float x, float y, float depth, Color color)
+        private static void SetCorner(ObjectSprite sprite, int index, in Matrix4x4 matrix, float x, float y, float depth, Color color)
         {
             var destinationX = (matrix.m00 * x) + (matrix.m01 * y) + matrix.m03;
             var destinationY = (matrix.m10 * x) + (matrix.m11 * y) + matrix.m13;

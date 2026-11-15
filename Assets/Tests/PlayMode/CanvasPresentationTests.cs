@@ -289,7 +289,7 @@ namespace PlantsVsZombies.Tests.PlayMode
                 var clearPixel = Pixel(Mathf.FloorToInt(60f + placed.X) + clearest.x, Mathf.FloorToInt(60f + placed.Y) + clearest.y);
                 AssertColor(brightPixel, new Color(0f, strongest, 0f, 1f));
                 AssertColor(clearPixel, new Color(0f, weakest, 0f, 1f));
-                Assert.That(CanvasUI.PooledImageCount, Is.EqualTo(2), "Each Chinese glyph must submit its original atlas region.");
+                Assert.That(CanvasUI.PooledBitmapRunCount, Is.EqualTo(1), "Consecutive Chinese glyphs on one original atlas page must share one retained run.");
             }
             finally
             {

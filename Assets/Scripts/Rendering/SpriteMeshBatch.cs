@@ -1,5 +1,5 @@
 #nullable enable
-using System.Collections.Generic;
+using System;
 using UnityEngine;
 using UnityEngine.Rendering;
 
@@ -10,18 +10,22 @@ namespace PlantsVsZombies.Rendering
     {
         /// <summary>The maximum vertices addressable without requiring 32-bit GPU indices.</summary>
         internal const int MaximumVertexCount = 65532;
-        /// <summary>The accumulated transformed positions.</summary>
-        private readonly List<Vector3> _vertices = new List<Vector3>(256);
+        /// <summary>The retained transformed-position buffer; only its populated prefix is uploaded.</summary>
+        private Vector3[] _vertices = new Vector3[256];
         /// <summary>The accumulated atlas coordinates.</summary>
-        private readonly List<Vector2> _coordinates = new List<Vector2>(256);
+        private Vector2[] _coordinates = new Vector2[256];
         /// <summary>The accumulated source tint and alpha.</summary>
-        private readonly List<Color> _colors = new List<Color>(256);
+        private Color[] _colors = new Color[256];
         /// <summary>The grayscale, producer brightness, render mode, and fused-hit switch per vertex.</summary>
-        private readonly List<Vector4> _effects = new List<Vector4>(256);
+        private Vector4[] _effects = new Vector4[256];
         /// <summary>The unfiltered source-color highlight per vertex.</summary>
-        private readonly List<Vector4> _highlights = new List<Vector4>(256);
+        private Vector4[] _highlights = new Vector4[256];
         /// <summary>The ordered triangle indices.</summary>
-        private readonly List<int> _indices = new List<int>(384);
+        private int[] _indices = new int[384];
+        /// <summary>The populated vertex prefix shared by all attribute buffers.</summary>
+        private int _vertexCount;
+        /// <summary>The populated triangle-index prefix.</summary>
+        private int _indexCount;
         /// <summary>Whether the CPU buffers differ from the uploaded mesh.</summary>
         private bool _dirty;
         /// <summary>Gets the reusable geometry drawn by this batch.</summary>
@@ -35,9 +39,9 @@ namespace PlantsVsZombies.Rendering
         /// <summary>Gets the last logical painter order appended to this batch.</summary>
         internal int LastOrder { get; private set; }
         /// <summary>Gets the number of vertices currently buffered.</summary>
-        internal int VertexCount => _vertices.Count;
+        internal int VertexCount => _vertexCount;
         /// <summary>Gets the number of indices currently buffered.</summary>
-        internal int IndexCount => _indices.Count;
+        internal int IndexCount => _indexCount;
 
         /// <summary>Creates the persistent mesh and renderer below their owning pool.</summary>
         /// <param name="parent">The transform that owns the renderer pool.</param>
@@ -73,12 +77,8 @@ namespace PlantsVsZombies.Rendering
         /// <param name="opaque">Whether depth ordering replaces transparent sorting.</param>
         internal void Reset(Material material, int order, bool opaque)
         {
-            _vertices.Clear();
-            _coordinates.Clear();
-            _colors.Clear();
-            _effects.Clear();
-            _highlights.Clear();
-            _indices.Clear();
+            _vertexCount = 0;
+            _indexCount = 0;
             if (!ReferenceEquals(Material, material))
             {
                 Material = material;
@@ -103,7 +103,7 @@ namespace PlantsVsZombies.Rendering
         internal bool CanAppend(Material material, int order, int vertexCount)
         {
             return ReferenceEquals(Material, material) && (order == LastOrder || order == LastOrder + 1)
-                && _vertices.Count + vertexCount <= MaximumVertexCount;
+                && _vertexCount + vertexCount <= MaximumVertexCount;
         }
 
         /// <summary>Appends one vertex to the current polygon.</summary>
@@ -114,11 +114,21 @@ namespace PlantsVsZombies.Rendering
         /// <param name="highlight">The source-colored hit multiplier.</param>
         internal void AddVertex(Vector3 position, Vector2 coordinates, Color color, Vector4 effects, Vector4 highlight)
         {
-            _vertices.Add(position);
-            _coordinates.Add(coordinates);
-            _colors.Add(color);
-            _effects.Add(effects);
-            _highlights.Add(highlight);
+            if (_vertexCount == _vertices.Length)
+            {
+                var capacity = Math.Min(MaximumVertexCount, _vertices.Length * 2);
+                Array.Resize(ref _vertices, capacity);
+                Array.Resize(ref _coordinates, capacity);
+                Array.Resize(ref _colors, capacity);
+                Array.Resize(ref _effects, capacity);
+                Array.Resize(ref _highlights, capacity);
+            }
+            var index = _vertexCount++;
+            _vertices[index] = position;
+            _coordinates[index] = coordinates;
+            _colors[index] = color;
+            _effects[index] = effects;
+            _highlights[index] = highlight;
             _dirty = true;
         }
 
@@ -128,11 +138,16 @@ namespace PlantsVsZombies.Rendering
         /// <param name="order">The original source painter order.</param>
         internal void CompletePolygon(int firstVertex, int vertexCount, int order)
         {
+            var required = _indexCount + (vertexCount - 2) * 3;
+            if (required > _indices.Length)
+            {
+                Array.Resize(ref _indices, Math.Max(required, _indices.Length * 2));
+            }
             for (var index = 1; index < vertexCount - 1; index++)
             {
-                _indices.Add(firstVertex);
-                _indices.Add(firstVertex + index);
-                _indices.Add(firstVertex + index + 1);
+                _indices[_indexCount++] = firstVertex;
+                _indices[_indexCount++] = firstVertex + index;
+                _indices[_indexCount++] = firstVertex + index + 1;
             }
 
             LastOrder = order;
@@ -148,12 +163,12 @@ namespace PlantsVsZombies.Rendering
 
             using var upload = SpriteRenderingProfiler.Measure(SpriteRenderingProfiler.Upload);
             Mesh.Clear();
-            Mesh.SetVertices(_vertices);
-            Mesh.SetUVs(0, _coordinates);
-            Mesh.SetColors(_colors);
-            Mesh.SetUVs(1, _effects);
-            Mesh.SetUVs(2, _highlights);
-            Mesh.SetTriangles(_indices, 0, true);
+            Mesh.SetVertices(_vertices, 0, _vertexCount);
+            Mesh.SetUVs(0, _coordinates, 0, _vertexCount);
+            Mesh.SetColors(_colors, 0, _vertexCount);
+            Mesh.SetUVs(1, _effects, 0, _vertexCount);
+            Mesh.SetUVs(2, _highlights, 0, _vertexCount);
+            Mesh.SetTriangles(_indices, 0, _indexCount, 0, true);
             _dirty = false;
         }
     }

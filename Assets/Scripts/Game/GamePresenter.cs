@@ -34,6 +34,7 @@ namespace PlantsVsZombies.Game
             _owner = owner;
             _drawConveyorPackets = DrawAdventureConveyorPacketContents;
             _drawCardImage = DrawCardImage;
+            _drawCardThumbnail = DrawCardThumbnail;
             _textureLookup = owner.Textures.LoadImage;
             _drawPacketMask = DrawAdventurePacketMask;
             _doomTrackOffset = DoomShroomTrackOffset;
@@ -164,6 +165,22 @@ namespace PlantsVsZombies.Game
         private GUIStyle? _textFieldStyle;
         /// <summary>Reuses the callback used to grayscale an imitated packet image.</summary>
         private readonly Func<bool> _drawCardImage;
+        /// <summary>Reuses the synchronous fixed-pose thumbnail callback inside imitation captures.</summary>
+        private readonly Func<bool> _drawCardThumbnail;
+        /// <summary>The original resource used by the immediately consumed imitation thumbnail.</summary>
+        private string _cardThumbnailName = string.Empty;
+        /// <summary>The logical origin of the immediately consumed thumbnail.</summary>
+        private Vector2 _cardThumbnailOrigin;
+        /// <summary>The native scale of the immediately consumed thumbnail.</summary>
+        private float _cardThumbnailScale;
+
+        /// <summary>Submits the configured fixed-pose thumbnail inside the existing native capture.</summary>
+        /// <returns>Whether the thumbnail submitted visible source tracks.</returns>
+        private bool DrawCardThumbnail()
+        {
+            return _owner.RequiredAnimations.DrawNativeThumbnail(_cardThumbnailName, _cardThumbnailOrigin, _cardThumbnailScale);
+        }
+
         /// <summary>The immediately consumed imitated packet image.</summary>
         private SpriteImage _cardAtlas = null!;
         /// <summary>The immediately consumed packet destination and atlas coordinates.</summary>
@@ -5848,12 +5865,15 @@ namespace PlantsVsZombies.Game
                     var iconKind = imitated ? _owner.RequiredGame.Adventure.RequiredImitaterTarget : kind;
                     if (imitated)
                     {
-                        ActorRenderer.DrawCursor(AdventurePlantAnimation(iconKind), origin, scale, null, false, true,
-                            _presentationKeys.Get("imitater-card-", (int)card.x, (int)card.y), card);
+                        _cardThumbnailName = AdventurePlantAnimation(iconKind);
+                        _cardThumbnailOrigin = origin;
+                        _cardThumbnailScale = scale;
+                        _owner.RequiredAnimations.DrawNativeClipped(_presentationKeys.Get("imitater-card-", (int)card.x, (int)card.y),
+                            card, _drawCardThumbnail, grayscale: true);
                     }
                     else
                     {
-                        _owner.RequiredAnimations.DrawNative(AdventurePlantAnimation(iconKind), origin, scale, 0f);
+                        _owner.RequiredAnimations.DrawNativeThumbnail(AdventurePlantAnimation(iconKind), origin, scale);
                     }
                 }
             }
@@ -5866,7 +5886,7 @@ namespace PlantsVsZombies.Game
                 float scale;
                 AlmanacPortraitLayout.PlantThumbnailTransform((int)PlantKind.Wallnut, new Rect(0, 0, 50, 70), out origin, out scale);
                 origin = new Vector2(card.x + origin.x * card.width / 50f, card.y + origin.y * card.height / 70f);
-                _owner.RequiredAnimations.DrawNative("Wallnut", origin, scale * card.width / 50f, 0f, "anim_idle");
+                _owner.RequiredAnimations.DrawNativeThumbnail("Wallnut", origin, scale * card.width / 50f, "anim_idle");
                 CanvasUI.Color = previous;
             }
 
@@ -5886,6 +5906,7 @@ namespace PlantsVsZombies.Game
         /// <summary>Draws the complete PC seed bank below lawn actors during play.</summary>
         private void DrawAdventureSeedBankContents()
         {
+            using var profile = SpriteRenderingProfiler.Measure(SpriteRenderingProfiler.SeedBank);
             var board = _owner.RequiredGame.Adventure;
             var packets = board.Level.HasConveyor || board.Level.Mode == AdventureMode.Vasebreaker;
             if (_owner.RequiredGame.UsesNativeAdventureConveyor)
