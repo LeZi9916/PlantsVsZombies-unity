@@ -5914,11 +5914,33 @@ namespace PlantsVsZombies.Game
         /// <summary>Performs draw adventure packet cost.</summary>
         /// <param name = "kind">The kind.</param>
         /// <param name = "card">The card.</param>
-        private void DrawAdventurePacketCost(PlantKind kind, Rect card)
+        /// <param name="currentCost">Whether to display the combat bank's current cost instead of the chooser's base-price-plus.</param>
+        private void DrawAdventurePacketCost(PlantKind kind, Rect card, bool currentCost = true)
         {
-            var text = kind == PlantKind.Imitater && !_owner.RequiredGame.Adventure.ImitaterTarget.HasValue
-                ? "?" : NumberLabel(_owner.RequiredGame.AdventureSeedCost(kind));
+            var text = AdventurePacketCostLabel(kind, currentCost);
             DrawNativePacketCost(text, card);
+        }
+
+        /// <summary>Caches the eight original chooser price labels carrying the endless-pricing plus sign.</summary>
+        private readonly string?[] _upgradeChooserPrices = new string?[8];
+
+        /// <summary>Resolves PC 49D260's chooser base-price-plus or live seed-bank price.</summary>
+        /// <param name="kind">The original packet type.</param>
+        /// <param name="currentCost">Whether the caller is the combat bank using current board population.</param>
+        /// <returns>The original numeric label, including the chooser-only plus sign where applicable.</returns>
+        private string AdventurePacketCostLabel(PlantKind kind, bool currentCost)
+        {
+            if (kind == PlantKind.Imitater && !_owner.RequiredGame.Adventure.ImitaterTarget.HasValue)
+            {
+                return "?";
+            }
+            if (!currentCost && AdventureUpgradeSeedRules.UsesAcceleratedPricing(kind, _owner.RequiredGame.ModeSession?.Definition.Id ?? 0))
+            {
+                var index = (int)kind - (int)PlantKind.GatlingPea;
+                return _upgradeChooserPrices[index] ??= NumberLabel(GameSimulation.Cost(kind)) + "+";
+            }
+            return NumberLabel(currentCost ? _owner.RequiredGame.AdventureSeedCost(kind)
+                : GameSimulation.Cost(kind == PlantKind.Imitater ? _owner.RequiredGame.Adventure.RequiredImitaterTarget : kind));
         }
 
         /// <summary>Draws the original Pico129 packet cost at PC 49D260's right-aligned baseline.</summary>
@@ -6209,7 +6231,7 @@ namespace PlantsVsZombies.Game
             }
             else if (bank != null)
             {
-                _owner.RequiredAnimations.DrawNativeImage(bank, card, new Rect(2f / 9f, 0, 1f / 9f, 1));
+                _owner.RequiredAnimations.DrawNativeImage(bank, card, new Rect(AdventureUpgradeSeedRules.PacketFrame(kind) / 9f, 0, 1f / 9f, 1));
             }
 
             var template = imitaterTemplate ?? _owner.RequiredGame.Adventure.ImitaterTarget;
@@ -6273,7 +6295,7 @@ namespace PlantsVsZombies.Game
 
             if (price)
             {
-                DrawAdventurePacketCost(imitated ? (PlantKind)id : kind, card);
+                DrawAdventurePacketCost(imitated ? (PlantKind)id : kind, card, currentCost: false);
             }
         }
 
@@ -7408,7 +7430,7 @@ namespace PlantsVsZombies.Game
             var seeds = _owner.Textures.LoadImage("seeds.png");
             if (seeds != null)
             {
-                CanvasUI.DrawTextureWithTexCoords(card, seeds, new Rect(2f / 9f, 0, 1f / 9f, 1));
+                CanvasUI.DrawTextureWithTexCoords(card, seeds, new Rect(AdventureUpgradeSeedRules.PacketFrame(kind) / 9f, 0, 1f / 9f, 1));
             }
 
             var cell = AlmanacPortraitLayout.PlantAtlasCell((int)kind);

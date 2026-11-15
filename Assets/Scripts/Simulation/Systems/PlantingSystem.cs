@@ -111,6 +111,7 @@ namespace PlantsVsZombies.Simulation
                 return;
             }
 
+            _world._seedInitialCooldownThresholds[(int)kind] = 0;
             _world._seedCooldownTicks[(int)kind] = LegacySimulation.DefinitionFor(_seedBankSystem.ResolveAdventureSeed(kind)).RechargeThresholdRaw + 1;
             PlaceAdventurePlantWithEffects(kind, row, column);
             planted = true;

@@ -1273,3 +1273,43 @@ including complete simulation-only shooter cycles without renderer queries.
 Packaged Players, other platforms and native executable pixel equivalence remain
 unverified; no unrelated combat mechanics or global particle random-stream parity
 is implied by these targeted checks.
+
+
+## Original garlic, Cattail, cannon, and upgrade packet parity
+
+The November 15, 2026 corrections follow the local PC GOTY executable
+`PlantsVsZombies.exe` (SHA-256
+`E1511201EC2AE9A7E30259F04BC2EC7272BADB2574A2E9B405D0E916AE5C082C`),
+the adjacent `analysis/ida` exports, and unchanged original runtime artwork.
+The mobile-derived reference source is supplementary; PC disassembly determines
+counters, projectile types, and timings.
+
+| Path | Native evidence and regression boundary |
+| --- | --- |
+| Garlic | `472AD0` changes only `anim_face` below integer health thresholds 266/133 and hides `Garlic_stem` in the last stage. `547230/547280/547380/54ADC0` govern supported gross-out heads, the 21/70/170/271 milestones, crowd-limited Foley 72, and paused body clocks. Extended types retain their native IDs before shared-body mapping, including plant-headed zombies without a gross-out face. Lane displacement approaches its new baseline by one pixel per native update. |
+| Cattail | `46DC00/472C70/4752E0/47CCB0` restart one shooting animation at launch countdown zero and fifty, release one type-8 cactus spike at shooting countdown nineteen, and steer the chosen target at two pixels per update with age-dependent `.001` acceleration. A dead target is not replaced. |
+| Cob Cannon | `46F3F0/475230/472C70/528520` use 15 charge frames and 42 shooting frames at 12 FPS, release on the 205th update, finish shooting before 3000-tick reload, and tint only `CobCannon_cob` with the original 75-tick flash. The cursor uses the original 70x63 image and alpha 127, a thirty-tick/fifty-pixel repeat-click guard, and actual pointer coordinates. Projectile launch/impact offsets and the two-part native flight retain original pixels. |
+| Purple packets | `49D260/49F5B0/49CDC0/4296E0/429730/419140` use background cel one, a 3500 startup threshold and 5000 post-use threshold (ready on strictly greater: 3501/5001 updates), carried cooldowns between survival stages, and base cost plus fifty per current same-kind plant only in modes 11 through 15. Chooser labels show the base cost followed by `+`; bank labels show the live price. |
+
+Focused validation (Unity **7000.0.0a16**, Windows graphics device):
+
+```powershell
+$env:PVZ_BOARD_STRESS_ASSETS = (Resolve-Path Assets/StreamingAssets).Path
+./Tools/Tests/Run-UnityTests.ps1 -Platform All -TestFilter 'AdventureGarlicTests;AdventureCattailTests;AdventureCobCannonTests;AdventureUpgradeSeedTests;AdventurePlantSoundTests;AdventureSeedChooserTests;ChallengeSeedChooserTests;OriginalPlantParityGraphicsTests'
+git diff --check
+```
+
+The focused run passes **110 EditMode and 6 PlayMode cases**, with no skips.
+`OriginalPlantParityGraphicsTests` compares actual camera readbacks against the
+original damaged garlic images, hidden stems, Cattail shooting clip and cactus
+spike, single-track cannon flash, post-release shooting pose, native crosshair,
+and purple card background. It also decodes non-silent original garlic/charge/
+launch/throw recordings and verifies production audio voice playback.
+`PVZ_BOARD_STRESS_OUTPUT` optionally saves the actual diagnostic screenshots.
+
+These are isolated simulation/presenter/GPU/audio checks. They do not represent
+a complete interactive Lawn scene smoke run, an original-process frame capture,
+a packaged Player, physical speaker listening, or Linux/macOS/Android/iOS and
+other target ABI verification. The Windows runner invocation used a temporary
+ASCII junction to this repository because this Editor misdecoded the Unicode
+NUnit result path; the source snapshot and results remain in ignored `.unity-runs`.

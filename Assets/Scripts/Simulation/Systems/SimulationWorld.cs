@@ -90,6 +90,8 @@ namespace PlantsVsZombies.Simulation
         internal readonly AdventureFogState _boardCells = new AdventureFogState();
         /// <summary>Stores seed cooldown ticks.</summary>
         internal readonly int[] _seedCooldownTicks = new int[VerifiedDataCatalog.Plants.Count];
+        /// <summary>Retains an initial packet refresh threshold independently of the plant table's post-use threshold.</summary>
+        internal readonly int[] _seedInitialCooldownThresholds = new int[VerifiedDataCatalog.Plants.Count];
         /// <summary>Stores next zombie.</summary>
         internal float _nextZombie;
         /// <summary>Stores next sky sun.</summary>

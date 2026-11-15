@@ -38,6 +38,34 @@ namespace PlantsVsZombies.Simulation
             _conveyorSystem = conveyorSystem;
         }
 
+        /// <summary>Initializes PC 49F5B0's purple packet startup cooldown while retaining selected survival packets between stages.</summary>
+        /// <param name="selected">The newly confirmed seed choices before replacing the previous bank.</param>
+        internal void InitializeUpgradePacketCooldowns(IReadOnlyList<PlantKind> selected)
+        {
+            var mode = _world.ModeSession;
+            var nativeMode = mode?.Definition.Id ?? 0;
+            var exempt = nativeMode == 20 || nativeMode == 24 || nativeMode == 23 || nativeMode == 31
+                || mode?.Definition.Puzzle == true || mode?.Definition.Mechanic == global::PlantsVsZombies.Modes.ModeMechanic.Whack;
+            foreach (var kind in selected)
+            {
+                if (!AdventureUpgradeSeedRules.IsUpgrade(kind))
+                {
+                    continue;
+                }
+                if (mode?.Definition.Survival == true && mode.Stage > 1)
+                {
+                    if (!ContainsSeed(_adventureModeRunner.Adventure.SelectedSeeds, kind))
+                    {
+                        _world._seedCooldownTicks[(int)kind] = 0;
+                        _world._seedInitialCooldownThresholds[(int)kind] = 0;
+                    }
+                    continue;
+                }
+                _world._seedInitialCooldownThresholds[(int)kind] = exempt ? 0 : 3500;
+                _world._seedCooldownTicks[(int)kind] = exempt ? 0 : 3501;
+            }
+        }
+
         /// <summary>Performs initialize replay seed choices.</summary>
         internal void InitializeReplaySeedChoices()
         {
@@ -154,7 +182,11 @@ namespace PlantsVsZombies.Simulation
         /// <returns>The supplied destination or a newly allocated snapshot of the current packet state.</returns>
         internal AdventureSeedBankContext AdventurePacketContext(PlantKind kind, bool playing = true, int darken = 255, int anticipatedSun = -1, AdventureSeedBankContext? destination = null)
         {
-            int left = _world._seedCooldownTicks[(int)kind], duration = LegacySimulation.DefinitionFor(ResolveAdventureSeed(kind)).RechargeThresholdRaw;
+            int left = _world._seedCooldownTicks[(int)kind], duration = _world._seedInitialCooldownThresholds[(int)kind];
+            if (duration == 0)
+            {
+                duration = LegacySimulation.DefinitionFor(ResolveAdventureSeed(kind)).RechargeThresholdRaw;
+            }
             var context = destination ?? new AdventureSeedBankContext();
             context.Reset();
             context.PacketKind = (int)kind;
@@ -391,7 +423,18 @@ namespace PlantsVsZombies.Simulation
         /// <returns>The resulting adventure seed cost.</returns>
         internal int AdventureSeedCost(PlantKind kind)
         {
-            return LegacySimulation.Cost(ResolveAdventureSeed(kind));
+            var cost = LegacySimulation.Cost(ResolveAdventureSeed(kind));
+            if (AdventureUpgradeSeedRules.UsesAcceleratedPricing(kind, _world.ModeSession?.Definition.Id ?? 0))
+            {
+                foreach (var plant in _world.Plants)
+                {
+                    if (plant.Kind == kind)
+                    {
+                        cost += 50;
+                    }
+                }
+            }
+            return cost;
         }
 
         /// <summary>Performs adventure seed recharge time.</summary>

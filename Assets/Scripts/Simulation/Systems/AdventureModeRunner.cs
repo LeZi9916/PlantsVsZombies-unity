@@ -219,6 +219,7 @@ namespace PlantsVsZombies.Simulation
                 return false;
             }
 
+            _seedBankSystem.InitializeUpgradePacketCooldowns(selected);
             Adventure.SelectedSeeds = selected.AsReadOnly();
             Adventure.Phase = AdventurePhase.Playing;
             return true;

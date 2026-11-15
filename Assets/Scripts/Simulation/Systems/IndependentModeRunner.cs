@@ -463,6 +463,7 @@ namespace PlantsVsZombies.Simulation
                 return false;
             }
 
+            _seedBankSystem.InitializeUpgradePacketCooldowns(next);
             _adventureModeRunner.Adventure.SelectedSeeds = next.AsReadOnly();
             _adventureModeRunner.Adventure.Phase = AdventurePhase.Playing;
             _world.ModeSession.Phase = _world.ModeSession.Definition.Mechanic == ModeMechanic.LastStand ? ModePhase.Preparing : ModePhase.Playing;
