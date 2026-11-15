@@ -4,6 +4,8 @@ using System;
 using System.Collections;
 using System.Linq;
 using System.Reflection;
+using System.IO;
+using System.Xml.Linq;
 using NUnit.Framework;
 using PlantsVsZombies.Adventure;
 using PlantsVsZombies.Game;
@@ -139,6 +141,53 @@ namespace PlantsVsZombies.Tests.PlayMode
 
                 Assert.That(visible, Is.GreaterThan(100), "The following actors must be visible in the camera comparison.");
                 Assert.That(changed, Is.Zero, kind + " blink must not change following plants, zombies or sun.");
+            }
+        }
+
+        /// <summary>Checks attached blink artwork precedes the original foreground leaves on both idle and action clips.</summary>
+        /// <returns>Original source-art frames compared with explicit PC per-track attachment painter order.</returns>
+        [UnityTest]
+        public IEnumerator BlinksKeepOriginalForegroundLeavesVisible()
+        {
+            foreach (var sample in new[] { (PlantKind.MelonPult, "Melonpult", false), (PlantKind.MelonPult, "Melonpult", true),
+                (PlantKind.UmbrellaLeaf, "Umbrellaleaf", false), (PlantKind.UmbrellaLeaf, "Umbrellaleaf", true) })
+            {
+                using var fixture = new OriginalStormGraphicsTests.StormFixture(8);
+                SpriteSourceTestUtilities.SetImage(fixture.Owner.Textures, "plantshadow.png", null!);
+                var plant = new Plant { Id = 991, Kind = sample.Item1, Row = 1, Column = 2, Health = 300f,
+                    Age = .3f, PresentationRate = 12f, BlinkAnimation = "anim_blink", BlinkAnimationTicks = 7 };
+                var clip = sample.Item3 ? sample.Item1 == PlantKind.MelonPult ? "anim_shooting" : "anim_block" : "anim_idle";
+                var seconds = sample.Item3 ? .6f : .3f;
+                var rate = sample.Item3 ? sample.Item1 == PlantKind.MelonPult ? AdventurePresentationRules.ShootingRate(sample.Item1) : 22f : 12f;
+                if (sample.Item3)
+                {
+                    if (sample.Item1 == PlantKind.MelonPult)
+                    {
+                        plant.PresentationShotAge = seconds;
+                    }
+                    else
+                    {
+                        plant.PresentationUmbrellaAge = seconds;
+                    }
+                }
+
+                yield return fixture.Capture(null, () => fixture.DrawPass("DrawAdventurePlant", plant));
+                var actual = fixture.Pixels.GetPixels32();
+                var tracks = XElement.Parse("<r>" + File.ReadAllText(Path.Combine(fixture.Root, "reanim", sample.Item2 + ".reanim")) + "</r>")
+                    .Elements("track").Select(track => track.Element("name")!.Value).ToArray();
+                var face = Array.IndexOf(tracks, "anim_face");
+                Assert.That(face, Is.GreaterThanOrEqualTo(0));
+                yield return fixture.Capture(null, () =>
+                {
+                    var index = -1;
+                    fixture.Animations.DrawNativePlayback(sample.Item2, new Vector2(200f, 180f), 1f, seconds, clip, !sample.Item3, rate,
+                        track => ++index <= face && !track.StartsWith("anim_eye", StringComparison.OrdinalIgnoreCase));
+                    fixture.Animations.DrawNativePlantBlink(plant, sample.Item2, new Vector2(200f, 180f), 1f, seconds, clip, !sample.Item3, rate, null, 0f);
+                    index = -1;
+                    fixture.Animations.DrawNativePlayback(sample.Item2, new Vector2(200f, 180f), 1f, seconds, clip, !sample.Item3, rate,
+                        track => ++index > face && !track.StartsWith("anim_eye", StringComparison.OrdinalIgnoreCase));
+                });
+                Assert.That(fixture.Pixels.GetPixels32(), Is.EqualTo(actual), sample + " blink must be drawn at the face track before foreground leaves.");
             }
         }
 

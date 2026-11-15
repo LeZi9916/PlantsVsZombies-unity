@@ -266,6 +266,9 @@ namespace PlantsVsZombies.Reanimation
             }
         }
 
+        /// <summary>Gets the inherited transform of the current scene or native capture before sampling an actor.</summary>
+        internal Matrix4x4 CurrentSpriteMatrix => SpriteMatrix;
+
         /// <summary>Stores native portrait material.</summary>
         private Material? _nativePortraitMaterial;
         /// <summary>The managed imitation filter inherited by synchronous source-track and nested capture draws.</summary>
@@ -583,8 +586,9 @@ namespace PlantsVsZombies.Reanimation
         /// <param name="crazyDaveHeldItemAge">The elapsed time of the held item's animation.</param>
         /// <param name="trackOffset">Optional native pixel offsets applied to individual animation tracks.</param>
         /// <param name="trackAttachment">Optional original attachments receiving the track, native pose, outer transform, and opacity.</param>
+        /// <param name="trackDrawn">Optional synchronous notification at each original track's attachment draw boundary.</param>
         /// <returns>The resulting draw internal.</returns>
-        private bool DrawInternal(string? name, Rect destination, float seconds, string? animation, bool loop, ZombieVariant variant, bool equipmentIntact, Func<string, bool>? trackVisible, string? overrideTrack = null, SpriteImage? imageOverride = null, Matrix4x4? nativePlacement = null, bool cachedFlag = false, NativePoseBlend? blend = null, string? crazyDaveHeldItem = null, float crazyDaveHeldItemAge = 0f, Func<string, Vector2>? trackOffset = null, Action<string, Matrix4x4, Matrix4x4, float>? trackAttachment = null)
+        private bool DrawInternal(string? name, Rect destination, float seconds, string? animation, bool loop, ZombieVariant variant, bool equipmentIntact, Func<string, bool>? trackVisible, string? overrideTrack = null, SpriteImage? imageOverride = null, Matrix4x4? nativePlacement = null, bool cachedFlag = false, NativePoseBlend? blend = null, string? crazyDaveHeldItem = null, float crazyDaveHeldItemAge = 0f, Func<string, Vector2>? trackOffset = null, Action<string, Matrix4x4, Matrix4x4, float>? trackAttachment = null, Action<string>? trackDrawn = null)
         {
             using var profile = SpriteRenderingProfiler.Measure(SpriteRenderingProfiler.Animation);
             LastError = null;
@@ -726,6 +730,7 @@ namespace PlantsVsZombies.Reanimation
                                 blend.Current[track.PoseId] = from;
                             }
 
+                            trackDrawn?.Invoke(track.Name);
                             continue;
                         }
 
@@ -763,6 +768,7 @@ namespace PlantsVsZombies.Reanimation
                         }
 
                         trackAttachment?.Invoke(track.Name, layout * part, originalMatrix, frame.Alpha);
+                        trackDrawn?.Invoke(track.Name);
 
                         if (flagHand)
                         {
@@ -2093,8 +2099,9 @@ namespace PlantsVsZombies.Reanimation
         /// <param name = "imageOverride">The image override.</param>
         /// <param name = "trackVisible">The track visible.</param>
         /// <param name = "blend">The blend.</param>
+        /// <param name="trackDrawn">Optional synchronous attachment notification after each original track.</param>
         /// <returns>The resulting draw clip pose.</returns>
-        private bool DrawClipPose(Reanimation asset, Clip? clip, float seconds, float fps, bool loop, Matrix4x4 parent, Color tint, string? overrideTrack = null, SpriteImage? imageOverride = null, Func<string, bool>? trackVisible = null, NativePoseBlend? blend = null)
+        private bool DrawClipPose(Reanimation asset, Clip? clip, float seconds, float fps, bool loop, Matrix4x4 parent, Color tint, string? overrideTrack = null, SpriteImage? imageOverride = null, Func<string, bool>? trackVisible = null, NativePoseBlend? blend = null, Action<string>? trackDrawn = null)
         {
             using var profile = SpriteRenderingProfiler.Measure(SpriteRenderingProfiler.Animation);
             if (clip == null)
@@ -2127,6 +2134,7 @@ namespace PlantsVsZombies.Reanimation
                             blend.Current[track.PoseId] = from;
                         }
 
+                        trackDrawn?.Invoke(track.Name);
                         continue;
                     }
 
@@ -2152,6 +2160,7 @@ namespace PlantsVsZombies.Reanimation
                     var substituted = imageOverride != null && TrackIs(track.Name, overrideTrack);
                     DrawTexturePart(nativeImage, nativeImage == image && !substituted ? from.Texture.Width : nativeImage.Width, nativeImage == image && !substituted ? from.Texture.Height : nativeImage.Height);
                     drawn = true;
+                    trackDrawn?.Invoke(track.Name);
                 }
             }
 
@@ -2898,8 +2907,9 @@ namespace PlantsVsZombies.Reanimation
         /// <param name="trackOffset">Optional native pixel offsets applied before each track's placement and scaling.</param>
         /// <param name="trackAttachment">Optional original particles attached after each sampled and blended body track.</param>
         /// <param name="fullLastFrame">Whether the native loop displays the full final source frame.</param>
+        /// <param name="trackDrawn">Optional synchronous notification for a native attachment drawn immediately after its track.</param>
         /// <returns>The resulting draw native playback.</returns>
-        public bool DrawNativePlayback(string? name, Vector2 origin, float scale, float seconds, string? animation, bool loop, float framesPerSecond = -1f, Func<string, bool>? visible = null, string? overrideTrack = null, string? overrideImage = null, bool facingLeft = false, string? instanceKey = null, int blendTicks = 20, float verticalScale = -1f, float mirrorWidth = 80f, string? crazyDaveHeldItem = null, float crazyDaveHeldItemAge = 0f, Func<string, Vector2>? trackOffset = null, Action<string, Matrix4x4, Matrix4x4, float>? trackAttachment = null, bool fullLastFrame = false)
+        public bool DrawNativePlayback(string? name, Vector2 origin, float scale, float seconds, string? animation, bool loop, float framesPerSecond = -1f, Func<string, bool>? visible = null, string? overrideTrack = null, string? overrideImage = null, bool facingLeft = false, string? instanceKey = null, int blendTicks = 20, float verticalScale = -1f, float mirrorWidth = 80f, string? crazyDaveHeldItem = null, float crazyDaveHeldItemAge = 0f, Func<string, Vector2>? trackOffset = null, Action<string, Matrix4x4, Matrix4x4, float>? trackAttachment = null, bool fullLastFrame = false, Action<string>? trackDrawn = null)
         {
             using var objectScope = BeginObjectScope();
             Reanimation? asset;
@@ -2917,7 +2927,7 @@ namespace PlantsVsZombies.Reanimation
                 placement.m11 = verticalScale;
             }
 
-            return DrawInternal(name, new Rect(0, 0, 1, 1), NativeSeconds(clip, seconds, rate, asset.Fps, loop, fullLastFrame), animation, false, ZombieVariant.Normal, false, visible, overrideTrack, image, placement, false, PrepareNativeBlend(instanceKey, animation, seconds, blendTicks), crazyDaveHeldItem, crazyDaveHeldItemAge, trackOffset, trackAttachment);
+            return DrawInternal(name, new Rect(0, 0, 1, 1), NativeSeconds(clip, seconds, rate, asset.Fps, loop, fullLastFrame), animation, false, ZombieVariant.Normal, false, visible, overrideTrack, image, placement, false, PrepareNativeBlend(instanceKey, animation, seconds, blendTicks), crazyDaveHeldItem, crazyDaveHeldItemAge, trackOffset, trackAttachment, trackDrawn);
         }
 
         /// <summary>Draws Dave's original blink attached to the current head pose.</summary>
@@ -2965,6 +2975,23 @@ namespace PlantsVsZombies.Reanimation
             }
         }
 
+        /// <summary>Resolves PC 472370's selected blink attachment track in original first-match order.</summary>
+        /// <param name="plant">The plant and selected blink head.</param>
+        /// <param name="name">The original source reanimation.</param>
+        /// <returns>The selected face or idle track name, or null when no attachment anchor exists.</returns>
+        internal string? NativePlantBlinkAnchor(Plant plant, string name)
+        {
+            if (!TryGetClip(name, plant.BlinkAnimation, out var asset, out _))
+            {
+                return null;
+            }
+
+            var face = plant.Kind == PlantKind.Threepeater ? plant.BlinkHead == 0 ? "anim_face1" : plant.BlinkHead == 1 ? "anim_face2" : "anim_face3"
+                : plant.Kind == PlantKind.SplitPea && plant.BlinkHead == 1 ? "SplitPea_head"
+                : plant.Kind == PlantKind.TwinSunflower && plant.BlinkHead == 1 ? "anim_face2" : "anim_face";
+            return (FindTrack(asset, face) ?? FindTrack(asset, "anim_face") ?? FindTrack(asset, "anim_idle"))?.Name;
+        }
+
         /// <summary>Draws PC 472370's independent blink attached to the actual sampled body or selected head.</summary>
         /// <param name="plant">The original plant blink and head selection state.</param>
         /// <param name="name">The original plant reanimation definition.</param>
@@ -2976,9 +3003,12 @@ namespace PlantsVsZombies.Reanimation
         /// <param name="rate">The current parent body rate.</param>
         /// <param name="heads">The existing selected head poses, or null for an unsplit body.</param>
         /// <param name="remainder">The render-only interpolation remainder.</param>
+        /// <param name="inheritedMatrix">The parent actor's inherited scene or capture transform before its tracks were drawn.</param>
+        /// <param name="inheritedTint">The parent actor's original inherited tint before individual track opacity.</param>
         /// <returns>Whether original blink artwork was drawn.</returns>
         public bool DrawNativePlantBlink(Plant plant, string name, Vector2 origin, float scale, float seconds,
-            string animation, bool loop, float rate, HeadPlayback[]? heads, float remainder)
+            string animation, bool loop, float rate, HeadPlayback[]? heads, float remainder,
+            Matrix4x4? inheritedMatrix = null, Color? inheritedTint = null)
         {
             using var objectScope = BeginObjectScope();
             // Keep the independent blink instance separate from the three possible head instances.
@@ -2989,9 +3019,8 @@ namespace PlantsVsZombies.Reanimation
                 return false;
             }
 
-            var placement = SpriteMatrix * CombatPlacement(origin, scale, plant.ModeFacesLeft);
-            var face = plant.Kind == PlantKind.Threepeater ? plant.BlinkHead == 0 ? "anim_face1" : plant.BlinkHead == 1 ? "anim_face2" : "anim_face3"
-                : plant.Kind == PlantKind.SplitPea && plant.BlinkHead == 1 ? "SplitPea_head" : "anim_face";
+            var placement = (inheritedMatrix ?? SpriteMatrix) * CombatPlacement(origin, scale, plant.ModeFacesLeft);
+            var face = NativePlantBlinkAnchor(plant, name);
             var parentSeconds = seconds;
             var parentRate = rate;
             var parentLoops = loop;
@@ -3011,7 +3040,7 @@ namespace PlantsVsZombies.Reanimation
                 parentLoops = selected.Loop;
             }
 
-            var attachment = FindTrack(asset, face) ?? FindTrack(asset, "anim_face") ?? FindTrack(asset, "anim_idle");
+            var attachment = face == null ? null : FindTrack(asset, face);
             if (attachment != null)
             {
                 var baseFrame = parent.Start;
@@ -3039,7 +3068,7 @@ namespace PlantsVsZombies.Reanimation
             try
             {
                 return DrawClipPose(asset, blink, NativeSeconds(blink, plant.BlinkAnimationTicks * .01f + remainder, 15f, asset.Fps, false, true),
-                    asset.Fps, false, placement, tint);
+                    asset.Fps, false, placement, inheritedTint ?? tint);
             }
             finally
             {
@@ -3093,8 +3122,11 @@ namespace PlantsVsZombies.Reanimation
         /// <param name = "facingLeft">The facing left.</param>
         /// <param name = "instanceKey">The instance key.</param>
         /// <param name = "blendTicks">The blend ticks.</param>
+        /// <param name="headTrackDrawn">The synchronous attachment notification for one selected head's original tracks.</param>
+        /// <param name="attachmentHead">The selected head receiving the attachment notification, or minus one.</param>
         /// <returns>The resulting draw native attached heads.</returns>
-        public bool DrawNativeAttachedHeads(string? name, Vector2 origin, float scale, float bodySeconds, float bodyRate, HeadPlayback[] heads, Func<string, bool>? visible = null, bool facingLeft = false, string? instanceKey = null, int blendTicks = 20)
+        public bool DrawNativeAttachedHeads(string? name, Vector2 origin, float scale, float bodySeconds, float bodyRate, HeadPlayback[] heads, Func<string, bool>? visible = null, bool facingLeft = false, string? instanceKey = null, int blendTicks = 20,
+            Action<string>? headTrackDrawn = null, int attachmentHead = -1)
         {
             using var objectScope = BeginObjectScope();
             Reanimation? asset;
@@ -3129,7 +3161,8 @@ namespace PlantsVsZombies.Reanimation
                     var time = SampleFrame(body, bodySample, asset.Fps, false);
                     var attach = PartMatrix(Interpolate(GetFrame(anchor, time.Current), GetFrame(anchor, time.Next), time.Fraction)) * inverseBase;
                     var sample = NativeSeconds(head, playback.Seconds, playback.Rate, asset.Fps, playback.Loop);
-                    drawn |= DrawClipPose(asset, head, sample, asset.Fps, false, layout * attach, tint, null, null, visible, PrepareNativeBlend(GetHeadInstanceKey(instanceKey, headIndex), playback.Animation, playback.Seconds, blendTicks));
+                    drawn |= DrawClipPose(asset, head, sample, asset.Fps, false, layout * attach, tint, null, null, visible, PrepareNativeBlend(GetHeadInstanceKey(instanceKey, headIndex), playback.Animation, playback.Seconds, blendTicks),
+                        headIndex == attachmentHead ? headTrackDrawn : null);
                 }
             }
             finally
