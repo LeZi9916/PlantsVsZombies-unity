@@ -735,7 +735,7 @@ namespace PlantsVsZombies.Simulation
                         state.GlowFrames = 10;
                         state.GlowTime = 0;
                         p.ActionTimer = 0;
-                        _world._random.Next(400); // PC initializes blink countdown as 400+Rand(400).
+                        p.BlinkCountdown = 400 + _world._random.Next(400);
                     }
 
                     break;

@@ -25,6 +25,19 @@ namespace PlantsVsZombies.Simulation
             }
         }
 
+        /// <summary>Gets the original randomly initialized animation frame length.</summary>
+        public int AnimationFrameLength { get; internal set; }
+        /// <summary>Gets the original awake updates remaining before the next blink attempt.</summary>
+        public int BlinkCountdown { get; internal set; }
+        /// <summary>Gets the original active blink marker, or null between blinks.</summary>
+        public string? BlinkAnimation { get; internal set; }
+        /// <summary>Gets the native updates elapsed in the independent fifteen-FPS blink.</summary>
+        public int BlinkAnimationTicks { get; internal set; }
+        /// <summary>Gets the parent body marker retained when its first blink fixes the native attachment base pose.</summary>
+        public string? BlinkBaseAnimation { get; internal set; }
+        /// <summary>Gets the original zero-based head selected for an attached blink.</summary>
+        public int BlinkHead { get; internal set; }
+
         /// <summary>Gets the original persistent horizontal planting displacement in board pixels.</summary>
         public int PositionOffsetX { get; internal set; }
         /// <summary>Gets the original persistent vertical planting displacement in board pixels.</summary>

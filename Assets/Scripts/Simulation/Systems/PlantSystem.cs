@@ -166,6 +166,7 @@ namespace PlantsVsZombies.Simulation
                 }
                 finally
                 {
+                    AdventurePlantBlinkRules.Tick(p, _world._random);
                     if (AdventureProducerGlow.HasNativeProductionHint(p.Kind))
                     {
                         AdventureProducerGlow.Tick(p, producerAdvanced, p.Kind == PlantKind.Sunflower && p.Timing.HasValue ? p.Timing.Value.Countdown : AdventureProducerGlow.CounterFromSeconds(p.ActionTimer), p.Kind == PlantKind.Marigold ? p.ActionCount > producerActions : _world.Suns.Count > producerSunCount);

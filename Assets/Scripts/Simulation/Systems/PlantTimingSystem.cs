@@ -58,6 +58,16 @@ namespace PlantsVsZombies.Simulation
         internal void InitializeAdventureNativePlantTiming(Plant plant)
         {
             plant.Behavior.Initialize(plant, _behaviorContext);
+            if (!plant.Timing.HasValue && !plant.MultiHeadTiming.HasValue && plant.StarfruitLaunchCountdown < 0
+                && plant.Kind != PlantKind.SunShroom && plant.Kind != PlantKind.Marigold
+                && global::PlantsVsZombies.VerifiedData.VerifiedDataCatalog.TryGetPlant((int)plant.Kind, out var definition)
+                && definition.ActionPeriodRaw > 0)
+            {
+                // PC 46C1E3 also initializes counters that a species-specific state machine may later ignore.
+                var countdown = plant.Kind == PlantKind.TwinSunflower ? 300 + _world._random.Next(951)
+                    : _world._random.Next(definition.ActionPeriodRaw + 1);
+                plant.ActionTimer = countdown * .01f;
+            }
         }
         /// <summary>Provides the plant behavior context after all collaborators are connected.</summary>
         /// <param name="context">The initialized plant action dependencies.</param>
@@ -155,6 +165,7 @@ namespace PlantsVsZombies.Simulation
                     plant._kernelWeaponPrepared = true;
                 }
 
+                plant.BlinkAnimation = null;
                 plant.PresentationShotAge = 0;
                 plant.PresentationHeadAge[0] = 0;
                 plant._presentationPrefiring = true;
@@ -265,6 +276,7 @@ namespace PlantsVsZombies.Simulation
             if (result.AnimationStarted)
             {
                 pose.BeginShooting();
+                plant.BlinkAnimation = null;
                 plant.PresentationShotAge = 0f;
                 plant._presentationPrefiring = true;
                 plant.ShootAge = 0f;
@@ -411,6 +423,7 @@ namespace PlantsVsZombies.Simulation
                 if ((result.StartedHeads & mask) != 0)
                 {
                     plant.PresentationHeadAge[head] = 0f;
+                    plant.BlinkAnimation = null;
                     plant.PresentationShotAge = 0f;
                     plant.ShootAge = 0f;
                 }
@@ -452,6 +465,7 @@ namespace PlantsVsZombies.Simulation
             }
 
             plant.StarfruitShootingCountdown = AdventureStarfruitRules.ShootingCountdown;
+            plant.BlinkAnimation = null;
             plant.PresentationShotAge = 0;
             plant.PresentationHeadAge[0] = 0;
             plant._presentationPrefiring = true;

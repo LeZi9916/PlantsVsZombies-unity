@@ -276,13 +276,18 @@ namespace PlantsVsZombies.Game
         /// <returns>Whether native plant artwork was submitted.</returns>
         private bool DrawPlantPose()
         {
-            var visible = _plant.Kind == PlantKind.KernelPult || _plant.Kind == PlantKind.PotatoMine
+            var visible = _plant.BlinkAnimation != null || _plant.Kind == PlantKind.KernelPult || _plant.Kind == PlantKind.PotatoMine
                 || _plant.Kind == PlantKind.Pumpkin && _pumpkinGroup >= 0 ? _plantVisible : null;
             var drawn = _heads != null
                 ? RequiredRenderer.DrawNativeAttachedHeads(_name, _origin, _scale, _seconds, _rate, _heads, visible, _plant.ModeFacesLeft, _key, _blendTicks)
                 : RequiredRenderer.DrawNativePlayback(_name, _origin, _scale, _seconds, _clip, _loop, _rate, visible,
                     AdventureDefensivePlantRules.DamageTrack(_plant.Kind), AdventureDefensivePlantRules.DamageImage(_plant.Kind, _plant.Health),
                     _plant.ModeFacesLeft, _key, _blendTicks, verticalScale: _plantVerticalScale, trackOffset: _plantTrackOffset);
+            if (_plant.BlinkAnimation != null)
+            {
+                drawn |= RequiredRenderer.DrawNativePlantBlink(_plant, _name!, _origin, _scale, _seconds, _clip!, _loop, _rate, _heads, _remainder);
+            }
+
             var mine = _plant.PotatoMinePresentation;
             if (_plant.Kind == PlantKind.PotatoMine && mine != null && mine.LightCreated && _plant.MinePhase == MinePhase.Armed)
             {
@@ -298,6 +303,11 @@ namespace PlantsVsZombies.Game
         /// <returns>Whether the current plant should display the track.</returns>
         private bool IsPlantTrackVisible(string track)
         {
+            if (_plant.BlinkAnimation != null && track.StartsWith("anim_eye", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
             if (_plant.Kind == PlantKind.PotatoMine)
             {
                 return !string.Equals(track, "anim_glow", StringComparison.OrdinalIgnoreCase);

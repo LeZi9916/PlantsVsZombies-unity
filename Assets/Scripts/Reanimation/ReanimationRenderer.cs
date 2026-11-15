@@ -1933,10 +1933,12 @@ namespace PlantsVsZombies.Reanimation
                         start++;
                     }
 
-                    end = start;
-                    while (end < marker.Frames.Length && marker.Frames[end].Visibility >= 0f)
+                    // PC 482703..48272A includes hidden gaps between the first and last visible frames.
+                    // Nut blink markers deliberately contain such gaps between successive blinks.
+                    end = marker.Frames.Length;
+                    while (end > start && marker.Frames[end - 1].Visibility < 0f)
                     {
-                        end++;
+                        end--;
                     }
                 }
 
@@ -2956,6 +2958,79 @@ namespace PlantsVsZombies.Reanimation
                 SpriteMatrix = previous;
                 SpriteDrawState.Color = color;
             }
+        }
+
+        /// <summary>Draws PC 472370's independent blink attached to the actual sampled body or selected head.</summary>
+        /// <param name="plant">The original plant blink and head selection state.</param>
+        /// <param name="name">The original plant reanimation definition.</param>
+        /// <param name="origin">The current body origin, including planting displacement.</param>
+        /// <param name="scale">The current native body scale.</param>
+        /// <param name="seconds">The current parent body playback time.</param>
+        /// <param name="animation">The current parent body marker.</param>
+        /// <param name="loop">Whether the parent body loops.</param>
+        /// <param name="rate">The current parent body rate.</param>
+        /// <param name="heads">The existing selected head poses, or null for an unsplit body.</param>
+        /// <param name="remainder">The render-only interpolation remainder.</param>
+        /// <returns>Whether original blink artwork was drawn.</returns>
+        public bool DrawNativePlantBlink(Plant plant, string name, Vector2 origin, float scale, float seconds,
+            string animation, bool loop, float rate, HeadPlayback[]? heads, float remainder)
+        {
+            using var objectScope = BeginObjectScope();
+            // Keep the independent blink instance separate from the three possible head instances.
+            using var blinkAttachment = Hierarchy.BeginAttachment(4 + plant.BlinkHead);
+            if (plant.BlinkAnimation == null || !TryGetClip(name, plant.BlinkAnimation, out var asset, out var blink)
+                || !TryGetClip(name, heads == null ? animation : "anim_idle", out _, out var parent))
+            {
+                return false;
+            }
+
+            var placement = SpriteMatrix * CombatPlacement(origin, scale, plant.ModeFacesLeft);
+            var face = plant.Kind == PlantKind.Threepeater ? plant.BlinkHead == 0 ? "anim_face1" : plant.BlinkHead == 1 ? "anim_face2" : "anim_face3"
+                : plant.Kind == PlantKind.SplitPea && plant.BlinkHead == 1 ? "SplitPea_head" : "anim_face";
+            var parentSeconds = seconds;
+            var parentRate = rate;
+            var parentLoops = loop;
+            if (heads != null && plant.BlinkHead < heads.Length)
+            {
+                var selected = heads[plant.BlinkHead];
+                if (!TryPrepareAttachedPlant(name, "anim_idle", selected.Animation, selected.Anchor, out _, out _, out var head, out var anchor, out var inverse, out _))
+                {
+                    return false;
+                }
+
+                var bodyTime = SampleFrame(parent, NativeSeconds(parent, seconds, rate, asset.Fps, true), asset.Fps, false);
+                placement *= PartMatrix(Interpolate(GetFrame(anchor, bodyTime.Current), GetFrame(anchor, bodyTime.Next), bodyTime.Fraction)) * inverse;
+                parent = head;
+                parentSeconds = selected.Seconds;
+                parentRate = selected.Rate;
+                parentLoops = selected.Loop;
+            }
+
+            var attachment = FindTrack(asset, face) ?? FindTrack(asset, "anim_face") ?? FindTrack(asset, "anim_idle");
+            if (attachment != null)
+            {
+                var baseFrame = parent.Start;
+                if (heads == null && plant.BlinkBaseAnimation != null
+                    && TryGetClip(name, plant.BlinkBaseAnimation, out _, out var basePose))
+                {
+                    baseFrame = basePose.Start;
+                }
+
+                if (plant.Kind == PlantKind.SunShroom)
+                {
+                    baseFrame = 6;
+                }
+                if (!TryInverseAffine(PartMatrix(GetFrame(attachment, baseFrame)), out var inverse))
+                {
+                    return false;
+                }
+
+                var time = SampleFrame(parent, NativeSeconds(parent, parentSeconds, parentRate, asset.Fps, parentLoops), asset.Fps, false);
+                placement *= PartMatrix(Interpolate(GetFrame(attachment, time.Current), GetFrame(attachment, time.Next), time.Fraction)) * inverse;
+            }
+
+            return DrawClipPose(asset, blink, NativeSeconds(blink, plant.BlinkAnimationTicks * .01f + remainder, 15f, asset.Fps, false, true),
+                asset.Fps, false, placement, SpriteDrawState.Color);
         }
 
         /// <summary>Tests whether a CrazyDave track is visible inside the attached blink reanimation.</summary>

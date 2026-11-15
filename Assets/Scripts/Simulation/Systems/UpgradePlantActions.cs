@@ -166,6 +166,8 @@ namespace PlantsVsZombies.Simulation
                     ImitaterTransformRemaining = 3.2f,
                     ActionTimer = float.MaxValue
                 };
+                AdventurePlantBlinkRules.Initialize(mimic, _world._random);
+                AdventurePlantBlinkRules.CompleteInitialization(mimic, _world._random);
                 _world.Plants.Add(mimic);
                 _legacySimulation.Raise(GameEvent.Planted);
                 return mimic;
@@ -204,8 +206,10 @@ namespace PlantsVsZombies.Simulation
                 CannonPhase = CobCannonPhase.Arming,
                 CannonReloadRemaining = kind == PlantKind.CobCannon ? 5f : 0
             };
-            _plantTimingSystem.InitializeAdventureNativePlantTiming(result);
+            AdventurePlantBlinkRules.Initialize(result, _world._random);
             _plantingSystem.InitializeAdventureSleepingPlant(result);
+            _plantTimingSystem.InitializeAdventureNativePlantTiming(result);
+            AdventurePlantBlinkRules.CompleteInitialization(result, _world._random);
             _world.Plants.Add(result);
             _legacySimulation.Raise(GameEvent.Planted);
             return result;

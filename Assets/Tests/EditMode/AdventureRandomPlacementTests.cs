@@ -114,7 +114,7 @@ namespace PlantsVsZombies.Tests.EditMode
                 var game = Board(19);
                 var random = AttachRandom(game, last);
                 var plant = (Plant)Invoke(game, "PlaceAdventurePlant", kind, 1, 2)!;
-                Assert.That(random.Bounds[0], Is.EqualTo(initialBound));
+                Assert.That(random.Bounds.Take(3), Is.EqualTo(new[] { 7, 400, initialBound }));
                 Assert.That(plant.ActionTimer, Is.EqualTo((initialBase + (last ? initialBound - 1 : 0)) * .01f));
                 random.Bounds.Clear();
                 plant.ActionTimer = .01f;

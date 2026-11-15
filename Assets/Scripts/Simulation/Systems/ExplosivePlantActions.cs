@@ -88,7 +88,7 @@ namespace PlantsVsZombies.Simulation
 
             var state = new global::PlantsVsZombies.Adventure.AdventureCherryBombState
             {
-                Rate = 10f + AdventureCherryRandomFloat(5f)
+                Rate = plant._presentationKind == plant.Kind ? plant.PresentationRate : 10f + AdventureCherryRandomFloat(5f)
             };
             plant.CherryBombPresentation = state;
             plant._presentationKind = PlantKind.CherryBomb;
@@ -169,7 +169,7 @@ namespace PlantsVsZombies.Simulation
             }
 
             // PC 46C07A..46C0A4 selects 10 + RandFloat(5); case 20 shares 46C615's special=100/once-and-hold branch.
-            var state = new AdventureJalapenoState { Rate = 10f + AdventureCherryRandomFloat(5f) };
+            var state = new AdventureJalapenoState { Rate = plant._presentationKind == plant.Kind ? plant.PresentationRate : 10f + AdventureCherryRandomFloat(5f) };
             plant.JalapenoPresentation = state;
             plant._presentationKind = PlantKind.Jalapeno;
             plant.PresentationRate = state.Rate;
