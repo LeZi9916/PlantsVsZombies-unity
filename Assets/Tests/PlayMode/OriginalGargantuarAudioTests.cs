@@ -55,7 +55,7 @@ namespace PlantsVsZombies.Tests.PlayMode
                 effects._soundVolume = .7f;
                 effects._soundVoices = new AudioVoicePool(audio, source, 32);
                 yield return effects.LoadSounds();
-                foreach (var name in new[] { "lowgroan", "lowgroan2", "gargantuar_thump", "chomp", "chomp2", "swing", "imp", "imp2" })
+                foreach (var name in new[] { "lowgroan", "lowgroan2", "gargantuar_thump", "chomp", "chomp2", "swing", "imp", "imp2", "gargantudeath" })
                 {
                     var clip = effects._presentationSounds[name];
                     var samples = new float[clip.samples * clip.channels];
@@ -103,6 +103,12 @@ namespace PlantsVsZombies.Tests.PlayMode
                     ?? FindVoice(audio, effects._presentationSounds["imp2"]);
                 Assert.That(imp, Is.Not.Null);
                 Assert.That(imp!.pitch, Is.InRange(1f, Mathf.Pow(2f, 5f / 12f)));
+                Invoke(game, "HitAdventureZombie", giant, 10000f, true, 0U);
+                effects.UpdateAdventureZombiePartAudio();
+                yield return null;
+                var death = FindVoice(audio, effects._presentationSounds["gargantudeath"]);
+                Assert.That(death, Is.Not.Null, "The original giant death Foley must reach a production voice immediately.");
+                Assert.That(death!.pitch, Is.InRange(1f, Mathf.Pow(2f, 3f / 12f)));
             }
             finally
             {

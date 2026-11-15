@@ -134,10 +134,10 @@ namespace PlantsVsZombies.Simulation
             }
 
             var rate = zombie.Kind == ZombieKind.Football ? 24f : zombie.Kind == ZombieKind.Gargantuar || zombie.Kind == ZombieKind.Snorkel || zombie.Kind == ZombieKind.Yeti ? 14f : zombie.Kind == ZombieKind.Digger || zombie.Kind == ZombieKind.Boss ? 18f : 24f + (float)_world._random.NextDouble() * 6f;
-            if (zombie.Kind == ZombieKind.DolphinRider && zombie.ChillRemaining > 0f)
+            if (kind == 23 || kind == 32)
             {
-                // PC phase-one UpdateAnimSpeed applies the retained chill once; the dying chill counter no longer advances.
-                rate *= .5f;
+                // PC 54F27F requests the giant's death groan before the death-clip random ticket.
+                RequestAdventureZombieFoley(91);
             }
             var roll = _world._random.Next(100);
             var clip = zombie.Kind == ZombieKind.DolphinRider ? "anim_death" : zombie.PresentationInPool == true ? "anim_waterdeath" : roll == 99 && _adventureModeRunner.Adventure.Level.Number > 5 && zombie.ChillRemaining <= 0 && _world.Zombies.Count <= 5 ? "anim_superlongdeath" : roll > 50 ? "anim_death2" : "anim_death";
@@ -190,6 +190,14 @@ namespace PlantsVsZombies.Simulation
                     corpse.Duration = 0f;
                     return corpse;
                 }
+            }
+
+            // PC SetAnimRate 54AD40/ApplyAnimRate 54AD60 keeps the original dying chill multiplier.
+            // Death counters no longer advance, so apply it once when constructing the retained playback.
+            if (corpse.RequiredZombie.ChillRemaining > 0f || AdventureDancerRules.IsDancer(corpse.RequiredZombie)
+                && AdventureDancerRules.GroupAffected(corpse.RequiredZombie, _world.Zombies, true))
+            {
+                corpse.Rate *= .5f;
             }
 
             corpse.AnimationDuration = global::PlantsVsZombies.Adventure.AdventureZombieDeathRules.AnimationSeconds(frames, corpse.Rate);

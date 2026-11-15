@@ -229,6 +229,62 @@ namespace PlantsVsZombies.Tests.EditMode
             Assert.That(game.Presentation.Explosions.Single().Effect, Is.EqualTo(AdventureExplosionEffect.IceTrap));
         }
 
+        /// <summary>Checks the PC 54F27F death groan is requested immediately, separately from the later falling thump.</summary>
+        /// <param name="chilled">Whether the giant retains the original cold slowdown at death.</param>
+        [TestCase(false)]
+        [TestCase(true)]
+        public void GiantDeathRequestsOriginalGroanBeforeItsFallingContact(bool chilled)
+        {
+            var game = Board();
+            var giant = Spawn(game, 500f);
+            giant.ChillRemaining = chilled ? 10f : 0f;
+            Invoke(game, "HitAdventureZombie", giant, 10000f, true, 0U);
+            Assert.That(Sounds(game, 91), Is.EqualTo(1), "PC 54F27F requests gargantudeath before starting the death clip.");
+            Assert.That(Sounds(game, 28), Is.Zero);
+            Assert.That(Sounds(game, 40), Is.Zero);
+            var corpse = game.Presentation.Corpses.Single();
+            Assert.That(corpse.Rate, Is.EqualTo(chilled ? 7f : 14f));
+            for (var tick = 0; tick < 2000 && !corpse.FallSoundPlayed; tick++)
+            {
+                Tick(game, 1);
+            }
+
+            Assert.That(corpse.FallSoundPlayed, Is.True);
+            Assert.That(Sounds(game, 28), Is.EqualTo(1));
+            Assert.That(Sounds(game, 40), Is.EqualTo(1));
+            Tick(game, 1);
+            Assert.That(Sounds(game, 91), Is.EqualTo(1));
+        }
+
+        /// <summary>Checks PC SetAnimRate/ApplyAnimRate retains one cold multiplier for every supported death definition.</summary>
+        [Test]
+        public void AllZombieDeathDefinitionsRetainOriginalChillSlowdown()
+        {
+            var checkedKinds = 0;
+            foreach (ZombieKind kind in Enum.GetValues(typeof(ZombieKind)))
+            {
+                var game = Board();
+                var zombie = new Zombie { Kind = kind, Row = 1, X = 5f, Health = 0f, ChillRemaining = 10f };
+                var corpse = (AdventureZombieCorpse)Invoke(game, "InitializeAdventureZombieCorpse",
+                    new AdventureZombieCorpse { Zombie = zombie, Animation = "anim_death", Rate = 28f })!;
+                if (corpse.Duration == 0f)
+                {
+                    continue;
+                }
+
+                checkedKinds++;
+                Assert.That(corpse.Rate, Is.EqualTo(14f), kind + " uses the retained cold rate exactly once.");
+                Assert.That(corpse.AnimationDuration, Is.EqualTo(AdventureZombieDeathRules.AnimationSeconds(
+                    AdventureZombieDeathData.TryGet(AdventureAnimationCatalog.AdventureZombieAnimation(kind), corpse.Animation, out var frames) ? frames : 0, 14f)), kind.ToString());
+                game.Presentation.Corpses.Add(corpse);
+                Tick(game, 2);
+                Assert.That(corpse.Rate, Is.EqualTo(14f), kind + " must not apply the multiplier repeatedly.");
+                Assert.That(zombie.ChillRemaining, Is.EqualTo(10f), "The original dying chill counter is retained.");
+            }
+
+            Assert.That(checkedKinds, Is.GreaterThan(20));
+        }
+
         /// <summary>Checks drive-over respects PC Squish's triggered-Squash immunity while flattening its roof support.</summary>
         /// <param name="kind">The original crushing vehicle.</param>
         /// <param name="phase">The original look or prelaunch plant state.</param>
