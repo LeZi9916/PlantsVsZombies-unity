@@ -263,11 +263,6 @@ namespace PlantsVsZombies.Simulation
                 a.ImitaterTarget = access.ImitaterTarget;
             }
 
-            if (d.Mechanic == ModeMechanic.LastStand)
-            {
-                available.RemoveAll(k => k == PlantKind.Sunflower || k == PlantKind.SunShroom || k == PlantKind.TwinSunflower);
-            }
-
             if (d.Mechanic == ModeMechanic.Stars && !available.Contains(PlantKind.Starfruit))
             {
                 available.Add(PlantKind.Starfruit);
@@ -452,7 +447,10 @@ namespace PlantsVsZombies.Simulation
             var next = new List<PlantKind>();
             foreach (var kind in seeds)
             {
-                if (next.Contains(kind) || !SeedBankSystem.ContainsSeed(_adventureModeRunner.Adventure.AvailableSeeds, kind) || kind == PlantKind.Imitater && !_adventureModeRunner.Adventure.ImitaterTarget.HasValue)
+                if (ModeSeedChooserRules.IsDisabled(_world.ModeSession.Definition.Id, kind)
+                    || kind == PlantKind.Imitater && _adventureModeRunner.Adventure.ImitaterTarget.HasValue
+                        && ModeSeedChooserRules.IsDisabled(_world.ModeSession.Definition.Id, _adventureModeRunner.Adventure.ImitaterTarget.Value)
+                    || next.Contains(kind) || !SeedBankSystem.ContainsSeed(_adventureModeRunner.Adventure.AvailableSeeds, kind) || kind == PlantKind.Imitater && !_adventureModeRunner.Adventure.ImitaterTarget.HasValue)
                 {
                     return false;
                 }
@@ -494,7 +492,9 @@ namespace PlantsVsZombies.Simulation
         /// <returns>The resulting set mode imitater target.</returns>
         internal bool SetModeImitaterTarget(PlantKind kind)
         {
-            if (_world.ModeSession == null || _world.ModeSession.Phase != ModePhase.ChoosingSeeds || (int)kind < 0 || (int)kind > 39 || !SeedBankSystem.ContainsSeed(_adventureModeRunner.Adventure.AvailableSeeds, PlantKind.Imitater))
+            if (_world.ModeSession == null || _world.ModeSession.Phase != ModePhase.ChoosingSeeds || (int)kind < 0 || (int)kind > 39
+                || ModeSeedChooserRules.IsDisabled(_world.ModeSession.Definition.Id, kind)
+                || !SeedBankSystem.ContainsSeed(_adventureModeRunner.Adventure.AvailableSeeds, kind) || !SeedBankSystem.ContainsSeed(_adventureModeRunner.Adventure.AvailableSeeds, PlantKind.Imitater))
             {
                 return false;
             }

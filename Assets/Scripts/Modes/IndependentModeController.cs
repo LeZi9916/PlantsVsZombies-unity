@@ -37,6 +37,21 @@ namespace PlantsVsZombies.Modes
         internal float SurvivalTransitionGain => IsModeBoard && RequiredModeSession.Definition.Survival && RequiredModeSession.HasNextStage
             && SurvivalTransitionTicks >= 0 ? SurvivalTransitionTicks / 500f : 1f;
 
+        /// <summary>Gets PC 499170's original almanac availability for the active profile.</summary>
+        internal bool CanShowChooserAlmanac => RequiredModeSession.WaveContext.ProfileProgress > 0 || RequiredModeSession.WaveContext.ProfileLevel >= 15;
+        /// <summary>Gets PC 499170's original store availability for the active profile.</summary>
+        internal bool CanShowChooserStore => RequiredModeSession.WaveContext.ProfileProgress > 0 || RequiredModeSession.WaveContext.ProfileLevel >= 25;
+
+        /// <summary>Retains PC OnStartButton's pending synchronous-dialog sequence across host frames.</summary>
+        private List<ModeChooserWarning>? _chooserWarnings;
+        /// <summary>Identifies the next original warning to confirm.</summary>
+        private int _chooserWarningIndex;
+        /// <summary>Gets the currently displayed original warning.</summary>
+        internal ModeChooserWarning? ChooserWarning => _chooserWarnings == null ? null : _chooserWarnings[_chooserWarningIndex];
+        /// <summary>Gets whether native chooser input belongs to the copy or confirmation dialog.</summary>
+        internal bool HasChooserModal => IsModeBoard && _owner.Opening.AdventureIntroAwaitingSeeds
+            && (_modeChoosingImitater || _chooserWarnings != null);
+
         /// <summary>Stores mode session.</summary>
         internal ModeSession? _modeSession;
 
@@ -304,6 +319,7 @@ namespace PlantsVsZombies.Modes
                 _modeSavedStage = -1;
                 _modeSaveError = null;
                 _modeChoosingImitater = false;
+                _chooserWarnings = null;
                 _modeSession.Game.ApplyModePurchases(account.PurchaseCount(29) > 0, account.PurchaseCount(24) > 0 ? (Func<bool>)(() =>
                 {
                     try
@@ -927,6 +943,11 @@ namespace PlantsVsZombies.Modes
         /// <param name="point">The logical top-left pointer position.</param>
         private void HandleNativeModeChooser(Vector2 point)
         {
+            if (HasChooserModal)
+            {
+                HandleChooserModal(point);
+                return;
+            }
             var opening = _owner.Opening;
             var clock = opening.RequiredAdventureIntro;
             if (clock.ViewingLawn)
@@ -939,12 +960,12 @@ namespace PlantsVsZombies.Modes
                 _owner.Menus.OpenOptions();
                 return;
             }
-            if (new Rect(680, 572, 111, 26).Contains(point))
+            if (CanShowChooserAlmanac && new Rect(680, 572, 111, 26).Contains(point))
             {
                 _owner.Menus.OpenAlmanac(PvZGame.ScreenView.Board);
                 return;
             }
-            if (new Rect(560, 572, 111, 26).Contains(point))
+            if (CanShowChooserStore && new Rect(560, 572, 111, 26).Contains(point))
             {
                 _owner.Store.OpenStore();
                 if (_owner._currentView == PvZGame.ScreenView.Store)
@@ -964,28 +985,6 @@ namespace PlantsVsZombies.Modes
             }
             var seeds = _owner.RequiredGame.Adventure.AvailableSeeds;
             var required = Math.Min(RequiredModeSession.PacketSlots, seeds.Count);
-            if (_modeChoosingImitater)
-            {
-                foreach (var target in seeds)
-                {
-                    if ((int)target >= 40)
-                    {
-                        continue;
-                    }
-                    if (opening.AdventureCampaignChooserRect(target).Contains(local) && _owner.RequiredGame.SetModeImitaterTarget(target))
-                    {
-                        var home = opening.AdventureCampaignChooserRect(PlantKind.Imitater);
-                        _owner.RequiredPendingSeeds.Choose(PlantKind.Imitater, (int)home.x, (int)home.y + clock.Frame.ChooserY, _owner.Layout.SeedBankCapacity);
-                        _modeChoosingImitater = false;
-                        return;
-                    }
-                }
-                if (opening.AdventureChooserStartRect.Contains(local))
-                {
-                    _modeChoosingImitater = false;
-                }
-                return;
-            }
             if (_owner.Router.ReturnSelectedChooserSeed(point, _owner.Layout.SeedBankCapacity, true))
             {
                 return;
@@ -997,11 +996,13 @@ namespace PlantsVsZombies.Modes
                 {
                     continue;
                 }
-                if (!_owner.RequiredPendingSeeds.Contains(seed) && _owner.RequiredPendingSeeds.Count < required)
+                if (!ModeSeedChooserRules.IsDisabled(RequiredModeSession.Definition.Id, seed)
+                    && !_owner.RequiredPendingSeeds.Contains(seed) && _owner.RequiredPendingSeeds.Count < required)
                 {
                     if (seed == PlantKind.Imitater)
                     {
                         _modeChoosingImitater = true;
+                        _owner._presenter.PrepareModeChooserDialog();
                     }
                     else
                     {
@@ -1013,14 +1014,87 @@ namespace PlantsVsZombies.Modes
             }
             if (opening.AdventureChooserStartRect.Contains(local) && _owner.RequiredPendingSeeds.Count == required && !_owner.RequiredPendingSeeds.HasFlyingSeeds)
             {
-                var chosen = new List<PlantKind>(_owner.RequiredPendingSeeds);
-                if (RequiredModeSession.ChooseSeeds(chosen))
+                var warnings = ModeSeedChooserRules.Warnings(RequiredModeSession, _owner.RequiredPendingSeeds);
+                if (warnings.Count > 0)
                 {
-                    _owner._choosingSeeds = false;
-                    _owner._deck.Clear();
-                    _owner._deck.AddRange(chosen);
-                    opening.BeginAdventureOpeningReturn();
+                    _chooserWarnings = warnings;
+                    _chooserWarningIndex = 0;
+                    _owner._presenter.PrepareModeChooserDialog();
                 }
+                else
+                {
+                    CommitNativeChooser();
+                }
+            }
+        }
+
+        /// <summary>Resumes the original start-button continuation or keeps the current bank for re-picking.</summary>
+        /// <param name="accept">Whether the native affirmative button was chosen.</param>
+        internal void AnswerChooserWarning(bool accept)
+        {
+            if (_chooserWarnings == null)
+            {
+                return;
+            }
+            if (!accept)
+            {
+                _chooserWarnings = null;
+                return;
+            }
+            _chooserWarningIndex++;
+            if (_chooserWarningIndex < _chooserWarnings.Count)
+            {
+                _owner._presenter.PrepareModeChooserDialog();
+                return;
+            }
+            _chooserWarnings = null;
+            CommitNativeChooser();
+        }
+
+        /// <summary>Routes only the original modal chooser buttons or basic copy targets.</summary>
+        /// <param name="point">The original logical pointer position.</param>
+        private void HandleChooserModal(Vector2 point)
+        {
+            var dialog = _owner._presenter.RequiredModeChooserDialog;
+            if (_chooserWarnings != null)
+            {
+                if (dialog.YesBounds.Contains(point) || dialog.NoBounds.Contains(point))
+                {
+                    _owner.Sounds.PlayAdventureRewardSound("gravebutton.ogg");
+                    AnswerChooserWarning(dialog.YesBounds.Contains(point));
+                }
+                return;
+            }
+            if (_owner.RequiredPendingSeeds.HasFlyingSeeds)
+            {
+                return;
+            }
+            foreach (var target in _owner.RequiredGame.Adventure.AvailableSeeds)
+            {
+                if ((int)target >= 40 || !dialog.CardRect(target).Contains(point)
+                    || !_owner.RequiredGame.SetModeImitaterTarget(target))
+                {
+                    continue;
+                }
+                var home = _owner.Opening.AdventureCampaignChooserRect(PlantKind.Imitater);
+                _owner.RequiredPendingSeeds.Choose(PlantKind.Imitater, (int)home.x,
+                    (int)home.y + _owner.Opening.RequiredAdventureIntroFrame.ChooserY, _owner.Layout.SeedBankCapacity);
+                _modeChoosingImitater = false;
+                _owner.Sounds.PlayAdventureRewardSound("tap2.ogg");
+                return;
+            }
+        }
+
+        /// <summary>Transfers the settled original bank only after every required warning has been acknowledged.</summary>
+        private void CommitNativeChooser()
+        {
+            var chosen = new List<PlantKind>(_owner.RequiredPendingSeeds);
+            if (RequiredModeSession.ChooseSeeds(chosen))
+            {
+                _owner._choosingSeeds = false;
+                _owner._deck.Clear();
+                _owner._deck.AddRange(chosen);
+                _owner.Opening.BeginAdventureOpeningReturn();
             }
         }
 

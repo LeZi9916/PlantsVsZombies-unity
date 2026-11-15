@@ -601,6 +601,19 @@ namespace PlantsVsZombies.Game
         /// <summary>Routes the Escape and Enter or Space keys to dismiss dialogs, leave screens or pause the board.</summary>
         internal void HandleEscape()
         {
+            if (_owner.IndependentModes.HasChooserModal && !_owner.RequiredOptionsView.IsOpen)
+            {
+                if (GameInput.Current.EscapePressed)
+                {
+                    _owner.IndependentModes._modeChoosingImitater = false;
+                    _owner.IndependentModes.AnswerChooserWarning(false);
+                }
+                else if (GameInput.Current.EnterPressed || GameInput.Current.SpacePressed)
+                {
+                    _owner.IndependentModes.AnswerChooserWarning(true);
+                }
+                return;
+            }
             if (_owner.Opening.AdventureIntroActive && _owner.Opening.RequiredAdventureIntro.ViewingLawn)
             {
                 var input = GameInput.Current;

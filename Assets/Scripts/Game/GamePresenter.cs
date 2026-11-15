@@ -75,9 +75,58 @@ namespace PlantsVsZombies.Game
             ((IDisposable)_profileNameLayout).Dispose();
             _hammerParticles?.Clear();
             _poolRenderer?.Dispose();
+            _modeChooserDialog?.Dispose();
             _levelNameFont?.Dispose();
             _seedCostFont?.Dispose();
             CanvasUI.Dispose();
+        }
+
+        /// <summary>Owns cached original chooser dialog fonts and geometry.</summary>
+        private OriginalChooserDialog? _modeChooserDialog;
+        /// <summary>Gets the native modal prepared when its opening input was accepted.</summary>
+        internal OriginalChooserDialog RequiredModeChooserDialog => _modeChooserDialog ??= new OriginalChooserDialog(_textureLookup);
+
+        /// <summary>Measures the exact original dialog content when a copy or confirmation dialog is opened.</summary>
+        internal void PrepareModeChooserDialog()
+        {
+            var warning = _owner.IndependentModes.ChooserWarning;
+            var message = warning.HasValue ? OriginalProgressionText(warning.Value.Key) : string.Empty;
+            if (warning?.Upgrade != null && warning?.Base != null)
+            {
+                message = message.Replace("{UPGRADE_FROM}", _owner.AdventureBoard.AdventurePlantName(warning.Value.Base.Value))
+                    .Replace("{UPGRADE_TO}", _owner.AdventureBoard.AdventurePlantName(warning.Value.Upgrade.Value));
+            }
+            RequiredModeChooserDialog.Configure(OriginalProgressionText(warning.HasValue ? "DIALOG_WARNING" : "CHOOSE_SEED_TO_COPY"), message, !warning.HasValue);
+        }
+
+        /// <summary>Draws PC 498CC0's independent copy dialog or PC 49B120's original re-pick confirmation.</summary>
+        private void DrawModeChooserDialog()
+        {
+            if (!_owner.IndependentModes.HasChooserModal)
+            {
+                return;
+            }
+            var dialog = RequiredModeChooserDialog;
+            dialog.Draw();
+            if (_owner.IndependentModes.ChooserWarning.HasValue)
+            {
+                DrawOriginalUiButton(dialog.YesBounds, OriginalProgressionText("DIALOG_BUTTON_YES"));
+                DrawOriginalUiButton(dialog.NoBounds, OriginalProgressionText("REPICK_BUTTON"));
+                return;
+            }
+            var previous = CanvasUI.Color;
+            foreach (var seed in _owner.RequiredGame.Adventure.AvailableSeeds)
+            {
+                if ((int)seed >= 40)
+                {
+                    continue;
+                }
+                var gray = ModeSeedChooserRules.IsDisabled(_owner.IndependentModes.RequiredModeSession.Definition.Id, seed)
+                    || _owner.RequiredGame.AdventureChooserWarningKey(seed, ChooserHasCoffee).Length != 0 ? 115f / 255f : 1f;
+                CanvasUI.Color = new Color(previous.r * gray, previous.g * gray, previous.b * gray, previous.a);
+                DrawAdventureCard(PlantKind.Imitater, dialog.CardRect(seed), true, seed);
+            }
+            CanvasUI.Color = previous;
         }
 
         /// <summary>Stores width.</summary>
@@ -267,6 +316,10 @@ namespace PlantsVsZombies.Game
                 }
 
                 DrawOriginalHoverTips();
+                if (_owner._currentView == PvZGame.ScreenView.Board)
+                {
+                    DrawModeChooserDialog();
+                }
                 if (_owner._unavailableFeature != null)
                 {
                     DrawUnavailable();
@@ -1976,8 +2029,14 @@ namespace PlantsVsZombies.Game
                 && _owner.Opening.AdventureIntroAwaitingSeeds && !_owner.Opening.RequiredAdventureIntro.ViewingLawn)
             {
                 DrawOriginalUiButton(new Rect(681, -10, 117, 46), OriginalProgressionText("MENU_BUTTON"));
-                DrawNativeChooserButton(new Rect(560, 572, 111, 26), "SHOP_BUTTON");
-                DrawNativeChooserButton(new Rect(680, 572, 111, 26), "ALMANAC_BUTTON");
+                if (_owner.IndependentModes.CanShowChooserStore)
+                {
+                    DrawNativeChooserButton(new Rect(560, 572, 111, 26), "SHOP_BUTTON");
+                }
+                if (_owner.IndependentModes.CanShowChooserAlmanac)
+                {
+                    DrawNativeChooserButton(new Rect(680, 572, 111, 26), "ALMANAC_BUTTON");
+                }
             }
             if (_owner.Opening.RequiredAdventureIntro.ViewingLawn && _owner.Opening.RequiredAdventureIntro.ViewLawnTicks >= 100
                 && _owner.Opening.RequiredAdventureIntro.ViewLawnTicks <= 250)
@@ -2010,7 +2069,8 @@ namespace PlantsVsZombies.Game
         /// <returns>The original RGB brightness from fifty-five to 255.</returns>
         private int ChooserHomeGrayness(PlantKind kind)
         {
-            var recommended = _owner.RequiredGame.AdventureChooserWarningKey(kind, ChooserHasCoffee).Length == 0;
+            var recommended = _owner.RequiredGame.AdventureChooserWarningKey(kind, ChooserHasCoffee).Length == 0
+                && (!_owner.IndependentModes.IsModeBoard || !ModeSeedChooserRules.IsDisabled(_owner.IndependentModes.RequiredModeSession.Definition.Id, kind));
             return _owner.RequiredPendingSeeds.HomeGrayness(kind, recommended);
         }
 
@@ -5942,7 +6002,8 @@ namespace PlantsVsZombies.Game
         /// <param name = "kind">The kind.</param>
         /// <param name = "card">The card.</param>
         /// <param name = "price">The price.</param>
-        private void DrawAdventureCard(PlantKind kind, Rect card, bool price)
+        /// <param name="imitaterTemplate">The native copy dialog target, or null for the settled bank template.</param>
+        private void DrawAdventureCard(PlantKind kind, Rect card, bool price, PlantKind? imitaterTemplate = null)
         {
             var bank = _owner.Textures.LoadImage("seeds.png");
             if (card.width > 50.01f && _owner.Textures.LoadImage("SeedPacket_Larger.png") != null)
@@ -5954,12 +6015,9 @@ namespace PlantsVsZombies.Game
                 _owner.RequiredAnimations.DrawNativeImage(bank, card, new Rect(2f / 9f, 0, 1f / 9f, 1));
             }
 
-            var id = (int)kind;
-            var imitated = kind == PlantKind.Imitater && _owner.RequiredGame.Adventure.ImitaterTarget.HasValue;
-            if (imitated)
-            {
-                id = (int)_owner.RequiredGame.Adventure.RequiredImitaterTarget;
-            }
+            var template = imitaterTemplate ?? _owner.RequiredGame.Adventure.ImitaterTarget;
+            var imitated = kind == PlantKind.Imitater && template.HasValue;
+            var id = imitated ? (int)template!.Value : (int)kind;
 
             if (id >= 0 && id < 49)
             {
@@ -5988,7 +6046,7 @@ namespace PlantsVsZombies.Game
                     AlmanacPortraitLayout.PlantThumbnailTransform(id, new Rect(0, 0, 50, 70), out origin, out scale);
                     origin = new Vector2(card.x + origin.x * card.width / 50f, card.y + origin.y * card.height / 70f);
                     scale *= card.width / 50f;
-                    var iconKind = imitated ? _owner.RequiredGame.Adventure.RequiredImitaterTarget : kind;
+                    var iconKind = imitated ? (PlantKind)id : kind;
                     if (imitated)
                     {
                         _cardThumbnailName = AdventurePlantAnimation(iconKind);
@@ -6018,7 +6076,7 @@ namespace PlantsVsZombies.Game
 
             if (price)
             {
-                DrawAdventurePacketCost(kind, card);
+                DrawAdventurePacketCost(imitated ? (PlantKind)id : kind, card);
             }
         }
 
@@ -6248,7 +6306,7 @@ namespace PlantsVsZombies.Game
             }
 
             var nativeMode = _owner.IndependentModes.IsModeBoard;
-            var choosingImitater = nativeMode ? _owner.IndependentModes._modeChoosingImitater : _owner.AdventureBoard._choosingImitater;
+            var choosingImitater = !nativeMode && _owner.AdventureBoard._choosingImitater;
             DrawImage("SeedChooser_Background.png", new Rect(0, 87, 465, 513));
             var title = OriginalProgressionText("CHOOSE_YOUR_PLANTS");
             var nativeGold = new Color(213f / 255f, 159f / 255f, 43f / 255f);
@@ -7589,6 +7647,10 @@ namespace PlantsVsZombies.Game
                 return;
             }
 
+            if (_owner.IndependentModes.HasChooserModal)
+            {
+                return;
+            }
             var modeChooser = _owner.IndependentModes.IsModeBoard && _owner.IndependentModes.RequiredModeSession.Phase == ModePhase.ChoosingSeeds;
             if (_owner.Opening.AdventureIntroActive && !_owner.Opening.AdventureIntroAwaitingSeeds && !modeChooser)
             {

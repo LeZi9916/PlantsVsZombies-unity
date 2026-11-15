@@ -1154,3 +1154,21 @@ and entitlements for all independent modes which choose plants.
 
 This opening run passes 47 EditMode and 16 PlayMode cases. Packaged Player,
 other target platforms and native executable pixel equivalence remain unverified.
+
+`ChallengeSeedChooserTests` covers all five PC Last Stand exclusions, Imitater
+copy restrictions, the ordered producer/pool/roof/flyer/upgrade confirmations,
+and purchased access after leaving the store. `OriginalChallengeOpeningTests`
+also exercises the real original-artwork copy and re-pick dialogs. Their sizing,
+frame, header and buttons follow PC `464B40/464FF0/4651D0`; copy-card positions
+follow `498C70`, and warning order follows `49B120/49AF50`. For the supplied
+Chinese title, executing the original `464B40` instructions with original font
+metrics gives the copy dialog rectangle `(147,11,506,578)`.
+
+```powershell
+./Tools/Tests/Run-UnityTests.ps1 -Platform EditMode -TestFilter 'ChallengeSeedChooserTests;AdventureSeedChooserTests;ModeWaveFidelityTests'
+./Tools/Tests/Run-UnityTests.ps1 -Platform PlayMode -TestFilter 'OriginalChallengeOpeningTests;OriginalSurvivalFlowTests'
+```
+
+The chooser run passes 53 EditMode and eight PlayMode cases. The store and
+almanac widgets retain their PC profile-level gates. The copy dialog previews
+its target without changing the match's selected Imitater template during Draw.

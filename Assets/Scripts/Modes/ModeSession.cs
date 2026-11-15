@@ -142,6 +142,10 @@ namespace PlantsVsZombies.Modes
                     seeds.Add(seed);
                 }
             }
+            if (Definition.Mechanic == ModeMechanic.Stars && !seeds.Contains(PlantKind.Starfruit))
+            {
+                seeds.Add(PlantKind.Starfruit);
+            }
             Game.Adventure.AvailableSeeds = seeds.AsReadOnly();
             Game.Rules.AdventureSeedAccess = access;
             PacketSlots = Math.Max(6, Math.Min(10, packetSlots));

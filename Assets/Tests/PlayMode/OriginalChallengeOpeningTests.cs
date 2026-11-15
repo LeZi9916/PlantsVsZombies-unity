@@ -93,10 +93,76 @@ namespace PlantsVsZombies.Tests.PlayMode
             Save(fixture, "boss-revenge-enter");
         }
 
+        /// <summary>Checks PC 498920's independent copy dialog and native Last Stand disabled-card input.</summary>
+        /// <returns>Native chooser and Imitater modal GPU frames.</returns>
+        [UnityTest]
+        public IEnumerator ImitaterUsesNativeIndependentDialogAndDisabledTargets()
+        {
+            using var fixture = new OriginalStormGraphicsTests.StormFixture(28);
+            Prepare(fixture, 31, AdventureSeedAccess.DevelopmentAll());
+            var owner = fixture.Owner;
+            WaitForChooser(owner);
+            owner.IndependentModes.TryHandleModeClick(owner.Opening.AdventureCampaignChooserRect(PlantKind.PuffShroom).center);
+            Assert.That(owner.RequiredPendingSeeds.Count, Is.Zero);
+            owner.IndependentModes.TryHandleModeClick(owner.Opening.AdventureCampaignChooserRect(PlantKind.Imitater).center);
+            Assert.That(owner.IndependentModes.HasChooserModal, Is.True);
+            var dialog = owner._presenter.RequiredModeChooserDialog;
+            Assert.That(dialog.CardRect(PlantKind.Peashooter).x, Is.EqualTo(dialog.Bounds.x + (int)dialog.Bounds.width / 2 - 210));
+            Assert.That(dialog.CardRect(PlantKind.MelonPult).y, Is.EqualTo(dialog.Bounds.y + 398));
+            yield return fixture.Capture("DrawAdventureBoard", () =>
+            {
+                fixture.DrawPass("DrawModesInterface");
+                fixture.DrawPass("DrawModeChooserDialog");
+            }, wholeBoard: true);
+            Save(fixture, "imitater-dialog");
+            owner.IndependentModes.TryHandleModeClick(dialog.CardRect(PlantKind.Sunflower).center);
+            Assert.That(owner.IndependentModes.HasChooserModal, Is.True);
+            Assert.That(owner.RequiredPendingSeeds.Count, Is.Zero);
+            owner.IndependentModes.TryHandleModeClick(dialog.CardRect(PlantKind.Peashooter).center);
+            Assert.That(owner.IndependentModes.HasChooserModal, Is.False);
+            Assert.That(owner.RequiredPendingSeeds[0], Is.EqualTo(PlantKind.Imitater));
+            Assert.That(owner.RequiredGame.Adventure.ImitaterTarget, Is.EqualTo(PlantKind.Peashooter));
+            Assert.That(owner.RequiredPendingSeeds.HasFlyingSeeds, Is.True);
+        }
+
+        /// <summary>Checks the original re-pick/yes continuation leaves the bank intact and commits only after confirmation.</summary>
+        /// <returns>The actual original warning dialog GPU frame.</returns>
+        [UnityTest]
+        public IEnumerator NativeWarningCanRepickOrContinueWithoutLosingSelection()
+        {
+            using var fixture = new OriginalStormGraphicsTests.StormFixture(8);
+            Prepare(fixture, 16);
+            var owner = fixture.Owner;
+            WaitForChooser(owner);
+            foreach (var seed in new[] { PlantKind.Peashooter, PlantKind.Wallnut, PlantKind.PotatoMine, PlantKind.CherryBomb, PlantKind.SnowPea, PlantKind.Chomper })
+            {
+                owner.IndependentModes.TryHandleModeClick(owner.Opening.AdventureCampaignChooserRect(seed).center);
+                owner.RequiredPendingSeeds.LandFlyingSeeds();
+            }
+            owner.IndependentModes.TryHandleModeClick(owner.Opening.AdventureChooserStartRect.center);
+            Assert.That(owner.IndependentModes.ChooserWarning?.Key, Is.EqualTo("SEED_CHOOSER_SUN_WARNING"));
+            Assert.That(owner.IndependentModes.RequiredModeSession.Phase, Is.EqualTo(ModePhase.ChoosingSeeds));
+            yield return fixture.Capture("DrawAdventureBoard", () =>
+            {
+                fixture.DrawPass("DrawModesInterface");
+                fixture.DrawPass("DrawModeChooserDialog");
+            }, wholeBoard: true);
+            Save(fixture, "chooser-warning");
+            owner.IndependentModes.TryHandleModeClick(owner._presenter.RequiredModeChooserDialog.NoBounds.center);
+            Assert.That(owner.IndependentModes.HasChooserModal, Is.False);
+            Assert.That(owner.RequiredPendingSeeds.Count, Is.EqualTo(6));
+            owner.IndependentModes.TryHandleModeClick(owner.Opening.AdventureChooserStartRect.center);
+            owner.IndependentModes.TryHandleModeClick(owner._presenter.RequiredModeChooserDialog.YesBounds.center);
+            Assert.That(owner.IndependentModes.RequiredModeSession.Phase, Is.EqualTo(ModePhase.Playing));
+            Assert.That(owner.Opening.AdventureIntroAwaitingSeeds, Is.False);
+            Assert.That(owner.RequiredGame.Adventure.SelectedSeeds.Count, Is.EqualTo(6));
+        }
+
         /// <summary>Creates an isolated production host with the exact native mode metadata.</summary>
         /// <param name="fixture">The original-artwork presenter.</param>
         /// <param name="id">The original challenge identifier.</param>
-        private static void Prepare(OriginalStormGraphicsTests.StormFixture fixture, int id)
+        /// <param name="access">The original purchased seed entitlements.</param>
+        private static void Prepare(OriginalStormGraphicsTests.StormFixture fixture, int id, AdventureSeedAccess? access = null)
         {
             var owner = fixture.Owner;
             owner._presenter = (GamePresenter)typeof(OriginalStormGraphicsTests.StormFixture)
@@ -104,7 +170,7 @@ namespace PlantsVsZombies.Tests.PlayMode
             owner.Dave.Initialize(owner.gameObject.AddComponent<AudioSource>(), 0f);
             owner.Opening.PlayOpeningInIsolatedSession = true;
             owner._currentView = PvZGame.ScreenView.Board;
-            var session = new ModeSession(id, packetSlots: 6, roofCleaners: true, poolCleaners: true,
+            var session = new ModeSession(id, access, packetSlots: 6, roofCleaners: true, poolCleaners: true,
                 waveContext: new ModeWaveContext(7529, profileProgress: 1, profileLevel: 50), deferBossEntrance: true);
             owner.IndependentModes._modeSession = session;
             owner.Campaign.AttachAdventureGame(session.Game);
