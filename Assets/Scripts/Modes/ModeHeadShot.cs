@@ -9,6 +9,8 @@ namespace PlantsVsZombies.Modes
         public float X, Row;
         /// <summary>Stores the original projectile's pixel x/y before sprite placement.</summary>
         public float NativeX, NativeY;
+        /// <summary>Stores the original row-relative ground shadow y.</summary>
+        public float NativeShadowY;
         /// <summary>Stores the previous original projectile pixel x for rendering interpolation.</summary>
         public float PreviousNativeX;
         /// <summary>Stores damage.</summary>

@@ -390,6 +390,11 @@ namespace PlantsVsZombies.Adventure
                 z.PogoState = new AdventurePogoState { PhaseTicks = next(AdventurePogoRules.BounceTicks) + 1 };
             }
 
+            if (kind == 31)
+            {
+                z.WorldY += 30;
+            }
+
             if (c.HasRoof)
             {
                 z.WorldY -= 2 * gy + 30 - 7 * gx;

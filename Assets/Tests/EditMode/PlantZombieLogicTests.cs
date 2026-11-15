@@ -183,9 +183,13 @@ namespace PlantsVsZombies.Tests.EditMode
             var shell = new Plant { Id = 9003, Kind = PlantKind.Pumpkin, Layer = PlantLayer.Armor, Row = 1, Column = 3, Health = 4000 };
             SimulationFixture.Plants(session.Game).Add(shell);
             shot.NativeX = 290;
+            shot.NativeY = 0; // PC 47BE90 uses same-row horizontal overlap, not sprite-height intersection.
             TickActions(session.Game);
             Assert.That(shell.Health, Is.EqualTo(3980));
             Assert.That(puff.Health, Is.EqualTo(300));
+            Assert.That(shell.PresentationEatenFlashTicks, Is.EqualTo(25));
+            Assert.That(session.Game.Presentation.Impacts.Last().NativeParticleX, Is.EqualTo(shot.NativeX - 3).Within(.0001f));
+            Assert.That(session.Game.Presentation.Impacts.Last().NativeParticleY, Is.EqualTo(shot.NativeY + 17).Within(.0001f));
             Assert.That(session.HeadShots, Is.Empty);
         }
 
@@ -207,6 +211,67 @@ namespace PlantsVsZombies.Tests.EditMode
             TickActions(session.Game);
             Assert.That(session.Game.Plants, Has.No.Member(plant));
             Assert.That(session.Game.Presentation.SquishedPlants.Any(item => item.Plant == plant), Is.True);
+        }
+
+        /// <summary>Checks burning preserves the original held child clip while the corpse's live child clock can advance separately.</summary>
+        [Test]
+        public void FrozenBurnCapturesTheActiveChildClipAndClock()
+        {
+            var session = Board();
+            var zombie = Spawn(session.Game, 26);
+            zombie.PlantZombieState!.Play("anim_shooting", 35, false, 20);
+            zombie.PlantZombieState.HeadSeconds = .2f;
+            Assert.That(SimulationInspection.GetMethod("CreateAdventureBurnPresentation").Invoke(session.Game, new object[] { zombie }), Is.EqualTo(true));
+            var corpse = session.Game.Presentation.Corpses.Last();
+            Assert.That(corpse.FrozenPlantHeadState, Is.Not.SameAs(zombie.PlantZombieState));
+            Assert.That(corpse.FrozenPlantHeadState!.HeadClip, Is.EqualTo("anim_shooting"));
+            zombie.PlantZombieState.HeadSeconds = .7f;
+            Assert.That(corpse.FrozenPlantHeadState.HeadSeconds, Is.EqualTo(.2f));
+        }
+
+        /// <summary>Checks body death leaves an attached plant head's original independent animation running.</summary>
+        [Test]
+        public void NormalDeathKeepsTheOriginalIndependentHeadClock()
+        {
+            var session = Board();
+            var zombie = Spawn(session.Game, 29);
+            zombie.PlantZombieState!.HeadSeconds = .2f;
+            SimulationInspection.GetMethod("KillAdventureZombie").Invoke(session.Game, new object[] { zombie, 0U });
+            Assert.That(session.Game.Presentation.Corpses.Any(item => item.Zombie == zombie), Is.True);
+            SimulationInspection.GetMethod("AdventurePresentationTick").Invoke(session.Game, new object[] { .01f });
+            Assert.That(zombie.PlantZombieState.HeadSeconds, Is.EqualTo(.21f).Within(.00001f));
+        }
+
+        /// <summary>Checks the native counter gate runs before the final butter update removes immobilization.</summary>
+        [Test]
+        public void FinalButterTickCannotAdvanceTheHeadActionCounterEarly()
+        {
+            var session = Board();
+            var zombie = Spawn(session.Game, 26);
+            zombie.PresentationButter = .01f;
+            SimulationInspection.GetMethod("AdventurePresentationTick").Invoke(session.Game, new object[] { .01f });
+            TickActions(session.Game);
+            Assert.That(zombie.PlantZombieState!.Counter, Is.EqualTo(150));
+            SimulationInspection.GetMethod("AdventurePresentationTick").Invoke(session.Game, new object[] { .01f });
+            TickActions(session.Game);
+            Assert.That(zombie.PlantZombieState.Counter, Is.EqualTo(149));
+        }
+
+        /// <summary>Checks complete native shooter cycles use simulation-owned body/head data without a renderer.</summary>
+        [Test]
+        public void FullModeTicksFireBothOriginalShooterCyclesWithoutRendering()
+        {
+            var session = Board();
+            var pea = Spawn(session.Game, 26);
+            var gatling = Spawn(session.Game, 29);
+            for (var tick = 0; tick < 150; tick++)
+            {
+                session.Update(.01f);
+            }
+            Assert.That(pea.PlantZombieState!.Counter, Is.EqualTo(150));
+            Assert.That(gatling.PlantZombieState!.Counter, Is.EqualTo(150));
+            Assert.That(session.HeadShots.Count, Is.EqualTo(5));
+            Assert.That(session.HeadShots.All(shot => shot.NativeX != 0 && shot.NativeY != 0), Is.True);
         }
 
         /// <summary>Creates only the original Pea Heads board and puts its simulation in the playing state.</summary>

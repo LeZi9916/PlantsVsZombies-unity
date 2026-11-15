@@ -3660,7 +3660,9 @@ namespace PlantsVsZombies.Reanimation
         /// <returns>The resulting draw native plant head attachment.</returns>
         /// <param name="sampledTrack">The exact native parent placement and blended track sampled during body traversal, when available.</param>
         /// <param name="boardTransform">The inherited board transform accompanying the sampled track.</param>
-        public bool DrawNativePlantHeadAttachment(Vector2 origin, float scale, string? parentClip, float parentSeconds, float parentRate, int nativeKind, float headSeconds, bool facingLeft, Matrix4x4? sampledTrack = null, Matrix4x4? boardTransform = null)
+        /// <param name="state">The simulation-owned original child clip, rate and age, or null for a native idle portrait.</param>
+        /// <param name="instanceKey">The stable child identity used for original twenty-update clip blending.</param>
+        public bool DrawNativePlantHeadAttachment(Vector2 origin, float scale, string? parentClip, float parentSeconds, float parentRate, int nativeKind, float headSeconds, bool facingLeft, Matrix4x4? sampledTrack = null, Matrix4x4? boardTransform = null, AdventurePlantZombieState? state = null, string? instanceKey = null)
         {
             using var objectScope = BeginObjectScope();
             int childId;
@@ -3727,6 +3729,14 @@ namespace PlantsVsZombies.Reanimation
                     return false;
             }
 
+            if (state?.HeadRemoved == true)
+            {
+                return false;
+            }
+            childClip = state?.HeadClip ?? childClip;
+            var headRate = state?.HeadRate ?? 15f;
+            var headLoops = state?.HeadLoops ?? true;
+            headSeconds = state?.HeadSeconds ?? headSeconds;
             global::PlantsVsZombies.VerifiedData.ReanimationDefinition? definition;
             if (!global::PlantsVsZombies.VerifiedData.VerifiedDataCatalog.TryGetReanimation(childId, out definition))
             {
@@ -3774,7 +3784,8 @@ namespace PlantsVsZombies.Reanimation
                 var parentPlacement = sampledTrack ?? CombatPlacement(origin, scale, facingLeft, 90) * PartMatrix(pose);
                 var placement = outer * parentPlacement * inverse * offset;
                 using var hierarchyAttachment = Hierarchy.BeginAttachment(12);
-                return DrawClipPose(child, head, NativeSeconds(head, headSeconds, 15f, child.Fps, true), child.Fps, false, placement, color);
+                return DrawClipPose(child, head, NativeSeconds(head, headSeconds, headRate, child.Fps, headLoops), child.Fps, false, placement, color,
+                    blend: PrepareNativeBlend(instanceKey, childClip, headSeconds, state?.HeadBlendTicks ?? 0));
             }
             finally
             {

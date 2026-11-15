@@ -752,7 +752,6 @@ namespace PlantsVsZombies.Simulation
             if (z.PlantZombieState != null)
             {
                 var head = z.PlantZombieState;
-                head.ImmobilizedAtTickStart = z.FrozenRemaining > 0 || z.PresentationButter > 0;
                 // Ice/chill change the body clock; ApplyButter alone explicitly stops the special child reanimation.
                 if (z.PresentationButter <= 0 || head.Detached)
                 {
@@ -1109,6 +1108,11 @@ namespace PlantsVsZombies.Simulation
         /// <returns>The resulting adventure presentation zombie rate.</returns>
         internal float AdventurePresentationZombieRate(Zombie z)
         {
+            if (z.PlantZombieState?.Detached == true)
+            {
+                return 12f;
+            }
+
             if (z.BungeeCarrierId != 0)
             {
                 return 0f;

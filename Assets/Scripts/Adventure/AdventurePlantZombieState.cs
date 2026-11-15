@@ -41,6 +41,18 @@ namespace PlantsVsZombies.Adventure
             HeadClip = nativeKind == 26 || nativeKind == 29 ? "anim_head_idle" : "anim_idle";
         }
 
+        /// <summary>Captures the original child's held animation for a frozen burned silhouette.</summary>
+        /// <returns>An independent copy whose clock cannot be changed by later corpse updates.</returns>
+        internal AdventurePlantZombieState Snapshot()
+        {
+            return new AdventurePlantZombieState(NativeKind)
+            {
+                Counter = Counter, HeadClip = HeadClip, HeadRate = HeadRate, HeadLoops = HeadLoops,
+                HeadSeconds = HeadSeconds, HeadBlendTicks = 0, Detached = Detached, HeadRemoved = HeadRemoved,
+                SquashPhase = SquashPhase, DetachedX = DetachedX, DetachedY = DetachedY
+            };
+        }
+
         /// <summary>Starts a native child clip without coupling it to the body's walking clock.</summary>
         /// <param name="clip">The original animation marker.</param>
         /// <param name="rate">The original frames per second.</param>

@@ -1830,8 +1830,11 @@ namespace PlantsVsZombies.Game
                 zombie.ModeHead = preview.NativeKind >= 26 ? preview.NativeKind : -1;
                 zombie.Health = 270;
                 zombie.StartingHealth = 270;
+                zombie.PlantZombieState = null;
+                zombie.PresentationPlantHeadAge = _owner.Opening._adventureIntroVisualAge;
                 // The original preview zombies are real board zombies, so each starts with its full ZombieInitialize equipment.
-                zombie.ArmorHealth = AdventureZombieEquipmentRules.StartingArmor(zombie.Kind);
+                zombie.ArmorHealth = zombie.ModeHead == 27 ? 1100 : zombie.ModeHead == 31 ? 2200
+                    : AdventureZombieEquipmentRules.StartingArmor(zombie.Kind);
                 zombie.ShieldHealth = AdventureZombieEquipmentRules.StartingShield(zombie.Kind);
                 zombie.PresentationMaxArmor = zombie.ArmorHealth;
                 zombie.PresentationMaxShield = zombie.ShieldHealth;
@@ -2575,6 +2578,8 @@ namespace PlantsVsZombies.Game
                         DrawAdventureProjectile(pea);
                     }
 
+                    DrawPlantZombieHeadShots(row);
+
                     foreach (var bungee in _owner.RequiredGame.Zombies)
                     {
                         if (bungee.Kind == ZombieKind.Bungee && bungee.Row == row)
@@ -3110,6 +3115,10 @@ namespace PlantsVsZombies.Game
                 y -= 16f;
             }
 
+            if (zombie.ModeHead == 31)
+            {
+                y += 30f;
+            }
             // PC GetDrawPos (0x549740) applies unscaled species offsets before the body overlay.
             switch (zombie.Kind)
             {
@@ -4503,6 +4512,48 @@ namespace PlantsVsZombies.Game
 
             DrawAdventureTangleKelpGrab(zombie, x);
             DrawAdventureZomboniSmoke(zombie, x);
+            DrawDetachedPlantZombieHead(zombie);
+
+        }
+
+        /// <summary>Draws PC 543520's detached, positive-scale Squash above its stationary zombie body.</summary>
+        /// <param name="zombie">The original body retaining the standalone child lifecycle.</param>
+        private void DrawDetachedPlantZombieHead(Zombie zombie)
+        {
+            var head = zombie.PlantZombieState;
+            if (head?.Detached != true || head.HeadRemoved)
+            {
+                return;
+            }
+            _owner.RequiredAnimations.DrawNativePlayback("Squash", new Vector2(head.DetachedX, head.DetachedY), .75f,
+                head.HeadSeconds, head.HeadClip, false, head.HeadRate,
+                instanceKey: _presentationKeys.Get("native-detached-squash-", zombie.Id), blendTicks: head.HeadBlendTicks);
+        }
+
+        /// <summary>Draws original backwards pea shadows and source images at projectile row order beneath fog.</summary>
+        /// <param name="row">The original projectile render row.</param>
+        private void DrawPlantZombieHeadShots(int row)
+        {
+            var session = _owner.RequiredGame.ModeSession;
+            if (session == null)
+            {
+                return;
+            }
+            foreach (var shot in session.HeadShots)
+            {
+                if ((int)shot.Row != row)
+                {
+                    continue;
+                }
+                var x = Mathf.Lerp(shot.PreviousNativeX, shot.NativeX, Mathf.Clamp01(AdventureRenderRemainder * 100));
+                var shadow = _owner.Textures.LoadImage("pea_shadows.png");
+                if (shadow != null)
+                {
+                    CanvasUI.DrawTextureWithTexCoords(new Rect(x + 3, shot.NativeShadowY, shadow.Width / 2f, shadow.Height), shadow,
+                        new Rect(_owner.RequiredGame.Adventure.Level.IsNight ? .5f : 0f, 0, .5f, 1));
+                }
+                DrawNativeProgressionImage("ProjectilePea.png", x, shot.NativeY);
+            }
         }
 
         /// <summary>Draws PC 549EC0's butter at the transformed original head center and species offsets.</summary>
@@ -4751,6 +4802,11 @@ namespace PlantsVsZombies.Game
         /// <returns>The native shadow bounds before the shared viewport transform.</returns>
         internal static Rect AdventureZombieShadowBounds(Zombie zombie, float gridX, float floorY, Vector2 imageSize, bool inPool)
         {
+            if (zombie.ModeHead == 31)
+            {
+                floorY += 30f;
+            }
+
             var scale = AdventureDancerRules.Scale(zombie);
             var shadowScale = scale;
             var backwards = zombie.PresentationWalkingBackwards ?? (zombie.Hypnotized || zombie.Kind == ZombieKind.Digger && AdventureDiggerState.WalksBackwards(zombie));
@@ -5127,7 +5183,7 @@ namespace PlantsVsZombies.Game
 
                     if (plantHead && !zombie.Headless)
                     {
-                        _owner.RequiredAnimations.DrawNativePlantHeadAttachment(origin, burn.Scale, clip, corpse.FrozenSeconds, corpse.FrozenRate, zombie.ModeHead, corpse.FrozenHeadSeconds, burn.FacingLeft);
+                        _owner.RequiredAnimations.DrawNativePlantHeadAttachment(origin, burn.Scale, clip, corpse.FrozenSeconds, corpse.FrozenRate, zombie.ModeHead, corpse.FrozenHeadSeconds, burn.FacingLeft, state: corpse.FrozenPlantHeadState);
                     }
                 }
                 finally
@@ -7069,10 +7125,6 @@ namespace PlantsVsZombies.Game
                 }
             }
 
-            foreach (var shot in s.HeadShots)
-            {
-                DrawImage("PeaNormal_0.png", new Rect(BoardLayout.AdventureGridX + shot.X * BoardLayout.CellWidth - 12, _owner.Layout.AdventureCellY((int)shot.Row, shot.X) + 28, 24, 24));
-            }
         }
 
         /// <summary>Performs draw mode aquarium.</summary>

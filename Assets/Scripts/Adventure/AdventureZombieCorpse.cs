@@ -24,6 +24,8 @@ namespace PlantsVsZombies.Adventure
         public AdventureBurnPose RequiredBurn => Burn ?? throw new System.InvalidOperationException("The member 'Burn' is not available.");
         /// <summary>Stores frozen seconds, frozen rate, frozen head seconds.</summary>
         public float FrozenSeconds, FrozenRate, FrozenHeadSeconds;
+        /// <summary>Retains the exact independent plant-head clip and time of a frozen burned silhouette.</summary>
+        public AdventurePlantZombieState? FrozenPlantHeadState;
         /// <summary>Stores age, rate, rate scale, duration.</summary>
         public float Age, Rate, RateScale = 1f, Duration = float.PositiveInfinity;
         /// <summary>Stores animation duration, fade duration.</summary>

@@ -1243,3 +1243,33 @@ Ninety-one distinct focused EditMode cases pass across the allocation/action run
 and the extended tube, short-plant immunity, layered collision and delayed-crush
 cases. This does not certify all unrelated independent-mode mechanics or a full
 whole-game random stream.
+
+The plant-zombie presentation follow-up binds the simulation-owned idle/shooting
+clips to the child reanimation, including original once-and-hold rates and blends.
+It renders the standalone Squash at the native phase coordinates, retains the
+Tall-nut-head constructor's thirty-pixel actor/shadow offset, initializes preview
+helm health, and advances preview and ordinary death head clocks independently.
+Burned frozen silhouettes capture their own child clip/time snapshot.
+
+PC `47BE90/47C270` uses same-row horizontal overlap for hostile peas, preserves
+six short-plant exclusions and the eating-order layered target, raises the plant
+flash to 25, plays Splat, and creates PeaSplat at projectile `(-3,+17)`. Backwards
+motion is exactly 3.33 pixels per native update. Actual `ProjectilePea`/`pea_shadows`
+artwork is painted at projectile row order beneath fog, with no mode-footer copy.
+`OriginalPlantZombieGraphicsTests` captures all six original heads, both facing
+directions, day/pool bodies, shooting clips, detached Squash and the projectile.
+
+```powershell
+./Tools/Tests/Run-UnityTests.ps1 -Platform EditMode -TestFilter 'PlantZombieLogicTests;AdventureSpawnFidelityTests;AdventureGargantuarTests;AdventureBoardViewTests'
+./Tools/Tests/Run-UnityTests.ps1 -Platform PlayMode -TestFilter 'PlantZombieAttachmentTests;OriginalPlantZombieGraphicsTests;OriginalZombiePoolGraphicsTests.PlantHeadAttachmentKeepsParentWaterlineInSceneAndCapture;ReanimationCombatAssociationTests;OriginalZombieDeathBlendTests;OriginalChallengeOpeningTests;GamePresentationPerformanceTests.PreservesAttachedPlantHeadArtwork'
+```
+
+The final focused run passes 116 EditMode cases and all 28 PlayMode cases. One
+existing `AdventureBoardViewTests.ExplosionNamesMatchEnumTextWithoutRepeatedFormatting`
+allocation assertion reports 111 samples instead of zero on both the task's
+unchanged `76d8433` baseline and the repaired source with Unity 7000.0.0a16.
+Its implementation and test remain unchanged. The task's 24 new logic cases pass,
+including complete simulation-only shooter cycles without renderer queries.
+Packaged Players, other platforms and native executable pixel equivalence remain
+unverified; no unrelated combat mechanics or global particle random-stream parity
+is implied by these targeted checks.

@@ -6,6 +6,7 @@ using System.Linq;
 using System.Reflection;
 using NUnit.Framework;
 using PlantsVsZombies.Game;
+using PlantsVsZombies.Adventure;
 using PlantsVsZombies.Reanimation;
 using PlantsVsZombies.Rendering;
 using PlantsVsZombies.Simulation;
@@ -48,9 +49,10 @@ namespace PlantsVsZombies.Tests.PlayMode
                 + "<track><name>anim_eat</name><t><f>-1</f></t><t/><t><f>0</f></t><t/></track>";
             File.WriteAllText(Path.Combine(directory, "Zombie.reanim"), markers
                 + Track("Zombie_body", "body", false) + Track("anim_head1", "body", true) + Track("Zombie_outerarm_hand", "front", false));
-            var child = "<fps>12</fps><track><name>anim_idle</name><t><f>0</f></t><t/></track>"
-                + "<track><name>anim_head_idle</name><t><f>0</f></t><t/></track>"
-                + "<track><name>picture</name><t><i>IMAGE_REANIM_head</i><f>0</f></t><t/></track>";
+            var child = "<fps>12</fps><track><name>anim_idle</name><t><f>0</f></t><t/><t><f>-1</f></t><t/></track>"
+                + "<track><name>anim_head_idle</name><t><f>0</f></t><t/><t><f>-1</f></t><t/></track>"
+                + "<track><name>anim_shooting</name><t><f>-1</f></t><t/><t><f>0</f></t><t/></track>"
+                + "<track><name>picture</name><t><i>IMAGE_REANIM_head</i><x>0</x><f>0</f></t><t/><t><x>20</x></t><t/></track>";
             foreach (var name in new[] { "PeaShooterSingle", "Wallnut", "Jalapeno", "GatlingPea", "Squash", "Tallnut" })
             {
                 File.WriteAllText(Path.Combine(directory, name + ".reanim"), child);
@@ -110,6 +112,23 @@ namespace PlantsVsZombies.Tests.PlayMode
             Assert.That(Array.FindIndex(names, name => name == "head.png"), Is.LessThan(Array.FindIndex(names, name => name == "front.png")));
             Assert.That(SpriteDrawState.Color, Is.EqualTo(Color.white));
             Assert.That(SpriteDrawState.Matrix, Is.EqualTo(Matrix4x4.identity));
+        }
+
+        /// <summary>Checks the independently controlled original shooting clip is rendered rather than a perpetual idle head.</summary>
+        [Test]
+        public void ActiveChildClipAndOriginalOnceAndHoldTimeReachRendering()
+        {
+            var zombie = new Zombie { Kind = ZombieKind.Normal, ModeHead = 26, Health = 270, StartingHealth = 270,
+                PlantZombieState = new AdventurePlantZombieState(26) };
+            var actor = new AdventureActorRenderer(_renderer);
+            DrawActor(actor, zombie, "anim_walk", 0);
+            var idle = Head().Vertices[0];
+            zombie.PlantZombieState.Play("anim_shooting", 35, false, 0);
+            zombie.PlantZombieState.HeadSeconds = 10;
+            DrawActor(actor, zombie, "anim_walk", 0);
+            var shot = Head().Vertices[0];
+            Assert.That(shot.x - idle.x, Is.EqualTo(-.980066597f * 20).Within(.0001f));
+            Assert.That(-shot.y + idle.y, Is.EqualTo(.198669329f * 20).Within(.0001f));
         }
 
         /// <summary>Gets the renderer's actual submitted scene source commands.</summary>

@@ -75,7 +75,7 @@ namespace PlantsVsZombies.Simulation
         /// <param name="dt">The fixed native update duration.</param>
         internal void TickModeSpecialZombies(float dt)
         {
-            AdvanceHeadProjectiles(dt);
+            AdvanceHeadProjectiles();
             foreach (var zombie in new PooledSnapshot<Zombie>(_world.Zombies))
             {
                 var state = zombie.PlantZombieState;
@@ -164,9 +164,11 @@ namespace PlantsVsZombies.Simulation
                 _zombieFeedbackSystem.SynchronizeAdventureZombieRate(zombie), out var headX, out var headY);
             var x = (int)(AdventureZombieNativeRules.NativePositionX(zombie.X, AdventureDancerRules.Scale(zombie)) + headX - 9f);
             var y = (int)(_biteSystem.AdventureBiteNativeY(zombie, x) + headY + 6f - (subtractAltitude ? zombie.PresentationAltitude : 0f));
+            var level = _independentModeRunner.RequiredModeSession.Game.Adventure.Level;
             _independentModeRunner.RequiredModeSession.HeadShots.Add(new ModeHeadShot
             {
-                NativeX = x, PreviousNativeX = x, NativeY = y, X = (x - 40f) / 80f, Row = zombie.Row
+                NativeX = x, PreviousNativeX = x, NativeY = y, X = (x - 40f) / 80f, Row = zombie.Row,
+                NativeShadowY = 80 + zombie.Row * (level.HasPool || level.HasRoof ? 85 : 100) + 67
             });
             _zombieFeedbackSystem.RequestAdventureZombieFoley(3);
         }
@@ -229,15 +231,14 @@ namespace PlantsVsZombies.Simulation
         }
 
         /// <summary>Moves original backwards peas and applies their short-plant immunity and native collision rectangle.</summary>
-        /// <param name="dt">The fixed native update duration.</param>
-        private void AdvanceHeadProjectiles(float dt)
+        private void AdvanceHeadProjectiles()
         {
             var shots = _independentModeRunner.RequiredModeSession.HeadShots;
             for (var index = shots.Count - 1; index >= 0; index--)
             {
                 var shot = shots[index];
                 shot.PreviousNativeX = shot.NativeX;
-                shot.NativeX -= 3.33f * dt * 100;
+                shot.NativeX -= 3.33f;
                 shot.X = (shot.NativeX - 40) / 80;
                 Plant? target = null;
                 foreach (var plant in _world.Plants)
@@ -250,7 +251,7 @@ namespace PlantsVsZombies.Simulation
                     }
                     var rectangle = _biteSystem.AdventurePlantEatingRectangle(plant);
                     var overlap = Math.Min(shot.NativeX + 40, rectangle.X + rectangle.Width) - Math.Max(shot.NativeX - 15, rectangle.X);
-                    if (overlap > 8 && shot.NativeY < rectangle.Y + rectangle.Height && shot.NativeY + 40 > rectangle.Y)
+                    if (overlap > 8)
                     {
                         target = _boardQueries.AdventurePlantAt(plant.Row, plant.Column, PlantLayer.Armor)
                             ?? _boardQueries.AdventurePlantAt(plant.Row, plant.Column, PlantLayer.Main)
@@ -261,6 +262,14 @@ namespace PlantsVsZombies.Simulation
                 if (target != null)
                 {
                     target.Health -= shot.Damage;
+                    target.PresentationEatenFlashTicks = Math.Max(target.PresentationEatenFlashTicks, 25);
+                    _zombieFeedbackSystem.RequestAdventureZombieFoley(1);
+                    _world.Presentation.Impacts.Add(new AdventureImpact
+                    {
+                        Id = ++_world.Presentation._effectId, Seed = _world._random.Next(), Kind = PlantKind.Peashooter,
+                        X = shot.X, Row = shot.Row, NativeIcePoint = true,
+                        NativeParticleX = shot.NativeX - 3, NativeParticleY = shot.NativeY + 17
+                    });
                     if (target.Health <= 0)
                     {
                         _plantingSystem.RemoveAdventurePlantAndStack(target);

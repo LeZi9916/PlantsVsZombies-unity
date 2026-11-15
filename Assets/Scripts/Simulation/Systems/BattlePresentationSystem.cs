@@ -177,6 +177,12 @@ namespace PlantsVsZombies.Simulation
             {
                 var corpse = _world.Presentation.Corpses[i];
                 corpse.Age += dt;
+                var specialHead = corpse.RequiredZombie.PlantZombieState;
+                if (specialHead != null && !specialHead.HeadRemoved && !specialHead.Detached && !_world.Zombies.Contains(corpse.RequiredZombie))
+                {
+                    specialHead.HeadSeconds += dt;
+                    corpse.RequiredZombie.PresentationPlantHeadAge = specialHead.HeadSeconds;
+                }
                 if (corpse.RequiredZombie.UseLadderColumn >= 0 && corpse.RequiredZombie.PresentationNativeHeight == 7)
                 {
                     LadderSystem.AdvanceAdventureLadderFall(corpse.RequiredZombie);
@@ -279,6 +285,10 @@ namespace PlantsVsZombies.Simulation
                 _zombieFeedbackSystem.SynchronizeAdventureZombieAnimation(zombie);
                 zombie.PresentationFlash = Math.Max(0, zombie.PresentationFlash - dt);
                 zombie.PresentationArmorFlash = Math.Max(0, zombie.PresentationArmorFlash - dt);
+                if (zombie.PlantZombieState != null)
+                {
+                    zombie.PlantZombieState.ImmobilizedAtTickStart = zombie.FrozenRemaining > 0 || zombie.PresentationButter > 0;
+                }
                 var butterTicks = Math.Max(0, (int)Math.Round(zombie.PresentationButter * 100f) - 1);
                 zombie.PresentationButter = butterTicks * .01f;
                 _zombieFeedbackSystem.AdvanceAdventureZombieClock(zombie, dt);
@@ -642,6 +652,7 @@ namespace PlantsVsZombies.Simulation
                 Animation = zombie.PresentationAnimation,
                 FrozenSeconds = zombie.PresentationAnimationAge,
                 FrozenHeadSeconds = zombie.PresentationPlantHeadAge,
+                FrozenPlantHeadState = zombie.PlantZombieState?.Snapshot(),
                 RateScale = pose.Visual == global::PlantsVsZombies.Adventure.AdventureBurnVisual.CharredDefinition ? .9f + (float)_world._random.NextDouble() * .2f : 1f,
                 Duration = pose.Visual == global::PlantsVsZombies.Adventure.AdventureBurnVisual.FrozenOriginal ? 3f : float.PositiveInfinity
             });

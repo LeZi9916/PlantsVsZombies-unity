@@ -37,6 +37,8 @@ namespace PlantsVsZombies.Game
         private readonly Action<string, Matrix4x4, Matrix4x4, float> _zombieTrackAttachment;
         /// <summary>Retains the inherited complete-body color while a track submits its attached plant head.</summary>
         private Color _zombieInheritedColor;
+        /// <summary>Retains the child identity derived once from a changed parent identity.</summary>
+        private string _plantHeadKey = string.Empty;
         /// <summary>The retained notification inserting an original blink immediately after its attachment track.</summary>
         private readonly Action<string> _plantBlinkTrackDrawn;
         /// <summary>The original selected face or idle track at which the blink is attached.</summary>
@@ -249,6 +251,10 @@ namespace PlantsVsZombies.Game
                 : zombie.Kind == ZombieKind.Buckethead && zombie.ArmorHealth > 0 ? ZombieVariant.Buckethead
                 : zombie.Kind == ZombieKind.ScreenDoor && zombie.ShieldHealth > 0 ? ZombieVariant.ScreenDoor : ZombieVariant.Normal;
             _plantHead = zombie.ModeHead >= 26 && zombie.ModeHead <= 31;
+            if (_plantHead)
+            {
+                _plantHeadKey = zombie.PresentationPlantHeadKey ??= key + "-plant-head";
+            }
             _backwards = zombie.PresentationWalkingBackwards ?? (zombie.Hypnotized || zombie.Kind == ZombieKind.Digger && AdventureDiggerState.WalksBackwards(zombie));
             if (AdventureDancerRules.IsDancer(zombie))
             {
@@ -482,7 +488,8 @@ namespace PlantsVsZombies.Game
                 {
                     SpriteDrawState.Color = _zombieInheritedColor;
                     RequiredRenderer.DrawNativePlantHeadAttachment(_origin, _scale, _clip, _seconds, _rate,
-                        _zombie.ModeHead, _zombie.PresentationPlantHeadAge, _backwards, placement, boardTransform);
+                        _zombie.ModeHead, _zombie.PresentationPlantHeadAge, _backwards, placement, boardTransform,
+                        _zombie.PlantZombieState, _plantHeadKey);
                 }
                 finally
                 {

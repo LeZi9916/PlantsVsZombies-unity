@@ -355,6 +355,9 @@ namespace PlantsVsZombies.Simulation
         /// <summary>Gets the original independent animation and phase state of a plant-headed zombie.</summary>
         public global::PlantsVsZombies.Adventure.AdventurePlantZombieState? PlantZombieState { get; internal set; }
 
+        /// <summary>Retains the stable render identity of this actor's independently blended plant head.</summary>
+        internal string? PresentationPlantHeadKey;
+
         /// <summary>Stores mode head timer.</summary>
         internal float _modeHeadTimer = 1.5f;
         /// <summary>Stores mode portal cooldown.</summary>
