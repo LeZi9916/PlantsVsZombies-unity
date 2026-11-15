@@ -1120,3 +1120,21 @@ The flow fixtures use disposable profiles and the production Lawn host. GPU
 assertions compare native atlas cells and actual widget geometry, while source
 captures check original rendering resources. These runs do not establish
 native-executable pixel equivalence, packaged Players or other target devices.
+
+`ChallengeDirectoryTests` and `OriginalChallengeDirectoryTests` cover the PC
+mini-game and puzzle directories. Evidence is the unchanged executable's table
+at `0x74E490`, constructor `438EE0`, draw routines `43A780/439CB0`, and tooltip
+routine `43AD10` in the supplied `pvz-origin/analysis/ida/ui_challenge` materials.
+Both pages use the 22-cell `Challenge_Thumbnails` atlas, four rows at the native
+119-pixel pitch, finite trophies, and independent puzzle unlock chains. Normal
+pages hide the developer-only page tabs. Endless puzzle records use the original
+`LONGEST_STREAK` text and do not count toward the 18 puzzle trophies.
+
+```powershell
+./Tools/Tests/Run-UnityTests.ps1 -Platform EditMode -TestFilter 'ChallengeDirectoryTests;SurvivalPresentationTests'
+./Tools/Tests/Run-UnityTests.ps1 -Platform PlayMode -TestFilter 'OriginalChallengeDirectoryTests;OriginalSurvivalGraphicsTests.MenuUsesOriginalSurvivalArtworkAndWidgets;OriginalSurvivalGraphicsTests.LockedCardsAndReleaseSemanticsMatchPcDirectory'
+```
+
+The focused directory run passes 38 EditMode and four PlayMode cases with the
+original artwork and a real graphics device. These are native layout/resource
+checks, not executable screenshot pixel equivalence or target-device validation.

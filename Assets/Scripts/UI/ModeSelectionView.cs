@@ -16,37 +16,23 @@ namespace PlantsVsZombies.UI
     /// <summary>Defines mode selection view.</summary>
     public sealed class ModeSelectionView
     {
-        /// <summary>Stores titles.</summary>
-        private static readonly string[] s_titles =
-        {
-            "生存模式",
-            "小游戏",
-            "其他挑战",
-            "解谜模式"
-        };
         /// <summary>Stores texture.</summary>
         private readonly Func<string, SpriteImage?> _texture;
-        /// <summary>Stores font.</summary>
-        private readonly Font _font;
         /// <summary>Stores strings.</summary>
         private readonly Dictionary<string, string> _strings = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        /// <summary>Stores label.</summary>
-        private GUIStyle? _label;
         /// <summary>Stores category.</summary>
         private int _category;
-        /// <summary>Stores locked notice.</summary>
-        private string? _lockedNotice;
         /// <summary>Stores the original Layout.xml character-count split, with native zero meaning no automatic split.</summary>
-        private readonly int _survivalAutoWrap;
-        /// <summary>Reuses the original centered tooltip request for locked survival previews.</summary>
-        private readonly OriginalTooltipRequest _survivalTooltip = new OriginalTooltipRequest { Centered = true };
+        private readonly int _directoryAutoWrap;
+        /// <summary>Reuses the original centered tooltip request for locked challenge previews.</summary>
+        private readonly OriginalTooltipRequest _directoryTooltip = new OriginalTooltipRequest { Centered = true };
         /// <summary>Gets or sets the original locked-card tooltip key lookup.</summary>
         public Func<int, string>? LockTooltipKeyLookup { get; set; }
         /// <summary>Gets or sets the host-owned original tooltip renderer.</summary>
         public Func<OriginalTooltipRequest, bool>? TooltipRenderer { get; set; }
 
-        /// <summary>Stores the enabled survival button owning the current native press.</summary>
-        private int _pressedSurvivalButton = -1;
+        /// <summary>Stores the enabled challenge button owning the current native press.</summary>
+        private int _pressedDirectoryButton = -1;
         /// <summary>Gets whether the native survival directory is open.</summary>
         internal bool IsSurvivalPage => _category == 0;
         /// <summary>Gets or sets the PC 439C20 accomplishment distance for each challenge.</summary>
@@ -87,7 +73,6 @@ namespace PlantsVsZombies.UI
         public ModeSelectionView(string root, Func<string, SpriteImage?> textureLoader, Font displayFont)
         {
             _texture = textureLoader ?? throw new ArgumentNullException(nameof(textureLoader));
-            _font = displayFont;
             using var assets = SpriteAssetProvider.ForRoot(root);
             if (assets.TryReadText("properties/Layout.xml", out var layout))
             {
@@ -96,7 +81,7 @@ namespace PlantsVsZombies.UI
                     if ((string?)property.Attribute("id") == "CHALLENGE_SCREEN_BUTTON_AUTO_WRAP_NUM"
                         && int.TryParse(property.Value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var count))
                     {
-                        _survivalAutoWrap = Math.Max(0, count);
+                        _directoryAutoWrap = Math.Max(0, count);
                     }
                 }
             }
@@ -111,172 +96,39 @@ namespace PlantsVsZombies.UI
         /// <exception cref = "ArgumentOutOfRangeException">The operation cannot satisfy its preconditions.</exception>
         public void Open(int categoryIndex)
         {
-            if (categoryIndex < 0 || categoryIndex >= s_titles.Length)
+            if (categoryIndex < 0 || categoryIndex >= 4)
             {
                 throw new ArgumentOutOfRangeException(nameof(categoryIndex));
             }
 
             _category = categoryIndex;
             Closed = false;
-            _lockedNotice = null;
-            _pressedSurvivalButton = -1;
+            _pressedDirectoryButton = -1;
         }
 
         /// <summary>Performs handle click.</summary>
         /// <param name = "point">The point.</param>
         public void HandleClick(Vector2 point)
         {
-            if (IsSurvivalPage)
-            {
-                HandlePointer(point, PointerPhase.Down);
-                HandlePointer(point, PointerPhase.Up);
-                return;
-            }
-            if (_lockedNotice != null)
-            {
-                if (new Rect(310, 340, 180, 40).Contains(point))
-                {
-                    _lockedNotice = null;
-                }
-
-                return;
-            }
-
-            for (var i = 0; i < s_titles.Length; i++)
-            {
-                if (TabRect(i).Contains(point))
-                {
-                    _category = i;
-                    return;
-                }
-            }
-
-            if (new Rect(18, 568, 111, 26).Contains(point))
-            {
-                Closed = true;
-                return;
-            }
-
-            foreach (ChallengeModeDefinition mode in VerifiedDataCatalog.ChallengeModes)
-            {
-                if (mode.UiCategoryIndex != _category || !Playable(mode.Id) || !CardRect(mode).Contains(point))
-                {
-                    continue;
-                }
-
-                if (CanLaunch != null && !CanLaunch(mode.Id))
-                {
-                    _lockedNotice = LockReasonLookup == null ? "此挑战尚未解锁。" : LockReasonLookup(mode.Id);
-                    return;
-                }
-
-                if (LaunchRequested != null)
-                {
-                    LaunchRequested(mode.Id);
-                }
-
-                return;
-            }
+            HandlePointer(point, PointerPhase.Down);
+            HandlePointer(point, PointerPhase.Up);
         }
 
-        /// <summary>Performs draw.</summary>
+        /// <summary>Draws the original PC challenge directory for the selected category.</summary>
         public void Draw()
         {
-            if (IsSurvivalPage)
-            {
-                DrawSurvivalDirectory();
-                return;
-            }
-            DrawTexture("Challenge_Background.jpg", new Rect(0, 0, 800, 600));
-            var titleColor = new Color(220f / 255f, 220f / 255f, 220f / 255f);
-            if (OriginalCenteredLabel == null || !OriginalCenteredLabel(s_titles[_category], true, 400f, 58f, 560f, titleColor))
-            {
-                Label(new Rect(120, 28, 560, 58), s_titles[_category], 28, Color.white, TextAnchor.MiddleCenter, false);
-            }
-
-            var thumbnails = _texture("Challenge_Thumbnails.jpg");
-            foreach (ChallengeModeDefinition mode in VerifiedDataCatalog.ChallengeModes)
-            {
-                if (mode.UiCategoryIndex != _category || !Playable(mode.Id))
-                {
-                    continue;
-                }
-
-                var card = CardRect(mode);
-                var image = mode.Unidentified0x04;
-                if (thumbnails != null && image >= 0 && image < 22)
-                {
-                    CanvasUI.DrawTextureWithTexCoords(new Rect(card.x + 13, card.y + 4, 80, 65), thumbnails, new Rect(image / 22f, 0, 1f / 22f, 1));
-                }
-
-                DrawTexture(card.Contains(CanvasUI.PointerPosition) && (CanLaunch == null || CanLaunch(mode.Id)) ? "Challenge_Window_Highlight.png" : "Challenge_Window.png", new Rect(card.x - 6, card.y - 2, 118, 120));
-                var textColor = new Color(42f / 255f, 42f / 255f, 90f / 255f);
-                var name = Name(mode);
-                if (OriginalCenteredLabel == null || !OriginalCenteredLabel(name, false, card.x + 52f, card.y + 96f, 98f, textColor))
-                {
-                    Label(new Rect(card.x + 3, card.y + 70, card.width - 6, 39), name, 13, textColor, TextAnchor.MiddleCenter, true);
-                }
-
-                if (CanLaunch != null && !CanLaunch(mode.Id))
-                {
-                    DrawTexture("Challenge_Blank.png", new Rect(card.x + 13, card.y + 4, 80, 65));
-                    var lockImage = _texture("lock.png");
-                    if (lockImage != null)
-                    {
-                        CanvasUI.DrawTexture(new Rect(card.x + 32, card.y + 10, 40, 48), lockImage, ScaleMode.ScaleToFit, true);
-                    }
-                }
-
-                var record = ProgressLookup == null ? 0 : ProgressLookup(mode.Id);
-                if (record > 0)
-                {
-                    ModeCatalog.TryGet(mode.Id, out var definition);
-                    var complete = definition != null && !definition.Endless && (definition.Survival ? record >= (definition.Hard ? 10 : 5) : true);
-                    var progress = complete ? "已完成" : definition != null && definition.Endless ? "纪录 " + record : "旗帜 " + record;
-                    Label(new Rect(card.x - 3, card.y + 108, card.width + 6, 20), progress, 12, Color.yellow, TextAnchor.MiddleCenter, false);
-                }
-            }
-
-            var back = new Rect(18, 568, 111, 26);
-            OriginalUiWidgets.ImageButton(_texture, back, "Store_MainMenuButton.png", "Store_MainMenuButtonHighlight.png", "Store_MainMenuButtonDown.png", OriginalUiWidgets.Hovered(back), OriginalUiWidgets.Pressed(back));
-            Label(new Rect(18, 568, 111, 26), "返回主菜单", 14, Color.white, TextAnchor.MiddleCenter, false);
-            for (var i = 0; i < s_titles.Length; i++)
-            {
-                var tab = TabRect(i);
-                var text = OriginalUiWidgets.Hovered(tab) ? new Color(220f / 255f, 220f / 255f, 0) : new Color(1, 240f / 255f, 0);
-                if (!OriginalUiWidgets.Text(tab, s_titles[i], "BrianneTod12", text))
-                {
-                    Label(tab, s_titles[i], 16, text, TextAnchor.MiddleCenter, false);
-                }
-            }
-
-            if (_lockedNotice != null)
-            {
-                Fill(new Rect(0, 0, 800, 600), new Color(0, 0, 0, .5f));
-                OriginalUiWidgets.DialogFrame(_texture, new Rect(210, 185, 380, 260), true, false);
-                if (!OriginalUiWidgets.Text(new Rect(235, 235, 330, 88), _lockedNotice, "DwarvenTodcraft15", new Color(224f / 255f, 187f / 255f, 98f / 255f), true, true))
-                {
-                    Label(new Rect(235, 235, 330, 88), _lockedNotice, 20, Color.white, TextAnchor.MiddleCenter, true);
-                }
-
-                var okay = new Rect(310, 340, 180, 40);
-                OriginalUiWidgets.StoneButton(_texture, okay, OriginalUiWidgets.Hovered(okay), OriginalUiWidgets.Pressed(okay));
-                if (!OriginalUiWidgets.StoneLabel(okay, "知道了"))
-                {
-                    Label(okay, "知道了", 18, OriginalUiWidgets.StoneText, TextAnchor.MiddleCenter, false);
-                }
-            }
+            DrawDirectory();
         }
 
-        /// <summary>Preserves PC ButtonWidget press, release and drag-out semantics on the survival page.</summary>
+        /// <summary>Preserves PC ButtonWidget press, release and drag-out semantics on each challenge page.</summary>
         /// <param name="point">The original top-left logical pointer position.</param>
         /// <param name="phase">The ordered pointer transition.</param>
         public void HandlePointer(Vector2 point, PointerPhase phase)
         {
-            var button = SurvivalButtonAt(point);
+            var button = DirectoryButtonAt(point);
             if (phase == PointerPhase.Down)
             {
-                _pressedSurvivalButton = button;
+                _pressedDirectoryButton = button;
                 if (button >= 0)
                 {
                     ButtonPressed?.Invoke();
@@ -284,8 +136,8 @@ namespace PlantsVsZombies.UI
             }
             else if (phase == PointerPhase.Up)
             {
-                var pressed = _pressedSurvivalButton;
-                _pressedSurvivalButton = -1;
+                var pressed = _pressedDirectoryButton;
+                _pressedDirectoryButton = -1;
                 if (pressed < 0 || pressed != button)
                 {
                     return;
@@ -301,10 +153,10 @@ namespace PlantsVsZombies.UI
             }
         }
 
-        /// <summary>Finds an enabled native survival button without making locked cards clickable.</summary>
+        /// <summary>Finds an enabled native challenge button without making locked cards clickable.</summary>
         /// <param name="point">The logical pointer position.</param>
         /// <returns>The mode identifier, 100 for the back button, or minus one.</returns>
-        private int SurvivalButtonAt(Vector2 point)
+        private int DirectoryButtonAt(Vector2 point)
         {
             if (new Rect(18, 568, 111, 26).Contains(point))
             {
@@ -312,7 +164,7 @@ namespace PlantsVsZombies.UI
             }
             foreach (var mode in VerifiedDataCatalog.ChallengeModes)
             {
-                if (mode.Id <= 15 && CardRect(mode).Contains(point) && (CanLaunch == null || CanLaunch(mode.Id)))
+                if (mode.UiCategoryIndex == _category && Playable(mode.Id) && CardRect(mode).Contains(point) && (CanLaunch == null || CanLaunch(mode.Id)))
                 {
                     return mode.Id;
                 }
@@ -320,16 +172,17 @@ namespace PlantsVsZombies.UI
             return -1;
         }
 
-        /// <summary>Draws PC 43A780/439CB0 using the unchanged fifteen-entry PC challenge table.</summary>
-        private void DrawSurvivalDirectory()
+        /// <summary>Draws PC 43A780/439CB0 using the unchanged PC challenge table.</summary>
+        private void DrawDirectory()
         {
             DrawTexture("Challenge_Background.jpg", new Rect(0, 0, 800, 600));
             var titleColor = new Color(220f / 255f, 220f / 255f, 220f / 255f);
-            DrawDirectoryText(Text("PICK_AREA"), true, 400, 58, 560, titleColor);
+            DrawDirectoryText(Text(_category == 0 ? "PICK_AREA" : _category == 3 ? "SCARY_POTTER" : "PICK_CHALLENGE"), true, 400, 58, 560, titleColor);
             var trophies = 0;
-            for (var id = 1; id <= 10; id++)
+            var total = _category == 0 ? 10 : _category == 3 ? 18 : 20;
+            foreach (var mode in VerifiedDataCatalog.ChallengeModes)
             {
-                if ((ProgressLookup?.Invoke(id) ?? 0) >= (id <= 5 ? 5 : 10))
+                if (mode.UiCategoryIndex == _category && IsBeaten(mode.Id, ProgressLookup?.Invoke(mode.Id) ?? 0))
                 {
                     trophies++;
                 }
@@ -339,7 +192,7 @@ namespace PlantsVsZombies.UI
             if (first >= 0)
             {
                 counter = counter.Substring(0, first) + trophies + counter.Substring(first + 2);
-                counter = counter.Replace("%d", "10");
+                counter = counter.Replace("%d", total.ToString(CultureInfo.InvariantCulture));
             }
             OriginalUiWidgets.TextAtBaseline(counter, 739, 73, 110, "DwarvenTodcraft15", new Color(1f, 240f / 255f, 0f));
             var trophy = _texture("trophy.png");
@@ -349,13 +202,13 @@ namespace PlantsVsZombies.UI
             }
             foreach (var mode in VerifiedDataCatalog.ChallengeModes)
             {
-                if (mode.Id <= 15)
+                if (mode.UiCategoryIndex == _category)
                 {
-                    DrawSurvivalCard(mode);
+                    DrawDirectoryCard(mode);
                 }
             }
             var back = new Rect(18, 568, 111, 26);
-            var down = _pressedSurvivalButton == 100 && back.Contains(CanvasUI.PointerPosition);
+            var down = _pressedDirectoryButton == 100 && back.Contains(CanvasUI.PointerPosition);
             OriginalUiWidgets.ImageButton(_texture, back, "SeedChooser_Button2.png", "SeedChooser_Button2_Glow.png", "SeedChooser_Button2_Glow.png", back.Contains(CanvasUI.PointerPosition), down);
             OriginalUiWidgets.TextAtBaseline(Text("BACK_TO_MENU"), back.center.x + (down ? 1 : 0), 586 + (down ? 1 : 0), 111,
                 "BrianneTod12", new Color(42f / 255f, 42f / 255f, 90f / 255f));
@@ -363,16 +216,16 @@ namespace PlantsVsZombies.UI
             {
                 foreach (var mode in VerifiedDataCatalog.ChallengeModes)
                 {
-                    if (mode.Id > 15 || CanLaunch == null || CanLaunch(mode.Id) || !CardRect(mode).Contains(CanvasUI.PointerPosition)
+                    if (mode.UiCategoryIndex != _category || CanLaunch == null || CanLaunch(mode.Id) || !CardRect(mode).Contains(CanvasUI.PointerPosition)
                         || (AccomplishmentsNeededLookup?.Invoke(mode.Id) ?? 2) > 1)
                     {
                         continue;
                     }
                     var card = CardRect(mode);
-                    _survivalTooltip.Title = Text(LockTooltipKeyLookup(mode.Id));
-                    _survivalTooltip.X = (int)card.center.x;
-                    _survivalTooltip.Y = (int)card.y;
-                    TooltipRenderer(_survivalTooltip);
+                    _directoryTooltip.Title = Text(LockTooltipKeyLookup(mode.Id));
+                    _directoryTooltip.X = (int)card.center.x;
+                    _directoryTooltip.Y = (int)card.y;
+                    TooltipRenderer(_directoryTooltip);
                     break;
                 }
             }
@@ -380,12 +233,12 @@ namespace PlantsVsZombies.UI
 
         /// <summary>Draws one native card, including blank distant locks, gray next locks and original record overlays.</summary>
         /// <param name="mode">The unchanged PC menu metadata.</param>
-        private void DrawSurvivalCard(ChallengeModeDefinition mode)
+        private void DrawDirectoryCard(ChallengeModeDefinition mode)
         {
             var card = CardRect(mode);
             var enabled = CanLaunch == null || CanLaunch(mode.Id);
             var over = enabled && card.Contains(CanvasUI.PointerPosition);
-            var down = over && _pressedSurvivalButton == mode.Id;
+            var down = over && _pressedDirectoryButton == mode.Id;
             var x = card.x + (down ? 1 : 0);
             var y = card.y + (down ? 1 : 0);
             var needed = enabled ? 0 : Math.Max(1, AccomplishmentsNeededLookup?.Invoke(mode.Id) ?? 1);
@@ -402,7 +255,15 @@ namespace PlantsVsZombies.UI
             var image = mode.Unidentified0x04;
             var single = image == 11 ? "endless_day.jpg" : image == 12 ? "endless_night.jpg"
                 : image == 13 ? "endless_fog.jpg" : image == 14 ? "endless_roof.jpg" : null;
-            if (single != null)
+            if (_category != 0)
+            {
+                var thumbnails = _texture("Challenge_Thumbnails.jpg");
+                if (thumbnails != null)
+                {
+                    CanvasUI.DrawTextureWithTexCoords(new Rect(x + 13, y + 4, 80, 65), thumbnails, new Rect(image / 22f, 0, 1f / 22f, 1));
+                }
+            }
+            else if (single != null)
             {
                 DrawTexture(single, new Rect(x + 13, y + 4, 80, 65));
             }
@@ -420,9 +281,9 @@ namespace PlantsVsZombies.UI
             var caption = enabled ? Name(mode) : Text("CHALLENGE_DISABLED_BUTTON");
             var split = caption.IndexOf('&');
             var separator = split >= 0 ? 1 : 0;
-            if (split < 0 && enabled && _survivalAutoWrap > 0 && caption.Length > _survivalAutoWrap)
+            if (split < 0 && enabled && _directoryAutoWrap > 0 && caption.Length > _directoryAutoWrap)
             {
-                split = _survivalAutoWrap;
+                split = _directoryAutoWrap;
             }
             if (split >= 0)
             {
@@ -442,16 +303,39 @@ namespace PlantsVsZombies.UI
                     CanvasUI.DrawTexture(new Rect(x + 24, y + 9, imageLock.Width * .7f, imageLock.Height * .7f), imageLock);
                 }
             }
-            else if (record >= (mode.Id <= 5 ? 5 : 10) && mode.Id <= 10)
+            else if (IsBeaten(mode.Id, record))
             {
                 DrawTexture("MiniGame_trophy.png", new Rect(x - 6, y - 2, 72, 71));
             }
             else if (record > 0)
             {
-                var flags = record == 1 ? Text("ONE_FLAG") : Text("COUNT_FLAGS").Replace("{COUNT}", record.ToString());
-                OriginalUiWidgets.TextAtBaseline(flags, x + 48, y + 48, 104, "ContinuumBold14Outline", Color.white);
-                OriginalUiWidgets.TextAtBaseline(flags, x + 48, y + 48, 104, "ContinuumBold14", Color.red);
+                if (mode.Id == 60 || mode.Id == 70)
+                {
+                    var streak = Text("LONGEST_STREAK").Replace("{STREAK}", record.ToString(CultureInfo.InvariantCulture));
+                    var bounds = new Rect(x, y + 15, 96, 200);
+                    OriginalUiWidgets.Text(bounds, streak, "ContinuumBold14Outline", Color.white, true, true, false);
+                    OriginalUiWidgets.Text(bounds, streak, "ContinuumBold14", Color.red, true, true, false);
+                }
+                else if (mode.Id <= 15)
+                {
+                    var flags = record == 1 ? Text("ONE_FLAG") : Text("COUNT_FLAGS").Replace("{COUNT}", record.ToString(CultureInfo.InvariantCulture));
+                    OriginalUiWidgets.TextAtBaseline(flags, x + 48, y + 48, 104, "ContinuumBold14Outline", Color.white);
+                    OriginalUiWidgets.TextAtBaseline(flags, x + 48, y + 48, 104, "ContinuumBold14", Color.red);
+                }
             }
+        }
+
+        /// <summary>Tests PC LawnApp::HasBeatenChallenge without awarding trophies to endless records.</summary>
+        /// <param name="id">The original challenge identifier.</param>
+        /// <param name="record">The persisted native record.</param>
+        /// <returns>Whether this finite challenge has its original trophy.</returns>
+        private static bool IsBeaten(int id, int record)
+        {
+            if (id <= 10)
+            {
+                return record >= (id <= 5 ? 5 : 10);
+            }
+            return record > 0 && !(id >= 11 && id <= 15 || id == 60 || id == 70);
         }
 
         /// <summary>Draws the original challenge title or wrapped card caption at its PC baseline.</summary>
@@ -501,14 +385,6 @@ namespace PlantsVsZombies.UI
         private static Rect CardRect(ChallengeModeDefinition mode)
         {
             return mode.UiCategoryIndex == 0 ? new Rect(38 + mode.UiGridColumn * 155, 125 + mode.UiGridRow * 145, 104, 115) : new Rect(38 + mode.UiGridColumn * 155, 93 + mode.UiGridRow * 119, 104, 115);
-        }
-
-        /// <summary>Performs tab rect.</summary>
-        /// <param name = "index">The index.</param>
-        /// <returns>The resulting tab rect.</returns>
-        private static Rect TabRect(int index)
-        {
-            return new Rect(100 * (index + 2), 540, 100, 75);
         }
 
         /// <summary>Performs name.</summary>
@@ -569,38 +445,5 @@ namespace PlantsVsZombies.UI
             }
         }
 
-        /// <summary>Performs fill.</summary>
-        /// <param name = "rect">The rect.</param>
-        /// <param name = "color">The color.</param>
-        private static void Fill(Rect rect, Color color)
-        {
-            var old = CanvasUI.Color;
-            CanvasUI.Color = color;
-            CanvasUI.DrawTexture(rect, Texture2D.whiteTexture);
-            CanvasUI.Color = old;
-        }
-
-        /// <summary>Performs label.</summary>
-        /// <param name = "rect">The rect.</param>
-        /// <param name = "text">The text.</param>
-        /// <param name = "size">The size.</param>
-        /// <param name = "color">The color.</param>
-        /// <param name = "alignment">The alignment.</param>
-        /// <param name = "wrap">The wrap.</param>
-        private void Label(Rect rect, string text, int size, Color color, TextAnchor alignment, bool wrap)
-        {
-            if (_label == null)
-            {
-                _label = new GUIStyle();
-            }
-
-            _label.font = _font;
-            _label.fontSize = size;
-            _label.fontStyle = FontStyle.Bold;
-            _label.alignment = alignment;
-            _label.wordWrap = wrap;
-            _label.normal.textColor = color;
-            CanvasUI.Label(rect, text, _label);
-        }
     }
 }

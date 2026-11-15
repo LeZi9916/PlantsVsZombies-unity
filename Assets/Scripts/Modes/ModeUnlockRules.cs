@@ -136,6 +136,28 @@ namespace PlantsVsZombies.Modes
             return needed;
         }
 
+        /// <summary>Resolves the PC 43AD10 tooltip for the next locked directory preview.</summary>
+        /// <param name="gameModeId">The original challenge identifier.</param>
+        /// <param name="finishedAdventure">Whether adventure has been completed.</param>
+        /// <returns>The unchanged LawnStrings tooltip key.</returns>
+        public static string LockTooltipKey(int gameModeId, bool finishedAdventure)
+        {
+            if (gameModeId >= 51 && gameModeId <= 70)
+            {
+                if (!finishedAdventure && (gameModeId == 54 || gameModeId == 64))
+                {
+                    return "FINISH_ADVENTURE_TOOLTIP";
+                }
+                return gameModeId <= 60 ? "ONE_MORE_SCARY_POTTER_TOOLTIP" : "ONE_MORE_IZOMBIE_TOOLTIP";
+            }
+            if (!finishedAdventure)
+            {
+                return "FINISH_ADVENTURE_TOOLTIP";
+            }
+            return gameModeId >= 11 && gameModeId <= 15 ? "10_SURVIVAL_TOOLTIP"
+                : gameModeId <= 15 ? "ONE_MORE_SURVIVAL_TOOLTIP" : "ONE_MORE_CHALLENGE_TOOLTIP";
+        }
+
         /// <summary>Performs lock reason.</summary>
         /// <param name = "gameModeId">The game mode id.</param>
         /// <param name = "finishedAdventure">The finished adventure.</param>

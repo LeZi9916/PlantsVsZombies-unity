@@ -141,8 +141,7 @@ namespace PlantsVsZombies.Modes
                 return _modeAccountSnapshot == null ? 2 : ModeUnlockRules.DirectoryAccomplishmentsNeeded(id, _modeHasFinishedAdventure, _modeAccountSnapshot.ModeRecord);
             };
             _owner.RequiredModeView.LockReasonLookup = ReadModeLockReason;
-            _owner.RequiredModeView.LockTooltipKeyLookup = id => !_modeHasFinishedAdventure ? "FINISH_ADVENTURE_TOOLTIP"
-                : id >= 11 && id <= 15 ? "10_SURVIVAL_TOOLTIP" : "ONE_MORE_SURVIVAL_TOOLTIP";
+            _owner.RequiredModeView.LockTooltipKeyLookup = id => ModeUnlockRules.LockTooltipKey(id, _modeHasFinishedAdventure);
             _owner.RequiredModeView.TooltipRenderer = request =>
             {
                 _owner._originalTooltip ??= new PlantsVsZombies.UI.OriginalTooltip();

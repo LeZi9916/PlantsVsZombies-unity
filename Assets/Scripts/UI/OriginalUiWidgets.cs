@@ -247,7 +247,8 @@ namespace PlantsVsZombies.UI
         /// <param name = "centered">The centered.</param>
         /// <param name = "wrap">The wrap.</param>
         /// <returns>The resulting text.</returns>
-        public static bool Text(Rect rect, string text, string originalFont, Color color, bool centered = true, bool wrap = false)
+        /// <param name="verticalCentered">Whether to center vertically instead of using the native wrapped-text top.</param>
+        public static bool Text(Rect rect, string text, string originalFont, Color color, bool centered = true, bool wrap = false, bool verticalCentered = true)
         {
             if (string.IsNullOrEmpty(text))
             {
@@ -281,7 +282,7 @@ namespace PlantsVsZombies.UI
             }
 
             var x = centered ? rect.center.x - layout.Width / 2f : rect.x;
-            var y = rect.center.y - layout.Height / 2f;
+            var y = verticalCentered ? rect.center.y - layout.Height / 2f : rect.y;
             font.Draw(layout, x, y, color);
             return true;
         }

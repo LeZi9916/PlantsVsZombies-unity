@@ -158,7 +158,7 @@ namespace PlantsVsZombies.Game
                 return;
             }
 
-            if (_owner._currentView == PvZGame.ScreenView.Modes && _owner.RequiredModeView.IsSurvivalPage
+            if (_owner._currentView == PvZGame.ScreenView.Modes
                 && !_owner._confirmingQuit && _owner._unavailableFeature == null)
             {
                 for (var index = 0; index < input.PhaseCount; index++)
