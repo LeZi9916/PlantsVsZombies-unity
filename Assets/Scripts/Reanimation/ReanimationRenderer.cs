@@ -701,7 +701,8 @@ namespace PlantsVsZombies.Reanimation
 
                 // PC shield groups and part overrides must also run on the common DrawInternal path.
                 // DrawNativePlayback/DrawZombiePlayback both enter here, including corpse playback.
-                var trackGroups = NativeZombieTrackGroups(asset);
+                var isCombatBody = IsNativeCombatBody(asset);
+                var trackGroups = NativeZombieTrackGroups(asset, isCombatBody);
                 for (var group = 0; group < trackGroups.Length; group++)
                 {
                     var indices = trackGroups[group];
@@ -709,13 +710,13 @@ namespace PlantsVsZombies.Reanimation
                     {
                         var trackIndex = indices[position];
                         var track = asset.Tracks[trackIndex];
-                        if (!IsTrackVisible(track, variant, equipmentIntact, trackVisible) || !NativeZombieTrackVisible(asset, track.Name))
+                        if (!IsTrackVisible(track, variant, equipmentIntact, trackVisible) || !NativeZombieTrackVisible(isCombatBody, track.Name))
                         {
                             continue;
                         }
 
-                        _nativeSpriteClip = NativePoolTrackClip(asset, track.Name, originalMatrix, previousSpriteClip);
-                        var from = GetFrame(track, current);
+                        _nativeSpriteClip = NativePoolTrackClip(asset, isCombatBody, track.Name, originalMatrix, previousSpriteClip);
+                        ref readonly var from = ref GetFrame(track, current);
                         var flagHand = flag != null && !cachedFlag && TrackIs(track.Name, "Zombie_flaghand");
                         if (from.Visibility < 0f || from.Texture == null && !flagHand)
                         {
@@ -754,9 +755,9 @@ namespace PlantsVsZombies.Reanimation
 
                             SpriteMatrix = sprite;
                             var alpha = originalColor.a * Math.Max(0f, Math.Min(1f, frame.Alpha));
-                            SpriteDrawState.Color = _nativeCombatZombie == null ? new Color(originalColor.r, originalColor.g, originalColor.b, alpha) : NativeZombieTrackColor(asset, track.Name, group, alpha);
+                            SpriteDrawState.Color = _nativeCombatZombie == null ? new Color(originalColor.r, originalColor.g, originalColor.b, alpha) : NativeZombieTrackColor(isCombatBody, track.Name, group, alpha);
                             var image = imageOverride != null && TrackIs(track.Name, overrideTrack) ? imageOverride : from.Texture;
-                            var nativeImage = NativeZombieImage(asset, track.Name, image);
+                            var nativeImage = NativeZombieImage(asset, isCombatBody, track.Name, image);
                             DrawTexturePart(nativeImage, nativeImage == image ? from.Texture.Width : nativeImage.Width, nativeImage == image ? from.Texture.Height : nativeImage.Height);
                             drawn = true;
                         }
@@ -1618,7 +1619,7 @@ namespace PlantsVsZombies.Reanimation
             for (var trackIndex = 0; trackIndex < asset.Tracks.Count; trackIndex++)
             {
                 var track = asset.Tracks[trackIndex];
-                var from = GetFrame(track, current);
+                ref readonly var from = ref GetFrame(track, current);
                 if (from.Visibility < 0f || from.Texture == null)
                 {
                     continue;
@@ -2096,7 +2097,8 @@ namespace PlantsVsZombies.Reanimation
 
             var time = SampleFrame(clip, seconds, fps, loop);
             var drawn = false;
-            var trackGroups = NativeZombieTrackGroups(asset);
+            var isCombatBody = IsNativeCombatBody(asset);
+            var trackGroups = NativeZombieTrackGroups(asset, isCombatBody);
             for (var group = 0; group < trackGroups.Length; group++)
             {
                 var indices = trackGroups[group];
@@ -2104,12 +2106,12 @@ namespace PlantsVsZombies.Reanimation
                 {
                     var trackIndex = indices[position];
                     var track = asset.Tracks[trackIndex];
-                    if (trackVisible != null && !trackVisible(track.Name) || !NativeZombieTrackVisible(asset, track.Name))
+                    if (trackVisible != null && !trackVisible(track.Name) || !NativeZombieTrackVisible(isCombatBody, track.Name))
                     {
                         continue;
                     }
 
-                    var from = GetFrame(track, time.Current);
+                    ref readonly var from = ref GetFrame(track, time.Current);
                     if (from.Visibility < 0f || from.Texture == null)
                     {
                         if (blend != null)
@@ -2137,9 +2139,9 @@ namespace PlantsVsZombies.Reanimation
 
                     SpriteMatrix = sprite;
                     var alpha = tint.a * Math.Max(0f, Math.Min(1f, frame.Alpha));
-                    SpriteDrawState.Color = _nativeCombatZombie == null ? new Color(tint.r, tint.g, tint.b, alpha) : NativeZombieTrackColor(asset, track.Name, group, alpha);
+                    SpriteDrawState.Color = _nativeCombatZombie == null ? new Color(tint.r, tint.g, tint.b, alpha) : NativeZombieTrackColor(isCombatBody, track.Name, group, alpha);
                     var image = imageOverride != null && TrackIs(track.Name, overrideTrack) ? imageOverride : from.Texture;
-                    var nativeImage = NativeZombieImage(asset, track.Name, image);
+                    var nativeImage = NativeZombieImage(asset, isCombatBody, track.Name, image);
                     var substituted = imageOverride != null && TrackIs(track.Name, overrideTrack);
                     DrawTexturePart(nativeImage, nativeImage == image && !substituted ? from.Texture.Width : nativeImage.Width, nativeImage == image && !substituted ? from.Texture.Height : nativeImage.Height);
                     drawn = true;
@@ -2424,9 +2426,9 @@ namespace PlantsVsZombies.Reanimation
         /// <param name = "track">The track.</param>
         /// <param name = "frame">The frame.</param>
         /// <returns>The resulting get frame.</returns>
-        private static Frame GetFrame(Track track, int frame)
+        private static ref readonly Frame GetFrame(Track track, int frame)
         {
-            return track.Frames[Math.Min(frame, track.Frames.Length - 1)];
+            return ref track.Frames[Math.Min(frame, track.Frames.Length - 1)];
         }
 
         /// <summary>Performs interpolate.</summary>
@@ -2434,7 +2436,7 @@ namespace PlantsVsZombies.Reanimation
         /// <param name = "to">The to.</param>
         /// <param name = "t">The t.</param>
         /// <returns>The resulting interpolate.</returns>
-        private static Frame Interpolate(Frame from, Frame to, float t)
+        private static Frame Interpolate(in Frame from, in Frame to, float t)
         {
             // The exporter already unwraps angles; do not use shortest-path angle interpolation.
             return new Frame
@@ -2476,7 +2478,7 @@ namespace PlantsVsZombies.Reanimation
         /// <summary>Performs part matrix.</summary>
         /// <param name = "frame">The frame.</param>
         /// <returns>The resulting part matrix.</returns>
-        private static Matrix4x4 PartMatrix(Frame frame)
+        private static Matrix4x4 PartMatrix(in Frame frame)
         {
             var x = frame.Kx * (Math.PI / 180d);
             var y = frame.Ky * (Math.PI / 180d);
@@ -2499,7 +2501,7 @@ namespace PlantsVsZombies.Reanimation
         /// <param name="frame">The final sampled pose, including any actor-specific blending.</param>
         /// <param name="track">The immutable source track retaining one bounded basis cache.</param>
         /// <returns>The same affine matrix as the uncached constructor for this exact pose.</returns>
-        private static Matrix4x4 PartMatrix(Frame frame, Track track)
+        private static Matrix4x4 PartMatrix(in Frame frame, Track track)
         {
             var input = track.BasisInput;
             if (!track.HasBasis || input.x != frame.Kx || input.y != frame.Ky
@@ -3969,19 +3971,35 @@ namespace PlantsVsZombies.Reanimation
         /// <returns>The track's water clip, or its inherited clip when PC ReanimIgnoreClipRect permits drawing outside it.</returns>
         private Rect? NativePoolTrackClip(Reanimation asset, string track, Matrix4x4 boardTransform, Rect? inherited)
         {
-            if (_nativeCombatZombie == null || !_nativeCombatBodyClipBottom.HasValue
-                || !AdventureZombieFeedbackRules.Same(asset.Name, _nativeCombatBody))
+            if (!_nativeCombatBodyClipBottom.HasValue)
+            {
+                return inherited;
+            }
+            return NativePoolTrackClip(asset, IsNativeCombatBody(asset), track, boardTransform, inherited);
+        }
+
+        /// <summary>Applies live pool clipping using the source-body association resolved once by the active draw.</summary>
+        /// <param name="asset">The parsed body or attachment supplying this track.</param>
+        /// <param name="isCombatBody">Whether this asset owns the current combat body's tracks.</param>
+        /// <param name="track">The current source-track name.</param>
+        /// <param name="boardTransform">The original board-to-target transform.</param>
+        /// <param name="inherited">The parent attachment's existing clip.</param>
+        /// <returns>The current track's water clip or unchanged inherited clip.</returns>
+        private Rect? NativePoolTrackClip(Reanimation asset, bool isCombatBody, string track, Matrix4x4 boardTransform, Rect? inherited)
+        {
+            var zombie = _nativeCombatZombie;
+            if (!isCombatBody || zombie == null || !_nativeCombatBodyClipBottom.HasValue)
             {
                 return inherited;
             }
 
             // PC 53FE40 exempts plain-body hands; swimmer initialization exempts its authored water tracks.
             // RiseFromGrave keeps whitewater2 exempt. ReanimReenableClipping restores every track for a kelp pull.
-            if (_nativeCombatZombie.PresentationNativeHeight != 3
+            if (zombie.PresentationNativeHeight != 3
                 && (TrackIs(track, "Zombie_snorkle_whitewater") || TrackIs(track, "Zombie_snorkle_whitewater2")
                     || TrackIs(track, "Zombie_dolphinrider_whitewater") || TrackIs(track, "Zombie_dolphinrider_dolphininwater")
-                    || IsZombie(asset) && (TrackIs(track, "Zombie_whitewater2") || _nativeCombatZombie.PresentationNativePhase != 14
-                        && (TrackIs(track, "Zombie_duckytube") && _nativeCombatZombie.PresentationNativePhase != 1
+                    || IsZombie(asset) && (TrackIs(track, "Zombie_whitewater2") || zombie.PresentationNativePhase != 14
+                        && (TrackIs(track, "Zombie_duckytube") && zombie.PresentationNativePhase != 1
                             || TrackIs(track, "Zombie_whitewater") || TrackIs(track, "Zombie_outerarm_hand") || TrackIs(track, "Zombie_innerarm3")))))
             {
                 return inherited;
@@ -4069,37 +4087,49 @@ namespace PlantsVsZombies.Reanimation
                 && matrix.m00 > 0f && matrix.m11 > 0f && matrix.m01 == 0f && matrix.m10 == 0f;
         }
 
+        /// <summary>Resolves the source-body association once for a synchronous body or attachment draw.</summary>
+        /// <param name="asset">The parsed source asset whose original case-insensitive identity is tested.</param>
+        /// <returns>Whether the source belongs to the active native combat body.</returns>
+        private bool IsNativeCombatBody(Reanimation asset)
+        {
+            return _nativeCombatZombie != null && AdventureZombieFeedbackRules.Same(asset.Name, _nativeCombatBody);
+        }
+
         /// <summary>Selects cached render groups using the live shield state only for its owning body asset.</summary>
         /// <param name="asset">The source body or attachment being sampled.</param>
+        /// <param name="isCombatBody">Whether the source owns the active combat body's live shield state.</param>
         /// <returns>Original source indices in native group order, or the unchanged full track order for attachments.</returns>
-        private int[][] NativeZombieTrackGroups(Reanimation asset)
+        private int[][] NativeZombieTrackGroups(Reanimation asset, bool isCombatBody)
         {
-            var shield = _nativeCombatZombie != null && AdventureZombieFeedbackRules.Same(asset.Name, _nativeCombatBody)
-                ? _nativeCombatShieldType : 0;
+            var shield = isCombatBody ? _nativeCombatShieldType : 0;
             return asset.NativeTrackGroups[shield];
         }
 
         /// <summary>Performs native zombie track visible.</summary>
-        /// <param name = "asset">The asset.</param>
+        /// <param name="isCombatBody">Whether the track belongs to the active combat body rather than an attachment.</param>
         /// <param name = "track">The track.</param>
         /// <returns>The resulting native zombie track visible.</returns>
-        private bool NativeZombieTrackVisible(Reanimation asset, string track)
+        private bool NativeZombieTrackVisible(bool isCombatBody, string track)
         {
-            if (_nativeCombatZombie == null || !AdventureZombieFeedbackRules.Same(asset.Name, _nativeCombatBody))
+            var zombie = _nativeCombatZombie;
+            if (!isCombatBody || zombie == null)
             {
                 return true;
             }
 
-            var kind = _nativeCombatZombie.ModeHead >= 26 ? _nativeCombatZombie.ModeHead : (int)_nativeCombatZombie.Kind;
-            return AdventureZombieEquipmentRules.TrackVisible(_nativeCombatZombie, track) && (!_nativeCombatZombie.PresentationArmLost || AdventureZombieFeedbackRules.ArmTrackVisible(kind, track)) && (!_nativeCombatZombie.Headless || AdventureZombiePartsRules.HeadTrackVisible(kind, track));
+            var kind = zombie.ModeHead >= 26 ? zombie.ModeHead : (int)zombie.Kind;
+            // Ordinary zombies have no helm/shield visibility tracks; their arm and head rules remain live below.
+            var equipmentVisible = zombie.Kind == ZombieKind.Normal || AdventureZombieEquipmentRules.TrackVisible(zombie, track);
+            return equipmentVisible && (!zombie.PresentationArmLost || AdventureZombieFeedbackRules.ArmTrackVisible(kind, track)) && (!zombie.Headless || AdventureZombiePartsRules.HeadTrackVisible(kind, track));
         }
 
         /// <summary>Performs native zombie image.</summary>
         /// <param name = "asset">The asset.</param>
+        /// <param name="isCombatBody">Whether this source owns the active body's part replacements.</param>
         /// <param name = "track">The track.</param>
         /// <param name = "original">The original.</param>
         /// <returns>The resulting native zombie image.</returns>
-        private SpriteImage NativeZombieImage(Reanimation asset, string track, SpriteImage original)
+        private SpriteImage NativeZombieImage(Reanimation asset, bool isCombatBody, string track, SpriteImage original)
         {
             if (_nativeCombatZombie == null)
             {
@@ -4107,10 +4137,17 @@ namespace PlantsVsZombies.Reanimation
             }
 
             var catapult = _nativeCombatZombie.CatapultState;
-            var equipment = catapult != null && AdventureZombieFeedbackRules.Same(asset.Name, _nativeCombatBody)
-                ? catapult.Image(track, original.SourceIdentity,
-                    AdventureZombieEquipmentRules.DamageIndex(_nativeCombatZombie.Health, (int)_nativeCombatZombie.StartingHealth))
-                : AdventureZombieEquipmentRules.Image(_nativeCombatZombie, asset.Name, _nativeCombatBody, track);
+            string? equipment = null;
+            if (catapult != null && isCombatBody)
+            {
+                equipment = catapult.Image(track, original.SourceIdentity,
+                    AdventureZombieEquipmentRules.DamageIndex(_nativeCombatZombie.Health, (int)_nativeCombatZombie.StartingHealth));
+            }
+            else if (_nativeCombatZombie.Kind != ZombieKind.Normal || _nativeCombatZombie.ModeHead == 27 || _nativeCombatZombie.ModeHead == 31)
+            {
+                // The common unarmored kind has no equipment substitutions, except the two native plant-head helms.
+                equipment = AdventureZombieEquipmentRules.Image(_nativeCombatZombie, asset.Name, _nativeCombatBody, track);
+            }
             if (equipment != null)
             {
                 EnsureNativeAtlas();
@@ -4123,7 +4160,7 @@ namespace PlantsVsZombies.Reanimation
             }
 
             var kind = _nativeCombatZombie.ModeHead >= 26 ? _nativeCombatZombie.ModeHead : (int)_nativeCombatZombie.Kind;
-            var replacement = AdventureZombieFeedbackRules.Same(asset.Name, _nativeCombatBody) ? AdventureZombieFeedbackRules.ArmReplacement(kind, track) : null;
+            var replacement = isCombatBody ? AdventureZombieFeedbackRules.ArmReplacement(kind, track) : null;
             if ((kind == 1 || kind == 33) && AdventureZombieFeedbackRules.Same(track, "Zombie_flag"))
             {
                 replacement = "IMAGE_REANIM_ZOMBIE_FLAG3";
@@ -4139,17 +4176,17 @@ namespace PlantsVsZombies.Reanimation
         }
 
         /// <summary>Preserves the dolphin's original water-track color overrides independently of its body feedback.</summary>
-        /// <param name="asset">The source definition supplying this track.</param>
+        /// <param name="isCombatBody">Whether the source track belongs to the active dolphin body or an attachment.</param>
         /// <param name="track">The original source track name.</param>
         /// <param name="group">The native body or shield render group.</param>
         /// <param name="alpha">The source track's current alpha.</param>
         /// <returns>The original track tint, including the caller's inherited color and opacity.</returns>
-        private Color NativeZombieTrackColor(Reanimation asset, string track, int group, float alpha)
+        private Color NativeZombieTrackColor(bool isCombatBody, string track, int group, float alpha)
         {
             // PC SetupWaterTrack 552CC0 sets IgnoreColorOverride and IgnoreExtraAdditiveColor as well as IgnoreClipRect.
             // DragUnder restores only clipping; these two color exclusions remain active for both original water tracks.
             if (_nativeCombatZombie?.Kind == ZombieKind.DolphinRider
-                && AdventureZombieFeedbackRules.Same(asset.Name, _nativeCombatBody)
+                && isCombatBody
                 && (TrackIs(track, "Zombie_dolphinrider_whitewater") || TrackIs(track, "Zombie_dolphinrider_dolphininwater")))
             {
                 _nativeTrackAdditive = Color.clear;
@@ -4414,7 +4451,7 @@ namespace PlantsVsZombies.Reanimation
         /// <param name = "pass">The pass.</param>
         /// <param name = "matrix">The matrix.</param>
         /// <param name="combineHit">Whether normal alpha and source-textured hit addition share one draw.</param>
-        private void DrawNativeSpritePass(SpriteImage texture, float width, float height, Rect uv, int pass, Matrix4x4 matrix, bool combineHit = false)
+        private void DrawNativeSpritePass(SpriteImage texture, float width, float height, Rect uv, int pass, in Matrix4x4 matrix, bool combineHit = false)
         {
             if (_recordingThumbnail != null)
             {

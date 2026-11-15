@@ -141,6 +141,7 @@ namespace PlantsVsZombies.Rendering
             }
         }
         /// <summary>Gets the synchronized retained logical commands for source diagnostics.</summary>
+        /// <remarks>Command slots and their diagnostic arrays are reused; copy values needed across later submissions.</remarks>
         internal IReadOnlyList<ObjectSprite> SubmittedSprites
         {
             get
@@ -463,7 +464,7 @@ namespace PlantsVsZombies.Rendering
         /// <param name="combineHit">Whether to fuse an adjacent source-color hit.</param>
         /// <exception cref="ObjectDisposedException">The renderer is disposed.</exception>
         /// <exception cref="ArgumentOutOfRangeException">The blend operation or source sorting range is invalid.</exception>
-        internal void EnqueueQuad(SpriteImage image, float width, float height, Rect uv, Matrix4x4 matrix, Color color,
+        internal void EnqueueQuad(SpriteImage image, float width, float height, Rect uv, in Matrix4x4 matrix, Color color,
             int mode, float grayscale = 0f, float producerAdditive = 0f, float additive = 0f,
             Color addColor = default, Rect? clipOverride = null, bool combineHit = false)
         {
@@ -589,7 +590,7 @@ namespace PlantsVsZombies.Rendering
                 command.AddColor.b + command.Additive, 0f);
             for (var index = command.FirstRegion; index < command.FirstRegion + command.RegionCount; index++)
             {
-                var result = arena.Results[index];
+                ref readonly var result = ref arena.CompletedResults[index];
                 if (result.Count < 3 || result.Area == 0f)
                 {
                     continue;
@@ -604,15 +605,9 @@ namespace PlantsVsZombies.Rendering
                 var opaque = arena.Opaque[index];
                 var material = GetMaterial(arena.Textures[index]!, opaque ? 2 : command.Mode == 1 || command.Mode == 2 ? 1 : 0);
                 var batch = GetBatch(material, order, result.Count, opaque);
-                var firstVertex = batch.VertexCount;
                 var depth = -order / 32768f;
-                for (var vertexIndex = 0; vertexIndex < result.Count; vertexIndex++)
-                {
-                    var vertex = arena.Vertices[result.Offset + vertexIndex];
-                    batch.AddVertex(new Vector3(vertex.Position.x, -vertex.Position.y, depth), vertex.Coordinates,
-                        command.Color, effects, highlight);
-                }
-                batch.CompletePolygon(firstVertex, result.Count, order);
+                batch.AppendClippedPolygon(arena.CompletedVertices, result.Offset, result.Count, depth,
+                    command.Color, effects, highlight, order);
                 _vertexCount += result.Count;
                 _triangleCount += result.Count - 2;
                 _coveredPixelArea += result.Area;
@@ -816,15 +811,7 @@ namespace PlantsVsZombies.Rendering
             var sprite = _sprites[_used++];
             sprite.GameObject = node;
             sprite.SourceImage = image;
-            var depth = -order / 32768f;
-            SetCorner(sprite, 0, matrix, 0f, 0f, depth, color);
-            SetCorner(sprite, 1, matrix, width, 0f, depth, color);
-            SetCorner(sprite, 2, matrix, width, height, depth, color);
-            SetCorner(sprite, 3, matrix, 0f, height, depth, color);
-            sprite.TextureCoordinates[0] = new Vector2(uv.xMin, uv.yMax);
-            sprite.TextureCoordinates[1] = new Vector2(uv.xMax, uv.yMax);
-            sprite.TextureCoordinates[2] = new Vector2(uv.xMax, uv.yMin);
-            sprite.TextureCoordinates[3] = new Vector2(uv.xMin, uv.yMin);
+            sprite.RecordGeometry(width, height, uv, in matrix, color, -order / 32768f);
             sprite.Mode = mode;
             sprite.Grayscale = grayscale;
             sprite.ProducerAdditive = producerAdditive;
@@ -1136,22 +1123,6 @@ namespace PlantsVsZombies.Rendering
                 2 => point.y - clip.yMin,
                 _ => clip.yMax - point.y
             };
-        }
-
-        /// <summary>Writes one transformed pixel-space corner using Unity's upward-positive coordinates.</summary>
-        /// <param name = "sprite">The reusable quad receiving the corner.</param>
-        /// <param name = "index">The corner to replace.</param>
-        /// <param name = "matrix">The source-to-destination pixel transform.</param>
-        /// <param name = "x">The source horizontal coordinate.</param>
-        /// <param name = "y">The source vertical coordinate.</param>
-        /// <param name = "color">The vertex tint.</param>
-        /// <param name="depth">The depth preserving the original painter order across render queues.</param>
-        private static void SetCorner(ObjectSprite sprite, int index, in Matrix4x4 matrix, float x, float y, float depth, Color color)
-        {
-            var destinationX = (matrix.m00 * x) + (matrix.m01 * y) + matrix.m03;
-            var destinationY = (matrix.m10 * x) + (matrix.m11 * y) + matrix.m13;
-            sprite.Vertices[index] = new Vector3(destinationX, -destinationY, depth);
-            sprite.Colors[index] = color;
         }
 
         /// <summary>Changes visibility of the active commands while leaving unused pool slots disabled.</summary>

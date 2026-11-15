@@ -1,5 +1,141 @@
 # Presentation CPU performance
 
+The fourth pass brings **all eight benchmark states above the original 30%
+mean/P95 reduction target** in the final three paired trials. Dense combat
+improves by 32.4%-33.3% in mean and 33.4%-34.1% in P95 versus the initial
+presentation implementation. The completed cooldown optimization is preserved:
+warmed cooldown captures remain zero and pixels remain identical.
+
+## Fourth pass: dense combat and submission overhead
+
+The baseline for incremental gains is `2dbac57`; cumulative gains use the same
+original presentation source snapshot as earlier passes. No simulation code,
+source artwork, shader, scene or existing asset GUID changes in this pass.
+
+- GPU geometry is still generated and uploaded every presentation. Only the
+  separate `ObjectSprite` diagnostic corner/UV/color expansion is deferred until
+  a diagnostic getter is read. Source identity, blend/clip/effect metadata remain
+  immediate, as does the independent live `SpriteHierarchySprite` Inspector.
+  Each source snapshots six affine coefficients and its logical parameters.
+  The same three arrays are reused; diagnostic arrays are borrowed until the next
+  source submission, and cross-frame snapshots must copy them. Existing consumers
+  follow that lifetime contract. Original float-expression order is retained.
+- Completed polygons write their five shared attribute buffers in one block,
+  instead of passing large repeated attribute values through one call per vertex.
+  Capacity checks, Float32 data, fan indices and the 65532-vertex UInt16 limit stay
+  intact. The immediate renderer remains the independent geometry/pixel oracle.
+- Numeric geometry now writes a compact prefix with offsets accumulated from
+  actual polygon counts. Zero-vertex regions do not advance the prefix. After
+  synchronous Managed/Burst execution, bounded result and valid vertex prefixes
+  are copied once to managed mirrors, avoiding per-vertex native safety reads
+  during mesh assembly. Owner changes, 1024-region chunks and failure cleanup
+  retain the original ordering and lifecycle.
+- Sampling resolves combat-body ownership once per source draw while retaining
+  case-insensitive names and attachment isolation. Ordinary zombies bypass only
+  equipment rules that always return true/null; missing-arm/head rules remain
+  live, and ModeHead 27/31 plant-head helms and catapult overrides are preserved.
+  Special equipment rules continue through their original implementations.
+- Immutable source frame elements and matrix parameters use read-only references
+  between sampling/submission helpers. Blended current poses, deferred commands,
+  numeric region inputs, Inspector state and diagnostic records still take owned
+  value snapshots before a caller can change state. No animation rate or update
+  frequency is reduced.
+- Stable imitation-card inner captures now use the existing static interface
+  cache with resolved target ID, grayscale, Rect and inherited color in their
+  signature. The outer Imitater cooldown mask remains uncached: base/mask color
+  changes still invalidate and rewrite the shared inner surface as before.
+  Stable no-mask cards reuse pixels; prices stay outside the capture and live.
+
+### Memory tradeoff
+
+The numeric arena retains about **204 KiB** of additional managed numeric mirrors,
+with unchanged native capacity. Diagnostic snapshots add approximately **72 bytes
+per pooled source slot** (about 110 KiB at 1563 slots), bounded by the existing
+source pool. The three diagnostic arrays keep their original allocation policy
+and identity. This is a CPU/memory tradeoff, not a zero-memory-growth claim.
+No new warmed per-frame managed allocations are observed.
+
+### Final paired measurements
+
+The same Unity 6000.3.17f1, Apple M4 / macOS 27.2 / Metal environment, 800x600
+target and 640x480 screen viewport were used. Every state warms 120 frames and
+measures 900 complete Present calls. Original, previous and current sources use
+identical simulation/assets/fixtures; run order reverses in the second trial.
+Deep Profile and phase markers are disabled. The following reductions are the
+median of the three paired ratios, rather than ratios of independent medians.
+
+| Workload | Cumulative mean reduction | Cumulative P95 reduction | Additional mean reduction | Additional P95 reduction |
+| --- | ---: | ---: | ---: | ---: |
+| combat / Normal | 33.3% | 33.4% | 12.9% | 12.7% |
+| combat / Hit feedback | 32.5% | 33.9% | 12.4% | 12.6% |
+| combat / Chilled | 32.4% | 34.1% | 12.8% | 12.2% |
+| roof / Normal | 34.1% | 32.1% | 7.3% | 4.4% |
+| roof / Cooldown masks | 61.7% | 61.1% | 9.5% | 12.7% |
+| roof / Selected card | 40.4% | 41.6% | 10.2% | 15.8% |
+| roof / Imitater | 38.8% | 38.3% | 19.1% | 18.9% |
+| roof / Paused | 32.8% | 32.4% | 8.3% | 8.4% |
+
+All 48 paired PNG comparisons (current against original and previous, eight
+states, three trials) are byte-identical. Active source count, vertices, batches,
+final population/time/match state match. Whole-Present allocation-event counts
+remain unchanged. The cooldown state still performs **zero captures after
+warmup**; the no-mask imitation state now also performs zero warmed captures.
+The eight previously retained cooldown surfaces and their invalidation rules
+remain unchanged.
+
+Host activity increased late in the final run: the main Editor process became
+CPU-active, and original normal-combat trial means ranged from about 3.04 to
+3.99 ms. The paired raw ratios and run order are preserved, rather than dropping
+slower runs or treating these absolute times as a Player budget. An earlier,
+more stable complete three-trial sequence before the final imitation-card cache
+already measured dense combat at 31.9%-32.4% mean and 31.0%-35.1% P95 cumulative
+reduction. This remains Editor evidence, not a target-device guarantee.
+
+Accepted final evidence is `.unity-runs/present-cpu-v4/final-{original,v3,v4}-{combat,roof}-{1,2,3}`
+and `summary.json`; earlier `pilot-*`, `accepted-*`, `verified-*` and diagnostic
+runs document the implementation stages. All captures/logs/arrays remain ignored.
+Runtime sources are frozen during final timing; test-only evidence also records
+battle random draw counts for advancing-state comparisons.
+
+### Fourth-pass validation
+
+New tests cover unobserved/latest diagnostic poses, original formula equality,
+reused array identity, smaller source populations, warm zero allocation,
+compact mixed four/five/zero-vertex offsets, shorter/empty segments, case-insensitive
+combat bodies and same-named unrelated attachments. Equipment tests compare
+10 mode-head values, five health/armor/shield combinations and four arm/head
+states against the original pure rules, including explicit Wallnut/Tallnut crack
+images. The imitation oracle independently uses the old uncached inner capture;
+it checks no-mask/mask/no-mask transitions, target changes and actual source
+readiness. Its fixture includes the production `PeaShooterSingle` resource name.
+
+The final focused filters extend the previous suites with
+`ObjectSpriteDiagnosticsTests|ReanimationCombatAssociationTests` and the updated
+`SpriteGeometryBatchTests`, plus original catapult, bungee, digger, newspaper,
+ladder, magnet, Zomboni and bobsled graphics. Final focused results: **73 EditMode passed; 268 PlayMode passed, nine unchanged
+3100-event allocation failures, zero skipped**. The failure names and original
+baseline are documented below; no assertion was relaxed for them. The suite now
+includes the 21 newly added/extended sampling, geometry and imitation cases.
+Final logs/XML are `.unity-runs/present-cpu-v4/final-{EditMode,PlayMode}.{log,xml}`.
+Only validated code is retained; the unused compatibility-material gate experiment
+showed no reliable benefit and was reverted.
+
+An advancing comparison over 120 warm plus 900 deterministic 0.01-second steps
+ends at identical simulation time 10.200138, 25 plants, 47 zombies, Playing state
+and **866 battle random draws**. Final PNG bytes and main geometry are identical.
+This checks animation/cache transitions and behavior, not repeated active-match
+CPU performance. The benchmark records `FinalBattleRandomDrawCount` alongside
+population and match state for this purpose.
+
+The main Editor was observed running Play Mode and recording the Profiler during
+late measurements; it was left running. Its Console included font diagnostics
+and a Temp file-system timestamp check error, not a C# compilation error. This
+pass does not claim a completely clear main Console. Final isolated compilation
+and regression results are the validation evidence; Windows, target-platform
+Players, other ABIs and the full active game's performance remain **unverified**.
+
+## Third-pass history
+
 The latest pass meets the 30% mean/P95 target for the cooldown-mask workload:
 against the previous presentation commit `e348a94`, complete Present mean time
 falls **49.4%**, and P95 falls **48.8%**. This is a macOS/Metal Editor result for

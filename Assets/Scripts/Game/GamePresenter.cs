@@ -5857,7 +5857,8 @@ namespace PlantsVsZombies.Game
                         _cardAtlas = atlas;
                         _cardDestination = card;
                         _cardSource = source;
-                        _owner.RequiredAnimations.DrawNativeClipped(_presentationKeys.Get("imitater-card-", (int)card.x, (int)card.y), card, _drawCardImage, false, true);
+                        _owner.RequiredAnimations.DrawNativeCachedClipped(_presentationKeys.Get("imitater-card-", (int)card.x, (int)card.y),
+                            card, _drawCardImage, id, grayscale: true);
                     }
                     else
                     {
@@ -5877,8 +5878,8 @@ namespace PlantsVsZombies.Game
                         _cardThumbnailName = AdventurePlantAnimation(iconKind);
                         _cardThumbnailOrigin = origin;
                         _cardThumbnailScale = scale;
-                        _owner.RequiredAnimations.DrawNativeClipped(_presentationKeys.Get("imitater-card-", (int)card.x, (int)card.y),
-                            card, _drawCardThumbnail, grayscale: true);
+                        _owner.RequiredAnimations.DrawNativeCachedClipped(_presentationKeys.Get("imitater-card-", (int)card.x, (int)card.y),
+                            card, _drawCardThumbnail, id, grayscale: true);
                     }
                     else
                     {

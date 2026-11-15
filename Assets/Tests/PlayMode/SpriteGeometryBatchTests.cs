@@ -626,6 +626,52 @@ namespace PlantsVsZombies.Tests.PlayMode
             }
         }
 
+        /// <summary>Checks compact native output retains mixed polygon sizes and copies only the valid prefix.</summary>
+        /// <param name="executionValue">The managed or Burst numeric executor.</param>
+        [TestCase((int)SpriteGeometryExecution.Managed)]
+        [TestCase((int)SpriteGeometryExecution.Burst)]
+        public void CompactCompletedPrefixPreservesVisibleAndCulledRegionOffsets(int executionValue)
+        {
+            using var arena = new SpriteGeometryArena();
+            var input = new SpriteRegionInput
+            {
+                Matrix = Matrix4x4.identity, SourcePixels = new Rect(0f, 0f, 8f, 8f),
+                TextureUv = new Rect(0f, 0f, 1f, 1f), SourceUv = new Rect(0f, 0f, 1f, 1f),
+                ImageSize = new Vector2(8f, 8f), Size = new Vector2(8f, 8f),
+                Clip = new Rect(0f, 0f, 8f, 8f), ClipEnabled = true, PixelStepX = 1d, PixelStepY = 1d
+            };
+            arena.Inputs[0] = input;
+            input.Clip = new Rect(100f, 100f, 1f, 1f);
+            arena.Inputs[1] = input;
+            input.Clip = new Rect(0f, 0f, 10f, 8f);
+            input.Matrix.m01 = .5f;
+            arena.Inputs[2] = input;
+            arena.RegionCount = 3;
+            arena.Execute((SpriteGeometryExecution)executionValue);
+            Assert.That(arena.CompletedResults[0].Offset, Is.Zero);
+            Assert.That(arena.CompletedResults[0].Count, Is.EqualTo(4));
+            Assert.That(arena.CompletedResults[1].Offset, Is.EqualTo(4));
+            Assert.That(arena.CompletedResults[1].Count, Is.Zero);
+            Assert.That(arena.CompletedResults[2].Offset, Is.EqualTo(4));
+            Assert.That(arena.CompletedResults[2].Count, Is.EqualTo(5));
+            for (var index = 0; index < 9; index++)
+            {
+                Assert.That(arena.CompletedVertices[index].Position, Is.EqualTo(arena.Vertices[index].Position));
+                Assert.That(arena.CompletedVertices[index].Coordinates, Is.EqualTo(arena.Vertices[index].Coordinates));
+            }
+            // A later shorter segment must not expose stale descriptors or trailing native vertices.
+            input.Matrix = Matrix4x4.identity;
+            input.Clip = new Rect(0f, 0f, 4f, 8f);
+            arena.Inputs[0] = input;
+            arena.RegionCount = 1;
+            arena.Execute((SpriteGeometryExecution)executionValue);
+            Assert.That(arena.CompletedResults[0].Offset, Is.Zero);
+            Assert.That(arena.CompletedResults[0].Count, Is.EqualTo(4));
+            Assert.That(arena.CompletedResults[0].Area, Is.EqualTo(32f).Within(.0001f));
+            arena.RegionCount = 0;
+            Assert.DoesNotThrow(() => arena.Execute((SpriteGeometryExecution)executionValue));
+        }
+
         /// <summary>Checks a reused batch uploads only live array prefixes after shrinking and retains full precision.</summary>
         [Test]
         public void ReusedBatchDropsStaleVerticesIndicesAndColorsAfterShrinking()

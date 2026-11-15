@@ -299,6 +299,7 @@ namespace PlantsVsZombies.Tests.PlayMode
                     result.FinalPlantCount = owner._game.Plants.Count;
                     result.FinalZombieCount = owner._game.Zombies.Count;
                     result.FinalSimulationSeconds = owner._game.Elapsed;
+                    result.FinalBattleRandomDrawCount = owner._game.BattleRandomDrawCount;
                     result.FinalMatchState = owner._game.State.ToString();
                     result.PresentationSamples = (double[])cpuSamples.Clone();
                     result.UpdateAndPresentationSamples = (double[])totalSamples.Clone();
@@ -767,6 +768,8 @@ namespace PlantsVsZombies.Tests.PlayMode
             public int FinalZombieCount;
             /// <summary>The final simulation clock, allowing equivalent runs to be checked.</summary>
             public float FinalSimulationSeconds;
+            /// <summary>The final deterministic battle random draw counter, compared in advancing workloads.</summary>
+            public ulong FinalBattleRandomDrawCount;
             /// <summary>The terminal match state for the deterministic workload.</summary>
             public string FinalMatchState = "";
             /// <summary>The exact Editor version used by this run.</summary>

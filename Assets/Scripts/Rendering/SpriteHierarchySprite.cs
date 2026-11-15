@@ -31,7 +31,7 @@ namespace PlantsVsZombies.Rendering
         /// <param name="matrix">The complete source-to-target matrix.</param>
         /// <param name="color">The source tint and opacity.</param>
         /// <param name="mode">The original compositing mode.</param>
-        internal void Record(SpriteImage image, float width, float height, Rect uv, Matrix4x4 matrix, Color color, int mode)
+        internal void Record(SpriteImage image, float width, float height, Rect uv, in Matrix4x4 matrix, Color color, int mode)
         {
             SourceIdentity = image.SourceIdentity;
             LogicalSize = new Vector2(width, height);

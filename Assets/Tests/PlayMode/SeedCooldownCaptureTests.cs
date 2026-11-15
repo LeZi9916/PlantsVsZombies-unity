@@ -35,6 +35,22 @@ namespace PlantsVsZombies.Tests.PlayMode
         private Action<PlantKind, Rect> _drawPacket = null!;
         /// <summary>The original card-art method shared by the independent uncached reference.</summary>
         private Action<PlantKind, Rect, bool> _drawCard = null!;
+        /// <summary>Resolves original resource names without using the changed card composition implementation.</summary>
+        private Func<PlantKind, string> _animationName = null!;
+        /// <summary>The old uncached imitation callback retained for every reference frame.</summary>
+        private Func<bool> _drawReferenceImitater = null!;
+        /// <summary>The retained original imitation capture key names used without per-frame formatting.</summary>
+        private readonly PresentationKeyCache _referenceKeys = new PresentationKeyCache();
+        /// <summary>The immediately consumed static atlas for a reference imitation, or null for native artwork.</summary>
+        private SpriteImage? _referenceImitaterAtlas;
+        /// <summary>The atlas crop immediately consumed by the old imitation callback.</summary>
+        private Rect _referenceImitaterSource;
+        /// <summary>The resource immediately consumed by the old native imitation callback.</summary>
+        private string _referenceImitaterName = string.Empty;
+        /// <summary>The native origin immediately consumed by the old imitation callback.</summary>
+        private Vector2 _referenceImitaterOrigin;
+        /// <summary>The native scale immediately consumed by the old imitation callback.</summary>
+        private float _referenceImitaterScale;
         /// <summary>The production price method, outside the cached artwork itself.</summary>
         private Action<PlantKind, Rect> _drawCost = null!;
         /// <summary>The uncaptured reference mask callback retained across every frame.</summary>
@@ -85,6 +101,7 @@ namespace PlantsVsZombies.Tests.PlayMode
                 + "<track><name>anim_stem</name><t><f>0</f><x>4</x></t><t/><t/><t/></track>"
                 + "<track><name>body</name><t><i>IMAGE_REANIM_red</i><f>0</f></t><t/><t><f>-1</f></t><t/></track>"
                 + "<track><name>head</name><t><i>IMAGE_REANIM_green</i><x>8</x><y>8</y><f>-1</f></t><t/><t><f>0</f></t><t/></track>");
+            File.Copy(Path.Combine(reanim, "PeaShooter.reanim"), Path.Combine(reanim, "PeaShooterSingle.reanim"));
             File.WriteAllText(Path.Combine(reanim, "Sunflower.reanim"), "<fps>12</fps>" + marker
                 + "<track><name>body</name><t><i>IMAGE_REANIM_blue</i><x>4</x><y>2</y><f>0</f></t><t/></track>");
             var optionBytes = red.EncodeToPNG();
@@ -118,6 +135,8 @@ namespace PlantsVsZombies.Tests.PlayMode
             _drawPacket = (Action<PlantKind, Rect>)typeof(GamePresenter).GetMethod("DrawAdventurePacket", flags)!.CreateDelegate(typeof(Action<PlantKind, Rect>), _presenter);
             _drawCard = (Action<PlantKind, Rect, bool>)typeof(GamePresenter).GetMethod("DrawAdventureCard", flags)!.CreateDelegate(typeof(Action<PlantKind, Rect, bool>), _presenter);
             _drawCost = (Action<PlantKind, Rect>)typeof(GamePresenter).GetMethod("DrawAdventurePacketCost", flags)!.CreateDelegate(typeof(Action<PlantKind, Rect>), _presenter);
+            _animationName = (Func<PlantKind, string>)typeof(GamePresenter).GetMethod("AdventurePlantAnimation", BindingFlags.Static | BindingFlags.NonPublic)!.CreateDelegate(typeof(Func<PlantKind, string>));
+            _drawReferenceImitater = DrawReferenceImitater;
             _drawReferenceMask = DrawReferenceMask;
             _drawDirectMask = DrawDirectMask;
             _directMaskImage = SpriteImage.FromTexture(red);
@@ -190,15 +209,17 @@ namespace PlantsVsZombies.Tests.PlayMode
         public IEnumerator ImitaterTargetChangesPreserveNestedCapturePixels()
         {
             _kind = PlantKind.Imitater;
-            foreach (var target in new[] { PlantKind.Peashooter, PlantKind.Sunflower, PlantKind.CabbagePult, PlantKind.Peashooter })
+            foreach (var target in new[] { PlantKind.Peashooter, PlantKind.Sunflower, PlantKind.CabbagePult,
+                PlantKind.KernelPult, PlantKind.Peashooter })
             {
                 _owner.RequiredGame.Adventure.ImitaterTarget = target;
-                for (var repeat = 0; repeat < 3; repeat++)
+                foreach (var ticks in new[] { 0, 0, 500, 380, 0, 0, 260 })
                 {
-                    _cooldowns[(int)_kind] = 500 - repeat * 120;
+                    _cooldowns[(int)_kind] = ticks;
                     // Warm the production path first: the base and dark mask share an imitation capture key.
                     // A read-only outer capture must not change the inner surface's observable final pixels.
                     Draw(false);
+                    AssertImitationSourceReady();
                     yield return null;
                     yield return null;
                     yield return AssertMatchesReference();
@@ -266,6 +287,48 @@ namespace PlantsVsZombies.Tests.PlayMode
                 + ", cached production = " + cachedEvents + " (64 identical traversals each).");
         }
 
+        /// <summary>Retains the no-mask imitation image without adding capture renders or context allocation events.</summary>
+        [Test]
+        public void WarmNoMaskImitaterReusesItsInnerCaptureWithoutAdditionalAllocations()
+        {
+            _kind = PlantKind.Imitater;
+            _owner.RequiredGame.Adventure.ImitaterTarget = PlantKind.Peashooter;
+            _cooldowns[(int)_kind] = 0;
+            for (var warm = 0; warm < 32; warm++)
+            {
+                Draw(true);
+            }
+            using var allocations = new ProfilerRecorder(ProfilerCategory.Internal, "GC.Alloc", 2048,
+                ProfilerRecorderOptions.CollectOnlyOnCurrentThread);
+            Assert.That(allocations.Valid, Is.True);
+            allocations.Start();
+            for (var frame = 0; frame < 32; frame++)
+            {
+                Draw(true);
+            }
+            allocations.Stop();
+            var referenceEvents = allocations.Count;
+            for (var warm = 0; warm < 32; warm++)
+            {
+                Draw(false);
+            }
+            AssertImitationSourceReady();
+            var captures = _renderer.NativeCaptureRenderCount;
+            Assert.That(captures, Is.GreaterThan(0));
+            allocations.Reset();
+            allocations.Start();
+            for (var frame = 0; frame < 32; frame++)
+            {
+                Draw(false);
+            }
+            allocations.Stop();
+            var cachedEvents = allocations.Count;
+            Assert.That(_renderer.NativeCaptureRenderCount, Is.EqualTo(captures), "A warm no-mask imitation must not rerender its inner image.");
+            Assert.That(cachedEvents, Is.LessThanOrEqualTo(referenceEvents), "Imitation caching must add no events to the old packet-context path.");
+            TestContext.WriteLine("Warm no-mask imitation allocation events: uncached reference = " + referenceEvents
+                + ", cached production = " + cachedEvents + " (32 traversals each).");
+        }
+
         /// <summary>Isolates the retained capture path and requires zero allocations after complete warmup.</summary>
         [Test]
         public void WarmContextFreeCaptureCropChangesAllocateNoManagedMemory()
@@ -310,15 +373,34 @@ namespace PlantsVsZombies.Tests.PlayMode
         /// <returns>Frame boundaries before comparing the two completed screen targets.</returns>
         private IEnumerator AssertMatchesReference()
         {
-            _renderer.ReleaseNativeSurface("reference-cooldown");
-            Draw(true);
-            yield return null;
-            yield return null;
-            var expected = Capture();
-            Draw(false);
-            yield return null;
-            yield return null;
-            var actual = Capture();
+            Color32[] expected;
+            Color32[] actual;
+            if (_kind == PlantKind.Imitater)
+            {
+                // Read production first: the old inner capture deliberately uses the same logical key,
+                // so drawing the reference first would invalidate the cache and hide warm-hit mistakes.
+                Draw(false);
+                yield return null;
+                yield return null;
+                actual = Capture();
+                _renderer.ReleaseNativeSurface("reference-cooldown");
+                Draw(true);
+                yield return null;
+                yield return null;
+                expected = Capture();
+            }
+            else
+            {
+                _renderer.ReleaseNativeSurface("reference-cooldown");
+                Draw(true);
+                yield return null;
+                yield return null;
+                expected = Capture();
+                Draw(false);
+                yield return null;
+                yield return null;
+                actual = Capture();
+            }
             var maximum = 0;
             for (var index = 0; index < expected.Length; index++)
             {
@@ -336,6 +418,7 @@ namespace PlantsVsZombies.Tests.PlayMode
         {
             ObjectSpriteRenderer.BeginSceneFrame();
             CanvasUI.BeginFrame();
+            _referenceKeys.BeginFrame();
             var scale = Mathf.Min(Screen.width / 800f, Screen.height / 600f);
             CanvasUI.Matrix = Matrix4x4.TRS(new Vector3((Screen.width - 800f * scale) * .5f, (Screen.height - 600f * scale) * .5f),
                 Quaternion.identity, new Vector3(scale, scale, 1f));
@@ -373,7 +456,7 @@ namespace PlantsVsZombies.Tests.PlayMode
             {
                 var shade = visual.BaseColor / 255f;
                 CanvasUI.Color = new Color(previous.r * shade, previous.g * shade, previous.b * shade, previous.a);
-                _drawCard(_kind, _card, false);
+                DrawReferenceCard(_kind, _card);
                 if (visual.DrawMask)
                 {
                     CanvasUI.Color = new Color(previous.r * visual.MaskColor / 255f, previous.g * visual.MaskColor / 255f,
@@ -396,8 +479,67 @@ namespace PlantsVsZombies.Tests.PlayMode
         /// <returns>True after the packet artwork was submitted.</returns>
         private bool DrawReferenceMask()
         {
-            _drawCard(_kind, _card, false);
+            DrawReferenceCard(_kind, _card);
             return true;
+        }
+
+        /// <summary>Rejects missing native resources or failed inner captures before comparing imitation pixels.</summary>
+        private void AssertImitationSourceReady()
+        {
+            Assert.That(_renderer.LastError ?? string.Empty, Does.Not.Contain("not found"),
+                "The fixture must draw real source tracks instead of only comparing packet backgrounds.");
+            var field = typeof(ReanimationRenderer).GetField("_nativeSurfaces", BindingFlags.Instance | BindingFlags.NonPublic)!;
+            var surfaces = (IDictionary)field.GetValue(_renderer)!;
+            var key = _referenceKeys.Get("imitater-card-", (int)_card.x, (int)_card.y);
+            Assert.That(surfaces.Contains(key), Is.True, "The source imitation capture must have been created.");
+            var surface = surfaces[key]!;
+            var ready = surface.GetType().GetField("Ready", BindingFlags.Instance | BindingFlags.Public)!;
+            Assert.That((bool)ready.GetValue(surface)!, Is.True, "The native thumbnail or atlas image must produce a ready capture.");
+        }
+
+        /// <summary>Draws imitation card artwork through the original uncached inner capture, independent of production changes.</summary>
+        /// <param name="kind">The packet kind selecting ordinary or imitation artwork.</param>
+        /// <param name="card">The original native packet rectangle.</param>
+        private void DrawReferenceCard(PlantKind kind, Rect card)
+        {
+            if (kind != PlantKind.Imitater)
+            {
+                _drawCard(kind, card, false);
+                return;
+            }
+            var bank = _owner.Textures.LoadImage("seeds.png");
+            if (bank != null)
+            {
+                _renderer.DrawNativeImage(bank, card, new Rect(2f / 9f, 0f, 1f / 9f, 1f));
+            }
+            var target = _owner.RequiredGame.Adventure.RequiredImitaterTarget;
+            var id = (int)target;
+            var cell = AlmanacPortraitLayout.PlantAtlasCell(id);
+            _referenceImitaterAtlas = cell >= 0 ? _owner.Textures.LoadImage("packet_plants.png") : null;
+            if (_referenceImitaterAtlas != null)
+            {
+                _referenceImitaterSource = new Rect(cell / 13f, 0f, 1f / 13f, 1f);
+            }
+            else
+            {
+                AlmanacPortraitLayout.PlantThumbnailTransform(id, new Rect(0f, 0f, 50f, 70f), out var origin, out var scale);
+                _referenceImitaterOrigin = new Vector2(card.x + origin.x * card.width / 50f, card.y + origin.y * card.height / 70f);
+                _referenceImitaterScale = scale * card.width / 50f;
+                _referenceImitaterName = _animationName(target);
+            }
+            _renderer.DrawNativeClipped(_referenceKeys.Get("imitater-card-", (int)card.x, (int)card.y),
+                card, _drawReferenceImitater, grayscale: true);
+        }
+
+        /// <summary>Submits the currently selected old imitation artwork without any retained inner-capture optimization.</summary>
+        /// <returns>Whether native artwork or its static atlas image was submitted.</returns>
+        private bool DrawReferenceImitater()
+        {
+            if (_referenceImitaterAtlas != null)
+            {
+                return _renderer.DrawNativeImage(_referenceImitaterAtlas, _card, _referenceImitaterSource);
+            }
+            return _renderer.DrawNativeThumbnail(_referenceImitaterName, _referenceImitaterOrigin, _referenceImitaterScale);
         }
 
         /// <summary>Reads the completed native screen target while restoring the caller's active target.</summary>

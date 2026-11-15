@@ -242,7 +242,7 @@ namespace PlantsVsZombies.Rendering
         /// <param name="matrix">The complete source-to-target affine matrix.</param>
         /// <param name="color">The vertex tint and opacity.</param>
         /// <param name="mode">The source compositing mode.</param>
-        internal static void RecordCurrentSprite(SpriteImage image, float width, float height, Rect uv, Matrix4x4 matrix, Color color, int mode)
+        internal static void RecordCurrentSprite(SpriteImage image, float width, float height, Rect uv, in Matrix4x4 matrix, Color color, int mode)
         {
             if (s_currentMetadata != null)
             {

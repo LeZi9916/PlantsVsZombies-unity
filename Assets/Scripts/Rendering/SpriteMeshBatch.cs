@@ -116,12 +116,7 @@ namespace PlantsVsZombies.Rendering
         {
             if (_vertexCount == _vertices.Length)
             {
-                var capacity = Math.Min(MaximumVertexCount, _vertices.Length * 2);
-                Array.Resize(ref _vertices, capacity);
-                Array.Resize(ref _coordinates, capacity);
-                Array.Resize(ref _colors, capacity);
-                Array.Resize(ref _effects, capacity);
-                Array.Resize(ref _highlights, capacity);
+                GrowVertexBuffers(_vertexCount + 1);
             }
             var index = _vertexCount++;
             _vertices[index] = position;
@@ -130,6 +125,51 @@ namespace PlantsVsZombies.Rendering
             _effects[index] = effects;
             _highlights[index] = highlight;
             _dirty = true;
+        }
+
+        /// <summary>Appends a completed numeric polygon with one capacity check and one copy of its shared attributes.</summary>
+        /// <param name="vertices">The synchronously completed compact clipping output.</param>
+        /// <param name="offset">The first completed vertex of this polygon.</param>
+        /// <param name="count">The number of visible polygon vertices.</param>
+        /// <param name="depth">The original painter depth applied to every vertex.</param>
+        /// <param name="color">The full-precision source tint and opacity.</param>
+        /// <param name="effects">The grayscale, brightness, mode and fused-hit state.</param>
+        /// <param name="highlight">The source-colored highlight applied to every vertex.</param>
+        /// <param name="order">The original source painter order.</param>
+        internal void AppendClippedPolygon(SpriteClipVertex[] vertices, int offset, int count,
+            float depth, Color color, Vector4 effects, Vector4 highlight, int order)
+        {
+            var first = _vertexCount;
+            var required = first + count;
+            if (required > _vertices.Length)
+            {
+                GrowVertexBuffers(required);
+            }
+            for (var index = 0; index < count; index++)
+            {
+                var vertex = vertices[offset + index];
+                var target = first + index;
+                _vertices[target] = new Vector3(vertex.Position.x, -vertex.Position.y, depth);
+                _coordinates[target] = vertex.Coordinates;
+                _colors[target] = color;
+                _effects[target] = effects;
+                _highlights[target] = highlight;
+            }
+            _vertexCount = required;
+            CompletePolygon(first, count, order);
+            _dirty = true;
+        }
+
+        /// <summary>Grows all attribute buffers together only when a new population exceeds their retained capacity.</summary>
+        /// <param name="required">The populated vertex capacity required by the next complete polygon.</param>
+        private void GrowVertexBuffers(int required)
+        {
+            var capacity = Math.Min(MaximumVertexCount, Math.Max(required, _vertices.Length * 2));
+            Array.Resize(ref _vertices, capacity);
+            Array.Resize(ref _coordinates, capacity);
+            Array.Resize(ref _colors, capacity);
+            Array.Resize(ref _effects, capacity);
+            Array.Resize(ref _highlights, capacity);
         }
 
         /// <summary>Triangulates the last convex polygon without changing primitive order.</summary>

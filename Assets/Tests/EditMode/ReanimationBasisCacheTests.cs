@@ -17,8 +17,8 @@ namespace PlantsVsZombies.Tests.EditMode
             var owner = typeof(ReanimationRenderer);
             var frameType = owner.GetNestedType("Frame", BindingFlags.NonPublic)!;
             var trackType = owner.GetNestedType("Track", BindingFlags.NonPublic)!;
-            var uncached = owner.GetMethod("PartMatrix", BindingFlags.NonPublic | BindingFlags.Static, null, new[] { frameType }, null)!;
-            var cached = owner.GetMethod("PartMatrix", BindingFlags.NonPublic | BindingFlags.Static, null, new[] { frameType, trackType }, null)!;
+            var uncached = owner.GetMethod("PartMatrix", BindingFlags.NonPublic | BindingFlags.Static, null, new[] { frameType.MakeByRefType() }, null)!;
+            var cached = owner.GetMethod("PartMatrix", BindingFlags.NonPublic | BindingFlags.Static, null, new[] { frameType.MakeByRefType(), trackType }, null)!;
             var track = Activator.CreateInstance(trackType, true)!;
             var random = new System.Random(7529);
             for (var pose = 0; pose < 120; pose++)
