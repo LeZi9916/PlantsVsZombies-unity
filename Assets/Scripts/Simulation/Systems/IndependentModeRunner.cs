@@ -232,7 +232,7 @@ namespace PlantsVsZombies.Simulation
             a.CurrentWave = 0;
             a._finalAmbush = false;
             a.VaseStage = 2;
-            a._nextSkySun = 4.25f + (float)_world._random.NextDouble() * 2.75f;
+            a._nextSkySun = (425 + _world._random.Next(276)) * .01f;
             a._nextPacket = 4f;
             a._nextHammerSun = 8f;
             a.WaveCountdown = d.ChoosesSeeds ? 18f : 2f;

@@ -129,7 +129,7 @@ namespace PlantsVsZombies.Simulation
                 WaveCountdown = !level.IsReplay && level.Number == 2 ? 50f : level.Mode == AdventureMode.Bowling || level.Mode == AdventureMode.WhackAZombie || level.Mode == AdventureMode.LittleTrouble || level.Mode == AdventureMode.Storm || level.Mode == AdventureMode.Bungee ? 2f : 18f,
                 _nextPacket = 4f,
                 _nextSkySun = _world.Rules.DeferAdventureWaveInitialization ? 0f
-                    : !level.IsReplay && level.Number == 1 ? 7f : 4.25f + (float)_world._random.NextDouble() * 2.75f,
+                    : !level.IsReplay && level.Number == 1 ? 7f : (425 + _world._random.Next(276)) * .01f,
                 _nextHammerSun = 8f,
                 BossHealth = level.Mode == AdventureMode.Boss ? 40000f : 0f,
                 _bossTimer = 12f

@@ -147,10 +147,21 @@ namespace PlantsVsZombies.Simulation
             return sun;
         }
 
+        /// <summary>Creates a sky pickup after the scheduler has consumed its X and interval draws.</summary>
+        /// <param name="nativeX">The original top-left X coordinate selected by the sky scheduler.</param>
+        /// <returns>A sky sun with the native landing-height draw and motion.</returns>
+        internal global::PlantsVsZombies.Simulation.Sun CreateAdventurePresentationSkySun(float nativeX)
+        {
+            var sun = CreateSun(0f, 0f, 0f, 25);
+            AdventurePresentationSunSpawn(sun, null, nativeX);
+            return sun;
+        }
+
         /// <summary>Performs adventure presentation sun spawn.</summary>
         /// <param name = "sun">The sun.</param>
         /// <param name = "producer">The producer.</param>
-        internal void AdventurePresentationSunSpawn(global::PlantsVsZombies.Simulation.Sun sun, Plant? producer)
+        /// <param name="skyX">The sky X already drawn by the scheduler, or null for direct pickup construction.</param>
+        internal void AdventurePresentationSunSpawn(global::PlantsVsZombies.Simulation.Sun sun, Plant? producer, float? skyX = null)
         {
             var pitch = _adventureModeRunner.Adventure.Level.HasPool || _adventureModeRunner.Adventure.Level.HasRoof ? 85f : 100f;
             if (producer != null)
@@ -162,7 +173,7 @@ namespace PlantsVsZombies.Simulation
             }
 
             var kind = sun.Value == 15 ? global::PlantsVsZombies.Sun.SunKind.Small : sun.Value == 50 ? global::PlantsVsZombies.Sun.SunKind.Large : global::PlantsVsZombies.Sun.SunKind.Normal;
-            float x = 100 + _world._random.Next(550), y = 60;
+            float x = skyX ?? (100 + _world._random.Next(550)), y = 60;
             sun.PresentationMotion = global::PlantsVsZombies.Adventure.AdventureSunMotion.Sky;
             sun.PresentationFromPlant = false;
             sun.PresentationVelocityX = 0;

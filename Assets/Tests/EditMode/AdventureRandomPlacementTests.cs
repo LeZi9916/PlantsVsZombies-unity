@@ -101,6 +101,52 @@ namespace PlantsVsZombies.Tests.EditMode
             Assert.That(Invoke(game, "FindAdventureCatapultTarget", zombie), Is.SameAs(plant));
         }
 
+        /// <summary>Checks production uses native initial and repeat bounds before the pickup's own random motion.</summary>
+        /// <param name="kind">The production plant whose fixed timer was replaced.</param>
+        /// <param name="initialBound">The original initialization bound.</param>
+        /// <param name="initialBase">The original initialization base in ticks.</param>
+        [TestCase(PlantKind.SunShroom, 951, 300)]
+        [TestCase(PlantKind.Marigold, 2501, 0)]
+        public void ProductionIntervalsUseOriginalIntegerTickets(PlantKind kind, int initialBound, int initialBase)
+        {
+            foreach (var last in new[] { false, true })
+            {
+                var game = Board(19);
+                var random = AttachRandom(game, last);
+                var plant = (Plant)Invoke(game, "PlaceAdventurePlant", kind, 1, 2)!;
+                Assert.That(random.Bounds[0], Is.EqualTo(initialBound));
+                Assert.That(plant.ActionTimer, Is.EqualTo((initialBase + (last ? initialBound - 1 : 0)) * .01f));
+                random.Bounds.Clear();
+                plant.ActionTimer = .01f;
+                Invoke(game, "AdvanceAdventurePlants", .01f);
+                Assert.That(random.Bounds[0], Is.EqualTo(151));
+                Assert.That(plant.ActionTimer, Is.EqualTo(last ? 25f : 23.5f));
+            }
+        }
+
+        /// <summary>Checks sky X, integer interval and landing height draw order, including the native interval cap.</summary>
+        [Test]
+        public void SkySunUsesOriginalIntegerIntervalsAndDrawOrder()
+        {
+            foreach (var drops in new[] { 0, 51, 52, 100 })
+            {
+                foreach (var last in new[] { false, true })
+                {
+                    var game = Board(9);
+                    var random = AttachRandom(game, last);
+                    game.Adventure._skySunCount = drops;
+                    game.Adventure._nextSkySun = .01f;
+                    Invoke(game, "AdvanceAdventureEconomy", .01f);
+                    Assert.That(random.Bounds, Is.EqualTo(new[] { 550, 275, 250 }));
+                    Assert.That(game.Adventure._skySunCount, Is.EqualTo(drops + 1));
+                    Assert.That(game.Adventure._nextSkySun,
+                        Is.EqualTo((Math.Min(950, 425 + 10 * (drops + 1)) + (last ? 274 : 0)) * .01f));
+                    Assert.That(game.Suns[0].PresentationPickup!.X, Is.EqualTo(last ? 649f : 100f));
+                    Assert.That(game.Suns[0].PresentationLandingY, Is.EqualTo(last ? 549f : 300f));
+                }
+            }
+        }
+
         /// <summary>Creates a production board with distant waves and its real native seed bank.</summary>
         /// <param name="level">The original terrain and day/night fixture.</param>
         /// <returns>The playing deterministic board.</returns>

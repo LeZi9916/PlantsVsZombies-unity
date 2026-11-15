@@ -470,7 +470,7 @@ namespace PlantsVsZombies.Simulation
                 Layer = LayerFor(kind),
                 Health = kind == PlantKind.Wallnut || kind == PlantKind.Pumpkin ? 4000f : kind == PlantKind.TallNut ? 8000f : kind == PlantKind.Garlic ? 400f : 300f,
                 Asleep = Nocturnal(kind) && !_adventureModeRunner.Adventure.Level.IsNight,
-                ActionTimer = kind == PlantKind.PotatoMine ? 15f : kind == PlantKind.CherryBomb || kind == PlantKind.Jalapeno || kind == PlantKind.DoomShroom || kind == PlantKind.IceShroom ? 1f : kind == PlantKind.GraveBuster ? global::PlantsVsZombies.Adventure.AdventureGraveBusterRules.TotalSeconds : kind == PlantKind.Sunflower || kind == PlantKind.SunShroom ? 5f + (float)_world._random.NextDouble() * 2.5f : 0.5f,
+                ActionTimer = kind == PlantKind.PotatoMine ? 15f : kind == PlantKind.CherryBomb || kind == PlantKind.Jalapeno || kind == PlantKind.DoomShroom || kind == PlantKind.IceShroom ? 1f : kind == PlantKind.GraveBuster ? global::PlantsVsZombies.Adventure.AdventureGraveBusterRules.TotalSeconds : 0.5f,
                 IsSmall = false
             };
             // PC 46BE80 creates the free sleep animation before the launch counter and planting displacement.

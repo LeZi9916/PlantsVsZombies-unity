@@ -289,11 +289,11 @@ namespace PlantsVsZombies.Simulation
             {
                 if (p.ActionTimer <= 0.000001f)
                 {
+                    p.ActionTimer = (2350 + _world._random.Next(151)) * 0.01f;
                     _zombieFeedbackSystem.RequestAdventureZombieFoley(4);
                     _world.Suns.Add(_sunSystem.CreateAdventurePresentationSun(p, 25));
                     _world.Suns.Add(_sunSystem.CreateAdventurePresentationSun(p, 25));
                     p.ActionCount++;
-                    p.ActionTimer = (2350 + _world._random.Next(151)) * 0.01f;
                 }
 
                 return true;

@@ -47,8 +47,11 @@ namespace PlantsVsZombies.Simulation
                 a._nextSkySun -= dt;
                 if (a._nextSkySun <= 0f)
                 {
-                    _world.Suns.Add(_sunSystem.CreateAdventurePresentationSun(null, 25));
-                    a._nextSkySun = 4.25f + Math.Min(9.5f, a._skySunCount++ * 0.1f) + (float)_world._random.NextDouble() * 2.75f;
+                    // PC 41FB40 draws X, increments the drop count, draws the interval, then creates the pickup.
+                    var x = 100 + _world._random.Next(550);
+                    a._skySunCount++;
+                    a._nextSkySun = (Math.Min(950, 425 + a._skySunCount * 10) + _world._random.Next(275)) * .01f;
+                    _world.Suns.Add(_sunSystem.CreateAdventurePresentationSkySun(x));
                 }
             }
 
