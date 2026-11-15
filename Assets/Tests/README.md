@@ -1013,3 +1013,37 @@ The boss driver's idle/drive/laugh clock remains independent of the body and
 respects original freeze/chill rate changes. Native head-contact Foley markers
 (.37/.42/.55 and leave .48/.8) consume their original request-time draws; normal
 head leave does not borrow the distinct `551E00` death branch's audio.
+
+## Original Zomboss lifecycle and rendering
+
+`AdventureBossFidelityTests`, `OriginalBossGraphicsTests` and
+`OriginalBossAudioTests` cover the original 5-10 roof opening and boss lifecycle.
+The source is the supplied PC executable (SHA-256
+`e1511201ec2ae9a7e30259f04bc2ec7272badb2574a2e9b405d0e916ae5c082c`)
+and its analysis: `4473C0` / `PlayBossEnter`, `53DD90`, `551ED0`,
+`552610`, `54D080`, `54D810`, `551E00`, `5524F0`, and `54F4A0`.
+The mobile-derived source is used for navigation; PC driver offset `(28,-84)`,
+initial rate 18, phase gates and frame ranges follow PC instructions/assets.
+
+The tests check empty preview, creation at `6000 + DaveTime + LawnMowerTime`,
+40-frame entrance and its .24/.79 thumps, native body overlay `(15,-8)`,
+separate back/front legs and back arm, attached driver order, RV and bungee
+offsets, damage images and blue glows, ball additive groups and counters,
+all-row lobber targeting, lethal health-one retreat, death explosions, flag
+and the award boundary. The existing 24 native boss decision vectors remain
+in `AdventureNativeRandomTests` and the read-only exporter in
+`Tools/Tests/Modules/Random`.
+
+Set `PVZ_BOARD_STRESS_ASSETS` to the original imported runtime directory and run:
+
+```powershell
+./Tools/Tests/Run-UnityTests.ps1 -Platform EditMode -TestFilter 'AdventureBossFidelityTests;AdventureNativeRandomTests;AdventureRoofCombatTests'
+./Tools/Tests/Run-UnityTests.ps1 -Platform PlayMode -TestFilter 'OriginalBossGraphicsTests;OriginalBossAudioTests;OriginalNativeRandomGraphicsTests;FinalBossOpeningPlaysDialogueAndSkipsItAfterRestart'
+```
+
+Graphics and audio tests require the original resources and a real graphics/audio
+backend. Playback checks inspect production voices, not physical speaker output.
+They do not establish packaged Player or other-platform verification. As described
+in the random-module README, the existing renderer-owned particle engine still
+has a separate random stream; these tests validate native boss contacts, source
+resources and placements, not full-process particle RNG parity.

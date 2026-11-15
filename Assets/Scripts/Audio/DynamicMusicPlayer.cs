@@ -400,6 +400,11 @@ namespace PlantsVsZombies.Audio
 
             var bossGrabFade = _owner.Opening._bossDaveGrabbed && _owner.Dave._crazyDaveAnimation == "anim_grab" && _owner.Opening.AdventureIntroActive;
             _dynamicMusicStems[0].Gain = bossGrabFade ? Mathf.Clamp01(1f - _owner.Dave._crazyDaveAnimationAge / .5f) : desired == MusicCue.Night ? _dynamicBurst.NightBase : 1f;
+            var boss = _owner._game is { IsAdventure: true } adventureGame ? adventureGame.Adventure.Boss : null;
+            if (desired == MusicCue.Boss && boss?.DeathStarted == true)
+            {
+                _dynamicMusicStems[0].Gain *= Mathf.Clamp01(1f - boss.DeathTicks / 200f);
+            }
             _dynamicMusicStems[1].Gain = _dynamicBurst.Drums;
             _dynamicMusicStems[2].Gain = _dynamicBurst.HiHats;
             foreach (var stem in _dynamicMusicStems)

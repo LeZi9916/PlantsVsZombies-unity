@@ -831,13 +831,22 @@ namespace PlantsVsZombies.Audio
                 -6 => "boing",
                 -7 => "ladder_zombie",
                 -8 => "diamond",
+                -9 => "RVthrow",
+                -10 => "bossexplosion",
                 _ => null
             };
             if (directSample != null)
             {
                 if (_presentationSounds.TryGetValue(directSample, out var directClip) && directClip != null)
                 {
-                    RequiredAudioSource.PlayOneShot(directClip);
+                    if (evt.Foley == -9 || evt.Foley == -10)
+                    {
+                        _soundVoices.TryPlay(directClip, _soundVolume, 1f, group: evt.Foley);
+                    }
+                    else
+                    {
+                        RequiredAudioSource.PlayOneShot(directClip);
+                    }
                 }
 
                 return;
@@ -895,7 +904,9 @@ namespace PlantsVsZombies.Audio
                 "jackinthebox",
                 "digger_zombie",
                 "boing",
-                "ladder_zombie"
+                "ladder_zombie",
+                "RVthrow",
+                "bossexplosion"
             };
             foreach (var definition in AdventureZombieFoleyData.Definitions.Values)
             {
