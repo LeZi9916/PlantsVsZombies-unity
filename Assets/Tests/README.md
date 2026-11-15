@@ -1365,3 +1365,24 @@ identity checks and the complete cannon state cycle also pass. Optional capture:
 These fixtures verify the production simulation, controller, original assets,
 and GPU presentation in an isolated project. Full interactive scene play,
 packaged Players and other platform/device builds were not run for this change.
+
+
+## Garlic gross-out image dimensions
+
+PC `547280` replaces `anim_head1` with the original gross-out resource. In
+`4816F0`, the original cel center is retained before substitution; `4814C0`
+then draws the replacement at its own cel width/height. Direct playback now
+uses those dimensions and the corresponding center offset, instead of
+stretching the replacement into the ordinary head rectangle.
+
+```powershell
+$env:PVZ_BOARD_STRESS_ASSETS = (Resolve-Path Assets/StreamingAssets).Path
+./Tools/Tests/Run-UnityTests.ps1 -Platform PlayMode -TestFilter 'OriginalGarlicFaceScaleTests;GarlicDamageAndGrossOutUseOriginalImages'
+```
+
+Both selected original-resource PlayMode cases pass on Unity **7000.0.0a16** /
+Windows. The scale regression checks all five native body families, full/small
+bodies and mirrored poses against independently computed quad dimensions and
+centers, then verifies restoration of the original head. The existing garlic
+damage/face artwork comparison also passes. Physical devices and packaged
+Players were not tested.

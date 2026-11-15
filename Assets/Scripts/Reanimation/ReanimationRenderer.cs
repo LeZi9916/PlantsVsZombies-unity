@@ -776,9 +776,17 @@ namespace PlantsVsZombies.Reanimation
                             {
                                 SpriteDrawState.Color *= trackColor.Value;
                             }
-                            var image = imageOverride != null && TrackIs(track.Name, overrideTrack) ? imageOverride : from.Texture;
+                            var substituted = imageOverride != null && TrackIs(track.Name, overrideTrack);
+                            var image = substituted ? imageOverride! : from.Texture;
                             var nativeImage = NativeZombieImage(asset, isCombatBody, track.Name, image);
-                            DrawTexturePart(nativeImage, nativeImage == image ? from.Texture.Width : nativeImage.Width, nativeImage == image ? from.Texture.Height : nativeImage.Height);
+                            if (substituted)
+                            {
+                                // PC 4816F0 keeps the original track center; 4814C0 draws the replacement at its own cel size.
+                                SpriteMatrix *= Matrix4x4.Translate(new Vector3((from.Texture.Width - nativeImage.Width) * .5f,
+                                    (from.Texture.Height - nativeImage.Height) * .5f, 0f));
+                            }
+                            DrawTexturePart(nativeImage, nativeImage == image && !substituted ? from.Texture.Width : nativeImage.Width,
+                                nativeImage == image && !substituted ? from.Texture.Height : nativeImage.Height);
                             drawn = true;
                         }
 
