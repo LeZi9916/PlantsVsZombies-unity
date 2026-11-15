@@ -119,6 +119,23 @@ namespace PlantsVsZombies.Modes
             return Math.Max(0, position - (trophies + 3) + 1);
         }
 
+        /// <summary>Gets PC 439C20's directory distance, including the final three-trophy endless preview reveal.</summary>
+        /// <param name="gameModeId">The original challenge identifier.</param>
+        /// <param name="finishedAdventure">Whether the native profile has completed adventure.</param>
+        /// <param name="record">The zero-based original challenge record lookup.</param>
+        /// <returns>Zero for an open card, one for the next locked preview, or a larger blank-card distance.</returns>
+        /// <exception cref="ArgumentNullException">The record lookup is null.</exception>
+        /// <exception cref="ArgumentOutOfRangeException">The identifier is not a supported challenge.</exception>
+        public static int DirectoryAccomplishmentsNeeded(int gameModeId, bool finishedAdventure, Func<int, int> record)
+        {
+            var needed = MoreTrophiesNeeded(gameModeId, finishedAdventure, record);
+            if (gameModeId >= 11 && gameModeId <= 15 && needed <= 3 && needed > 0 && finishedAdventure)
+            {
+                return 1;
+            }
+            return needed;
+        }
+
         /// <summary>Performs lock reason.</summary>
         /// <param name = "gameModeId">The game mode id.</param>
         /// <param name = "finishedAdventure">The finished adventure.</param>

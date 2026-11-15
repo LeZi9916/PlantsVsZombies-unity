@@ -158,6 +158,20 @@ namespace PlantsVsZombies.Game
                 return;
             }
 
+            if (_owner._currentView == PvZGame.ScreenView.Modes && _owner.RequiredModeView.IsSurvivalPage
+                && !_owner._confirmingQuit && _owner._unavailableFeature == null)
+            {
+                for (var index = 0; index < input.PhaseCount; index++)
+                {
+                    _owner.RequiredModeView.HandlePointer(mouse, input.GetPhase(index));
+                }
+                if (_owner.RequiredModeView.Closed)
+                {
+                    _owner._currentView = PvZGame.ScreenView.Selector;
+                }
+                return;
+            }
+
             if (_owner._currentView == PvZGame.ScreenView.Almanac)
             {
                 if (input.ScrollDelta != 0f)
