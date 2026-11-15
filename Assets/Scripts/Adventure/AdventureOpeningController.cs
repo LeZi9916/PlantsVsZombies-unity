@@ -116,7 +116,14 @@ namespace PlantsVsZombies.Adventure
 
             if (_owner._game.ModeSession != null)
             {
-                InitializeIndependentPuzzleOpening();
+                if (_owner.RequiredGame.RequiredModeSession.Definition.Survival)
+                {
+                    InitializeIndependentSurvivalOpening();
+                }
+                else
+                {
+                    InitializeIndependentPuzzleOpening();
+                }
                 return;
             }
 
@@ -189,6 +196,44 @@ namespace PlantsVsZombies.Adventure
 
             // PC street actors consume the existing global stream; drawing their cached preview never resamples it.
             _adventurePreview.AddRange(AdventureIntroPresentation.CreateStreetPreview(context, waves, _owner._game.DrawAdventureRandomInt, _owner._game.DrawAdventureRandomFloat, (kind, clip) => kind < 26 && _owner.AnimationCatalog.AdventureClipExists(AdventureAnimationCatalog.AdventureZombieAnimation((ZombieKind)kind), clip)));
+            _adventurePreview.Sort((a, b) => a.RenderOrder.CompareTo(b.RenderOrder));
+        }
+
+        /// <summary>Runs PC CutScene's original terrain preview and bank/chooser timing for all survival identifiers.</summary>
+        private void InitializeIndependentSurvivalOpening()
+        {
+            var game = _owner.RequiredGame;
+            var session = game.RequiredModeSession;
+            var context = new AdventureIntroContext
+            {
+                Level = 0,
+                NativeMode = session.Definition.Id,
+                NativeBackground = (int)game.Adventure.Level.Terrain,
+                FirstAdventure = false,
+                SurvivalRepick = session.Stage > 1,
+                HasGraveStones = game.Adventure.Graves.Count > 0,
+                CanShowAlmanacOrStore = true,
+                ChooseSeedsOverride = true
+            };
+            _adventureIntro = new AdventureIntroClock(AdventureIntroPresentation.CreatePlan(context));
+            _adventureIntroFrame = _adventureIntro.Frame;
+            _owner._pendingSeeds = new AdventureSeedChooserState(session.Stage == 1 ? Array.Empty<PlantKind>() : game.Adventure.SelectedSeeds);
+            _owner._choosingSeeds = true;
+            game.Adventure.GravesEnabled = _adventureIntro.Plan.GraveStoneTime == 0;
+            game.BeginAdventureFogIntro();
+            var waves = new List<int[]>();
+            foreach (var wave in game.Adventure.Waves)
+            {
+                var kinds = new int[wave.Zombies.Count];
+                for (var i = 0; i < kinds.Length; i++)
+                {
+                    kinds[i] = (int)wave.Zombies[i];
+                }
+                waves.Add(kinds);
+            }
+            _adventurePreview.AddRange(AdventureIntroPresentation.CreateStreetPreview(context, waves,
+                game.DrawAdventureRandomInt, game.DrawAdventureRandomFloat,
+                (kind, clip) => kind < 26 && _owner.AnimationCatalog.AdventureClipExists(AdventureAnimationCatalog.AdventureZombieAnimation((ZombieKind)kind), clip)));
             _adventurePreview.Sort((a, b) => a.RenderOrder.CompareTo(b.RenderOrder));
         }
 
@@ -500,6 +545,11 @@ namespace PlantsVsZombies.Adventure
                 _owner.RequiredGame.BeginAdventureStormPlaying();
                 _owner._choosingSeeds = false;
                 _adventurePreview.Clear();
+                var session = _owner.RequiredGame.ModeSession;
+                if (session?.Definition.Survival == true && session.Stage == 1)
+                {
+                    _owner.AdventureBoard.AdventureFeedback(session.Advice, 5f);
+                }
             }
         }
 
@@ -513,6 +563,27 @@ namespace PlantsVsZombies.Adventure
 
             _adventureIntro.BeginReturn();
             _adventureIntroFrame = _adventureIntro.Frame;
+        }
+
+        /// <summary>Gets the PC 499F40 expanded chooser layout for a completed profile or purchased upgrades.</summary>
+        internal bool AdventureChooserHasUpgradeRows
+        {
+            get
+            {
+                var game = _owner.RequiredGame;
+                if (game.Adventure.Level.IsReplay || game.ModeSession?.WaveContext.ProfileProgress > 0)
+                {
+                    return true;
+                }
+                foreach (var kind in game.Adventure.AvailableSeeds)
+                {
+                    if ((int)kind >= 40 && (int)kind < 48)
+                    {
+                        return true;
+                    }
+                }
+                return false;
+            }
         }
 
         /// <summary>Performs adventure campaign chooser rect.</summary>
@@ -544,17 +615,7 @@ namespace PlantsVsZombies.Adventure
                 return new Rect(468, 515, 50, 70);
             }
 
-            var upgrades = _owner.RequiredGame.Adventure.Level.IsReplay;
-            var chooserSeeds = _owner.RequiredGame.Adventure.AvailableSeeds;
-            for (var seedIndex = 0; seedIndex < chooserSeeds.Count; seedIndex++)
-            {
-                var kind = chooserSeeds[seedIndex];
-                if ((int)kind >= 40 && (int)kind < 48)
-                {
-                    upgrades = true;
-                }
-            }
-
+            var upgrades = AdventureChooserHasUpgradeRows;
             return new Rect(22 + id % 8 * 53, (upgrades ? 123 : 128) + id / 8 * (upgrades ? 70 : 73), 50, 70);
         }
 

@@ -123,9 +123,7 @@ namespace PlantsVsZombies.Adventure
 
             if (!paused)
             {
-                var shaking = Lost && LostTicks >= 700 && LostTicks < 800;
-                LossShakeX = shaking ? RainRandomFloat(random, 2f) - 1f : 0f;
-                LossShakeY = shaking ? RainRandomFloat(random, 2f) - 1f : 0f;
+                AdvanceLostShake(random);
             }
 
             var thunder = AdvanceFlash(random, playing, paused, lost, hasYeti);
@@ -138,6 +136,15 @@ namespace PlantsVsZombies.Adventure
             }
 
             return thunder;
+        }
+
+        /// <summary>Advances the common PC ZombiesWon reanimation shake without updating rain or thunder.</summary>
+        /// <param name="random">The original shared board random stream.</param>
+        internal void AdvanceLostShake(Random random)
+        {
+            var shaking = Lost && LostTicks >= 700 && LostTicks < 800;
+            LossShakeX = shaking ? RainRandomFloat(random, 2f) - 1f : 0f;
+            LossShakeY = shaking ? RainRandomFloat(random, 2f) - 1f : 0f;
         }
 
         /// <summary>Advances the original challenge countdown, including its special pause and Yeti branches.</summary>

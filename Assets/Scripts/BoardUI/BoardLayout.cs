@@ -305,7 +305,7 @@ namespace PlantsVsZombies.BoardUI
                     return new Vector2(x, _owner.RequiredGame.Adventure._whackSeedBankY);
                 }
 
-                return !_owner.IndependentModes.IsModeBoard && _owner.RequiredGame.IsAdventure && _owner.Opening._adventureIntroFrame != null
+                return _owner.RequiredGame.IsAdventure && _owner.Opening._adventureIntroFrame != null
                     ? new Vector2(_owner.Opening._adventureIntroFrame.SeedBankX, _owner.Opening._adventureIntroFrame.SeedBankY)
                     : Vector2.zero;
             }

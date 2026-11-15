@@ -1089,3 +1089,34 @@ They do not establish packaged Player or other-platform verification. As describ
 in the random-module README, the existing renderer-owned particle engine still
 has a separate random stream; these tests validate native boss contacts, source
 resources and placements, not full-process particle RNG parity.
+
+## PC survival directory and re-selection
+
+`SurvivalPresentationTests`, `OriginalSurvivalGraphicsTests` and
+`OriginalSurvivalFlowTests` cover the local PC survival table (all fifteen
+identifiers), the eleven-cell `Survival_Thumbnails` atlas and four separate
+endless images, original directory locks/caption splitting, pointer release,
+terrain previews, empty first selection, retained re-selection bank, native
+view-lawn timing, the 500-update handoff/music fade, persisted partial flags,
+and on-lawn finite rewards. Original-art tests require `PVZ_BOARD_STRESS_ASSETS`;
+`PVZ_BOARD_STRESS_OUTPUT` optionally records their real GPU captures.
+
+The authoritative PC sources are `ui_challenge/438EE0`, `4397F0`, `439C20`,
+`439CB0`, `43A780`, `43AD10`, the original table at `74E490`, resource bindings
+at `4891C0`/`48B0C0`/`48B620`, the original `Layout.xml` wrap property,
+`adventure_intro/446520`/`4473C0`, and chooser `499170`/`49A8D0`/`49B6D0`/
+`49C110`/`49C9B0` in the supplied origin analysis. PC `41869D` sets the survival
+handoff to 500 native ticks; the common PC loss sequence is `448040` and
+`6EF150`. The mobile-derived C# source is used for navigation and callback
+semantics; its hidden-endless table and compact mobile menu geometry are not
+used. The local PC executable puts all fifteen survival entries on page zero.
+
+```powershell
+./Tools/Tests/Run-UnityTests.ps1 -Platform EditMode -TestFilter 'SurvivalPresentationTests;AdventureIntroPerformanceTests;ModeWaveFidelityTests;AdventureSeedChooserTests;HypnoCompletionTests'
+./Tools/Tests/Run-UnityTests.ps1 -Platform PlayMode -TestFilter 'OriginalSurvivalGraphicsTests;OriginalSurvivalFlowTests;OriginalStormFlowTests;OriginalPoolGraphicsTests;SeedBankLayoutTests;IndependentPuzzleDialogueTests'
+```
+
+The flow fixtures use disposable profiles and the production Lawn host. GPU
+assertions compare native atlas cells and actual widget geometry, while source
+captures check original rendering resources. These runs do not establish
+native-executable pixel equivalence, packaged Players or other target devices.

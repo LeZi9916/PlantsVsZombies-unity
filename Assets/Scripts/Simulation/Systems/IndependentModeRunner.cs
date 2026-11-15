@@ -791,7 +791,10 @@ namespace PlantsVsZombies.Simulation
             s.Phase = next ? ModePhase.StageCleared : ModePhase.Won;
             _adventureModeRunner.Adventure.Phase = AdventurePhase.Reward;
             _world.State = MatchState.Won;
-            _legacySimulation.Raise(GameEvent.Won);
+            if (!s.Definition.Survival || !next)
+            {
+                _legacySimulation.Raise(GameEvent.Won);
+            }
         }
 
         /// <summary>Performs continue mode stage.</summary>

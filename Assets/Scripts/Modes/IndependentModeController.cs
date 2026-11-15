@@ -25,6 +25,18 @@ namespace PlantsVsZombies.Modes
             _owner = owner;
         }
 
+        /// <summary>Gets the remaining original 500-update delay before survival re-selection.</summary>
+        internal int SurvivalTransitionTicks { get; private set; } = -1;
+        /// <summary>Retains fractional native ticks during the survival stage handoff.</summary>
+        private double _survivalTransitionRemainder;
+        /// <summary>Retains the last persisted native survival flag count, including a partial hard/endless stage.</summary>
+        private int _savedSurvivalFlags = -1;
+        /// <summary>Tracks the original level-award light-fill sound.</summary>
+        private bool _survivalLightFillPlayed;
+        /// <summary>Gets the original five-second survival music fade.</summary>
+        internal float SurvivalTransitionGain => IsModeBoard && RequiredModeSession.Definition.Survival && RequiredModeSession.HasNextStage
+            && SurvivalTransitionTicks >= 0 ? SurvivalTransitionTicks / 500f : 1f;
+
         /// <summary>Stores mode session.</summary>
         internal ModeSession? _modeSession;
 
@@ -63,7 +75,8 @@ namespace PlantsVsZombies.Modes
                     return null;
                 }
 
-                if (_owner.RequiredGame.State == MatchState.Won || _owner.RequiredGame.State == MatchState.Lost)
+                if ((_owner.RequiredGame.State == MatchState.Won && !(RequiredModeSession.Definition.Survival && RequiredModeSession.HasNextStage))
+                    || _owner.RequiredGame.State == MatchState.Lost)
                 {
                     return MusicCue.None;
                 }
@@ -284,6 +297,10 @@ namespace PlantsVsZombies.Modes
                     }
                 };
                 _modeRewardClaimed = false;
+                SurvivalTransitionTicks = -1;
+                _savedSurvivalFlags = -1;
+                _survivalTransitionRemainder = 0;
+                _survivalLightFillPlayed = false;
                 _modeNextSaveAttempt = 0;
                 _modeSavedStage = -1;
                 _modeSaveError = null;
@@ -315,9 +332,13 @@ namespace PlantsVsZombies.Modes
                 _owner.Campaign.AttachAdventureGame(_modeSession.Game);
                 _owner._deck.Clear();
                 _owner._deck.AddRange(_owner.RequiredGame.Adventure.SelectedSeeds);
-                _owner.AdventureBoard.AdventureFeedback(_modeSession.Advice, 8f);
+                if (!definition.Survival || !_owner.Opening.AdventureIntroActive)
+                {
+                    _owner.AdventureBoard.AdventureFeedback(_modeSession.Advice, 8f);
+                }
                 _owner._choosingSeeds = _modeSession.Phase == ModePhase.ChoosingSeeds;
-                _owner._pendingSeeds = new AdventureSeedChooserState(_owner.RequiredGame.Adventure.SelectedSeeds);
+                _owner._pendingSeeds = new AdventureSeedChooserState(definition.Survival && _owner.Opening.AdventureIntroActive
+                    ? Array.Empty<PlantKind>() : _owner.RequiredGame.Adventure.SelectedSeeds);
                 _owner._currentView = PvZGame.ScreenView.Board;
                 return true;
             }
@@ -357,12 +378,87 @@ namespace PlantsVsZombies.Modes
             }
 
             RequiredModeSession.Update(dt);
-            if ((RequiredModeSession.Phase == ModePhase.StageCleared || RequiredModeSession.Phase == ModePhase.Lost) && _modeSavedStage != RequiredModeSession.ClearedStages && Time.unscaledTime >= _modeNextSaveAttempt)
+            if (RequiredModeSession.Definition.Survival)
+            {
+                UpdateSurvivalTransition(dt);
+            }
+            if ((RequiredModeSession.Phase == ModePhase.StageCleared || RequiredModeSession.Phase == ModePhase.Lost)
+                && (RequiredModeSession.Definition.Survival ? _savedSurvivalFlags != RequiredModeSession.NativeSurvivalFlagsCompleted
+                    : _modeSavedStage != RequiredModeSession.ClearedStages) && Time.unscaledTime >= _modeNextSaveAttempt)
             {
                 SaveModeRecord(false);
             }
 
             return true;
+        }
+
+        /// <summary>Runs the original delayed re-selection or native on-lawn trophy/money-bag award.</summary>
+        /// <param name="dt">The unpaused board delta in seconds.</param>
+        private void UpdateSurvivalTransition(float dt)
+        {
+            var session = RequiredModeSession;
+            if (session.HasNextStage)
+            {
+                if (SurvivalTransitionTicks < 0)
+                {
+                    // PC Board::FadeOutLevel 41869D sets +561C to 500 and displays ADVICE_MORE_ZOMBIES.
+                    SurvivalTransitionTicks = 500;
+                    _survivalTransitionRemainder = 0;
+                    _owner.AdventureBoard.AdventureFeedback("[ADVICE_MORE_ZOMBIES]", 5f);
+                    _owner.Sounds.PlayAdventureRewardSound("hugewave.ogg");
+                }
+                else if (dt > 0f && !float.IsNaN(dt) && !float.IsInfinity(dt))
+                {
+                    _survivalTransitionRemainder += dt;
+                    while (_survivalTransitionRemainder + .000000001 >= (double).01f && SurvivalTransitionTicks > 0)
+                    {
+                        _survivalTransitionRemainder -= (double).01f;
+                        SurvivalTransitionTicks--;
+                    }
+                }
+                if (SurvivalTransitionTicks == 0 && SaveModeRecord(false) && session.Continue())
+                {
+                    SurvivalTransitionTicks = -1;
+                    _owner.RequiredAnimations.ResetNativePlayback();
+                    _owner._deck.Clear();
+                    _owner._deck.AddRange(session.Game.Adventure.SelectedSeeds);
+                    _owner._choosingSeeds = true;
+                    _modeChoosingImitater = false;
+                    _owner._selected = -1;
+                    _owner._shovel = false;
+                    _owner.AdventureBoard.ClearAdventurePacketSelection();
+                    _owner.Opening.InitializeAdventureOpening();
+                }
+                return;
+            }
+            if (session.Phase == ModePhase.Lost)
+            {
+                session.Game.AdvanceAdventureStormPresentation(dt, false, false);
+                return;
+            }
+            if (session.Phase != ModePhase.Won)
+            {
+                return;
+            }
+            var board = session.Game.Adventure;
+            if (board.RewardPresentation == null)
+            {
+                // Native trophy (8) and replay award money bag (18) use the existing PC Coin presentation.
+                var type = _modeFirstClear ? 8 : 18;
+                board.RewardPresentation = new AdventureRewardPresentation(type, board._lastRewardX, board._lastRewardY,
+                    type == 8 ? 83 : 91, type == 8 ? 63 : 78,
+                    session.Game.DrawAdventureRandomFloat(1f), session.Game.DrawAdventureRandomFloat(1f), session.Game.DrawAdventureRandomInt(20));
+            }
+            board.RewardPresentation.Update(dt);
+            if (!_survivalLightFillPlayed && board.RewardPresentation.CollectionTicks >= 300)
+            {
+                _survivalLightFillPlayed = true;
+                _owner.Sounds.PlayAdventureRewardSound("lightfill.ogg");
+            }
+            if (board.RewardPresentation.Stage == AdventureAwardStage.Introduction && _modeRewardClaimed)
+            {
+                ReturnToModeDirectory();
+            }
         }
 
         /// <summary>Performs save mode record.</summary>
@@ -383,7 +479,7 @@ namespace PlantsVsZombies.Modes
                 }
 
                 var s = _modeSession;
-                var score = s.Definition.Survival ? s.FlagsCompleted : s.Definition.Endless ? s.ClearedStages : s.Phase == ModePhase.Won ? 1 : 0;
+                var score = s.Definition.Survival ? s.NativeSurvivalFlagsCompleted : s.Definition.Endless ? s.ClearedStages : s.Phase == ModePhase.Won ? 1 : 0;
                 if (claimReward && s.Phase == ModePhase.Won && !s.Definition.Endless)
                 {
                     _owner.Accounts._accountStore.RecordModeResult(_modeProfileId, s.Definition.RecordIndex, score, s.RunId.ToString("N"), _modeFirstClear ? 100 : 25);
@@ -391,10 +487,14 @@ namespace PlantsVsZombies.Modes
                 }
                 else
                 {
-                    _owner.Accounts._accountStore.RecordModeResult(_modeProfileId, s.Definition.RecordIndex, score, s.RunId.ToString("N") + ":score:" + s.ClearedStages, 0);
+                    _owner.Accounts._accountStore.RecordModeResult(_modeProfileId, s.Definition.RecordIndex, score, s.RunId.ToString("N") + ":score:" + (s.Definition.Survival ? score : s.ClearedStages), 0);
                 }
 
                 _modeSavedStage = s.ClearedStages;
+                if (s.Definition.Survival)
+                {
+                    _savedSurvivalFlags = score;
+                }
                 _modeSaveError = null;
                 _modeAccountSnapshot = null;
                 return true;
@@ -439,7 +539,52 @@ namespace PlantsVsZombies.Modes
 
             if (_owner.Opening.AdventureIntroActive)
             {
+                if (RequiredModeSession.Definition.Survival && _owner.Opening.AdventureIntroAwaitingSeeds)
+                {
+                    HandleNativeSurvivalChooser(point);
+                }
                 return true;
+            }
+
+            if (RequiredModeSession.Definition.Survival)
+            {
+                if (AdventureBoardController.s_adventureMenuButton.Contains(point))
+                {
+                    if (RequiredModeSession.Phase == ModePhase.Lost)
+                    {
+                        if (_owner.RequiredGame.Adventure.Storm.LossDialogReady)
+                        {
+                            _owner._currentView = PvZGame.ScreenView.Selector;
+                        }
+                    }
+                    else
+                    {
+                        _owner.Menus.OpenOptions();
+                    }
+                    return true;
+                }
+                if (RequiredModeSession.HasNextStage)
+                {
+                    return true;
+                }
+                if (RequiredModeSession.Phase == ModePhase.Lost)
+                {
+                    if (_owner.RequiredGame.Adventure.Storm.LossDialogReady && new Rect(316, 340, 168, 48).Contains(point))
+                    {
+                        ReturnToModeDirectory();
+                    }
+                    return true;
+                }
+                if (RequiredModeSession.Phase == ModePhase.Won)
+                {
+                    var award = _owner.RequiredGame.Adventure.RewardPresentation;
+                    if (award != null && award.Contains(point.x, point.y) && SaveModeRecord(true))
+                    {
+                        _owner.Sounds.PlayAdventureCoinPickupSound(_modeFirstClear ? AdventureCoinKind.Diamond : AdventureCoinKind.Gold);
+                        award.BeginCollection();
+                    }
+                    return true;
+                }
             }
 
             var s = _modeSession;
@@ -775,6 +920,107 @@ namespace PlantsVsZombies.Modes
             }
 
             return true;
+        }
+
+        /// <summary>Uses the original eight-column chooser and re-selection lawn view instead of the prototype mode panel.</summary>
+        /// <param name="point">The logical top-left pointer position.</param>
+        private void HandleNativeSurvivalChooser(Vector2 point)
+        {
+            var opening = _owner.Opening;
+            var clock = opening.RequiredAdventureIntro;
+            if (clock.ViewingLawn)
+            {
+                clock.CancelLawnView();
+                return;
+            }
+            if (new Rect(681, -10, 117, 46).Contains(point))
+            {
+                _owner.Menus.OpenOptions();
+                return;
+            }
+            if (new Rect(680, 572, 111, 26).Contains(point))
+            {
+                _owner.Menus.OpenAlmanac(PvZGame.ScreenView.Board);
+                return;
+            }
+            if (new Rect(560, 572, 111, 26).Contains(point))
+            {
+                _owner.Store.OpenStore();
+                if (_owner._currentView == PvZGame.ScreenView.Store)
+                {
+                    _owner.Store._storeReturnView = PvZGame.ScreenView.Board;
+                }
+                return;
+            }
+            var local = point - new Vector2(0, clock.Frame.ChooserY);
+            if (clock.CanViewLawn && new Rect(22, 561, 111, 26).Contains(local))
+            {
+                if (!_owner.RequiredPendingSeeds.HasFlyingSeeds)
+                {
+                    clock.BeginLawnView();
+                }
+                return;
+            }
+            var seeds = _owner.RequiredGame.Adventure.AvailableSeeds;
+            var required = Math.Min(RequiredModeSession.PacketSlots, seeds.Count);
+            if (_modeChoosingImitater)
+            {
+                foreach (var target in seeds)
+                {
+                    if ((int)target >= 40)
+                    {
+                        continue;
+                    }
+                    if (opening.AdventureCampaignChooserRect(target).Contains(local) && _owner.RequiredGame.SetModeImitaterTarget(target))
+                    {
+                        var home = opening.AdventureCampaignChooserRect(PlantKind.Imitater);
+                        _owner.RequiredPendingSeeds.Choose(PlantKind.Imitater, (int)home.x, (int)home.y + clock.Frame.ChooserY, _owner.Layout.SeedBankCapacity);
+                        _modeChoosingImitater = false;
+                        return;
+                    }
+                }
+                if (opening.AdventureChooserStartRect.Contains(local))
+                {
+                    _modeChoosingImitater = false;
+                }
+                return;
+            }
+            if (_owner.Router.ReturnSelectedChooserSeed(point, _owner.Layout.SeedBankCapacity, true))
+            {
+                return;
+            }
+            foreach (var seed in seeds)
+            {
+                var home = opening.AdventureCampaignChooserRect(seed);
+                if (!home.Contains(local))
+                {
+                    continue;
+                }
+                if (!_owner.RequiredPendingSeeds.Contains(seed) && _owner.RequiredPendingSeeds.Count < required)
+                {
+                    if (seed == PlantKind.Imitater)
+                    {
+                        _modeChoosingImitater = true;
+                    }
+                    else
+                    {
+                        _owner.RequiredPendingSeeds.Choose(seed, (int)home.x, (int)home.y + clock.Frame.ChooserY, _owner.Layout.SeedBankCapacity);
+                        _owner.Sounds.PlayAdventureRewardSound("tap2.ogg");
+                    }
+                }
+                return;
+            }
+            if (opening.AdventureChooserStartRect.Contains(local) && _owner.RequiredPendingSeeds.Count == required && !_owner.RequiredPendingSeeds.HasFlyingSeeds)
+            {
+                var chosen = new List<PlantKind>(_owner.RequiredPendingSeeds);
+                if (RequiredModeSession.ChooseSeeds(chosen))
+                {
+                    _owner._choosingSeeds = false;
+                    _owner._deck.Clear();
+                    _owner._deck.AddRange(chosen);
+                    opening.BeginAdventureOpeningReturn();
+                }
+            }
         }
 
         /// <summary>Performs handle mode chooser.</summary>

@@ -407,6 +407,7 @@ namespace PlantsVsZombies.Audio
             }
             _dynamicMusicStems[1].Gain = _dynamicBurst.Drums;
             _dynamicMusicStems[2].Gain = _dynamicBurst.HiHats;
+            volume *= _owner.IndependentModes.SurvivalTransitionGain;
             foreach (var stem in _dynamicMusicStems)
             {
                 stem.Update(volume, false);

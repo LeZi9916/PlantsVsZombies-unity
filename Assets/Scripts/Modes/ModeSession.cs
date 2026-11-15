@@ -99,6 +99,56 @@ namespace PlantsVsZombies.Modes
             }
         }
 
+        /// <summary>Gets PC Board's completed flags, excluding a currently fighting flag wave.</summary>
+        public int NativeSurvivalFlagsCompleted
+        {
+            get
+            {
+                if (!Definition.Survival)
+                {
+                    return FlagsCompleted;
+                }
+                if (HasNextStage || Phase == ModePhase.Won)
+                {
+                    return FlagsCompleted;
+                }
+                var wave = Game.Adventure.CurrentWave;
+                if (wave > 0 && wave % 10 == 0)
+                {
+                    wave--;
+                }
+                return (Stage - 1) * Definition.FlagsPerStage + wave / 10;
+            }
+        }
+
+        /// <summary>Refreshes native re-selection purchases after returning from the original store.</summary>
+        /// <param name="access">The newly persisted upgrade and Imitater entitlements.</param>
+        /// <param name="packetSlots">The newly persisted bank capacity.</param>
+        internal void RefreshSurvivalSeedAccess(AdventureSeedAccess access, int packetSlots)
+        {
+            if (!Definition.Survival || Phase != ModePhase.ChoosingSeeds)
+            {
+                return;
+            }
+            var seeds = new List<PlantKind>();
+            for (var id = 0; id < UnlockedBasicSeeds; id++)
+            {
+                seeds.Add((PlantKind)id);
+            }
+            foreach (var seed in access.AdditionalSeeds)
+            {
+                if (!seeds.Contains(seed))
+                {
+                    seeds.Add(seed);
+                }
+            }
+            Game.Adventure.AvailableSeeds = seeds.AsReadOnly();
+            Game.Rules.AdventureSeedAccess = access;
+            PacketSlots = Math.Max(6, Math.Min(10, packetSlots));
+            Game.Rules.AdventurePacketSlots = PacketSlots;
+            Game.Adventure.Level.SetPacketSlots(PacketSlots);
+        }
+
         /// <summary>Gets the explicit original profile and board inputs for eligibility and local seed derivation.</summary>
         public ModeWaveContext WaveContext { get; private set; }
 

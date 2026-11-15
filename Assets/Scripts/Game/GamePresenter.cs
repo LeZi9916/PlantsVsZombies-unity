@@ -188,6 +188,8 @@ namespace PlantsVsZombies.Game
         private Rect _cardDestination, _cardSource;
         /// <summary>The last displayed board and wave used to refresh the status caption.</summary>
         private AdventureBoard? _captionBoard;
+        /// <summary>Retains the survival flag count used by the original level-name caption.</summary>
+        private int _captionSurvivalFlags = -1;
         /// <summary>The retained wave progress label.</summary>
         private string _waveCaption = "";
         /// <summary>Retains the original PC HouseofTerror16 font used by the lower-right level name.</summary>
@@ -1968,6 +1970,19 @@ namespace PlantsVsZombies.Game
                 }
             }
 
+            if (_owner.IndependentModes.IsModeBoard && _owner.IndependentModes.RequiredModeSession.Definition.Survival
+                && _owner.Opening.AdventureIntroAwaitingSeeds && !_owner.Opening.RequiredAdventureIntro.ViewingLawn)
+            {
+                DrawOriginalUiButton(new Rect(681, -10, 117, 46), OriginalProgressionText("MENU_BUTTON"));
+                DrawNativeChooserButton(new Rect(560, 572, 111, 26), "SHOP_BUTTON");
+                DrawNativeChooserButton(new Rect(680, 572, 111, 26), "ALMANAC_BUTTON");
+            }
+            if (_owner.Opening.RequiredAdventureIntro.ViewingLawn && _owner.Opening.RequiredAdventureIntro.ViewLawnTicks >= 100
+                && _owner.Opening.RequiredAdventureIntro.ViewLawnTicks <= 250)
+            {
+                DrawOriginalBoardAdvice(OriginalProgressionText("CLICK_TO_CONTINUE"), false);
+            }
+
             if (_owner.Opening.RequiredAdventureIntro.Plan.ChooseSeeds)
             {
                 DrawChooserMovingPackets(_owner.RequiredGame.Adventure.AvailableSeeds,
@@ -2054,7 +2069,12 @@ namespace PlantsVsZombies.Game
                 var seed = seeds[i];
                 if (_owner.RequiredPendingSeeds.IsMoving(seed))
                 {
-                    var home = mode ? BoardLayout.AdventureChooserRect(i) : _owner.Opening.AdventureCampaignChooserRect(seed);
+                    var nativeSurvival = _owner.IndependentModes.IsModeBoard && _owner.IndependentModes.RequiredModeSession.Definition.Survival && _owner.Opening.AdventureIntroActive;
+                    var home = mode && !nativeSurvival ? BoardLayout.AdventureChooserRect(i) : _owner.Opening.AdventureCampaignChooserRect(seed);
+                    if (nativeSurvival)
+                    {
+                        home.y += _owner.Opening.RequiredAdventureIntroFrame.ChooserY;
+                    }
                     _owner.RequiredPendingSeeds.GetPosition(seed, (int)home.x, (int)home.y, slots, out var x, out var y);
                     DrawAdventureCard(seed, new Rect(x, y, 50, 70), true);
                 }
@@ -2263,7 +2283,8 @@ namespace PlantsVsZombies.Game
                             continue;
                         }
 
-                        if (!_owner.Opening.AdventureIntroActive || _owner.Opening.RequiredAdventureIntroFrame.MowerX[mower.Row] > -80)
+                        if (!_owner.Opening.AdventureIntroActive || _owner.Opening.RequiredAdventureIntro.Plan.RequiredContext.SurvivalRepick
+                            || _owner.Opening.RequiredAdventureIntroFrame.MowerX[mower.Row] > -80)
                         {
                             DrawAdventureMower(mower);
                         }
@@ -3070,7 +3091,8 @@ namespace PlantsVsZombies.Game
                 age = 0;
             }
 
-            var x = _owner.Opening.AdventureIntroActive ? _owner.Opening.RequiredAdventureIntroFrame.MowerX[mower.Row] : BoardLayout.AdventureGridX + mower.X * BoardLayout.CellWidth - 21f;
+            var x = _owner.Opening.AdventureIntroActive && !_owner.Opening.RequiredAdventureIntro.Plan.RequiredContext.SurvivalRepick
+                ? _owner.Opening.RequiredAdventureIntroFrame.MowerX[mower.Row] : BoardLayout.AdventureGridX + mower.X * BoardLayout.CellWidth - 21f;
             // PC 0x465F60: row floor+23, attached reanim y=18, scale .85 (.8 for pool).
             // Draw translates x+6; ready roof/pool offsets are -40/-33 and active -4/-7.
             var origin = new Vector2(x + 6f, AdventureFloorYAtPixel(mower.Row, x + 40f) + 23f + (mower.Active ? 18f : 19f));
@@ -5332,6 +5354,8 @@ namespace PlantsVsZombies.Game
         {
             switch (nativeType)
             {
+                case 8:
+                    return highResolution ? "trophy_hi_res.png" : "trophy.png";
                 case 9:
                     return highResolution ? "Shovel_hi_res.png" : "Shovel.png";
                 case 10:
@@ -6039,6 +6063,7 @@ namespace PlantsVsZombies.Game
         {
             var board = _owner.RequiredGame.Adventure;
             var progress = _owner.RequiredGame.Presentation.ProgressMeter;
+            var survival = _owner.RequiredGame.ModeSession?.Definition.Survival == true;
             var visible = (progress.Visible || board.Level.Mode == AdventureMode.Boss) && board.Level.Mode != AdventureMode.Vasebreaker;
             var meter = visible ? _owner.Textures.LoadImage("FlagMeter.png") : null;
             if (meter != null)
@@ -6056,9 +6081,9 @@ namespace PlantsVsZombies.Game
                 var parts = _owner.Textures.LoadImage("FlagMeterParts.png");
                 if (parts != null)
                 {
-                    if (AdventureProgressMeterState.HasFlags(board.Level.Number, board.Level.IsReplay))
+                    if (survival || AdventureProgressMeterState.HasFlags(board.Level.Number, board.Level.IsReplay))
                     {
-                        var perFlag = board.Level.IsReplay ? 10 : Math.Min(10, Math.Max(1, board.Waves.Count));
+                        var perFlag = survival || board.Level.IsReplay ? 10 : Math.Min(10, Math.Max(1, board.Waves.Count));
                         for (var wave = perFlag; wave <= board.Waves.Count; wave += perFlag)
                         {
                             var x = AdventureProgressMeterState.FlagX(wave, board.Waves.Count);
@@ -6076,10 +6101,21 @@ namespace PlantsVsZombies.Game
                 }
             }
 
-            if (!ReferenceEquals(_captionBoard, board))
+            var flags = survival ? _owner.RequiredGame.RequiredModeSession.NativeSurvivalFlagsCompleted : -1;
+            if (!ReferenceEquals(_captionBoard, board) || flags != _captionSurvivalFlags)
             {
                 _captionBoard = board;
+                _captionSurvivalFlags = flags;
                 _waveCaption = OriginalProgressionText("LEVEL") + " " + board.Level.Label;
+                if (survival)
+                {
+                    _waveCaption = OriginalProgressionText(VerifiedDataCatalog.ChallengeModes[_owner.RequiredGame.RequiredModeSession.Definition.Id - 1].LocalizationKey.Trim('[', ']'));
+                    if (flags > 0)
+                    {
+                        var count = flags == 1 ? OriginalProgressionText("ONE_FLAG") : OriginalProgressionText("COUNT_FLAGS").Replace("{COUNT}", flags.ToString());
+                        _waveCaption += " - " + OriginalProgressionText("FLAGS_COMPLETED").Replace("{FLAGS}", count);
+                    }
+                }
             }
 
             _levelNameFont ??= CanvasBitmapFont.LoadFromResources("HouseofTerror16");
@@ -6092,8 +6128,8 @@ namespace PlantsVsZombies.Game
         }
 
         /// <summary>Gets whether the current board is in the original Stormy Night loss scene.</summary>
-        private bool AdventureStormLost => _owner.RequiredGame.Adventure.Level.Mode == AdventureMode.Storm
-            && _owner.RequiredGame.State == MatchState.Lost;
+        private bool AdventureStormLost => (_owner.RequiredGame.Adventure.Level.Mode == AdventureMode.Storm
+            || _owner.RequiredGame.ModeSession?.Definition.Survival == true) && _owner.RequiredGame.State == MatchState.Lost;
 
         /// <summary>Restricts the original loss banner pass to its authored image track.</summary>
         private static readonly Func<string, bool> s_zombiesWonVisible = track => string.Equals(track, "ZombiesWon", StringComparison.OrdinalIgnoreCase);
@@ -6116,7 +6152,18 @@ namespace PlantsVsZombies.Game
 
             if (state.LossDialogReady)
             {
-                DrawDialog("僵尸吃掉了你的脑子！", "重新开始", false);
+                if (_owner.RequiredGame.ModeSession?.Definition.Survival == true)
+                {
+                    var flags = _owner.RequiredGame.RequiredModeSession.NativeSurvivalFlagsCompleted;
+                    var count = flags == 1 ? OriginalProgressionText("ONE_FLAG") : OriginalProgressionText("COUNT_FLAGS").Replace("{COUNT}", flags.ToString());
+                    var message = OriginalProgressionText("SURVIVAL_DEATH_MESSAGE").Replace("{FLAGS}", count);
+                    DrawOriginalUiDialog(new Rect(200, 166, 400, 270), OriginalProgressionText("GAME_OVER"), message);
+                    DrawOriginalUiButton(new Rect(316, 340, 168, 48), OriginalProgressionText("TRY_AGAIN"));
+                }
+                else
+                {
+                    DrawDialog("僵尸吃掉了你的脑子！", "重新开始", false);
+                }
             }
         }
 
@@ -6198,6 +6245,8 @@ namespace PlantsVsZombies.Game
                 return;
             }
 
+            var nativeSurvival = _owner.IndependentModes.IsModeBoard && _owner.IndependentModes.RequiredModeSession.Definition.Survival;
+            var choosingImitater = nativeSurvival ? _owner.IndependentModes._modeChoosingImitater : _owner.AdventureBoard._choosingImitater;
             DrawImage("SeedChooser_Background.png", new Rect(0, 87, 465, 513));
             var title = OriginalProgressionText("CHOOSE_YOUR_PLANTS");
             var nativeGold = new Color(213f / 255f, 159f / 255f, 43f / 255f);
@@ -6206,10 +6255,10 @@ namespace PlantsVsZombies.Game
                 Label(new Rect(18, 87, 425, 29), title, 19, nativeGold, TextAnchor.MiddleCenter, true);
             }
 
-            var seeds = _owner.AdventureBoard._choosingImitater ? _owner.RequiredGame.Adventure.Level.UnlockedSeeds : _owner.RequiredGame.Adventure.AvailableSeeds;
-            if (!_owner.AdventureBoard._choosingImitater)
+            var seeds = choosingImitater && !nativeSurvival ? _owner.RequiredGame.Adventure.Level.UnlockedSeeds : _owner.RequiredGame.Adventure.AvailableSeeds;
+            if (!choosingImitater)
             {
-                for (var index = 0; index < 40; index++)
+                for (var index = 0; index < (_owner.Opening.AdventureChooserHasUpgradeRows ? 48 : 40); index++)
                 {
                     var available = false;
                     for (var candidate = 0; candidate < seeds.Count; candidate++)
@@ -6231,9 +6280,13 @@ namespace PlantsVsZombies.Game
             for (var seedIndex = 0; seedIndex < seeds.Count; seedIndex++)
             {
                 var seed = seeds[seedIndex];
+                if (choosingImitater && (int)seed >= 40)
+                {
+                    continue;
+                }
                 var rect = _owner.Opening.AdventureCampaignChooserRect(seed);
                 var previous = CanvasUI.Color;
-                if (!_owner.AdventureBoard._choosingImitater)
+                if (!choosingImitater)
                 {
                     var grayness = ChooserHomeGrayness(seed) / 255f;
                     CanvasUI.Color = new Color(previous.r * grayness, previous.g * grayness, previous.b * grayness, previous.a);
@@ -6249,13 +6302,32 @@ namespace PlantsVsZombies.Game
             }
 
             var required = Math.Min(_owner.RequiredGame.Adventure.Level.PacketSlots, _owner.RequiredGame.Adventure.AvailableSeeds.Count);
-            var enabled = _owner.AdventureBoard._choosingImitater || _owner.RequiredPendingSeeds.Count == required && !_owner.RequiredPendingSeeds.HasFlyingSeeds;
+            var enabled = choosingImitater || _owner.RequiredPendingSeeds.Count == required && !_owner.RequiredPendingSeeds.HasFlyingSeeds;
             DrawImage(enabled ? "SeedChooser_Button.png" : "SeedChooser_Button_Disabled.png", _owner.Opening.AdventureChooserStartRect);
-            var caption = _owner.AdventureBoard._choosingImitater ? OriginalProgressionText("CANCEL") : OriginalProgressionText("LETS_ROCK_BUTTON");
+            var caption = choosingImitater ? OriginalProgressionText("CANCEL") : OriginalProgressionText("LETS_ROCK_BUTTON");
             if (!DrawBitmap(_owner._optionsBitmap, caption, _owner.Opening.AdventureChooserStartRect.center.x, 572, 150, nativeGold, true))
             {
                 Label(_owner.Opening.AdventureChooserStartRect, caption, 18, nativeGold, TextAnchor.MiddleCenter, true);
             }
+            if (nativeSurvival && !choosingImitater)
+            {
+                if (_owner.Opening.RequiredAdventureIntro.Plan.RequiredContext.SurvivalRepick)
+                {
+                    DrawNativeChooserButton(new Rect(22, 561, 111, 26), "VIEW_LAWN");
+                }
+            }
+        }
+
+        /// <summary>Draws an original BrianneTod12 chooser widget with its unmodified button artwork.</summary>
+        /// <param name="bounds">The PC widget rectangle.</param>
+        /// <param name="key">The original caption key.</param>
+        private void DrawNativeChooserButton(Rect bounds, string key)
+        {
+            var down = bounds.Contains(CanvasUI.PointerPosition) && GameInput.Current.Held;
+            OriginalUiWidgets.ImageButton(_textureLookup, bounds, "SeedChooser_Button2.png", "SeedChooser_Button2_Glow.png", null,
+                bounds.Contains(CanvasUI.PointerPosition), down);
+            OriginalUiWidgets.TextAtBaseline(OriginalProgressionText(key), bounds.center.x + (down ? 1 : 0), bounds.y + 18 + (down ? 1 : 0), bounds.width,
+                "BrianneTod12", new Color(42f / 255f, 42f / 255f, 90f / 255f));
         }
 
         /// <summary>Performs draw legacy adventure chooser.</summary>
@@ -6521,6 +6593,12 @@ namespace PlantsVsZombies.Game
                 return false;
             }
 
+            if (_owner.IndependentModes.RequiredModeSession.Definition.Survival)
+            {
+                DrawSurvivalInterface();
+                return true;
+            }
+
             if (_owner.Opening.AdventureIntroActive)
             {
                 _owner.Opening._adventureIntroDrawn = true;
@@ -6578,6 +6656,43 @@ namespace PlantsVsZombies.Game
             }
 
             return true;
+        }
+
+        /// <summary>Draws survival through the original opening/board UI, without the prototype footer and large chooser.</summary>
+        private void DrawSurvivalInterface()
+        {
+            if (DrawAdventureOpeningInterface())
+            {
+                return;
+            }
+            var session = _owner.IndependentModes.RequiredModeSession;
+            if (session.Phase == ModePhase.Lost)
+            {
+                if (_owner.RequiredGame.Adventure.Storm.LossDialogReady)
+                {
+                    DrawOriginalUiButton(AdventureBoardController.s_adventureMenuButton, OriginalProgressionText("MAIN_MENU_BUTTON"));
+                }
+                return;
+            }
+            DrawOriginalUiButton(AdventureBoardController.s_adventureMenuButton, OriginalProgressionText("MENU_BUTTON"));
+            DrawAdventureProgressAndName();
+            DrawAdventureWaveNotices();
+            DrawCollectedSunsAboveSeedBank();
+            if (_owner.AdventureBoard._adventureFeedback != null && Time.unscaledTime < _owner.AdventureBoard._adventureFeedbackUntil)
+            {
+                DrawOriginalBoardAdvice(ResolveAdventureAdvice(_owner.AdventureBoard._adventureFeedback), false);
+            }
+            if (_owner._choosingSeeds)
+            {
+                DrawAdventureChooser();
+                DrawChooserBank(_owner.Layout.SeedBankCapacity);
+                DrawChooserMovingPackets(_owner.RequiredGame.Adventure.AvailableSeeds, _owner.Layout.SeedBankCapacity);
+            }
+            if (session.Phase == ModePhase.Won)
+            {
+                DrawAdventureReward();
+            }
+
         }
 
         /// <summary>Performs mode button.</summary>

@@ -564,7 +564,12 @@ namespace PlantsVsZombies.Game
                 }
 
                 var index = simple ? Array.IndexOf(_owner._availablePlants, kind) : mode ? AdventureAvailableSeedIndex(kind) : -1;
-                var home = simple ? BoardLayout.ChooserSeedRect(index) : mode ? BoardLayout.AdventureChooserRect(index) : _owner.Opening.AdventureCampaignChooserRect(kind);
+                var nativeSurvival = mode && _owner.Opening.AdventureIntroActive && _owner.IndependentModes.RequiredModeSession.Definition.Survival;
+                var home = simple ? BoardLayout.ChooserSeedRect(index) : mode && !nativeSurvival ? BoardLayout.AdventureChooserRect(index) : _owner.Opening.AdventureCampaignChooserRect(kind);
+                if (nativeSurvival)
+                {
+                    home.y += _owner.Opening.RequiredAdventureIntroFrame.ChooserY;
+                }
                 if (_owner.RequiredPendingSeeds.Return(kind, (int)home.x, (int)home.y, slots))
                 {
                     _owner.Sounds.PlayAdventureRewardSound("tap2.ogg");
@@ -596,6 +601,15 @@ namespace PlantsVsZombies.Game
         /// <summary>Routes the Escape and Enter or Space keys to dismiss dialogs, leave screens or pause the board.</summary>
         internal void HandleEscape()
         {
+            if (_owner.Opening.AdventureIntroActive && _owner.Opening.RequiredAdventureIntro.ViewingLawn)
+            {
+                var input = GameInput.Current;
+                if (input.EnterPressed || input.SpacePressed || input.EscapePressed)
+                {
+                    _owner.Opening.RequiredAdventureIntro.CancelLawnView();
+                }
+                return;
+            }
             if (GameInput.Current.EscapePressed)
             {
                 if (_owner.RequiredOptionsView.IsOpen)
@@ -640,7 +654,11 @@ namespace PlantsVsZombies.Game
                 {
                     if (_owner._choosingSeeds)
                     {
-                        if (_owner.RequiredGame.IsAdventure)
+                        if (_owner.IndependentModes.IsModeBoard && _owner.IndependentModes.RequiredModeSession.Definition.Survival)
+                        {
+                            _owner.Menus.OpenOptions();
+                        }
+                        else if (_owner.RequiredGame.IsAdventure)
                         {
                             _owner._currentView = PvZGame.ScreenView.Selector;
                         }

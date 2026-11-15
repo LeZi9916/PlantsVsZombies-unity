@@ -454,7 +454,7 @@ namespace PlantsVsZombies.Audio
             {
                 "seedlift.ogg",
                 "tap2.ogg",
-                "lightfill.ogg",
+                "lightfill.ogg", "hugewave.ogg",
                 "readysetplant.ogg",
                 "roll_in.ogg",
                 "paper.ogg",

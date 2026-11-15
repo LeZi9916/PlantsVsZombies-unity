@@ -87,7 +87,9 @@ namespace PlantsVsZombies.Simulation
         /// <param name="intro">Whether the suspended board is in its introduction.</param>
         internal void AdvanceAdventureStormPresentation(float delta, bool paused, bool intro = false)
         {
-            if (!_world.IsAdventure || _adventureModeRunner.Adventure.Level.Mode != AdventureMode.Storm || delta <= 0f || float.IsNaN(delta) || float.IsInfinity(delta))
+            if (!_world.IsAdventure || (_adventureModeRunner.Adventure.Level.Mode != AdventureMode.Storm
+                && !(_world.ModeSession?.Definition.Survival == true && _world.State == MatchState.Lost))
+                || delta <= 0f || float.IsNaN(delta) || float.IsInfinity(delta))
             {
                 return;
             }
@@ -111,7 +113,14 @@ namespace PlantsVsZombies.Simulation
                     }
                 }
 
-                AdvanceAdventureStormTick(intro, paused || storm.LossDialogReady);
+                if (_adventureModeRunner.Adventure.Level.Mode == AdventureMode.Storm)
+                {
+                    AdvanceAdventureStormTick(intro, paused || storm.LossDialogReady);
+                }
+                else if (!paused)
+                {
+                    storm.AdvanceLostShake(_world._random);
+                }
                 storm.PresentationRemainder -= SimulationWorld.SimulationStep;
                 if (Math.Abs(storm.PresentationRemainder) < .0000001)
                 {
