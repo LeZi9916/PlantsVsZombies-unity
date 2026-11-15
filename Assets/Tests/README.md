@@ -1336,3 +1336,32 @@ terrains, finite survival variants, native progress cadence, paused clocks,
 stage reset, actual original FlagMeter submission, lower-right clicks, and the
 menu route. The PlayMode fixture uses the production controller and presenter
 without profiles. Packaged Players and other target devices remain unverified.
+
+
+## Cob Cannon completed-shot return blend
+
+PC `472C70` at `47318F..4731B5` restarts `anim_unarmed_idle` at the definition's
+12 FPS, starts the 3000-update reload, and passes **20** blend updates in EAX
+to `4830B0`. The existing shooting/charge/reload durations are retained. The
+correction records the completed shooting transition in the plant capability,
+retains the authored final firing pose even when the renderer skipped it, and
+starts the original return blend at the simulation transition time. It does not
+create an additional animation or reverse the shooting clip.
+
+```powershell
+$env:PVZ_BOARD_STRESS_ASSETS = (Resolve-Path Assets/StreamingAssets).Path
+./Tools/Tests/Run-UnityTests.ps1 -Platform All -TestFilter 'AdventureCobCannonTests;ReanimationPoseIdentityTests;OriginalCobCannonResetTests'
+git diff --check
+```
+
+The selected run passes **13 EditMode cases and one original-resource PlayMode
+case**, without skips, on Unity **7000.0.0a16** / Windows. The new pixel regression
+failed before the fix. It leaves the cannon undrawn across its firing endpoint,
+then compares the return at 10, 15 and 25 native updates against independent
+original end-pose playback with a twenty-update blend. Existing first-frame pose
+identity checks and the complete cannon state cycle also pass. Optional capture:
+`PVZ_BOARD_STRESS_OUTPUT/cannon-native-return.png`.
+
+These fixtures verify the production simulation, controller, original assets,
+and GPU presentation in an isolated project. Full interactive scene play,
+packaged Players and other platform/device builds were not run for this change.

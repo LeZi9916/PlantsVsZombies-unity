@@ -37,6 +37,7 @@ namespace PlantsVsZombies.Tests.EditMode
             Step(game, cannon, 145);
             Assert.That(cannon.CannonPhase, Is.EqualTo(CobCannonPhase.Reloading));
             Assert.That(cannon.CannonReloadRemaining, Is.EqualTo(30f));
+            Assert.That(cannon.CannonResetVersion, Is.EqualTo(1));
             Assert.That(game.Adventure.CobShells, Has.Count.EqualTo(1));
             Assert.That(game.Presentation.ZombieSounds.FindAll(sound => sound.Foley == 76).Count, Is.EqualTo(1));
             Assert.That(game.Presentation.ZombieSounds.FindAll(sound => sound.Foley == 3).Count, Is.EqualTo(1));

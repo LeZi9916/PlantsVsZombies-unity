@@ -22,6 +22,9 @@ namespace PlantsVsZombies.Simulation
         /// <summary>Retains the native CannonPhase state for this capability.</summary>
         internal CobCannonPhase CannonPhase;
 
+        /// <summary>Identifies each completed cannon shooting cycle so the renderer can retain its native terminal return pose.</summary>
+        internal int CannonResetVersion;
+
         /// <inheritdoc/>
         public override bool AdvanceAction(Plant plant, PlantBehaviorContext context, float dt)
         {

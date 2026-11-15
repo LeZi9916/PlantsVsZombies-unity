@@ -3147,13 +3147,14 @@ namespace PlantsVsZombies.Reanimation
             return blend;
         }
 
-        /// <summary>Retains an authored zero-blend pose even when simulation transitions again before the next draw.</summary>
+        /// <summary>Retains an authored source pose even when simulation transitions again before the next draw.</summary>
         /// <param name="name">The original reanimation asset containing the intermediate pose.</param>
         /// <param name="instanceKey">The actor's stable native playback identity.</param>
-        /// <param name="animation">The original clip whose first frame replaces the previous pose.</param>
-        /// <param name="version">The simulation-owned reset version, changed once for each zero-blend transition.</param>
+        /// <param name="animation">The original clip whose authored source pose replaces the previous rendered pose.</param>
+        /// <param name="version">The simulation-owned reset version, changed once for each source-pose transition.</param>
+        /// <param name="lastFrame">Whether the completed final frame is required instead of the first frame.</param>
         /// <returns>Whether this renderer already retained or successfully sampled the requested source pose.</returns>
-        internal bool EnsureNativePlaybackPose(string? name, string? instanceKey, string animation, int version)
+        internal bool EnsureNativePlaybackPose(string? name, string? instanceKey, string animation, int version, bool lastFrame = false)
         {
             if (string.IsNullOrEmpty(instanceKey) || version <= 0)
             {
@@ -3170,22 +3171,50 @@ namespace PlantsVsZombies.Reanimation
                 return false;
             }
 
-            var blend = PrepareNativeBlend(instanceKey, animation, 0f, 0)!;
+            var seconds = lastFrame ? clip.Count / asset.Fps : 0f;
+            var frame = lastFrame ? clip.Start + clip.Count - 1 : clip.Start;
+            var blend = PrepareNativeBlend(instanceKey, animation, seconds, 0)!;
             blend.From.Clear();
             blend.Current.Clear();
             blend.Animation = animation;
-            blend.StartedAt = 0f;
-            blend.LastSeconds = 0f;
+            blend.StartedAt = seconds;
+            blend.LastSeconds = seconds;
             blend.SourcePoseVersion = version;
             foreach (var track in asset.Tracks)
             {
-                var pose = GetFrame(track, clip.Start);
+                var pose = GetFrame(track, frame);
                 if (pose.Visibility >= 0f && pose.Texture != null)
                 {
                     blend.Current[track.PoseId] = pose;
                 }
             }
 
+            return true;
+        }
+
+        /// <summary>Starts the original return blend at simulation time zero using the completed source clip, independently of render frequency.</summary>
+        /// <param name="name">The original actor asset.</param>
+        /// <param name="instanceKey">The actor's stable native playback identity.</param>
+        /// <param name="sourceAnimation">The completed source clip whose final authored pose begins the blend.</param>
+        /// <param name="animation">The destination clip that began at the simulation transition.</param>
+        /// <param name="blendTicks">The native blend length in hundred-Hz updates.</param>
+        /// <param name="version">The simulation-owned transition version, consumed once for this actor.</param>
+        /// <returns>Whether the requested transition is already retained or was initialized successfully.</returns>
+        internal bool EnsureNativePlaybackTransition(string? name, string? instanceKey, string sourceAnimation, string animation, int blendTicks, int version)
+        {
+            if (string.IsNullOrEmpty(instanceKey) || version <= 0)
+            {
+                return false;
+            }
+            if (_nativePoseBlends.TryGetValue(instanceKey, out var existing) && existing.SourcePoseVersion == version)
+            {
+                return true;
+            }
+            if (!EnsureNativePlaybackPose(name, instanceKey, sourceAnimation, version, lastFrame: true))
+            {
+                return false;
+            }
+            PrepareNativeBlend(instanceKey, animation, 0f, blendTicks);
             return true;
         }
 

@@ -725,6 +725,7 @@ namespace PlantsVsZombies.Simulation
             {
                 p.CannonPhase = CobCannonPhase.Reloading;
                 p.CannonReloadRemaining = 30f;
+                p.CannonResetVersion++;
             }
         }
     }

@@ -10,6 +10,8 @@ namespace PlantsVsZombies.Adventure
         internal const float LoadingSeconds = 15f / 12f;
         /// <summary>The forty-two shooting frames at the original twelve frames per second.</summary>
         internal const float FiringSeconds = 42f / 12f;
+        /// <summary>PC 4731AE passes twenty native updates to PlayReanim when returning to the unarmed idle.</summary>
+        internal const int ReturnBlendTicks = 20;
         /// <summary>The original 206 shooting counter emits when its decremented value reaches one.</summary>
         internal const float ReleaseSeconds = 2.05f;
 

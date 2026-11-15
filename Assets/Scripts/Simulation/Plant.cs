@@ -362,6 +362,18 @@ namespace PlantsVsZombies.Simulation
                 }
             }
         }
+        /// <summary>Gets the completed shooting cycle whose native final pose begins the cannon's return blend.</summary>
+        public int CannonResetVersion
+        {
+            get => _behaviorKind == Kind && _behavior is UpgradePlantBehavior behavior ? behavior.CannonResetVersion : 0;
+            internal set
+            {
+                if (Behavior is UpgradePlantBehavior behavior)
+                {
+                    behavior.CannonResetVersion = value;
+                }
+            }
+        }
         /// <summary>Stores cannon reload remaining.</summary>
         public float CannonReloadRemaining
         {

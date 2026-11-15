@@ -330,6 +330,13 @@ namespace PlantsVsZombies.Game
         /// <returns>Whether native plant artwork was submitted.</returns>
         private bool DrawPlantPose()
         {
+            if (_plant.Kind == PlantKind.CobCannon && _plant.CannonPhase == CobCannonPhase.Reloading)
+            {
+                // PC UpdateShooting starts this twenty-tick return from the completed source animation,
+                // even if several logic updates passed without drawing the shooting endpoint.
+                RequiredRenderer.EnsureNativePlaybackTransition(_name, _key, "anim_shooting", "anim_unarmed_idle",
+                    AdventureCobCannonRules.ReturnBlendTicks, _plant.CannonResetVersion);
+            }
             var visible = _plant.BlinkAnimation != null || _plant.Kind == PlantKind.KernelPult || _plant.Kind == PlantKind.PotatoMine
                 || _plant.Kind == PlantKind.Garlic || _plant.Kind == PlantKind.Pumpkin && _pumpkinGroup >= 0 ? _plantVisible : null;
             var blinking = _plant.BlinkAnimation != null;
