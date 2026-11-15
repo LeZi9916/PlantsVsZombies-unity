@@ -33,8 +33,10 @@ namespace PlantsVsZombies.Game
         private readonly Func<string, bool> _plantVisible;
         /// <summary>The retained track predicate for zombie variants and missing parts.</summary>
         private readonly Func<string, bool> _zombieVisible;
-        /// <summary>The retained original pool attachment callback, shared by all synchronous zombie draws.</summary>
-        private readonly Action<string, Matrix4x4, Matrix4x4, float> _poolTrackAttachment;
+        /// <summary>Reuses the original zombie track attachment callback for plant heads and water effects.</summary>
+        private readonly Action<string, Matrix4x4, Matrix4x4, float> _zombieTrackAttachment;
+        /// <summary>Retains the inherited complete-body color while a track submits its attached plant head.</summary>
+        private Color _zombieInheritedColor;
         /// <summary>The retained notification inserting an original blink immediately after its attachment track.</summary>
         private readonly Action<string> _plantBlinkTrackDrawn;
         /// <summary>The original selected face or idle track at which the blink is attached.</summary>
@@ -91,7 +93,7 @@ namespace PlantsVsZombies.Game
             _drawCursor = DrawCursorPose;
             _plantVisible = IsPlantTrackVisible;
             _zombieVisible = IsZombieTrackVisible;
-            _poolTrackAttachment = DrawPoolTrackAttachment;
+            _zombieTrackAttachment = DrawZombieTrackAttachment;
             _plantBlinkTrackDrawn = DrawPlantBlinkAfterTrack;
         }
 
@@ -437,6 +439,7 @@ namespace PlantsVsZombies.Game
                     _zombie.PresentationNativePhase == 55 ? "anim_swim" : "anim_walk", _zombie.DolphinState.WalkingPoseVersion);
             }
 
+            _zombieInheritedColor = SpriteDrawState.Color;
             var painted = string.Equals(_name, "Zombie", StringComparison.OrdinalIgnoreCase) && !_zombie.Headless && !_plantHead
                 && !_backwards && _zombie.Kind != ZombieKind.Flag && _zombie.Kind != ZombieKind.DuckyTube
                 && _zombie.PoolState == null && _zombie.PresentationInPool != true && !_zombie.PresentationPoolRow
@@ -453,16 +456,43 @@ namespace PlantsVsZombies.Game
                             : _zombie.Kind == ZombieKind.Snorkel && _zombie.PresentationNativePhase != 58
                                 ? 0 : _zombie.Kind == ZombieKind.PoleVaulter ? _zombie.PresentationPoleVaultBlendTicks
                                     : AdventureDancerRules.AnimationBlendTicks(_zombie), -1f, 90f,
-                    trackAttachment: _poolParticles != null && (_zombie.PoolState?.SeaweedAge >= 0f
-                        || _zombie.ZomboniState?.FlatTires == true) ? _poolTrackAttachment : null,
+                    trackAttachment: _plantHead || _poolParticles != null && (_zombie.PoolState?.SeaweedAge >= 0f
+                        || _zombie.ZomboniState?.FlatTires == true) ? _zombieTrackAttachment : null,
                     fullLastFrame: _zombie.Kind == ZombieKind.Snorkel && _zombie.PresentationNativePhase == 59
-                        || _zombie.Kind == ZombieKind.DolphinRider && _zombie.PresentationNativePhase == 53);
-            if (_plantHead && !_zombie.Headless)
-            {
-                RequiredRenderer.DrawNativePlantHeadAttachment(_origin, _scale, _clip, _seconds, _rate, _zombie.ModeHead, _zombie.PresentationPlantHeadAge, _backwards);
-            }
+                        || _zombie.Kind == ZombieKind.DolphinRider && _zombie.PresentationNativePhase == 53,
+                    hiddenAttachmentTrack: _plantHead ? PlantHeadAnchor : null);
 
             return painted;
+        }
+
+        /// <summary>Gets PC ZombieInitialize's original plant-head attachment track.</summary>
+        private string PlantHeadAnchor => _zombie.ModeHead == 27 || _zombie.ModeHead == 28 || _zombie.ModeHead == 31 ? "Zombie_body" : "anim_head1";
+
+        /// <summary>Submits the original independent head immediately after the parent's exact blended attachment track.</summary>
+        /// <param name="track">The sampled original parent track.</param>
+        /// <param name="placement">The parent's placement multiplied by this track's displayed transform.</param>
+        /// <param name="boardTransform">The inherited board transform.</param>
+        /// <param name="alpha">The parent track opacity supplied to other original attachments.</param>
+        private void DrawZombieTrackAttachment(string track, Matrix4x4 placement, Matrix4x4 boardTransform, float alpha)
+        {
+            if (_plantHead && !_zombie.Headless && string.Equals(track, PlantHeadAnchor, StringComparison.OrdinalIgnoreCase))
+            {
+                var color = SpriteDrawState.Color;
+                try
+                {
+                    SpriteDrawState.Color = _zombieInheritedColor;
+                    RequiredRenderer.DrawNativePlantHeadAttachment(_origin, _scale, _clip, _seconds, _rate,
+                        _zombie.ModeHead, _zombie.PresentationPlantHeadAge, _backwards, placement, boardTransform);
+                }
+                finally
+                {
+                    SpriteDrawState.Color = color;
+                }
+            }
+            if (_poolParticles != null)
+            {
+                DrawPoolTrackAttachment(track, placement, boardTransform, alpha);
+            }
         }
 
         /// <summary>Submits PC pool-emergence seaweed immediately after its original visible body track.</summary>

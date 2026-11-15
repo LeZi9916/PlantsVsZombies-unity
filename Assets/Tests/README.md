@@ -1200,3 +1200,20 @@ pass. The presentation change covers the directories and pre-game flows; it is
 not a rewrite or full parity claim for every independent-mode combat mechanic,
 mid-battle HUD or result screen. Original executable pixel equivalence, packaged
 Players and other target devices remain unverified.
+
+`PlantZombieAttachmentTests` checks the six PC plant-zombie attachment transforms.
+Executing `527B50` with `(65,-5,0.2,-1,1)` yields the literal matrix
+`[-0.980066597,0.198669329,65;0.198669329,0.980066597,-5]`.
+The child uses the parent's ninety-pixel mind-control mirror and its actual
+sampled/blended track, and is submitted after that original track even when the
+original head image is hidden. The test uses labeled original-format tracks to
+check matrix channels, clip-transition continuity and foreground-arm order.
+Original pool waterline and cracked-helm cases retain their coverage.
+
+```powershell
+./Tools/Tests/Run-UnityTests.ps1 -Platform PlayMode -TestFilter 'PlantZombieAttachmentTests;OriginalZombiePoolGraphicsTests.PlantHeadAttachmentKeepsParentWaterlineInSceneAndCapture;ReanimationCombatAssociationTests.NormalKindPlantHeadHelmsKeepTheirCrackedArtwork'
+```
+
+Twelve distinct targeted PlayMode cases pass for this attachment repair. This is
+instruction-derived geometry and actual source-command validation, not native
+executable screenshot pixel equivalence or a target-device build.
