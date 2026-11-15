@@ -253,7 +253,7 @@ namespace PlantsVsZombies.Tests.EditMode
             Invoke(game, "SpawnScheduledAdventureWave", new AdventureWave { Index = 0, Zombies = new[] { ZombieKind.Bobsled } });
             Assert.That(game.Zombies, Has.Count.EqualTo(4));
             Assert.That(game.Zombies.All(zombie => zombie.Kind == ZombieKind.Normal), Is.True);
-            Assert.That(random.RawCalls, Is.EqualTo(4));
+            Assert.That(random.RawCalls, Is.EqualTo(12));
             Assert.That(random.Bounds.Count(bound => bound == 5), Is.EqualTo(4));
         }
 

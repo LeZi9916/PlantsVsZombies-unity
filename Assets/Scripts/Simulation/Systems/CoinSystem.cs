@@ -121,6 +121,7 @@ namespace PlantsVsZombies.Simulation
             coin.IsBeingCollected = true;
             coin.CollectorPlantId = 0;
             coin.PersistencePending = false;
+            _zombieFeedbackSystem.RequestAdventureZombieFoley(coin.Kind == AdventureCoinKind.Diamond ? -8 : 31);
             _adventureModeRunner.Adventure.Notice(AdventureNoticeKind.CoinCollectionStarted, (int)coin.Kind);
             return true;
         }

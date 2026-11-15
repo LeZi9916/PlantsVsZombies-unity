@@ -275,6 +275,7 @@ namespace PlantsVsZombies.Simulation
             }
 
             _world.Elapsed += dt;
+            _world._nativeFeedbackTick++;
             _seedBankSystem.AdvanceCooldowns(false);
 
             if (_world.IsExperimentalLevelOne)

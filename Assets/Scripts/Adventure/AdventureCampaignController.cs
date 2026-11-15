@@ -212,7 +212,6 @@ namespace PlantsVsZombies.Adventure
 
             if (notice.Kind == AdventureNoticeKind.CoinCollectionStarted)
             {
-                _owner.Sounds.PlayAdventureCoinPickupSound((AdventureCoinKind)notice.Value);
                 _owner._presenter.ShowWalletUntil(_owner.RequiredGame.Elapsed + 10f);
             }
 

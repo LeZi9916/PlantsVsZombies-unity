@@ -193,7 +193,7 @@ namespace PlantsVsZombies.Adventure
         public float FogBlownRemaining { get; internal set; }
 
         /// <summary>Retains the original overlapping fog tiles and their rolling displacement.</summary>
-        internal AdventureFogState Fog { get; } = new AdventureFogState();
+        internal AdventureFogState Fog { get; set; } = new AdventureFogState();
         /// <summary>Retains the original storm challenge, rain and flash presentation.</summary>
         internal AdventureStormState Storm { get; } = new AdventureStormState();
         /// <summary>Gets whether the original storm challenge is inside one of its flash windows.</summary>

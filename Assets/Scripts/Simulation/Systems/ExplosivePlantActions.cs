@@ -77,6 +77,16 @@ namespace PlantsVsZombies.Simulation
             return (float)(_world._random.Next() / 2147483647.0 * range);
         }
 
+        /// <summary>Consumes an original Cherry Foley through the same admission and random state as other sounds.</summary>
+        /// <param name="foley">The original reverse, boom or juicy Foley category.</param>
+        /// <returns>The immutable original playback selection.</returns>
+        private AdventureZombieSoundEvent SampleCherryFoley(int foley)
+        {
+            var sound = new AdventureZombieSoundEvent { Foley = foley, Tick = _world._nativeFeedbackTick };
+            _world._foleyRandom.Resolve(sound, _world._random, _world.Rules.AdventureSoundMuted);
+            return sound;
+        }
+
         /// <summary>Performs initialize adventure cherry bomb.</summary>
         /// <param name = "plant">The plant.</param>
         internal void InitializeAdventureCherryBomb(Plant plant)
@@ -96,8 +106,8 @@ namespace PlantsVsZombies.Simulation
             plant.ActionTimer = global::PlantsVsZombies.Adventure.AdventureCherryBombState.FuseTicks * .01f;
             // 52A5A0 selects the only original variation with Rand(1), even though its
             // choice is fixed. Keep that draw on the replayable simulation stream.
-            _world._random.Next(1);
-            _world._adventureCherryFuseSounds.Enqueue(new global::PlantsVsZombies.Adventure.AdventureCherryBombSound());
+            var fuse = SampleCherryFoley(57);
+            _world._adventureCherryFuseSounds.Enqueue(new AdventureCherryBombSound { SuppressPrimary = fuse.SampleIndex < 0 });
         }
 
         /// <summary>Performs advance adventure cherry bomb.</summary>
@@ -149,10 +159,10 @@ namespace PlantsVsZombies.Simulation
             plant.ActionTimer = 0;
             // Local PC 474B83..474C32: Foley 55 (boom), then Foley 65 (juicy).
             // Foley table 74B3B8 gives pitch ranges 0 and 2 respectively.
-            _world._random.Next(1);
-            var juicyPitch = AdventureCherryRandomFloat(2f);
-            _world._random.Next(1);
-            _world._adventureCherryDetonationSounds.Enqueue(new global::PlantsVsZombies.Adventure.AdventureCherryBombSound { Detonation = true, JuicyPitchSteps = juicyPitch });
+            var boom = SampleCherryFoley(55);
+            var juicy = SampleCherryFoley(65);
+            _world._adventureCherryDetonationSounds.Enqueue(new AdventureCherryBombSound { Detonation = true,
+                JuicyPitchSteps = juicy.ResolvedPitch, SuppressPrimary = boom.SampleIndex < 0, SuppressJuicy = juicy.SampleIndex < 0 });
             _legacySimulation.Raise(GameEvent.Explosion);
             _combatSystem.BlastAdventureAshPlant(plant, 115, 1);
             _explosionEffects.AdventurePresentationExplosion(PlantKind.CherryBomb, plant.Column + .5f, plant.Row);

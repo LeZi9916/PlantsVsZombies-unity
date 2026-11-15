@@ -80,6 +80,84 @@ namespace PlantsVsZombies.Tests.EditMode
             Assert.That(random.Bounds, Is.Empty);
         }
 
+        /// <summary>Checks PC Foley's pitch-before-admission order and rejection without a variation draw.</summary>
+        [Test]
+        public void FoleyRejectionKeepsPitchButDoesNotDrawASample()
+        {
+            var sampler = new AdventureFoleyRandom();
+            var random = new RecordingRandom(1);
+            var first = new AdventureZombieSoundEvent { Foley = 1, Tick = 100 };
+            sampler.Resolve(first, random, false);
+            var next = new AdventureZombieSoundEvent { Foley = 1, Tick = 101 };
+            sampler.Resolve(next, random, false);
+            Assert.That(first.SampleIndex, Is.InRange(0, 2));
+            Assert.That(next.SampleIndex, Is.EqualTo(-1));
+            Assert.That(random.Bounds, Is.EqualTo(new[] { 3 }));
+            Assert.That(random.RawCalls, Is.EqualTo(2));
+            Assert.That(next.ResolvedPitch, Is.InRange(0f, 10f));
+        }
+
+        /// <summary>Checks original flag 0x10 excludes only the last sample index while preserving weighted duplicate entries.</summary>
+        [Test]
+        public void FoleyNoRepeatFlagUsesTheOriginalReducedCandidateBound()
+        {
+            var sampler = new AdventureFoleyRandom();
+            var random = new RecordingRandom(1);
+            var first = new AdventureZombieSoundEvent { Foley = 95, Tick = 100 };
+            var second = new AdventureZombieSoundEvent { Foley = 95, Tick = 110 };
+            sampler.Resolve(first, random, false);
+            sampler.Resolve(second, random, false);
+            Assert.That(random.Bounds, Is.EqualTo(new[] { 3, 2 }));
+            Assert.That(first.SampleIndex, Is.Not.EqualTo(second.SampleIndex));
+        }
+
+        /// <summary>Checks the original eight looping slots, explicit stop and muted gate without inventing overflow replacement.</summary>
+        [Test]
+        public void FoleyVoiceLimitAndStopUseOriginalAdmissionRules()
+        {
+            var sampler = new AdventureFoleyRandom();
+            var random = new RecordingRandom(1);
+            for (var voice = 0; voice < 9; voice++)
+            {
+                var sound = new AdventureZombieSoundEvent { Foley = 49, Tick = 100 };
+                sampler.Resolve(sound, random, false);
+                Assert.That(sound.SampleIndex, Is.EqualTo(voice < 8 ? 0 : -1));
+            }
+
+            Assert.That(random.Bounds.Count, Is.EqualTo(8));
+            sampler.Stop(49);
+            var replay = new AdventureZombieSoundEvent { Foley = 49, Tick = 101 };
+            sampler.Resolve(replay, random, false);
+            Assert.That(replay.SampleIndex, Is.Zero);
+            var muted = new AdventureZombieSoundEvent { Foley = 1, Tick = 102 };
+            var raw = random.RawCalls;
+            sampler.Resolve(muted, random, true);
+            Assert.That(muted.SampleIndex, Is.EqualTo(-1));
+            Assert.That(random.RawCalls, Is.EqualTo(raw));
+            Assert.That(random.Bounds.Count, Is.EqualTo(9));
+        }
+
+        /// <summary>Checks every board initializes the original fifty-four cells once, and graves reuse those cells rather than reseeding.</summary>
+        [Test]
+        public void BoardCellsAndGravesShareTheBattleStream()
+        {
+            var game = Board(9);
+            var expected = new OriginalRandomAdapter(7529);
+            var cells = new AdventureFogState();
+            cells.InitializeLooks(expected);
+            var native = cells.CreateGraveAppearance(4, 2, 0);
+            var random = Attach(game, 1);
+            var first = (AdventureCellTimer)Invoke(game, "CreateAdventureGrave", 2, 4)!;
+            var second = (AdventureCellTimer)Invoke(game, "CreateAdventureGrave", 2, 4)!;
+            Assert.That(random.Bounds, Is.EqualTo(new[] { 50, 50 }));
+            Assert.That(first.GravePresentation!.Look, Is.EqualTo(native.Look));
+            Assert.That(first.GravePresentation.OffsetX, Is.EqualTo(native.OffsetX));
+            Assert.That(first.GravePresentation.OffsetY, Is.EqualTo(native.OffsetY));
+            Assert.That(second.GravePresentation!.Look, Is.EqualTo(first.GravePresentation.Look));
+            Assert.That(second.GravePresentation.OffsetX, Is.EqualTo(first.GravePresentation.OffsetX));
+            Assert.That(expected.Generator.DrawCount, Is.EqualTo(162UL));
+        }
+
         /// <summary>Checks original initialization counters are sampled even for plants whose specialized state may later ignore them.</summary>
         /// <param name="kind">The original plant species.</param>
         /// <param name="bound">The original counter's exclusive bound.</param>
@@ -111,12 +189,56 @@ namespace PlantsVsZombies.Tests.EditMode
             Assert.That(random.Bounds, Is.EqualTo(new[] { 400 }));
         }
 
+        /// <summary>Checks Foley admission keeps one monotonically advancing clock across opening and combat.</summary>
+        [Test]
+        public void FoleyClockDoesNotRestartWhenTheOpeningEnds()
+        {
+            var game = Board(19);
+            game.Rules.AdventureSoundMuted = false;
+            var random = Attach(game, 1);
+            for (var tick = 0; tick < 100; tick++)
+            {
+                game.AdvanceNativeFeedbackClock();
+            }
+
+            var first = new AdventureZombieSoundEvent { Foley = 11 };
+            game.ResolveAdventureFoley(first);
+            Assert.That(first.Tick, Is.EqualTo(100));
+            game.Update(.01f);
+            var early = new AdventureZombieSoundEvent { Foley = 11 };
+            game.ResolveAdventureFoley(early);
+            Assert.That(early.Tick, Is.EqualTo(101));
+            Assert.That(early.SampleIndex, Is.EqualTo(-1));
+            game.Update(.09f);
+            var admitted = new AdventureZombieSoundEvent { Foley = 11 };
+            game.ResolveAdventureFoley(admitted);
+            Assert.That(admitted.Tick, Is.EqualTo(110));
+            Assert.That(admitted.SampleIndex, Is.GreaterThanOrEqualTo(0));
+            Assert.That(random.Bounds, Is.EqualTo(new[] { 6, 6 }));
+        }
+
+        /// <summary>Checks dedicated Cherry audio queues honor the same original admission result as ordinary Foley.</summary>
+        [Test]
+        public void ConcurrentCherryFusesRetainTheirNativeAdmissionResult()
+        {
+            var game = Board(19);
+            game.Rules.AdventureSoundMuted = false;
+            var random = Attach(game, 1);
+            Invoke(game, "PlaceAdventurePlant", PlantKind.CherryBomb, 1, 2);
+            Invoke(game, "PlaceAdventurePlant", PlantKind.CherryBomb, 1, 3);
+            Assert.That(game.TryTakeAdventureCherryBombSound(GameEvent.Planted, out var first), Is.True);
+            Assert.That(game.TryTakeAdventureCherryBombSound(GameEvent.Planted, out var next), Is.True);
+            Assert.That(first.SuppressPrimary, Is.False);
+            Assert.That(next.SuppressPrimary, Is.True);
+            Assert.That(random.Bounds, Is.EqualTo(new[] { 7, 400, 1, 7, 400 }));
+        }
+
         /// <summary>Creates a playing board without asynchronous game boot or persistent data.</summary>
         /// <param name="level">The original adventure level.</param>
         /// <returns>The controlled production board.</returns>
         private static GameSimulation Board(int level)
         {
-            var game = new GameSimulation(new GameRules { AdventureLevel = level }, 7529);
+            var game = new GameSimulation(new GameRules { AdventureLevel = level, AdventureSoundMuted = true }, 7529);
             game.ChooseDefaultAdventureSeeds();
             game.ResetAdventureWaveSchedule(100000, false, false);
             SimulationFixture.Plants(game).Clear();

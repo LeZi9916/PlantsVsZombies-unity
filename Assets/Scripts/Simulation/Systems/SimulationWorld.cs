@@ -3,7 +3,6 @@ using PlantsVsZombies.Adventure;
 
 using PlantsVsZombies.Levels;
 using PlantsVsZombies.Modes;
-using PlantsVsZombies.Randomness;
 
 using PlantsVsZombies.VerifiedData;
 using System;
@@ -81,10 +80,14 @@ namespace PlantsVsZombies.Simulation
         internal double _completedBoardAccumulated;
         /// <summary>Reuses the immediately consumed packet-ready feedback context.</summary>
         internal readonly AdventureSeedBankContext _packetFeedbackContext = new AdventureSeedBankContext();
+        /// <summary>Counts native updates continuously across opening, dialogue and combat for original Foley admission.</summary>
+        internal int _nativeFeedbackTick;
+        /// <summary>Resolves original audio randomness without a renderer-owned generator.</summary>
+        internal readonly AdventureFoleyRandom _foleyRandom = new AdventureFoleyRandom();
         /// <summary>Stores random.</summary>
         internal Random _random = null!;
-        /// <summary>Samples original decorative grave choices without changing the combat random stream.</summary>
-        internal OriginalRandomAdapter _gravePresentationRandom = null!;
+        /// <summary>Retains PC 413930's cell looks and jitter shared by fog and gravestones.</summary>
+        internal readonly AdventureFogState _boardCells = new AdventureFogState();
         /// <summary>Stores seed cooldown ticks.</summary>
         internal readonly int[] _seedCooldownTicks = new int[VerifiedDataCatalog.Plants.Count];
         /// <summary>Stores next zombie.</summary>

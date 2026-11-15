@@ -128,17 +128,14 @@ namespace PlantsVsZombies.Simulation
                 Tutorial = level.IsReplay ? AdventureTutorial.Complete : level.Number == 1 ? AdventureTutorial.ChooseSeed : level.Number == 2 ? AdventureTutorial.PlantSunflower : level.Number == 5 ? AdventureTutorial.Shovel : level.Number == 11 ? AdventureTutorial.NightMushrooms : level.Number == 21 ? AdventureTutorial.PoolSupport : level.Number == 31 ? AdventureTutorial.FogVisibility : level.Number == 41 ? AdventureTutorial.RoofPots : level.Mode == AdventureMode.Bowling ? AdventureTutorial.Bowling : level.Mode == AdventureMode.WhackAZombie ? AdventureTutorial.Hammer : level.Mode == AdventureMode.Vasebreaker ? AdventureTutorial.Vases : level.Mode == AdventureMode.Boss ? AdventureTutorial.Boss : level.HasConveyor ? AdventureTutorial.Conveyor : AdventureTutorial.Complete,
                 WaveCountdown = !level.IsReplay && level.Number == 2 ? 50f : level.Mode == AdventureMode.Bowling || level.Mode == AdventureMode.WhackAZombie || level.Mode == AdventureMode.LittleTrouble || level.Mode == AdventureMode.Storm || level.Mode == AdventureMode.Bungee ? 2f : 18f,
                 _nextPacket = 4f,
-                _nextSkySun = _world.Rules.DeferAdventureWaveInitialization ? 0f
-                    : !level.IsReplay && level.Number == 1 ? 7f : (425 + _world._random.Next(276)) * .01f,
+                _nextSkySun = _world.Rules.DeferAdventureWaveInitialization || level.IsNight ? 0f
+                    : (425 + _world._random.Next(276)) * .01f,
                 _nextHammerSun = 8f,
                 BossHealth = level.Mode == AdventureMode.Boss ? 40000f : 0f,
                 _bossTimer = 12f
             };
             Array.Copy(enabledZombieTypes, Adventure.EnabledZombieTypes, enabledZombieTypes.Length);
-            if (level.Terrain == AdventureTerrain.Fog)
-            {
-                Adventure.Fog.InitializeLooks(_world._gravePresentationRandom);
-            }
+            Adventure.Fog = _world._boardCells;
             Adventure._whackSeedBankY = level.Mode == AdventureMode.WhackAZombie ? -87f : 0f;
             _seedBankSystem.InitializeAdventureSeedAccess();
             _seedBankSystem.InitializeReplaySeedChoices();
@@ -361,6 +358,7 @@ namespace PlantsVsZombies.Simulation
             }
 
             _world.Elapsed += dt;
+            _world._nativeFeedbackTick++;
             Adventure._ticks++;
             _battlePresentationSystem.AdventurePresentationTick(dt);
             _seedBankSystem.AdvanceAdventurePacketFeedback(dt);

@@ -1,6 +1,7 @@
 #nullable enable
 
 using PlantsVsZombies.Randomness;
+using PlantsVsZombies.Adventure;
 
 using System;
 
@@ -16,6 +17,44 @@ namespace PlantsVsZombies.Simulation
         internal SimulationRandom(SimulationWorld world)
         {
             _world = world;
+        }
+
+        /// <summary>Advances one original app update while an opening or dialogue owns the board clock.</summary>
+        internal void AdvanceNativeFeedbackClock()
+        {
+            _world._nativeFeedbackTick++;
+        }
+
+        /// <summary>Stops an explicitly stopped original Foley voice.</summary>
+        /// <param name="foley">The original category being stopped.</param>
+        internal void StopAdventureFoley(int foley)
+        {
+            _world._foleyRandom.Stop(foley, _world._nativeFeedbackTick);
+        }
+
+        /// <summary>Consumes an original bounded draw for an explicit native opening or UI action.</summary>
+        /// <param name="maximum">The original exclusive integer bound.</param>
+        /// <returns>The next original remainder-selected integer.</returns>
+        /// <exception cref="ArgumentOutOfRangeException">The exclusive bound is negative.</exception>
+        internal int DrawAdventureRandomInt(int maximum)
+        {
+            return _world._random.Next(maximum);
+        }
+
+        /// <summary>Consumes an original scaled float draw for an explicit native opening action.</summary>
+        /// <param name="scale">The original single-precision scale.</param>
+        /// <returns>The scaled original draw after the native float store.</returns>
+        internal float DrawAdventureRandomFloat(float scale)
+        {
+            return AdventureSpawnRandom.NextFloat(_world._random, scale);
+        }
+
+        /// <summary>Resolves an explicit native UI Foley request using the active game's shared state.</summary>
+        /// <param name="sound">The original request receiving its admitted playback choices.</param>
+        internal void ResolveAdventureFoley(AdventureZombieSoundEvent sound)
+        {
+            sound.Tick = Math.Max(sound.Tick, _world._nativeFeedbackTick);
+            _world._foleyRandom.Resolve(sound, _world._random, _world.Rules.AdventureSoundMuted);
         }
 
         /// <summary>Gets or sets battle random draw count.</summary>

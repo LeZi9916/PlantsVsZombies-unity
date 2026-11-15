@@ -24,7 +24,7 @@ namespace PlantsVsZombies.Adventure
             },
             {
                 49,
-                new AdventureZombieFoleyDefinition(0f, new[] { "rain" })
+                new AdventureZombieFoleyDefinition(0f, new[] { "rain" }, 5)
             },
             // PC 74B3B8 + id * 52: six normal groans, three extra brains variants, and two low giant groans.
             {
@@ -283,12 +283,165 @@ namespace PlantsVsZombies.Adventure
             },
             {
                 100,
-                new AdventureZombieFoleyDefinition(0.0f, new[] { "dancer" })
+                new AdventureZombieFoleyDefinition(0.0f, new[] { "dancer" }, 6)
             },
             {
                 79,
                 new AdventureZombieFoleyDefinition(10.0f, new[] { "gravestone_rumble" })
             },
+            // Remaining PC 74B3B8 rows, including the original boss hydraulic and driver samples.
+            {
+                0,
+                new AdventureZombieFoleyDefinition(10.0f, new[] { "points" }, 0)
+            },
+            {
+                2,
+                new AdventureZombieFoleyDefinition(10.0f, new[] { "lawnmower" }, 0)
+            },
+            {
+                8,
+                new AdventureZombieFoleyDefinition(0.0f, new[] { "plant2" }, 0)
+            },
+            {
+                9,
+                new AdventureZombieFoleyDefinition(0.0f, new[] { "tap2" }, 0)
+            },
+            {
+                10,
+                new AdventureZombieFoleyDefinition(0.0f, new[] { "bleep" }, 0)
+            },
+            {
+                13,
+                new AdventureZombieFoleyDefinition(0.0f, new[] { "groan", "groan2", "groan3", "groan4", "groan5", "groan6", "sukhbir", "sukhbir2", "sukhbir3" }, 0)
+            },
+            {
+                14,
+                new AdventureZombieFoleyDefinition(0.0f, new[] { "jackinthebox" }, 7)
+            },
+            {
+                15,
+                new AdventureZombieFoleyDefinition(0.0f, new[] { "diamond" }, 0)
+            },
+            {
+                24,
+                new AdventureZombieFoleyDefinition(2.0f, new[] { "slurp" }, 0)
+            },
+            {
+                33,
+                new AdventureZombieFoleyDefinition(0.0f, new[] { "digger_zombie" }, 7)
+            },
+            {
+                36,
+                new AdventureZombieFoleyDefinition(2.0f, new[] { "pool_cleaner" }, 0)
+            },
+            {
+                45,
+                new AdventureZombieFoleyDefinition(2.0f, new[] { "explosion" }, 0)
+            },
+            {
+                54,
+                new AdventureZombieFoleyDefinition(0.0f, new[] { "gravebusterchomp" }, 4)
+            },
+            {
+                55,
+                new AdventureZombieFoleyDefinition(0.0f, new[] { "cherrybomb" }, 0)
+            },
+            {
+                56,
+                new AdventureZombieFoleyDefinition(0.0f, new[] { "jalapeno" }, 0)
+            },
+            {
+                59,
+                new AdventureZombieFoleyDefinition(0.0f, new[] { "winmusic" }, 8)
+            },
+            {
+                71,
+                new AdventureZombieFoleyDefinition(0.0f, new[] { "prize" }, 0)
+            },
+            {
+                75,
+                new AdventureZombieFoleyDefinition(5.0f, new[] { "shovel" }, 0)
+            },
+            {
+                77,
+                new AdventureZombieFoleyDefinition(10.0f, new[] { "watering" }, 0)
+            },
+            {
+                81,
+                new AdventureZombieFoleyDefinition(0.0f, new[] { "fertilizer" }, 0)
+            },
+            {
+                82,
+                new AdventureZombieFoleyDefinition(0.0f, new[] { "portal" }, 0)
+            },
+            {
+                84,
+                new AdventureZombieFoleyDefinition(3.0f, new[] { "bugspray" }, 0)
+            },
+            {
+                86,
+                new AdventureZombieFoleyDefinition(0.0f, new[] { "paper" }, 0)
+            },
+            {
+                87,
+                new AdventureZombieFoleyDefinition(0.0f, new[] { "moneyfalls" }, 0)
+            },
+            {
+                89,
+                new AdventureZombieFoleyDefinition(3.0f, new[] { "hydraulic_short" }, 0)
+            },
+            {
+                90,
+                new AdventureZombieFoleyDefinition(0.0f, new[] { "hydraulic" }, 0)
+            },
+            {
+                91,
+                new AdventureZombieFoleyDefinition(3.0f, new[] { "gargantudeath" }, 0)
+            },
+            {
+                92,
+                new AdventureZombieFoleyDefinition(0.0f, new[] { "ceramic" }, 0)
+            },
+            {
+                93,
+                new AdventureZombieFoleyDefinition(0.0f, new[] { "bossboulderattack" }, 0)
+            },
+            {
+                94,
+                new AdventureZombieFoleyDefinition(0.0f, new[] { "chime" }, 0)
+            },
+            {
+                95,
+                new AdventureZombieFoleyDefinition(0.0f, new[] { "crazydaveshort1", "crazydaveshort2", "crazydaveshort3" }, 16)
+            },
+            {
+                96,
+                new AdventureZombieFoleyDefinition(0.0f, new[] { "crazydavelong1", "crazydavelong2", "crazydavelong3" }, 16)
+            },
+            {
+                97,
+                new AdventureZombieFoleyDefinition(0.0f, new[] { "crazydaveextralong1", "crazydaveextralong2", "crazydaveextralong3" }, 16)
+            },
+            {
+                98,
+                new AdventureZombieFoleyDefinition(0.0f, new[] { "crazydavecrazy" }, 0)
+            },
+            {
+                99,
+                new AdventureZombieFoleyDefinition(0.0f, new[] { "phonograph" }, 0)
+            },
+            {
+                101,
+                new AdventureZombieFoleyDefinition(0.0f, new[] { "finalfanfare" }, 0)
+            },
+            {
+                102,
+                new AdventureZombieFoleyDefinition(0.0f, new[] { "crazydavescream" }, 0)
+            },
+            {
+                103,
+                new AdventureZombieFoleyDefinition(0.0f, new[] { "crazydavescream2" }, 0)
+            }
         };
     }
 }

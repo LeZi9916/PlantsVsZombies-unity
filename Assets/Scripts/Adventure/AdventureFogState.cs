@@ -13,11 +13,18 @@ namespace PlantsVsZombies.Adventure
         /// <summary>Stores the original decorative cell choices, shared with the seventh fog row.</summary>
         private readonly int[,] _look = new int[9, 6];
 
+        /// <summary>Stores the original horizontal board-cell jitter.</summary>
+        private readonly int[,] _offsetX = new int[9, 6];
+        /// <summary>Stores the original vertical board-cell jitter.</summary>
+        private readonly int[,] _offsetY = new int[9, 6];
+        /// <summary>Gets whether the shared board constructor has initialized all fifty-four cells.</summary>
+        internal bool LooksInitialized { get; private set; }
+
         /// <summary>Gets the horizontal displacement that rolls the entire fog grid off the lawn.</summary>
         internal float Offset { get; private set; }
 
-        /// <summary>Initializes the original decorative cell distribution without consuming combat randomness.</summary>
-        /// <param name="random">The independently seeded presentation random source.</param>
+        /// <summary>Initializes PC 413930's cell distribution from the same stream used by the rest of the board.</summary>
+        /// <param name="random">The original shared board random stream.</param>
         internal void InitializeLooks(Random random)
         {
             for (var column = 0; column < 9; column++)
@@ -26,10 +33,22 @@ namespace PlantsVsZombies.Adventure
                 {
                     _look[column, row] = random.Next(20);
                     // Board initializes the two cell jitter values between adjacent look draws.
-                    random.Next(10);
-                    random.Next(10);
+                    _offsetX[column, row] = random.Next(10) - 5;
+                    _offsetY[column, row] = random.Next(10) - 5;
                 }
             }
+
+            LooksInitialized = true;
+        }
+
+        /// <summary>Gets the original constructor-selected cell artwork and jitter for a later gravestone.</summary>
+        /// <param name="column">The original lawn column.</param>
+        /// <param name="row">The original lawn row.</param>
+        /// <param name="delay">The separately drawn emergence delay.</param>
+        /// <returns>The retained native cell appearance with the requested emergence delay.</returns>
+        internal AdventureGravePresentation CreateGraveAppearance(int column, int row, int delay)
+        {
+            return new AdventureGravePresentation(_look[column, row], _offsetX[column, row], _offsetY[column, row], delay);
         }
 
         /// <summary>Returns the original left fog column for adventure and independent fog boards.</summary>

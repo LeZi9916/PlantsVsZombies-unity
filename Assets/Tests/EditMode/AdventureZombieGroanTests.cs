@@ -48,7 +48,7 @@ namespace PlantsVsZombies.Tests.EditMode
             Assert.That(game.Presentation.ZombieSounds, Has.Count.EqualTo(1));
             Assert.That(game.Presentation.ZombieSounds[0].Foley, Is.EqualTo(foley));
             Assert.That(game.Presentation.ZombieSounds[0].Pitch, Is.Zero);
-            Assert.That(random.Bounds, Is.EqualTo(new[] { 1, 1000 }));
+            Assert.That(random.Bounds, Is.EqualTo(new[] { 1, foley == 11 ? 6 : foley == 12 ? 9 : 2, 1000 }));
             Assert.That(zombie.GroanTicks, Is.EqualTo(500));
         }
 

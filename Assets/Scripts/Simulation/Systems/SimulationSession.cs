@@ -1,6 +1,5 @@
 #nullable enable
 
-using PlantsVsZombies.Randomness;
 
 using System;
 
@@ -50,7 +49,10 @@ namespace PlantsVsZombies.Simulation
             }
 
             _world._random = new global::PlantsVsZombies.Randomness.OriginalRandomAdapter(unchecked((uint)randomSeed));
-            _world._gravePresentationRandom = new OriginalRandomAdapter(unchecked((uint)randomSeed));
+            if (_world.IsAdventure && !_world.Rules.DeferAdventureWaveInitialization)
+            {
+                _world._boardCells.InitializeLooks(_world._random);
+            }
             _world.State = MatchState.Playing;
             _world.SunAmount = _world.Rules.StartingSun;
             _world._nextZombie = _world.Rules.FirstZombieDelay;

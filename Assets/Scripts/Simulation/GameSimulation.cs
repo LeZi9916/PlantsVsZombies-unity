@@ -1474,6 +1474,43 @@ namespace PlantsVsZombies.Simulation
             return _iZombieMode.PlaceModeZombie(kind, row, column);
         }
 
+        /// <summary>Advances the original feedback clock for one native opening or dialogue update.</summary>
+        internal void AdvanceNativeFeedbackClock()
+        {
+            _simulationRandom.AdvanceNativeFeedbackClock();
+        }
+
+        /// <summary>Stops an original voice at an explicit UI action boundary.</summary>
+        /// <param name="foley">The original category being stopped.</param>
+        internal void StopAdventureFoley(int foley)
+        {
+            _simulationRandom.StopAdventureFoley(foley);
+        }
+
+        /// <summary>Consumes a shared native integer draw at an explicit opening or UI action boundary.</summary>
+        /// <param name="maximum">The original exclusive bound.</param>
+        /// <returns>The next original remainder-selected integer.</returns>
+        /// <exception cref="ArgumentOutOfRangeException">The exclusive bound is negative.</exception>
+        internal int DrawAdventureRandomInt(int maximum)
+        {
+            return _simulationRandom.DrawAdventureRandomInt(maximum);
+        }
+
+        /// <summary>Consumes a shared native scaled float at an explicit opening action boundary.</summary>
+        /// <param name="scale">The original single-precision scale.</param>
+        /// <returns>The original scaled float result.</returns>
+        internal float DrawAdventureRandomFloat(float scale)
+        {
+            return _simulationRandom.DrawAdventureRandomFloat(scale);
+        }
+
+        /// <summary>Resolves an explicit original UI Foley request without a separately seeded audio stream.</summary>
+        /// <param name="sound">The request receiving immutable native sample and pitch choices.</param>
+        internal void ResolveAdventureFoley(AdventureZombieSoundEvent sound)
+        {
+            _simulationRandom.ResolveAdventureFoley(sound);
+        }
+
         /// <summary>Gets or sets battle random draw count.</summary>
         public ulong BattleRandomDrawCount
         {

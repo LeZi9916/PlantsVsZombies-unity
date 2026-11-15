@@ -101,6 +101,7 @@ namespace PlantsVsZombies.Simulation
             storm.PresentationRemainder += delta;
             while (storm.PresentationRemainder + .0000001 >= SimulationWorld.SimulationStep)
             {
+                _world._nativeFeedbackTick++;
                 if (_world.State == MatchState.Lost && !paused)
                 {
                     var foley = storm.AdvanceLossClock();

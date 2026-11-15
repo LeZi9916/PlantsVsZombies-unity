@@ -1,7 +1,6 @@
 #nullable enable
 using PlantsVsZombies.BoardUI;
 using PlantsVsZombies.Progression;
-using PlantsVsZombies.Randomness;
 using PlantsVsZombies.Simulation;
 using System;
 using System.Collections.Generic;
@@ -103,7 +102,7 @@ namespace PlantsVsZombies.Adventure
             _owner.Dave._crazyDaveHeldItem = null;
             _owner.Dave._crazyDaveIdleMouth = null;
             _owner.Dave._crazyDaveBlinkAge = -1f;
-            _owner.Dave._crazyDaveBlinkTicks = UnityEngine.Random.Range(400, 801);
+            _owner.Dave._crazyDaveBlinkTicks = 400 + (_owner._game?.DrawAdventureRandomInt(401) ?? UnityEngine.Random.Range(0, 401));
             _owner.Dave._crazyDaveVoice.Stop();
             // Older explicitly isolated feature probes start at the battle they are inspecting.
             // The new opening probe and normal player always use the complete original opening.
@@ -185,9 +184,8 @@ namespace PlantsVsZombies.Adventure
                 waves.Add(kinds);
             }
 
-            // Original MT, isolated from battle's already-created wave list. Full native RNG draw order is not claimed.
-            var previewRandom = new OriginalRandomAdapter(unchecked((uint)(level.Number * 104729 + level.Cycle * 31)));
-            _adventurePreview.AddRange(AdventureIntroPresentation.CreateStreetPreview(context, waves, bound => previewRandom.Next(bound), limit => (float)previewRandom.NextDouble() * limit, (kind, clip) => kind < 26 && _owner.AnimationCatalog.AdventureClipExists(AdventureAnimationCatalog.AdventureZombieAnimation((ZombieKind)kind), clip)));
+            // PC street actors consume the existing global stream; drawing their cached preview never resamples it.
+            _adventurePreview.AddRange(AdventureIntroPresentation.CreateStreetPreview(context, waves, _owner._game.DrawAdventureRandomInt, _owner._game.DrawAdventureRandomFloat, (kind, clip) => kind < 26 && _owner.AnimationCatalog.AdventureClipExists(AdventureAnimationCatalog.AdventureZombieAnimation((ZombieKind)kind), clip)));
             _adventurePreview.Sort((a, b) => a.RenderOrder.CompareTo(b.RenderOrder));
         }
 
@@ -264,6 +262,7 @@ namespace PlantsVsZombies.Adventure
             while (_adventureIntroRemainder + .000000001 >= (double).01f && !RequiredAdventureIntro.Complete)
             {
                 _adventureIntroRemainder -= (double).01f;
+                _owner.RequiredGame.AdvanceNativeFeedbackClock();
                 _adventureIntroVisualAge += .01f;
                 foreach (var preview in _adventurePreview)
                 {
@@ -443,6 +442,7 @@ namespace PlantsVsZombies.Adventure
             while (_vaseDialogueRemainder + .000000001 >= (double).01f && _vaseDialogueActive)
             {
                 _vaseDialogueRemainder -= (double).01f;
+                _owner.RequiredGame.AdvanceNativeFeedbackClock();
                 _owner.Dave.UpdateCrazyDaveAnimation(.01f);
                 if (_owner.Dave._crazyDaveAnimation == null)
                 {

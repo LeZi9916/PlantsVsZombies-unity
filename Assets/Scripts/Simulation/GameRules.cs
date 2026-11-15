@@ -18,6 +18,8 @@ namespace PlantsVsZombies.Simulation
         public int AdventureCycle = 1;
         /// <summary>Stores adventure dave seed.</summary>
         public int AdventureDaveSeed = 12345;
+        /// <summary>Mirrors the original SFX-muted gate for original Foley request sampling.</summary>
+        public bool AdventureSoundMuted;
         /// <summary>Stores adventure packet slots.</summary>
         public int AdventurePacketSlots = 6;
         /// <summary>Stores adventure coin commit.</summary>

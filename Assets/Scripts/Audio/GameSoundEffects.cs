@@ -235,14 +235,21 @@ namespace PlantsVsZombies.Audio
             {
                 if (!sound.Detonation)
                 {
-                    PlayPresentationSound("reverse_explosion");
+                    if (!sound.SuppressPrimary)
+                    {
+                        PlayPresentationSound("reverse_explosion");
+                    }
                     continue;
                 }
 
                 detonation = true;
-                PlayPresentationSound("cherrybomb");
+                if (!sound.SuppressPrimary)
+                {
+                    PlayPresentationSound("cherrybomb");
+                }
+
                 AudioClip clip;
-                if (_audioSource == null || !_presentationSounds.TryGetValue("juicy", out clip) || clip == null)
+                if (sound.SuppressJuicy || _audioSource == null || !_presentationSounds.TryGetValue("juicy", out clip) || clip == null)
                 {
                     continue;
                 }
@@ -380,6 +387,7 @@ namespace PlantsVsZombies.Audio
             }
 
             _vaseFoley.Tick = game.Adventure._ticks;
+            _vaseFoley.Resolved = false;
             while (_vaseSwingSoundSerial < game.Presentation.VaseSwingSoundSerial)
             {
                 _vaseSwingSoundSerial++;
@@ -537,10 +545,9 @@ namespace PlantsVsZombies.Audio
                 return;
             }
 
-            // Original Coin Foley uses the coin sample with a ten-semitone pitch range.
-            var semitones = (float)_zombieFoleyRandom.NextDouble() * 10f;
-            var frequency = Math.Max(100d, Math.Min(100000d, clip.frequency * Math.Pow(1.059463094359295d, semitones)));
-            _soundVoices.TryPlay(clip, _soundVolume, (float)(frequency / clip.frequency), 31, 8);
+            var sound = new AdventureZombieSoundEvent { Foley = 31,
+                Tick = _owner._game == null ? 0 : (int)Math.Round(_owner._game.Elapsed * 100f) };
+            PlayAdventureZombieFoley(sound);
         }
         /// <summary>Stores presentation sounds.</summary>
         internal readonly Dictionary<string, AudioClip> _presentationSounds = new Dictionary<string, AudioClip>(StringComparer.Ordinal);
@@ -743,8 +750,6 @@ namespace PlantsVsZombies.Audio
         private bool _zombiePartAudioLoading, _zombieFoleyReady;
         /// <summary>Stores zombie foley random.</summary>
         private readonly System.Random _zombieFoleyRandom = new global::PlantsVsZombies.Randomness.OriginalRandomAdapter(12345U);
-        /// <summary>Stores zombie foley last tick.</summary>
-        private readonly Dictionary<int, int> _zombieFoleyLastTick = new Dictionary<int, int>(AdventureZombieFoleyData.Definitions.Count);
 
         /// <summary>Performs update adventure zombie part audio.</summary>
         internal void UpdateAdventureZombiePartAudio()
@@ -755,7 +760,6 @@ namespace PlantsVsZombies.Audio
                 _zombiePartAudioSerial = 0;
                 _zombieRiseSoundSerial = 0;
                 _zombieSoundReadIndex = 0;
-                _zombieFoleyLastTick.Clear();
                 _jackInTheBoxMusic?.Stop();
                 _jackInTheBoxMusicPaused = false;
                 _diggerTunnelingSound?.Stop();
@@ -826,6 +830,7 @@ namespace PlantsVsZombies.Audio
                 -5 => "mindcontrolled",
                 -6 => "boing",
                 -7 => "ladder_zombie",
+                -8 => "diamond",
                 _ => null
             };
             if (directSample != null)
@@ -844,26 +849,27 @@ namespace PlantsVsZombies.Audio
                 return;
             }
 
-            // Keep native limits for ambient/chewing Foley; each projectile impact needs its own feedback.
-            var projectileImpact = evt.Foley == 1 || evt.Foley == 32 || evt.Foley == 38 || evt.Foley == 43
-                || evt.Foley == 46 || evt.Foley == 58 || evt.Foley == 62;
-            int previous;
-            // Storm countdowns continue while paused, independently of the frozen combat-event tick.
-            if (evt.Foley != 17 && !projectileImpact && _zombieFoleyLastTick.TryGetValue(evt.Foley, out previous) && evt.Tick - previous < 10)
+            if (!evt.Resolved && _owner._game != null)
+            {
+                _owner._game.ResolveAdventureFoley(evt);
+            }
+
+            // Simulation has already consumed admitted pitch/variation draws on the board stream.
+            // Calls without an active simulation retain the existing menu-preview playback fallback.
+            if (evt.Resolved && evt.SampleIndex < 0)
             {
                 return;
             }
 
-            // PC Foley 100 is OneAtATime: simultaneous dance leaders share one summoning vocal.
-            var groupLimit = evt.Foley == 100 ? 1 : 8;
-            if (!_soundVoices.CanPlay(evt.Foley, groupLimit, replaceOldest: projectileImpact))
+            var groupLimit = (definition.Flags & 2) != 0 ? 1 : 8;
+            if (!_soundVoices.CanPlay(evt.Foley, groupLimit, replaceOldest: false))
             {
                 return;
             }
 
-            // PC table 0x74B3B8: preserve duplicate entries as variation weights.
-            var semitones = evt.Pitch + (definition.PitchRange == 0f ? 0f : (float)_zombieFoleyRandom.NextDouble() * definition.PitchRange);
-            var sample = definition.Samples[_zombieFoleyRandom.Next(definition.Samples.Length)];
+            var semitones = evt.Resolved ? evt.ResolvedPitch
+                : evt.Pitch + (definition.PitchRange == 0f ? 0f : (float)_zombieFoleyRandom.NextDouble() * definition.PitchRange);
+            var sample = definition.Samples[evt.Resolved ? evt.SampleIndex : _zombieFoleyRandom.Next(definition.Samples.Length)];
             AudioClip clip;
             if (!_presentationSounds.TryGetValue(sample, out clip) || clip == null)
             {
@@ -871,11 +877,8 @@ namespace PlantsVsZombies.Audio
             }
 
             // PC DSoundInstance::AdjustPitch 0x63E850, including native frequency limits.
-            var frequency = Math.Max(100d, Math.Min(100000d, clip.frequency * Math.Pow(1.059463094359295d, semitones)));
-            if (_soundVoices.TryPlay(clip, _soundVolume, (float)(frequency / clip.frequency), evt.Foley, groupLimit, replaceOldest: projectileImpact))
-            {
-                _zombieFoleyLastTick[evt.Foley] = evt.Tick;
-            }
+            var frequency = Math.Max(100d, Math.Min(100000d, clip.frequency * Math.Pow(1.0594630943592953d, semitones)));
+            _soundVoices.TryPlay(clip, _soundVolume, (float)((int)frequency / (double)clip.frequency), evt.Foley, groupLimit, replaceOldest: false);
         }
 
         /// <summary>Loads the original native Foley recordings shared by combat actors and plant abilities.</summary>
@@ -910,13 +913,20 @@ namespace PlantsVsZombies.Audio
                 }
 
                 var path = Path.Combine(_owner._root, "sounds", name + ".ogg");
+                var type = AudioType.OGGVORBIS;
+                if (!File.Exists(path) && File.Exists(Path.ChangeExtension(path, ".wav")))
+                {
+                    path = Path.ChangeExtension(path, ".wav");
+                    type = AudioType.WAV;
+                }
+
                 if (!File.Exists(path))
                 {
                     Debug.LogError("[Audio] Missing original combat Foley: " + path);
                     continue;
                 }
 
-                using (var request = UnityWebRequestMultimedia.GetAudioClip(new Uri(path).AbsoluteUri, AudioType.OGGVORBIS))
+                using (var request = UnityWebRequestMultimedia.GetAudioClip(new Uri(path).AbsoluteUri, type))
                 {
                     yield return request.SendWebRequest();
                     if (request.result == UnityWebRequest.Result.Success)

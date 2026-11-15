@@ -10,6 +10,35 @@ namespace PlantsVsZombies.Progression
     /// <summary>Owns Crazy Dave's animation, held item, voice and dialogue text shared by the opening, store, garden and tree.</summary>
     internal sealed class CrazyDaveActor
     {
+        /// <summary>Samples the original shared stream during a board's dialogue, retaining the existing menu-only source without an active board.</summary>
+        /// <param name="maximum">The original exclusive integer bound.</param>
+        /// <returns>The next bounded original action ticket.</returns>
+        internal int NextOriginalRandom(int maximum)
+        {
+            return _owner._currentView == PvZGame.ScreenView.Board && _owner._game != null
+                ? _owner._game.DrawAdventureRandomInt(maximum) : UnityEngine.Random.Range(0, maximum);
+        }
+
+        /// <summary>Resolves Dave's original speech category and no-repeat variation on the shared board stream.</summary>
+        /// <param name="speech">The original speech category and recording names.</param>
+        /// <returns>The admitted original recording, or null while the original voice gate suppresses it.</returns>
+        private string? SelectOriginalSpeech(CrazyDaveSpeech speech)
+        {
+            var firstSound = speech.GetSoundName(0);
+            var game = _owner._game;
+            var foley = firstSound.StartsWith("crazydaveshort", StringComparison.Ordinal) ? 95
+                : firstSound.StartsWith("crazydavelong", StringComparison.Ordinal) ? 96
+                : firstSound.StartsWith("crazydaveextralong", StringComparison.Ordinal) ? 97 : -1;
+            if (game == null || _owner._currentView != PvZGame.ScreenView.Board || foley < 0)
+            {
+                return speech.GetSoundName(NextOriginalRandom(speech.SoundVariantCount));
+            }
+
+            var sound = new AdventureZombieSoundEvent { Foley = foley };
+            game.ResolveAdventureFoley(sound);
+            return sound.SampleIndex < 0 ? null : AdventureZombieFoleyData.Definitions[foley].Samples[sound.SampleIndex];
+        }
+
         /// <summary>Provides the game session whose shared state and services this component uses.</summary>
         private readonly PvZGame _owner;
 
@@ -116,7 +145,7 @@ namespace PlantsVsZombies.Progression
                 _crazyDaveBlinkTicks--;
                 if (_crazyDaveBlinkTicks <= 0)
                 {
-                    _crazyDaveBlinkTicks = UnityEngine.Random.Range(400, 801);
+                    _crazyDaveBlinkTicks = 400 + NextOriginalRandom(401);
                     _crazyDaveBlinkAge = 0f;
                 }
             }
@@ -179,6 +208,12 @@ namespace PlantsVsZombies.Progression
             if (speech.StopPreviousSound)
             {
                 _crazyDaveVoice.Stop();
+                if (_owner._currentView == PvZGame.ScreenView.Board)
+                {
+                    _owner._game?.StopAdventureFoley(95);
+                    _owner._game?.StopAdventureFoley(96);
+                    _owner._game?.StopAdventureFoley(97);
+                }
             }
 
             if (speech.AnimationName != null)
@@ -189,8 +224,8 @@ namespace PlantsVsZombies.Progression
 
             if (speech.SoundVariantCount > 0)
             {
-                var sound = speech.GetSoundName(UnityEngine.Random.Range(0, speech.SoundVariantCount));
-                if (_owner.Sounds._presentationSounds.TryGetValue(sound, out var clip) && clip != null)
+                var sound = SelectOriginalSpeech(speech);
+                if (sound != null && _owner.Sounds._presentationSounds.TryGetValue(sound, out var clip) && clip != null)
                 {
                     _crazyDaveVoice.volume = _owner.Sounds._soundVolume;
                     _crazyDaveVoice.clip = clip;
@@ -199,7 +234,7 @@ namespace PlantsVsZombies.Progression
                         || sound.StartsWith("crazydaveextralong", StringComparison.Ordinal);
                     _crazyDaveVoice.Play();
                 }
-                else
+                else if (sound != null)
                 {
                     Debug.LogWarning($"{nameof(PvZGame)}: Original Crazy Dave sound {sound} is missing.");
                 }

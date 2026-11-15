@@ -144,7 +144,7 @@ namespace PlantsVsZombies.Progression
             _owner.Dave._crazyDaveHeldItem = null;
             _owner.Dave._crazyDaveIdleMouth = null;
             _owner.Dave._crazyDaveBlinkAge = -1f;
-            _owner.Dave._crazyDaveBlinkTicks = UnityEngine.Random.Range(400, 801);
+            _owner.Dave._crazyDaveBlinkTicks = 400 + _owner.Dave.NextOriginalRandom(401);
             _owner.Dave._crazyDaveVoice.Stop();
             _owner.Dave.SetCrazyDaveAnimation("anim_enter", 24f, false);
         }

@@ -211,6 +211,17 @@ namespace PlantsVsZombies.Simulation
             _world.ModeSession = session;
             var a = _adventureModeRunner.Adventure;
             var d = session.Definition;
+            if (!_world._boardCells.LooksInitialized)
+            {
+                // PC 413BDE consumes a board-seed draw before cell initialization for survival modes 1..15.
+                if (d.Id >= 1 && d.Id <= 15)
+                {
+                    _world._random.Next();
+                }
+
+                _world._boardCells.InitializeLooks(_world._random);
+            }
+
             _world.Rules.AdventureDisableLoot = d.Mechanic == ModeMechanic.IZombie;
             _world.Plants.Clear();
             _world.Zombies.Clear();
@@ -232,7 +243,7 @@ namespace PlantsVsZombies.Simulation
             a.CurrentWave = 0;
             a._finalAmbush = false;
             a.VaseStage = 2;
-            a._nextSkySun = (425 + _world._random.Next(276)) * .01f;
+            a._nextSkySun = a.Level.IsNight ? 0f : (425 + _world._random.Next(276)) * .01f;
             a._nextPacket = 4f;
             a._nextHammerSun = 8f;
             a.WaveCountdown = d.ChoosesSeeds ? 18f : 2f;
@@ -551,6 +562,7 @@ namespace PlantsVsZombies.Simulation
             var s = RequiredModeSession;
             var d = s.Definition;
             _world.Elapsed += dt;
+            _world._nativeFeedbackTick++;
             _adventureModeRunner.Adventure._ticks++;
             _battlePresentationSystem.AdventurePresentationTick(dt);
             _seedBankSystem.AdvanceAdventurePacketFeedback(dt);

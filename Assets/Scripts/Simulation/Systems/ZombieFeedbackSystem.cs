@@ -309,7 +309,7 @@ namespace PlantsVsZombies.Simulation
             var iZombie = AdventureZombieIsIZombie;
             var low = global::PlantsVsZombies.Adventure.AdventureZombieNativeRules.PickSpeed(kind, phase, iZombie, 0f);
             var high = global::PlantsVsZombies.Adventure.AdventureZombieNativeRules.PickSpeed(kind, phase, iZombie, 1f);
-            z.PresentationNativeVelocity = global::PlantsVsZombies.Adventure.AdventureZombieNativeRules.PickSpeed(kind, phase, iZombie, low == high ? 0f : (float)_world._random.NextDouble());
+            z.PresentationNativeVelocity = low == high ? low : AdventureSpawnRandom.NextRange(_world._random, low, high);
             z._presentationSpeedPhase = phase;
             z._presentationSpeedKind = kind;
             z.Speed = global::PlantsVsZombies.Adventure.AdventureZombieNativeRules.GridSpeed(z.PresentationNativeVelocity);
@@ -325,6 +325,12 @@ namespace PlantsVsZombies.Simulation
             // PC 53DE17 draws the initial X before 53DED5 draws the groan clock, even when a caller replaces X.
             var random40 = _world._random.Next(40);
             z.GroanTicks = 400 + _world._random.Next(101);
+            // PC 53E02E chooses a speed; 53FF50 -> 54B050 chooses it again and draws the walk variant.
+            PickAdventureZombieNativeSpeed(z, 0);
+            PickAdventureZombieNativeSpeed(z, 0);
+            var walk = _world._random.Next(2);
+            z.PresentationWalk2 = z.Kind == ZombieKind.Flag || walk == 0;
+            z._presentationInitialized = true;
             var random10 = 0;
             if (z.Kind == ZombieKind.PoleVaulter || z.Kind == ZombieKind.Zomboni || z.Kind == ZombieKind.Catapult || z.Kind == ZombieKind.Gargantuar || (int)z.Kind == 32)
             {
@@ -426,8 +432,18 @@ namespace PlantsVsZombies.Simulation
                 AdventureDancerRules.Initialize(z, z.Kind == ZombieKind.Dancing ? _world._random.Next(12) : 0);
             }
 
-            // PC riding retains the speed selected for the original walk carrying the dolphin.
-            PickAdventureZombieNativeSpeed(z, z.Kind == ZombieKind.DolphinRider ? 51 : AdventureZombieFeedbackPhase(z));
+            // Only the original species branches that restart walking choose another random speed.
+            var phase = z.Kind == ZombieKind.DolphinRider ? 51 : AdventureZombieFeedbackPhase(z);
+            if (z.Kind == ZombieKind.PoleVaulter || z.Kind == ZombieKind.DolphinRider || z.Kind == ZombieKind.Digger
+                || z.Kind == ZombieKind.Ladder || AdventureZombieNativeRules.PickSpeed((int)z.Kind, phase, AdventureZombieIsIZombie, 0f)
+                    == AdventureZombieNativeRules.PickSpeed((int)z.Kind, phase, AdventureZombieIsIZombie, 1f))
+            {
+                PickAdventureZombieNativeSpeed(z, phase);
+            }
+            else
+            {
+                z._presentationSpeedPhase = phase;
+            }
             if (z.Kind == ZombieKind.DolphinRider)
             {
                 z._presentationSpeedPhase = z.PresentationNativePhase;
@@ -1515,10 +1531,16 @@ namespace PlantsVsZombies.Simulation
         /// <param name="presentationTick">The advancing cutscene tick when the battle elapsed clock is frozen.</param>
         internal void RequestAdventureZombieFoley(int id, float pitch = 0f, int? presentationTick = null)
         {
-            _world.Presentation.ZombieSounds.Add(new global::PlantsVsZombies.Adventure.AdventureZombieSoundEvent
+            var sound = new AdventureZombieSoundEvent
             {
-                Id = ++_world.Presentation._effectId, Foley = id, Tick = presentationTick ?? (int)System.Math.Round(_world.Elapsed * 100f), Pitch = pitch
-            });
+                Id = ++_world.Presentation._effectId, Foley = id, Tick = Math.Max(_world._nativeFeedbackTick, presentationTick ?? _world._nativeFeedbackTick), Pitch = pitch
+            };
+            if (id >= 0)
+            {
+                _world._foleyRandom.Resolve(sound, _world._random, _world.Rules.AdventureSoundMuted);
+            }
+
+            _world.Presentation.ZombieSounds.Add(sound);
         }
 
         /// <summary>Performs request adventure projectile impact sound.</summary>

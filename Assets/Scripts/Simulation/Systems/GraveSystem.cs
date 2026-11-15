@@ -134,7 +134,7 @@ namespace PlantsVsZombies.Simulation
         {
             if (_adventureModeRunner.Adventure._graves.Count > 0)
             {
-                var appearance = _adventureModeRunner.Adventure._graves[_world._gravePresentationRandom.Next(_adventureModeRunner.Adventure._graves.Count)].GravePresentation;
+                var appearance = _adventureModeRunner.Adventure._graves[_world._random.Next(_adventureModeRunner.Adventure._graves.Count)].GravePresentation;
                 if (appearance != null)
                 {
                     appearance.Special = true;
@@ -177,9 +177,7 @@ namespace PlantsVsZombies.Simulation
                 Row = row,
                 Column = column,
                 Remaining = float.MaxValue,
-                GravePresentation = new AdventureGravePresentation(_world._gravePresentationRandom.Next(20),
-                    _world._gravePresentationRandom.Next(10) - 5, _world._gravePresentationRandom.Next(10) - 5,
-                    _world._gravePresentationRandom.Next(50))
+                GravePresentation = _world._boardCells.CreateGraveAppearance(column, row, _world._random.Next(50))
             };
         }
 
