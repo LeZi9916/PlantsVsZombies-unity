@@ -77,6 +77,45 @@ namespace PlantsVsZombies.Tests.EditMode
             Assert.That(pot.PresentationBodyFrames, Is.GreaterThan(frames));
         }
 
+        /// <summary>Checks PC 47D410's preceding flight point and distinct attached splat versus world melon-burst coordinates.</summary>
+        /// <param name="attached">Whether the lob strikes a live zombie instead of the floor.</param>
+        [TestCase(false)]
+        [TestCase(true)]
+        public void LobberSplatsUseOriginalPreviousPointAndAttachmentOffsets(bool attached)
+        {
+            foreach (var kind in new[] { PlantKind.CabbagePult, PlantKind.KernelPult, PlantKind.MelonPult, PlantKind.WinterMelon })
+            {
+                var game = Board(12);
+                var zombie = attached ? new Zombie { Id = 500, Kind = ZombieKind.Normal, Row = 1,
+                    X = AdventureZombieNativeRules.GridX(350f), PresentationPreviousX = AdventureZombieNativeRules.GridX(350f), Health = 270f } : null;
+                var melon = kind == PlantKind.MelonPult || kind == PlantKind.WinterMelon;
+                var shot = new Pea { SourceKind = kind, Lobbed = true, Butter = kind == PlantKind.KernelPult,
+                    Splash = melon, IsSnow = kind == PlantKind.WinterMelon, FlightRow = 1,
+                    PresentationLobNativeX = 400f, PresentationLobNativeVelocityX = 2.5f,
+                    PresentationLaunchY = 180f, PresentationLobFloorOffset = -8f,
+                    PresentationLobContactHeight = -20f, PresentationLobVelocity = 4f };
+                Invoke(game, "AdventurePresentationImpact", shot, zombie!);
+                Assert.That(game.Presentation.Impacts, Has.Count.EqualTo(1));
+                var impact = game.Presentation.Impacts[0];
+                Assert.That(impact.NativeIcePoint, Is.True, kind.ToString());
+                var x = melon ? 427.5f : kind == PlantKind.KernelPult ? 377.5f : 359.5f;
+                var y = melon ? 178f : kind == PlantKind.KernelPult ? 211f : 171f;
+                if (attached && !melon)
+                {
+                    x = 350f + (int)(x + 52f - 350f);
+                    y = 150f + (int)Math.Max(20f, Math.Min(100f, y - 150f));
+                    Assert.That(impact.AttachedZombie, Is.SameAs(zombie));
+                }
+                else
+                {
+                    Assert.That(impact.AttachedZombie, Is.Null, "Melon fragments remain at their original world impact point.");
+                }
+
+                Assert.That(impact.NativeParticleX, Is.EqualTo(x), kind + " native X");
+                Assert.That(impact.NativeParticleY, Is.EqualTo(y), kind + " native Y");
+            }
+        }
+
         /// <summary>Checks all lobber weapons use the PC no-target velocity and impact the floor after target loss.</summary>
         /// <param name="level">The original flat or roof board.</param>
         /// <param name="targetAtLaunch">Whether the target dies after rather than before projectile creation.</param>

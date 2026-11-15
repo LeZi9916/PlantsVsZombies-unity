@@ -5043,7 +5043,7 @@ namespace PlantsVsZombies.Game
             if (pea.Lobbed)
             {
                 y = pea.PresentationLaunchY + Mathf.Lerp(pea.PresentationPreviousLobHeight, pea.PresentationLobHeight, AdventureRenderRemainder * 100f);
-                rotation = (pea.PresentationRotation + pea.PresentationSpin * pea.PresentationNativeAge * 100f) * Mathf.Rad2Deg;
+                rotation = -(pea.PresentationRotation + pea.PresentationSpin * pea.PresentationNativeAge * 100f) * Mathf.Rad2Deg;
                 _owner.RequiredAnimations.DrawResourceSprite("IMAGE_PEA_SHADOWS", new Vector2(BoardLayout.AdventureGridX + x * BoardLayout.CellWidth, _owner.Layout.AdventureCellY(pea.Row, x) + 80), 1.6f * 200f / (Mathf.Clamp(-pea.PresentationLobHeight, 0, 200) + 200), 0, _owner.RequiredGame.Adventure.Level.IsNight ? 1 : 0);
             }
 
@@ -5095,6 +5095,13 @@ namespace PlantsVsZombies.Game
             }
 
             var scale = shortPuff ? AdventurePuffShroomRules.ImageScale(pea.PresentationNativeAge + AdventureRenderRemainder) : 1f;
+            if (pea.Lobbed && _owner.RequiredAnimations.TryGetNativeSpriteSize(image, out var imageSize))
+            {
+                // PC Draw 47D950 rotates/scales around mPos + the unscaled source image half-size.
+                center += new Vector2(imageSize.x * .5f, imageSize.y * .5f);
+                scale = pea.Butter ? .8f : pea.SourceKind == PlantKind.KernelPult ? .95f : 1f;
+            }
+
             _owner.RequiredAnimations.DrawResourceSprite(image, center, scale, rotation);
         }
 

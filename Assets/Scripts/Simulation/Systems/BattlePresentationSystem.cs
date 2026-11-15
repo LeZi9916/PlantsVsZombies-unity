@@ -537,17 +537,31 @@ namespace PlantsVsZombies.Simulation
                 Butter = shot.Butter
             };
             _coldSystem.RecordAdventureIceImpact(shot, zombie, effect);
-            if (shot.Lobbed && zombie == null && !shot.IsSnow)
+            if (shot.Lobbed && !shot.IsSnow && (shot.Splash || shot.Butter || shot.SourceKind == PlantKind.CabbagePult))
             {
-                // PC 47D410: melon bursts use the preceding flight point; cabbage/butter use mPosY + 12.
+                // PC DoImpact 47D410 uses the preceding integration point for all native lobber splats.
+                var previousX = shot.PresentationLobNativeX - shot.PresentationLobNativeVelocityX;
+                var previousY = shot.PresentationLaunchY + shot.PresentationLobFloorOffset
+                    + shot.PresentationLobContactHeight - shot.PresentationLobVelocity;
                 effect.NativeIcePoint = true;
-                effect.NativeParticleX = shot.PresentationLobNativeX + 12f;
-                effect.NativeParticleY = shot.PresentationLaunchY + shot.PresentationLobFloorOffset + 12f;
-                if (shot.Splash)
+                effect.NativeParticleX = previousX + (shot.Splash ? 30f : shot.Butter ? -20f : -38f);
+                effect.NativeParticleY = previousY + (shot.Splash ? 30f : shot.Butter ? 63f : 23f);
+                if (zombie != null && !shot.Splash)
                 {
-                    effect.NativeParticleX = shot.PresentationLobNativeX - shot.PresentationLobNativeVelocityX + 30f;
-                    effect.NativeParticleY = shot.PresentationLaunchY + shot.PresentationLobFloorOffset
-                        + shot.PresentationLobContactHeight - shot.PresentationLobVelocity + 30f;
+                    // Cabbage/butter attach through 54DF80; melon bursts remain at their world impact point.
+                    var nativeX = (int)AdventureZombieNativeRules.NativePositionX(zombie.X, AdventureDancerRules.Scale(zombie));
+                    var nativeY = (int)_biteSystem.AdventureBiteNativeY(zombie, nativeX);
+                    var offsetY = effect.NativeParticleY - nativeY;
+                    if (zombie.PresentationNativePhase == 59 || zombie.PresentationNativePhase == 55)
+                    {
+                        offsetY += 60f;
+                    }
+
+                    effect.AttachedZombie = zombie;
+                    effect.NativeAttachedX = (int)(effect.NativeParticleX + 52f - nativeX);
+                    effect.NativeAttachedY = (int)Math.Max(20f, Math.Min(100f, offsetY));
+                    effect.NativeParticleX = nativeX + effect.NativeAttachedX;
+                    effect.NativeParticleY = nativeY + effect.NativeAttachedY;
                 }
             }
 
