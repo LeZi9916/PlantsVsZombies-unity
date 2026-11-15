@@ -319,6 +319,7 @@ namespace PlantsVsZombies.Tests.EditMode
                     var zombie = (Zombie)Invoke(game, "SpawnAdventureBoardZombie", kind, 1, 9.5f, 0)!;
                     var nativeX = AdventureZombieNativeRules.NativePositionX(zombie.X, AdventureDancerRules.Scale(zombie));
                     Assert.That(nativeX, Is.EqualTo((lastTicket ? maximum : minimum) + (flag ? flagShift : 0f)).Within(.0001f));
+                    Assert.That(zombie.PresentationPreviousX, Is.EqualTo(zombie.X), "The first frame must interpolate from the finalized native spawn position.");
                     Assert.That(random.Bounds.Take(3), Is.EqualTo(new[] { 5, 40, 101 }));
                 }
             }
@@ -333,6 +334,7 @@ namespace PlantsVsZombies.Tests.EditMode
             random.LastTicket = true;
             var zombie = (Zombie)Invoke(game, "SpawnAdventureZombie", ZombieKind.Normal, 1, 4.5f, 0)!;
             Assert.That(zombie.X, Is.EqualTo(4.5f));
+            Assert.That(zombie.PresentationPreviousX, Is.EqualTo(4.5f), "Explicit lawn spawns need the same first-frame interpolation baseline.");
             Assert.That(zombie.GroanTicks, Is.EqualTo(500));
             Assert.That(random.Bounds.Take(2), Is.EqualTo(new[] { 40, 101 }));
         }

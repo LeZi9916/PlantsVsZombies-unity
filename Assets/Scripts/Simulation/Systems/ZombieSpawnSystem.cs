@@ -293,6 +293,9 @@ namespace PlantsVsZombies.Simulation
                 z.PresentationNativeHeight = 0;
             }
 
+            // A new actor has no preceding movement sample. Seed interpolation after edge placement
+            // and target selection so its first rendered frame starts at the actual spawn position.
+            z.PresentationPreviousX = z.X;
             _world.Zombies.Add(z);
             if (kind == ZombieKind.DolphinRider)
             {

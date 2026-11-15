@@ -18,6 +18,39 @@ namespace PlantsVsZombies.Tests.PlayMode
     /// <summary>Compares original giant actions, durability art, free charred catapult and flattened plant pixels.</summary>
     public sealed class OriginalGargantuarGraphicsTests
     {
+        /// <summary>Checks newly created giants draw at the native edge or explicit spawn position before their first simulation update.</summary>
+        /// <returns>Real source-art frames at the birth boundary and halfway through the first fixed-step interval.</returns>
+        [UnityTest]
+        public IEnumerator NewGiantsRenderAtTheirNativeSpawnPositionImmediately()
+        {
+            foreach (var x in new[] { 9.5f, AdventureZombieNativeRules.GridX(650f) })
+            {
+                using var fixture = new OriginalStormGraphicsTests.StormFixture(49);
+                SpriteSourceTestUtilities.SetImage(fixture.Owner.Textures, "plantshadow.png", null!);
+                var game = fixture.Owner.RequiredGame;
+                Assert.That(game.ChooseDefaultAdventureSeeds(), Is.True);
+                game.ResetAdventureWaveSchedule(100000, false, false);
+                SimulationFixture.Zombies(game).Clear();
+                var giant = (Zombie)Invoke(game, "SpawnAdventureBoardZombie", ZombieKind.Gargantuar, 1, x, 0)!;
+                giant.GargantuarState!.Weapon = 0;
+                var nativeX = AdventureZombieNativeRules.NativePositionX(giant.X);
+                for (var frame = 0; frame < 2; frame++)
+                {
+                    yield return fixture.Capture(null, () => fixture.DrawPass("DrawAdventureZombie", giant));
+                    var actual = fixture.Pixels.GetPixels32();
+                    // PC 547FF0/549740: body at native X + 15; roof row-one baseline with the giant's -8 Y offset.
+                    yield return fixture.Capture(null, () => fixture.Animations.DrawNativePlayback("Zombie_gargantuar",
+                        new Vector2(nativeX + 15f, 109f), 1f, game.AdventurePresentationRemainder, "anim_walk", true,
+                        game.AdventurePresentationZombieRate(giant)));
+                    Assert.That(fixture.Pixels.GetPixels32(), Is.EqualTo(actual), "A new giant must never draw from the default zero grid coordinate.");
+                    if (frame == 0)
+                    {
+                        game.Update(.005f);
+                    }
+                }
+            }
+        }
+
         /// <summary>Checks original action clips, damage substitutions, weapon variants and released-imp visibility.</summary>
         /// <returns>Real camera frames comparing independent source-track composition.</returns>
         [UnityTest]

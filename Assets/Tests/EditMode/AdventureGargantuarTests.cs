@@ -101,6 +101,7 @@ namespace PlantsVsZombies.Tests.EditMode
             var imp = game.Zombies.Single(zombie => zombie.Kind == ZombieKind.Imp);
             Assert.That(giant.ThrownImp, Is.True);
             Assert.That(AdventureZombieNativeRules.NativePositionX(imp.X), Is.EqualTo(517f).Within(.001f));
+            Assert.That(imp.PresentationPreviousX, Is.EqualTo(imp.X), "The release frame must draw at the throwing hand before the imp's first movement tick.");
             Assert.That(imp.PresentationNativePhase, Is.EqualTo(71));
             Assert.That(imp.PresentationAltitude, Is.EqualTo(88f));
             Assert.That(AdventureZombieTargetingRules.CanBeAutoTargeted(imp), Is.False);
