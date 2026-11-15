@@ -322,16 +322,22 @@ namespace PlantsVsZombies.Simulation
         /// <param name = "rightEdge">The right edge.</param>
         internal void InitializeAdventureZombieNative(Zombie z, bool rightEdge)
         {
+            // PC 53DE17 draws the initial X before 53DED5 draws the groan clock, even when a caller replaces X.
+            var random40 = _world._random.Next(40);
+            z.GroanTicks = 400 + _world._random.Next(101);
+            var random10 = 0;
+            if (z.Kind == ZombieKind.PoleVaulter || z.Kind == ZombieKind.Zomboni || z.Kind == ZombieKind.Catapult || z.Kind == ZombieKind.Gargantuar || (int)z.Kind == 32)
+            {
+                random10 = _world._random.Next(10);
+            }
+
             // Explicit grave/vase/IZombie/summoned positions remain at their requested world cell.
             if (rightEdge)
             {
-                int r40 = _world._random.Next(40), r10 = 0;
-                if (z.Kind == ZombieKind.PoleVaulter || z.Kind == ZombieKind.Zomboni || z.Kind == ZombieKind.Catapult || z.Kind == ZombieKind.Gargantuar || (int)z.Kind == 32)
-                {
-                    r10 = _world._random.Next(10);
-                }
-
-                z.X = global::PlantsVsZombies.Adventure.AdventureZombieNativeRules.GridX(global::PlantsVsZombies.Adventure.AdventureZombieNativeRules.SpawnSourceX((int)z.Kind, r40, r10), AdventureDancerRules.Scale(z));
+                var waves = _adventureModeRunner.Adventure.Waves;
+                var flagWave = z.Wave >= 0 && z.Wave < waves.Count && waves[z.Wave].IsFlag;
+                z.X = AdventureZombieNativeRules.GridX(
+                    AdventureZombieNativeRules.SpawnSourceX((int)z.Kind, random40, random10, flagWave), AdventureDancerRules.Scale(z));
             }
 
             if (z.Kind == ZombieKind.PoleVaulter)

@@ -207,8 +207,6 @@ namespace PlantsVsZombies.Simulation
             var z = new Zombie
             {
                 Id = ++_adventureModeRunner.Adventure._zombieId,
-                // PC 53DE56/53DED5 initializes every actor's vocal clock before native placement and speed draws.
-                GroanTicks = 400 + _world._random.Next(101),
                 Kind = kind,
                 Row = row,
                 X = x,

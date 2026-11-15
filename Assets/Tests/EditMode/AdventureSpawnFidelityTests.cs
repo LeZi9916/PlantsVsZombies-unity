@@ -236,8 +236,8 @@ namespace PlantsVsZombies.Tests.EditMode
             var random = AttachRandom(game);
             var zombie = (Zombie)Invoke(game, "SpawnAdventureBoardZombie", ZombieKind.Normal, 2, 9.5f, 0)!;
             Assert.That(random.Bounds[0], Is.EqualTo(5));
-            Assert.That(random.Bounds[1], Is.EqualTo(101), "PC 53DE56/53DED5 initializes the vocal counter before native placement.");
-            Assert.That(random.Bounds[2], Is.EqualTo(40));
+            Assert.That(random.Bounds[1], Is.EqualTo(40), "PC 53DE17 draws the initial X before the groan clock.");
+            Assert.That(random.Bounds[2], Is.EqualTo(101));
             Assert.That(zombie.NativeVariant, Is.True);
             random.Bounds.Clear();
             Invoke(game, "SpawnAdventureZombie", ZombieKind.Normal, 2, 9.5f, 0);
@@ -288,6 +288,67 @@ namespace PlantsVsZombies.Tests.EditMode
             Assert.That(game.Adventure.Graves, Is.Empty);
             Assert.That(game.Plants, Is.Empty);
             Assert.That(game.CaptureBattleRandomState().DrawCount, Is.Zero);
+        }
+
+        /// <summary>Checks native default, fixed and species-specific right-edge ranges at both ticket boundaries.</summary>
+        /// <param name="kind">The original species identifier.</param>
+        /// <param name="minimum">The first native X ticket on an ordinary wave.</param>
+        /// <param name="maximum">The last native X ticket on an ordinary wave.</param>
+        /// <param name="flagShift">The original additional X on a flag wave.</param>
+        [TestCase(ZombieKind.Normal, 780f, 819f, 40f)]
+        [TestCase(ZombieKind.Conehead, 780f, 819f, 40f)]
+        [TestCase(ZombieKind.Buckethead, 780f, 819f, 40f)]
+        [TestCase(ZombieKind.Football, 780f, 819f, 40f)]
+        [TestCase(ZombieKind.DolphinRider, 780f, 819f, 40f)]
+        [TestCase(ZombieKind.Flag, 800f, 800f, 0f)]
+        [TestCase(ZombieKind.PoleVaulter, 870f, 879f, 0f)]
+        [TestCase(ZombieKind.Zomboni, 800f, 809f, 0f)]
+        [TestCase(ZombieKind.Bobsled, 880f, 880f, 0f)]
+        [TestCase(ZombieKind.Catapult, 825f, 834f, 0f)]
+        [TestCase(ZombieKind.Gargantuar, 845f, 854f, 0f)]
+        public void RightEdgeSpawnsUseNativeRanges(ZombieKind kind, float minimum, float maximum, float flagShift)
+        {
+            foreach (var flag in new[] { false, true })
+            {
+                foreach (var lastTicket in new[] { false, true })
+                {
+                    var game = Fixture(28);
+                    game.Adventure.Waves = new[] { new AdventureWave { Index = 0, IsFlag = flag } };
+                    var random = AttachRandom(game);
+                    random.LastTicket = lastTicket;
+                    var zombie = (Zombie)Invoke(game, "SpawnAdventureBoardZombie", kind, 1, 9.5f, 0)!;
+                    var nativeX = AdventureZombieNativeRules.NativePositionX(zombie.X, AdventureDancerRules.Scale(zombie));
+                    Assert.That(nativeX, Is.EqualTo((lastTicket ? maximum : minimum) + (flag ? flagShift : 0f)).Within(.0001f));
+                    Assert.That(random.Bounds.Take(3), Is.EqualTo(new[] { 5, 40, 101 }));
+                }
+            }
+        }
+
+        /// <summary>Checks discarded edge placement still consumes its native draw without moving grave, vase or summoned actors.</summary>
+        [Test]
+        public void ExplicitLawnPositionsKeepCoordinatesAndNativeInitializationDraws()
+        {
+            var game = Fixture(28);
+            var random = AttachRandom(game);
+            random.LastTicket = true;
+            var zombie = (Zombie)Invoke(game, "SpawnAdventureZombie", ZombieKind.Normal, 1, 4.5f, 0)!;
+            Assert.That(zombie.X, Is.EqualTo(4.5f));
+            Assert.That(zombie.GroanTicks, Is.EqualTo(500));
+            Assert.That(random.Bounds.Take(2), Is.EqualTo(new[] { 40, 101 }));
+        }
+
+        /// <summary>Checks a real scheduled wave samples independently instead of spacing its actors by array index.</summary>
+        [Test]
+        public void ScheduledWaveSamplesDifferentPositionsInsideTheNativeRange()
+        {
+            var game = Fixture(28);
+            game.Adventure.Waves = new[] { new AdventureWave { Index = 0, IsFlag = true,
+                Zombies = Enumerable.Repeat(ZombieKind.Normal, 40).ToArray() } };
+            Invoke(game, "SpawnScheduledAdventureWave", game.Adventure.Waves[0]);
+            var positions = game.Zombies.Select(zombie => AdventureZombieNativeRules.NativePositionX(zombie.X)).ToArray();
+            Assert.That(positions, Has.Length.EqualTo(40));
+            Assert.That(positions.All(x => x >= 820f && x <= 859f), Is.True);
+            Assert.That(positions.Distinct().Count(), Is.GreaterThan(1));
         }
 
         /// <summary>Creates an actual adventure board with no synthetic entities.</summary>

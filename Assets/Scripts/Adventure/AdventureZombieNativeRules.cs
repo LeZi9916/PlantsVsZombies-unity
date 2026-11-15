@@ -64,8 +64,9 @@ namespace PlantsVsZombies.Adventure
         /// <param name = "kind">The kind.</param>
         /// <param name = "random40">The random40.</param>
         /// <param name = "random10">The random10.</param>
-        /// <returns>The resulting spawn source x.</returns>
-        public static float SpawnSourceX(int kind, int random40, int random10)
+        /// <param name="flagWave">Whether PC 53E018 shifts the default spawn forty pixels for a flag wave.</param>
+        /// <returns>The original native horizontal spawn position in pixels.</returns>
+        public static float SpawnSourceX(int kind, int random40, int random10, bool flagWave = false)
         {
             switch (kind)
             {
@@ -84,7 +85,7 @@ namespace PlantsVsZombies.Adventure
                 case 32:
                     return 845f + random10;
                 default:
-                    return 780f + random40;
+                    return 780f + random40 + (flagWave ? 40f : 0f);
             }
         }
 

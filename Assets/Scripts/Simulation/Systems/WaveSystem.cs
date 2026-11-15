@@ -359,10 +359,10 @@ namespace PlantsVsZombies.Simulation
         {
             var a = _adventureModeRunner.Adventure;
             var dropWeights = a.Level.Mode == AdventureMode.Bungee ? BungeeZombieActions.CreateAdventureBungeeDropWeights() : null;
-            var spawned = 0;
             foreach (var kind in wave.Zombies)
             {
-                var x = 9.5f + spawned++ * 0.12f;
+                // Each actor samples PC Zombie::Init's native range independently.
+                var x = 9.5f;
                 if (kind == ZombieKind.Bobsled && !a._ice.Exists(ice => ice.RemainingTicks > 0 && ice.MinX < 700))
                 {
                     for (var follower = 0; follower < 4; follower++)

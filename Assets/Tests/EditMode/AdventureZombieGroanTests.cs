@@ -2,6 +2,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
 using NUnit.Framework;
 using PlantsVsZombies.Adventure;
@@ -12,7 +13,7 @@ namespace PlantsVsZombies.Tests.EditMode
     /// <summary>Checks the local PC executable's ambient vocal countdown, population draw, and species gates.</summary>
     public sealed class AdventureZombieGroanTests
     {
-        /// <summary>Checks both inclusive native initialization boundaries and the first constructor draw.</summary>
+        /// <summary>Checks both inclusive native initialization boundaries after the original position draw.</summary>
         /// <param name="lastTicket">Whether the original bounded draw chooses its last valid value.</param>
         /// <param name="ticks">The expected initial native countdown.</param>
         [TestCase(false, 400)]
@@ -22,7 +23,7 @@ namespace PlantsVsZombies.Tests.EditMode
             var game = Board();
             var random = Attach(game, lastTicket);
             var zombie = Spawn(game, ZombieKind.Normal);
-            Assert.That(random.Bounds[0], Is.EqualTo(101));
+            Assert.That(random.Bounds.Take(2), Is.EqualTo(new[] { 40, 101 }));
             Assert.That(zombie.GroanTicks, Is.EqualTo(ticks));
         }
 
