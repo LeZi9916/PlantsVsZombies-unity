@@ -1,5 +1,107 @@
 # Presentation CPU performance
 
+The latest pass meets the 30% mean/P95 target for the cooldown-mask workload:
+against the previous presentation commit `e348a94`, complete Present mean time
+falls **49.4%**, and P95 falls **48.8%**. This is a macOS/Metal Editor result for
+that workload; the broader all-scenario 30% target is not claimed.
+
+## Third pass: immutable cooldown captures
+
+Ordinary cooldown masks now retain the full original offscreen card image and
+apply the current `topCrop` on every composite. The native mask tint is constant
+64; cooldown progress changes the displayed height, not the captured artwork.
+The change retains the original RenderTexture format, premultiplied composition,
+source transforms, live prices, alpha, clipping and cooldown-state queries.
+It avoids eight redundant native render requests per warmed cooldown frame.
+
+`DrawNativeCachedClipped` is an internal interface-art entry point. It validates
+caller content revision, full viewport Rect, inherited Color, renderer layout
+version, grayscale and native RT backing. It uses the existing bounded surface
+pool; return/reset clears static state, and lost RT backing is recreated. A key
+cannot change dimensions after it was already submitted in the same frame;
+between frames it can acquire matching dimensions. Generic captures invalidate
+a static signature whenever they write new pixels. Actors, combat and additive
+contexts use the live generic path, preserving same-frame hierarchy switches.
+Unlike generic frozen actor captures, static interface hits do not scan the
+whole actor hierarchy for each card.
+
+The callback must represent immutable source pixels and have no required
+per-draw side effects on other submitted surfaces. Source-art changes require
+a new caller revision. Production ordinary cards use their stable plant-kind
+revision and shipped immutable artwork. **Imitater masks retain the original
+uncached path:** the nested imitation surface is also used by the earlier base
+card in the same frame, so omitting its write changes existing warm-frame pixels.
+The strengthened regression rejects the naive universal cache (maximum channel
+error 13) and passes with this compatibility path. No simulation source or
+serialized asset is changed in this pass.
+
+### Accepted measurements
+
+The same Unity 6000.3.17f1 / Apple M4 / macOS 27.2 / Metal environment and
+800x600 target / 640x480 screen viewport were used. Both versions share the
+same simulation, baked assets and benchmark fixture. Each state warms 120
+frames then measures 900 complete Present calls, including deferred work and
+uploads. Deep Profile and optional phase markers are disabled. The six runs
+alternate `previous1/current1`, `current2/previous2`, `previous3/current3`.
+Displayed times are the median trial values; reduction columns use the median
+of the three paired ratios. Positive values mean reduced CPU time.
+
+| Workload | Previous mean | Current mean | Paired mean reduction | Previous P95 | Current P95 | Paired P95 reduction |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| roof / Normal | 0.6036 | 0.6082 | -0.9% | 0.6434 | 0.6630 | -3.0% |
+| roof / Cooldown masks | 1.2389 | 0.6273 | 49.4% | 1.2972 | 0.6649 | 48.8% |
+| roof / Selected card | 0.6971 | 0.6077 | 12.9% | 0.7346 | 0.6459 | 12.0% |
+| roof / Imitater | 0.6719 | 0.6712 | 0.1% | 0.7102 | 0.7105 | 0.3% |
+| roof / Paused | 0.6211 | 0.6194 | -0.1% | 0.6648 | 0.6648 | -0.2% |
+| combat / Normal | 2.3468 | 2.3583 | -0.2% | 2.4597 | 2.5573 | -2.8% |
+| combat / Hit feedback | 2.3316 | 2.3393 | -0.4% | 2.4073 | 2.4182 | -0.7% |
+| combat / Chilled | 2.3413 | 2.3458 | -0.3% | 2.4205 | 2.5078 | -0.2% |
+
+All 24 paired screenshots are byte-identical, including the cooldown and selected
+card states. Main submitted sprites, vertices, mesh batches, final populations
+and simulation state match. Whole-Present GC.Alloc counts remain 1800 per 900-frame
+roof state and 900 per combat state. In the eight-card cooldown state,
+`CaptureRendersDuringMeasurement` is zero after warmup; the previous path made
+eight captures per presentation (also observed by the untimed capture observer).
+The existing eight color/depth surfaces remain pooled; this adds no raster cache
+outside their existing lifetime and bounds. Other workloads show only small
+variation, within the existing 5% regression threshold.
+
+Accepted raw results, screenshots, commands, logs and the paired summary are in
+`.unity-runs/present-cpu-v3/accepted-{v2,v3}-{roof,combat}-{1,2,3}` and `summary.json`.
+Earlier `final-*` runs in that directory are preliminary, before the Imitater
+compatibility guard, and are not used for these accepted ratios. These artifacts
+are ignored local evidence and are not committed.
+
+### Third-pass validation
+
+Focused final results: **73 EditMode passed; 223 PlayMode passed, 9 pre-existing
+allocation failures, 0 skipped**. The nine failures are the same 3100-event
+`WarmAdventureUpdateAndPresentDoesNotAllocateManagedMemory` cases documented below.
+No assertion was relaxed for them. The expanded PlayMode filter adds
+`SeedCooldownCaptureTests|NativeStaticCaptureTests` to the second-pass filter.
+For example:
+
+```powershell
+./Tools/Tests/Run-UnityTests.ps1 -Unity $unity -Platform PlayMode `
+    -TestFilter 'SeedCooldownCaptureTests|NativeStaticCaptureTests|GamePresentationPerformanceTests|SeedBankLayoutTests|NativeThumbnailCacheTests|SpriteCaptureBatchReuseTests|CanvasPresentationTests'
+```
+
+The eleven new cases compare production packets with an independent uncached
+oracle through full/partial/zero/restarted cooldowns, inherited tint/alpha,
+position/size, outer transforms, repeated imitation targets and nested capture.
+They also cover revision/grayscale changes, generic overwrites, pool reuse/reset,
+RT loss, actor visibility and same-frame resize rejection. Direct warmed cache
+composition observes zero GC.Alloc events while changing crop height without
+additional captures. Full production/reference traversals report 128/256 events
+respectively over 64 frames; the production path does not add allocation events.
+Original board stress, layer/shadow, pool, dolphin, dancer, death-blend, gargantuar,
+mesh, atlas, Canvas and feedback regressions remain in the final integration run.
+The main project was refreshed in Unity 6000.3.17f1 with zero Console errors.
+Windows/Player/other target ABI performance remains **unverified**.
+
+## Second-pass history
+
 The second optimization pass removes the previously reported dense-combat
 regression in controlled, alternating-order measurements. Against the original
 presentation implementation, dense-combat mean CPU time improves by 22.8%-23.6%
@@ -64,7 +166,7 @@ No simulation source, public gameplay API, save format, source artwork, shader,
 serialized scene or existing asset GUID is changed by this presentation commit.
 The GameSimulation refactor is the separate preceding commit `d053b8c`.
 
-## Final measurements: 2026-11-15
+## Second-pass measurements: 2026-11-15
 
 Unity 6000.3.17f1; Apple M4; macOS 27.2; Metal; 800x600 target; 640x480 screen
 viewport. Baked production assets are used. The original and current variants

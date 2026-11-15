@@ -198,6 +198,7 @@ namespace PlantsVsZombies.Tests.PlayMode
                         yield return null;
                     }
 
+                    var captureRendersBefore = ReadCounter(typeof(ReanimationRenderer), animations, "NativeCaptureRenderCount");
                     var result = new Measurement { State = state, Scenario = roof ? "roof" : "combat",
                         DeckKinds = string.Join(",", owner._deck), AdventureLevel = roof ? 41 : 9, RandomSeed = 7529, Width = target.width, Height = target.height,
                         PlantKinds = string.Join(",", plantKinds), ZombieKinds = string.Join(",", zombieKinds),
@@ -336,6 +337,8 @@ namespace PlantsVsZombies.Tests.PlayMode
                     result.RetainedBitmapRuns = ReadCounter(typeof(CanvasUI), null, "PooledBitmapRunCount");
                     result.TextureBytes = Texture.currentTextureMemory;
                     result.CaptureSurfaces = animations.NativeSurfaceCount;
+                    var captureRendersAfter = ReadCounter(typeof(ReanimationRenderer), animations, "NativeCaptureRenderCount");
+                    result.CaptureRendersDuringMeasurement = captureRendersBefore < 0 ? -1 : captureRendersAfter - captureRendersBefore;
                     ReadBatchStatistics(animations, result);
                     SaveTextureMemory(output!, state, animations, result);
                     using (var capture = new RenderingCoverageCapture())
@@ -866,6 +869,8 @@ namespace PlantsVsZombies.Tests.PlayMode
             public double GpuP95Milliseconds;
             /// <summary>The retained actor-local capture surfaces.</summary>
             public int CaptureSurfaces;
+            /// <summary>The actual synchronous captures during timed Present calls, or minus one on older revisions.</summary>
+            public int CaptureRendersDuringMeasurement;
             /// <summary>The actual native render requests in an untimed representative presentation.</summary>
             public int CaptureRequests;
             /// <summary>The summed rasterized geometric samples across all offscreen targets.</summary>

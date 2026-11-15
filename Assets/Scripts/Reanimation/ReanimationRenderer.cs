@@ -187,6 +187,18 @@ namespace PlantsVsZombies.Reanimation
             }
             /// <summary>Stores ready.</summary>
             public bool Ready;
+            /// <summary>Whether the complete pixel content was produced by the static interface cache.</summary>
+            public bool HasStaticContent;
+            /// <summary>The caller's immutable artwork revision, independent of the displayed crop height.</summary>
+            public long ContentVersion;
+            /// <summary>The source-space viewport baked into the cached pixels.</summary>
+            public Rect ContentViewport;
+            /// <summary>The inherited tint and opacity baked into the cached pixels.</summary>
+            public Color ContentColor;
+            /// <summary>The provider layout generation used by the cached artwork.</summary>
+            public int ContentLayoutVersion;
+            /// <summary>Whether the cached pixels were captured in grayscale.</summary>
+            public bool ContentGrayscale;
             /// <summary>The complete scene frame still referencing this texture from a composite quad.</summary>
             public int LastPresentedFrame;
         }
@@ -203,6 +215,8 @@ namespace PlantsVsZombies.Reanimation
         internal int InactiveNativeSurfaceCount => _inactiveNativeSurfaces.Count;
         /// <summary>Gets the number of independent capture textures created during this renderer's lifetime.</summary>
         internal int NativeSurfaceCreationCount { get; private set; }
+        /// <summary>Gets the actual synchronous native capture render count, excluding cached composites.</summary>
+        internal int NativeCaptureRenderCount { get; private set; }
         /// <summary>Shares synchronous capture cameras and mesh buffers across actors, retaining one pool for each nesting depth.</summary>
         private readonly List<ObjectSpriteRenderer> _nativeCaptureRenderers = new List<ObjectSpriteRenderer>();
         /// <summary>The number of capture callbacks currently producing an image before its synchronous render completes.</summary>
@@ -1008,6 +1022,87 @@ namespace PlantsVsZombies.Reanimation
         /// <returns>Whether the capture callback submitted visible artwork.</returns>
         public bool DrawNativeClipped(string key, Rect viewport, Func<bool> draw, bool freeze = false, bool grayscale = false, float additive = 0f, float topCrop = -1f, float producerAdditive = 0f)
         {
+            return DrawNativeClippedCore(key, viewport, draw, freeze, grayscale, additive, topCrop, producerAdditive, true);
+        }
+
+        /// <summary>Reuses immutable interface pixels while applying the current transform and crop at composition time.</summary>
+        /// <param name="key">The stable interface surface identity.</param>
+        /// <param name="viewport">The source-space capture bounds; any changed bounds invalidate the pixels.</param>
+        /// <param name="draw">The synchronous source callback, executed only when the content changes.</param>
+        /// <param name="contentVersion">The caller's revision for all source-artwork changes, including imitation targets.</param>
+        /// <param name="topCrop">The live visible height, or a negative value for the whole surface.</param>
+        /// <param name="grayscale">Whether the complete source capture uses grayscale composition.</param>
+        /// <returns>Whether valid source pixels were submitted.</returns>
+        /// <remarks>The callback must not have required per-draw side effects on other submitted surfaces.
+        /// Actor contexts use the uncached path so inspection switches and live feedback remain immediate.</remarks>
+        internal bool DrawNativeCachedClipped(string key, Rect viewport, Func<bool> draw, long contentVersion,
+            float topCrop = -1f, bool grayscale = false)
+        {
+            if (_disposed)
+            {
+                return Fail("The renderer has been disposed.");
+            }
+            if (!IsValidDestination(viewport) || draw == null || string.IsNullOrEmpty(key))
+            {
+                return Fail("A valid native viewport, cache key and draw callback are required.");
+            }
+            if (SpriteHierarchy.CurrentSpriteObject != null || _nativeCombatZombie != null || _nativeSpriteAdditive)
+            {
+                return DrawNativeClipped(key, viewport, draw, grayscale: grayscale, topCrop: topCrop);
+            }
+            var color = SpriteDrawState.Color;
+            var layoutVersion = _assets?.LayoutVersion ?? -1;
+            if (_nativeSurfaces.TryGetValue(key, out var surface))
+            {
+                if (surface.Texture.width != Mathf.CeilToInt(viewport.width)
+                    || surface.Texture.height != Mathf.CeilToInt(viewport.height))
+                {
+                    // Keep an already submitted surface intact when the same key requests different dimensions.
+                    if (surface.LastPresentedFrame == SpriteDrawState.FrameVersion)
+                    {
+                        return Fail("A native surface cache key was reused with a different viewport size in the same frame.");
+                    }
+                    ReleaseNativeSurface(key);
+                }
+                else if (!surface.HasStaticContent || surface.ContentVersion != contentVersion
+                    || !surface.ContentViewport.Equals(viewport) || !surface.ContentColor.Equals(color)
+                    || surface.ContentLayoutVersion != layoutVersion || surface.ContentGrayscale != grayscale
+                    || !surface.Texture.IsCreated())
+                {
+                    surface.Ready = false;
+                    if (!surface.Texture.IsCreated())
+                    {
+                        surface.Texture.Create();
+                    }
+                }
+            }
+            var drawn = DrawNativeClippedCore(key, viewport, draw, true, grayscale, 0f, topCrop, 0f, false);
+            if (drawn && _nativeSurfaces.TryGetValue(key, out surface))
+            {
+                surface.HasStaticContent = true;
+                surface.ContentVersion = contentVersion;
+                surface.ContentViewport = viewport;
+                surface.ContentColor = color;
+                surface.ContentLayoutVersion = _assets?.LayoutVersion ?? -1;
+                surface.ContentGrayscale = grayscale;
+            }
+            return drawn;
+        }
+
+        /// <summary>Captures or composites one native surface while retaining the generic actor visibility rules.</summary>
+        /// <param name="key">The stable capture identity.</param>
+        /// <param name="viewport">The complete source capture bounds.</param>
+        /// <param name="draw">The synchronous original source callback.</param>
+        /// <param name="freeze">Whether an existing complete capture can be reused.</param>
+        /// <param name="grayscale">Whether to grayscale the captured source.</param>
+        /// <param name="additive">The white source highlight.</param>
+        /// <param name="topCrop">The current visible capture height.</param>
+        /// <param name="producerAdditive">The source brightness.</param>
+        /// <param name="observeHierarchy">Whether actor visibility must be refreshed and invalidate frozen actor pixels.</param>
+        /// <returns>Whether a complete source capture is ready for composition.</returns>
+        private bool DrawNativeClippedCore(string key, Rect viewport, Func<bool> draw, bool freeze, bool grayscale,
+            float additive, float topCrop, float producerAdditive, bool observeHierarchy)
+        {
             using var objectScope = BeginObjectScope();
             if (_disposed)
             {
@@ -1046,12 +1141,12 @@ namespace PlantsVsZombies.Reanimation
                 return Fail("A native surface cache key was reused with a different viewport size.");
             }
 
-            if (freeze)
+            if (observeHierarchy && freeze)
             {
                 Hierarchy.RefreshVisibility();
             }
 
-            if (_hierarchyVisibilityRevision != Hierarchy.VisibilityRevision)
+            if (observeHierarchy && _hierarchyVisibilityRevision != Hierarchy.VisibilityRevision)
             {
                 foreach (var cachedSurface in _nativeSurfaces.Values)
                 {
@@ -1063,6 +1158,7 @@ namespace PlantsVsZombies.Reanimation
 
             if (!freeze || !surface.Ready)
             {
+                surface.HasStaticContent = false;
                 var matrix = SpriteDrawState.Matrix;
                 var color = SpriteDrawState.Color;
                 var previousCapture = _renderingNativeSurface;
@@ -1089,6 +1185,7 @@ namespace PlantsVsZombies.Reanimation
                     _nativeSurfaceAdditive = Math.Max(0f, additive);
                     surface.Ready = draw();
                     captureRenderer.RenderTo(surface.Texture);
+                    NativeCaptureRenderCount++;
                 }
                 finally
                 {
@@ -3554,6 +3651,7 @@ namespace PlantsVsZombies.Reanimation
         private void ReturnNativeSurface(NativeSurface surface)
         {
             surface.Ready = false;
+            surface.HasStaticContent = false;
             var pixels = (long)surface.Texture.width * surface.Texture.height;
             if (_inactiveNativeSurfaces.Count < MaximumRetainedNativeSurfaces
                 && pixels <= MaximumRetainedNativePixels - _inactiveNativePixels)

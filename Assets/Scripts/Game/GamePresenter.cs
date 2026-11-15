@@ -5493,8 +5493,17 @@ namespace PlantsVsZombies.Game
                     CanvasUI.Color = new Color(previous.r * visual.MaskColor / 255f, previous.g * visual.MaskColor / 255f, previous.b * visual.MaskColor / 255f, previous.a);
                     _maskKind = kind;
                     _maskCard = card;
-                    _owner.RequiredAnimations.DrawNativeClipped(_presentationKeys.Get("seed-cooldown-", (int)kind), card, _drawPacketMask,
-                        topCrop: Math.Min(card.height, visual.MaskHeight));
+                    var key = _presentationKeys.Get("seed-cooldown-", (int)kind);
+                    var crop = Math.Min(card.height, visual.MaskHeight);
+                    if (kind == PlantKind.Imitater)
+                    {
+                        // Its nested capture also supplies the earlier base-card composite in this frame.
+                        _owner.RequiredAnimations.DrawNativeClipped(key, card, _drawPacketMask, topCrop: crop);
+                    }
+                    else
+                    {
+                        _owner.RequiredAnimations.DrawNativeCachedClipped(key, card, _drawPacketMask, (int)kind, topCrop: crop);
+                    }
                 }
             }
             finally
