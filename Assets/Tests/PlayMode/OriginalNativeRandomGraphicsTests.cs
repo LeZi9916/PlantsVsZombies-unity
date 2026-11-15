@@ -7,6 +7,7 @@ using System.Reflection;
 using NUnit.Framework;
 using PlantsVsZombies.Adventure;
 using PlantsVsZombies.Game;
+using PlantsVsZombies.Rendering;
 using PlantsVsZombies.Simulation;
 using UnityEngine;
 using UnityEngine.TestTools;
@@ -65,6 +66,79 @@ namespace PlantsVsZombies.Tests.PlayMode
                 plant.BlinkAnimation = null;
                 yield return fixture.Capture(null, () => fixture.DrawPass("DrawAdventurePlant", plant));
                 Assert.That(fixture.Pixels.GetPixels32(), Is.EqualTo(idle), sample.Item1 + " restored body and eye tracks");
+            }
+        }
+
+        /// <summary>Checks that a blink preserves inherited draw state and the same-frame artwork of subsequent plants, zombies and sun.</summary>
+        /// <returns>Real camera frames comparing following actors with and without an earlier plant blink.</returns>
+        [UnityTest]
+        public IEnumerator PlantBlinksPreserveFollowingActorsInTheSameFrame()
+        {
+            foreach (var kind in new[] { PlantKind.PuffShroom, PlantKind.Threepeater })
+            {
+                using var fixture = new OriginalStormGraphicsTests.StormFixture(8);
+                var blinking = new Plant { Id = 991, Kind = kind, Row = 1, Column = 0,
+                    Health = 300f, Age = .3f, PresentationRate = 12f };
+                var following = new Plant { Id = 992, Kind = PlantKind.Sunflower, Row = 0, Column = 5,
+                    Health = 300f, Age = .3f, PresentationRate = 12f };
+                var zombie = new Zombie { Id = 993, Kind = ZombieKind.Normal, Row = 1,
+                    X = AdventureZombieNativeRules.GridX(550f), Health = 270f, PresentationAnimationAge = .3f };
+                var sun = new global::PlantsVsZombies.Simulation.Sun { X = 6f, Y = 3f, Age = .3f };
+                var tint = new Color(.8f, .6f, .9f, .7f);
+                Action drawFollowers = () =>
+                {
+                    fixture.DrawPass("DrawAdventurePlant", following);
+                    fixture.DrawPass("DrawAdventureZombie", zombie);
+                    fixture.DrawPass("DrawAdventureSun", sun);
+                };
+                yield return fixture.Capture(null, () =>
+                {
+                    SpriteDrawState.Color = tint;
+                    fixture.DrawPass("DrawAdventurePlant", blinking);
+                    drawFollowers();
+                });
+                var expected = fixture.Pixels.GetPixels32();
+                blinking.BlinkAnimation = kind == PlantKind.Threepeater ? "anim_blink3" : "anim_blink";
+                blinking.BlinkHead = kind == PlantKind.Threepeater ? 2 : 0;
+                blinking.BlinkAnimationTicks = 1;
+                var inherited = Matrix4x4.identity;
+                var returned = Matrix4x4.identity;
+                var returnedTint = Color.clear;
+                yield return fixture.Capture(null, () =>
+                {
+                    inherited = SpriteDrawState.Matrix;
+                    SpriteDrawState.Color = tint;
+                    fixture.DrawPass("DrawAdventurePlant", blinking);
+                    returned = SpriteDrawState.Matrix;
+                    returnedTint = SpriteDrawState.Color;
+                    drawFollowers();
+                });
+                Assert.That(returned, Is.EqualTo(inherited), kind + " blink must restore the caller's matrix.");
+                Assert.That(returnedTint, Is.EqualTo(tint), kind + " blink must restore the caller's tint.");
+                var actual = fixture.Pixels.GetPixels32();
+                var scale = Mathf.Min(Screen.width / 800f, Screen.height / 600f);
+                var rightHalf = (Screen.width - 800f * scale) * .5f + 400f * scale;
+                var changed = 0;
+                var visible = 0;
+                for (var index = 0; index < actual.Length; index++)
+                {
+                    if (index % fixture.Target.width < rightHalf)
+                    {
+                        continue;
+                    }
+
+                    if (!actual[index].Equals(expected[index]))
+                    {
+                        changed++;
+                    }
+                    if (expected[index].r < 250 || expected[index].g < 250 || expected[index].b < 250)
+                    {
+                        visible++;
+                    }
+                }
+
+                Assert.That(visible, Is.GreaterThan(100), "The following actors must be visible in the camera comparison.");
+                Assert.That(changed, Is.Zero, kind + " blink must not change following plants, zombies or sun.");
             }
         }
 

@@ -3034,8 +3034,18 @@ namespace PlantsVsZombies.Reanimation
                 placement *= PartMatrix(Interpolate(GetFrame(attachment, time.Current), GetFrame(attachment, time.Next), time.Fraction)) * inverse;
             }
 
-            return DrawClipPose(asset, blink, NativeSeconds(blink, plant.BlinkAnimationTicks * .01f + remainder, 15f, asset.Fps, false, true),
-                asset.Fps, false, placement, SpriteDrawState.Color);
+            var previous = SpriteMatrix;
+            var tint = SpriteDrawState.Color;
+            try
+            {
+                return DrawClipPose(asset, blink, NativeSeconds(blink, plant.BlinkAnimationTicks * .01f + remainder, 15f, asset.Fps, false, true),
+                    asset.Fps, false, placement, tint);
+            }
+            finally
+            {
+                SpriteMatrix = previous;
+                SpriteDrawState.Color = tint;
+            }
         }
 
         /// <summary>Tests whether a CrazyDave track is visible inside the attached blink reanimation.</summary>
