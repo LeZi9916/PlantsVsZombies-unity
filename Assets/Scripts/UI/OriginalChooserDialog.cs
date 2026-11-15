@@ -32,6 +32,10 @@ namespace PlantsVsZombies.UI
         internal Rect NoBounds { get; private set; }
         /// <summary>Identifies the original buttonless Imitater dialog.</summary>
         private bool _imitater;
+        /// <summary>Identifies PC ContinueDialog's extra row and tall bottom.</summary>
+        private bool _continuation;
+        /// <summary>Gets PC 43EBC0's separate cancel button beneath continue and restart.</summary>
+        internal Rect CancelBounds { get; private set; }
 
         /// <summary>Creates a chooser dialog using the host's existing texture ownership.</summary>
         /// <param name="texture">The original sprite lookup.</param>
@@ -46,17 +50,19 @@ namespace PlantsVsZombies.UI
         /// <param name="title">The translated original heading.</param>
         /// <param name="message">The translated original warning, or empty for Imitater.</param>
         /// <param name="imitater">Whether PC 498920 expands the buttonless copy dialog toward 500 by 600.</param>
-        internal void Configure(string title, string message, bool imitater)
+        /// <param name="continuation">Whether PC 43E770 adds the original continued-game button row.</param>
+        internal void Configure(string title, string message, bool imitater, bool continuation = false)
         {
-            if (_titleLayout != null && _title == title && _message == message && _imitater == imitater)
+            if (_titleLayout != null && _title == title && _message == message && _imitater == imitater && _continuation == continuation)
             {
                 return;
             }
             _title = title;
             _message = message;
             _imitater = imitater;
+            _continuation = continuation;
             _titleLayout = _header.Layout(title);
-            var size = Calculate(0, 0);
+            var size = Calculate(continuation ? 10 : 0, continuation ? 60 : 0);
             if (imitater)
             {
                 size = Calculate(500 - (int)size.x, 600 - (int)size.y);
@@ -68,6 +74,17 @@ namespace PlantsVsZombies.UI
             var buttonWidth = caps + RoundUp((contentWidth - 10) / 2 - middle - caps + 1, middle);
             YesBounds = new Rect(Bounds.x + 31, Bounds.yMax - 36 - Height("button_left.png") + 2, buttonWidth, Height("button_left.png"));
             NoBounds = new Rect(Bounds.x + 31 + contentWidth - buttonWidth, YesBounds.y, buttonWidth, YesBounds.height);
+            CancelBounds = default;
+            if (continuation)
+            {
+                // PC 464FF0 single footer, followed by ContinueDialog::Resize 43EBC0.
+                var footerWidth = caps + RoundUp(contentWidth - middle - caps + 1, middle);
+                CancelBounds = new Rect(Bounds.x + 31 + (contentWidth - footerWidth) / 2,
+                    Bounds.yMax - 36 - Height("button_left.png") + 7, footerWidth, Height("button_left.png"));
+                var topWidth = (int)footerWidth / 2 + 10;
+                YesBounds = new Rect(CancelBounds.x - 20, CancelBounds.y - CancelBounds.height, topWidth, CancelBounds.height);
+                NoBounds = new Rect(CancelBounds.xMax - topWidth + 20, YesBounds.y, topWidth, YesBounds.height);
+            }
         }
 
         /// <summary>Samples PC 498C70's eight-column copy-card geometry.</summary>
@@ -86,7 +103,7 @@ namespace PlantsVsZombies.UI
             CanvasUI.Color = prior * new Color(0f, 0f, 0f, .5f);
             CanvasUI.DrawTexture(new Rect(0, 0, 800, 600), Texture2D.whiteTexture);
             CanvasUI.Color = prior;
-            OriginalUiWidgets.DialogFrame(_texture, new Rect(Bounds.x, Bounds.y + 45, Bounds.width, Bounds.height - 45), false, false);
+            OriginalUiWidgets.DialogFrame(_texture, new Rect(Bounds.x, Bounds.y + 45, Bounds.width, Bounds.height - 45), _continuation, false);
             var cap = _texture("dialog_header.png");
             if (cap != null)
             {
@@ -100,7 +117,7 @@ namespace PlantsVsZombies.UI
             if (_bodyLayout != null && _message.Length > 0)
             {
                 var top = 80 + _header.Data.LineHeight + 3;
-                var bodyY = top + ((int)Bounds.height - 36 - 24 - top - 55 - (int)_bodyLayout.Height) / 2;
+                var bodyY = top + ((int)Bounds.height - 36 - 24 - top - (_continuation ? 91 : 55) - (int)_bodyLayout.Height) / 2;
                 _body.Draw(_bodyLayout, Bounds.x + 38 + Mathf.Floor((Bounds.width - 86 - _bodyLayout.Width) / 2), Bounds.y + bodyY, color);
             }
         }
@@ -133,7 +150,7 @@ namespace PlantsVsZombies.UI
                 _bodyLayout = null;
             }
             height += 24 + 8;
-            var minimumHeight = Height("dialog_topleft.png") + Height("dialog_bottomleft.png") + 45;
+            var minimumHeight = Height("dialog_topleft.png") + Height(_continuation ? "dialog_bigbottomleft.png" : "dialog_bottomleft.png") + 45;
             height = minimumHeight + RoundUp(height - minimumHeight, Height("dialog_centerleft.png"));
             return new Vector2(width, height);
         }

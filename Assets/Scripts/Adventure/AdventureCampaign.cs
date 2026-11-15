@@ -24,6 +24,12 @@ namespace PlantsVsZombies.Adventure
         private int _packetSlots = 6;
         /// <summary>Stores attempt id.</summary>
         private string _attemptId = string.Empty;
+        /// <summary>Gets the stable receipt identity retained across board continuation.</summary>
+        internal string AttemptId => _attemptId;
+        /// <summary>Stores the optional per-profile board checkpoint backend.</summary>
+        internal global::PlantsVsZombies.Profiles.MatchCheckpointStore? Checkpoints { get; set; }
+        /// <summary>Gets whether the last start restored a complete board.</summary>
+        internal bool WasRestored { get; private set; }
         /// <summary>Stores coin save retry utc.</summary>
         private long _coinSaveRetryUtc;
         /// <summary>Gets or sets last persistence error.</summary>
@@ -77,6 +83,23 @@ namespace PlantsVsZombies.Adventure
             var account = _accounts == null ? null : _accounts.Get(ProfileId);
             _seedAccess = account == null ? null : account.SeedAccess(p.ImitaterTarget);
             _packetSlots = account == null ? 6 : account.PacketSlots;
+            WasRestored = false;
+            if (Checkpoints != null && Checkpoints.Exists(ProfileId, 0))
+            {
+                var restored = Checkpoints.Load(ProfileId, 0, out var receipt);
+                if (restored.Adventure.Level.Number == p.NextLevel && restored.Rules.AdventureCycle == p.Cycle)
+                {
+                    Game = restored;
+                    _attemptId = receipt;
+                    _packetSlots = restored.Rules.AdventurePacketSlots;
+                    _seedAccess = restored.Rules.AdventureSeedAccess;
+                    restored.Rules.AdventureCoinCommit = _accounts == null ? (Func<int, bool>?)null : CommitCoins;
+                    restored.Rules.AdventureLootCommit = _accounts == null ? (Func<AdventureCoin, bool>?)null : CommitLoot;
+                    WasRestored = true;
+                    return restored;
+                }
+                Checkpoints.Delete(ProfileId, 0);
+            }
             _attemptId = Guid.NewGuid().ToString("N");
             LastPersistenceError = null;
             Game = new GameSimulation(new GameRules { DeferAdventureBossEntrance = true, AdventureLevel = p.NextLevel, AdventureCycle = p.Cycle, AdventureDaveSeed = unchecked(p.AttemptSeed + p.NextLevel + (p.Cycle - 1) * 101 + ProfileId.GetHashCode()), AdventurePacketSlots = _packetSlots, AdventureSeedAccess = _seedAccess, AdventureRoofCleaners = roofCleaners || account != null && account.PurchaseCount(23) > 0, AdventurePoolCleaners = poolCleaners || account != null && account.PurchaseCount(22) > 0, AdventureMinigamesUnlocked = account != null && account.MinigamesUnlocked, AdventurePuzzleUnlocked = account != null && account.PuzzleUnlocked, AdventurePottedLoot = account != null && p.CompletedRuns > 0 && account.Plants.Count < 32, AdventureChocolateLoot = account != null && account.PurchaseCount(20) > 0 && account.PurchaseCount(26) < 10, AdventureLootCommit = _accounts == null ? (Func<AdventureCoin, bool>?)null : CommitLoot, AdventureFirstAid = account != null && account.PurchaseCount(29) > 0, AdventurePlaceRake = account != null && account.PurchaseCount(24) > 0 ? (Func<bool>)(() =>
@@ -160,6 +183,7 @@ namespace PlantsVsZombies.Adventure
             }
 
             _store.RecordReward(ProfileId, Game.Adventure.Level.Number);
+            Checkpoints?.Delete(ProfileId, 0);
             return Game.CollectAdventureReward();
         }
 

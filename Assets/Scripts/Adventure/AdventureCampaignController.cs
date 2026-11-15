@@ -107,7 +107,10 @@ namespace PlantsVsZombies.Adventure
 
             try
             {
-                _adventureCampaign = new AdventureCampaign(_adventureStore, _owner._profiles.SelectedId.Value, _owner.Accounts._accountStore);
+                _adventureCampaign = new AdventureCampaign(_adventureStore, _owner._profiles.SelectedId.Value, _owner.Accounts._accountStore)
+                {
+                    Checkpoints = _owner.Continuation.Store
+                };
                 if (_owner.Accounts.RequiredGetSelectedAccount().ZenGardenTutorialStage > 0)
                 {
                     _owner.Garden.OpenZenGardenForAdventureIntro();
@@ -120,10 +123,15 @@ namespace PlantsVsZombies.Adventure
                 }
 
                 _adventureTestBoard = false;
-                AttachAdventureGame(_adventureCampaign.BeginOrResume());
+                var game = _adventureCampaign.BeginOrResume();
+                AttachAdventureGame(game, isRestored: _adventureCampaign.WasRestored);
                 _owner._currentView = PvZGame.ScreenView.Board;
+                if (_adventureCampaign.WasRestored)
+                {
+                    _owner.Continuation.OpenContinueDialog();
+                }
                 var account = _owner.Accounts.RequiredGetSelectedAccount();
-                if (_adventureCampaign.Progress.NextLevel == 35 && account.HasPendingTacoReward && !account.TacoDiamondPresented)
+                if (!_adventureCampaign.WasRestored && _adventureCampaign.Progress.NextLevel == 35 && account.HasPendingTacoReward && !account.TacoDiamondPresented)
                 {
                     _owner.Store.OpenStoreForAdventureIntro(601);
                     _owner.Store._storeAdventureGamePrepared = true;
@@ -141,7 +149,8 @@ namespace PlantsVsZombies.Adventure
         /// <summary>Performs attach adventure game.</summary>
         /// <param name = "simulation">The simulation.</param>
         /// <param name="isRestart">Whether this board follows a loss or an explicit restart.</param>
-        internal void AttachAdventureGame(GameSimulation? simulation, bool isRestart = false)
+        /// <param name="isRestored">Whether this board resumes its saved gameplay without a new opening.</param>
+        internal void AttachAdventureGame(GameSimulation? simulation, bool isRestart = false, bool isRestored = false)
         {
             _owner._game = simulation;
             _owner.AdventureBoard._hammerAnimationAge = 1f;
@@ -150,7 +159,7 @@ namespace PlantsVsZombies.Adventure
             _owner.RequiredGame.EventRaised = _owner.Sounds.PlaySound;
             _owner.RequiredGame.Adventure.NoticeRaised = AdventureNotice;
             _owner.RequiredGame.Adventure.VaseInterludeDialogueEnabled = true;
-            _owner.WaveNotices.InitializeAdventureWaveNotices();
+            _owner.WaveNotices.InitializeAdventureWaveNotices(isRestored);
             _owner._deck.Clear();
             foreach (PlantKind seed in _owner.RequiredGame.Adventure.SelectedSeeds)
             {
@@ -169,7 +178,11 @@ namespace PlantsVsZombies.Adventure
             _owner._shovel = false;
             _owner.AdventureBoard._adventureFeedback = null;
             _owner.AdventureBoard._choosingImitater = false;
-            _owner.Opening.InitializeAdventureOpening();
+            _owner.Opening.InitializeAdventureOpening(isRestored);
+            if (isRestored)
+            {
+                _owner.Sounds.AttachRestoredBoard();
+            }
         }
 
         /// <summary>Performs restart adventure.</summary>
@@ -183,6 +196,7 @@ namespace PlantsVsZombies.Adventure
 
             try
             {
+                _owner.Continuation.DeleteCurrent();
                 AttachAdventureGame(RequiredAdventureCampaign.BeginOrResume(), isRestart: true);
             }
             catch (Exception error)

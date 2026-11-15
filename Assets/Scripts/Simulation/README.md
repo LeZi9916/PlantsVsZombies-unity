@@ -1,5 +1,29 @@
 # Deterministic simulation ownership
 
+## In-progress game checkpoints
+
+`MatchCheckpointCodec` captures the authoritative `SimulationWorld` model graph,
+including RNG state, native animation/action clocks, ordered entities, linked cargo,
+packet cooldowns, projectiles and mode stages. Type descriptors and field schemas are
+written once and checked when reading. Restoring builds a detached world, then
+connects fresh collaborators without running gameplay initialization, consuming a
+rake or drawing random values. Entity stores rebuild their membership indexes and
+callbacks; cached views, services, delegates and scratch/object pools are excluded.
+The adjacent `link.xml` retains model field and collection metadata in stripped Players.
+
+`Profiles/MatchCheckpointStore` adds profile/mode identity, a bounded payload, SHA-256
+and atomic replacement. It is a replica format; it does not read the original PC's
+raw pointer/layout-dependent `game*.dat` files. Schema-incompatible or damaged files
+are rejected before a restored game is published. The original account, campaign and
+score formats are unchanged. Coin/loot attempt receipts survive continuation.
+
+`Game/MatchContinuationController` owns save-on-leave, suspension, the native continue
+dialog and terminal checkpoint retirement. Initial intros/seed selection do not
+replace a saved Playing board. Survival saves at countdown one before the next chooser;
+accepting that checkpoint keeps the backup, matching PC `417CD0` and `43EDF0`.
+See `Tools/Tests/CheckpointTests/README.md` for focused model and disk checks and
+`Assets/Tests/README.md` for production lifecycle validation.
+
 `GameSimulation` is the gameplay facade and composition root. Its public commands
 forward to explicitly connected collaborators; it does not dispatch species
 behavior. `SimulationWorld` owns match state, random sources, ordered collections,

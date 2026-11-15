@@ -32,6 +32,8 @@ namespace PlantsVsZombies.Profiles
         private readonly object _gate = new object();
         /// <summary>The absolute catalog path used for reads, lock files and atomic replacements.</summary>
         private readonly string _path;
+        /// <summary>Gets the directory shared by this catalog's per-profile board checkpoints.</summary>
+        internal string StorageDirectory => Path.GetDirectoryName(_path)!;
         /// <summary>Observes commit stages for deterministic failure tests, or null during normal use.</summary>
         private readonly Action<ProfileSaveStage>? _saveHook;
         /// <summary>The most recently committed immutable profile snapshot.</summary>

@@ -33,10 +33,13 @@ namespace PlantsVsZombies.Game
 
         /// <summary>Stores smoke pointer.</summary>
         private Vector2? _smokePointer = null; // Explicit Player scenarios only; normal input uses the frame snapshot.
+        /// <summary>Prevents the same Escape press from reaching the screen behind a dismissed continuation.</summary>
+        private bool _continuationInputConsumed;
 
         /// <summary>Routes one polled input snapshot before advancing the game.</summary>
         internal void HandleInput()
         {
+            _continuationInputConsumed = false;
             var input = GameInput.Current;
             var mouse = _owner._smokeMode && _smokePointer.HasValue ? _smokePointer.Value : input.Position;
             _owner._presenter.SetPointerPosition(mouse);
@@ -79,6 +82,12 @@ namespace PlantsVsZombies.Game
                     _owner.Menus.ApplyOptions();
                 }
 
+                return;
+            }
+            if (_owner.Continuation.DialogOpen && _owner._unavailableFeature == null)
+            {
+                _continuationInputConsumed = true;
+                _owner.Continuation.HandleInput();
                 return;
             }
 
@@ -601,6 +610,10 @@ namespace PlantsVsZombies.Game
         /// <summary>Routes the Escape and Enter or Space keys to dismiss dialogs, leave screens or pause the board.</summary>
         internal void HandleEscape()
         {
+            if (_continuationInputConsumed || _owner.Continuation.DialogOpen)
+            {
+                return;
+            }
             if (_owner.IndependentModes.HasChooserModal && !_owner.RequiredOptionsView.IsOpen)
             {
                 if (GameInput.Current.EscapePressed)

@@ -9,6 +9,16 @@ namespace PlantsVsZombies.Modes
     /// <summary>Defines mode session.</summary>
     public sealed class ModeSession
     {
+        /// <summary>Reconnects the facade excluded from the saved model graph.</summary>
+        /// <param name="game">The restored match owning this mode state.</param>
+        internal void AttachRestoredGame(GameSimulation game)
+        {
+            Game = game;
+        }
+        /// <summary>Retains PC Board's survival handoff countdown across a save at update one.</summary>
+        internal int ReSelectionTicks { get; set; } = -1;
+        /// <summary>Retains the fractional native update at a survival handoff.</summary>
+        internal double ReSelectionRemainder { get; set; }
         /// <summary>Gets or sets definition.</summary>
         public ModeDefinition Definition { get; private set; }
         /// <summary>Gets or sets game.</summary>

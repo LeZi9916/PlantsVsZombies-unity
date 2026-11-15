@@ -25,7 +25,8 @@ namespace PlantsVsZombies.Adventure
         /// <summary>Stores bundled wave animations.</summary>
         internal global::PlantsVsZombies.Reanimation.ReanimationRenderer? _bundledWaveAnimations;
         /// <summary>Performs initialize adventure wave notices.</summary>
-        internal void InitializeAdventureWaveNotices()
+        /// <param name="isRestored">Whether banner origins are retained from the saved board.</param>
+        internal void InitializeAdventureWaveNotices(bool isRestored = false)
         {
             if (_waveNoticeGame != null)
             {
@@ -36,6 +37,11 @@ namespace PlantsVsZombies.Adventure
             _hugeWaveNoticeStart = _finalWaveNoticeStart = -1f;
             if (_waveNoticeGame != null)
             {
+                if (isRestored)
+                {
+                    _hugeWaveNoticeStart = _waveNoticeGame.Presentation.HugeWaveNoticeStart;
+                    _finalWaveNoticeStart = _waveNoticeGame.Presentation.FinalWaveNoticeStart;
+                }
                 _waveNoticeGame.WaveScheduleEventRaised += HandleAdventureWaveNotice;
             }
         }

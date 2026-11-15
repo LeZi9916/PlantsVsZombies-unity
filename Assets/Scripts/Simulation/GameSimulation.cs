@@ -154,7 +154,21 @@ namespace PlantsVsZombies.Simulation
         /// <param name="randomSeed">The initial combat random seed.</param>
         /// <exception cref="ArgumentException">The mode options conflict.</exception>
         public GameSimulation(GameRules? rules = null, int randomSeed = 12345)
+            : this(rules, randomSeed, null)
         {
+        }
+
+        /// <summary>Connects collaborators to a new or fully restored world without replaying initialization.</summary>
+        /// <param name="rules">Rules for a new board.</param>
+        /// <param name="randomSeed">The new board's seed.</param>
+        /// <param name="restoredWorld">A detached verified checkpoint, or null for normal initialization.</param>
+        private GameSimulation(GameRules? rules, int randomSeed, SimulationWorld? restoredWorld)
+        {
+            if (restoredWorld != null)
+            {
+                _world = restoredWorld;
+                _world.RebuildViews();
+            }
             _adventureModeRunner = new AdventureModeRunner(_world);
             _adventureSpecials = new AdventureSpecials(_world);
             _aquariumMode = new AquariumMode(_world);
@@ -283,7 +297,37 @@ namespace PlantsVsZombies.Simulation
             _zombieLifecycle.Connect(_bungeeZombieActions, _legacySimulation, _lootSystem, _rewardSystem, _zombieFeedbackSystem);
             _zombieSpawnSystem.Connect(_adventureModeRunner, _bungeeZombieActions, _independentModeRunner, _zombieFeedbackSystem);
             _zombieSystem.Connect(_adventureModeRunner, _balloonZombieActions, _biteSystem, _boardEnvironment, _boardQueries, _bobsledZombieActions, _bungeeZombieActions, _combatSystem, _dancerZombieActions, _diggerZombieActions, _gargantuarActions, _jackZombieActions, _ladderSystem, _legacySimulation, _plantTimingSystem, _plantingSystem, _pogoZombieActions, _rewardSystem, _vaultZombieActions, _vehicleZombieActions, _waterZombieActions, _zombieFeedbackSystem, _zombieLifecycle);
-            _simulationSession.Initialize(rules, randomSeed);
+            if (restoredWorld == null)
+            {
+                _simulationSession.Initialize(rules, randomSeed);
+            }
+            else
+            {
+                _world._rewardPresentationTick = _rewardSystem.AdvanceAdventureRewardTick;
+                _world.ModeSession?.AttachRestoredGame(this);
+            }
+        }
+
+        /// <summary>Captures all authoritative board state without invoking persistence callbacks.</summary>
+        /// <returns>The complete replica checkpoint payload.</returns>
+        internal byte[] CaptureCheckpoint()
+        {
+            return MatchCheckpointCodec.Capture(_world);
+        }
+
+        /// <summary>Completes the original end-level coin cleanup when leaving during the award sequence.</summary>
+        /// <returns>Whether pending coin and unused-mower account writes succeeded.</returns>
+        internal bool FinishAdventureForSaving()
+        {
+            return _seedBankSystem.FinishAdventureForSaving(_world.ModeSession != null);
+        }
+
+        /// <summary>Creates a match from a complete detached checkpoint.</summary>
+        /// <param name="payload">The validated replica checkpoint payload.</param>
+        /// <returns>The restored match with freshly connected collaborators.</returns>
+        internal static GameSimulation RestoreCheckpoint(byte[] payload)
+        {
+            return new GameSimulation(null, 0, MatchCheckpointCodec.Restore(payload));
         }
         /// <summary>Stores rows.</summary>
         public const int Rows = 5;

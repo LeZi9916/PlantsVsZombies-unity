@@ -26,6 +26,9 @@ namespace PlantsVsZombies.Game
         private PvZGame.ScreenView _almanacReturnView = PvZGame.ScreenView.Selector;
         /// <summary>Stores almanac returns to options.</summary>
         private bool _almanacReturnsToOptions;
+        /// <summary>Gets whether an active board or its modal almanac owns the current Playing scene.</summary>
+        internal bool HasBoardForSaving => _owner._currentView == PvZGame.ScreenView.Board
+            || _owner._currentView == PvZGame.ScreenView.Almanac && _almanacReturnView == PvZGame.ScreenView.Board;
 
         /// <summary>Performs initialize profiles.</summary>
         internal void InitializeProfiles()
@@ -173,7 +176,10 @@ namespace PlantsVsZombies.Game
                     _owner.ResetGame();
                     break;
                 case OptionsCloseResult.MainMenu:
-                    _owner._currentView = PvZGame.ScreenView.Selector;
+                    if (_owner.Continuation.TrySaveActive())
+                    {
+                        _owner._currentView = PvZGame.ScreenView.Selector;
+                    }
                     break;
             }
         }

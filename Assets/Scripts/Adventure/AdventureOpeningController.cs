@@ -86,7 +86,8 @@ namespace PlantsVsZombies.Adventure
         internal bool PlayOpeningInIsolatedSession { get; set; }
 
         /// <summary>Performs initialize adventure opening.</summary>
-        internal void InitializeAdventureOpening()
+        /// <param name="isRestored">Whether a saved Playing board bypasses opening initialization and random draws.</param>
+        internal void InitializeAdventureOpening(bool isRestored = false)
         {
             _adventureIntro = null;
             _adventureIntroFrame = null;
@@ -107,8 +108,20 @@ namespace PlantsVsZombies.Adventure
             _owner.Dave._crazyDaveHeldItem = null;
             _owner.Dave._crazyDaveIdleMouth = null;
             _owner.Dave._crazyDaveBlinkAge = -1f;
-            _owner.Dave._crazyDaveBlinkTicks = 400 + (_owner._game?.DrawAdventureRandomInt(401) ?? UnityEngine.Random.Range(0, 401));
             _owner.Dave._crazyDaveVoice.Stop();
+            if (isRestored)
+            {
+                _bowlingLineVisible = _owner.RequiredGame.Adventure.Level.Mode == AdventureMode.Bowling;
+                var dialogue = _owner.RequiredGame.Presentation.DialogueCheckpoint;
+                if (dialogue != null)
+                {
+                    _vaseDialogueActive = true;
+                    _vaseDialogueRemainder = dialogue.Remainder;
+                    _owner.Dave.RestoreBoardDialogue(dialogue);
+                }
+                return;
+            }
+            _owner.Dave._crazyDaveBlinkTicks = 400 + (_owner._game?.DrawAdventureRandomInt(401) ?? UnityEngine.Random.Range(0, 401));
             // Older explicitly isolated feature probes start at the battle they are inspecting.
             // The new opening probe and normal player always use the complete original opening.
             if (_owner._game == null || !_owner._game.IsAdventure || _owner.Campaign._adventureTestBoard || _owner._smokeMode && !PlayOpeningInIsolatedSession)
@@ -466,6 +479,15 @@ namespace PlantsVsZombies.Adventure
             _owner.Sounds.PlayPresentationSound("hugewave");
             _owner.Dave.SetCrazyDaveAnimation("anim_enter", 24f, false);
             _owner.Dave.ShowCrazyDaveMessage(start);
+        }
+
+        /// <summary>Captures a playing-scene dialogue without invoking speech, animation or population commands.</summary>
+        internal void CaptureCheckpointPresentation()
+        {
+            var presentation = _owner.RequiredGame.Presentation;
+            presentation.DialogueCheckpoint = _vaseDialogueActive ? _owner.Dave.CaptureBoardDialogue(_vaseDialogueRemainder) : null;
+            presentation.HugeWaveNoticeStart = _owner.WaveNotices._hugeWaveNoticeStart;
+            presentation.FinalWaveNoticeStart = _owner.WaveNotices._finalWaveNoticeStart;
         }
 
         /// <summary>Updates Dave until he has left the vase stage transition.</summary>

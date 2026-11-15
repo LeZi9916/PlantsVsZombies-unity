@@ -129,6 +129,10 @@ namespace PlantsVsZombies.Game
         private AdventureCampaignController? _campaign;
         /// <summary>Gets the adventure campaign controller, creating it on first use.</summary>
         internal AdventureCampaignController Campaign => _campaign ??= new AdventureCampaignController(this);
+        /// <summary>Stores the lazily created in-progress board continuation controller.</summary>
+        private MatchContinuationController? _continuation;
+        /// <summary>Gets the original board save and continuation lifecycle.</summary>
+        internal MatchContinuationController Continuation => _continuation ??= new MatchContinuationController(this);
 
         /// <summary>Stores the lazily created adventure opening controller.</summary>
         private AdventureOpeningController? _opening;
@@ -420,14 +424,17 @@ namespace PlantsVsZombies.Game
             UpdateProgression();
             SaveUtility.OpenWhenRequested();
             if (_choosingSeeds && _pendingSeeds != null && _currentView == ScreenView.Board && !RequiredOptionsView.IsOpen
-                && !_confirmingQuit && _unavailableFeature == null && RequiredGame.State != MatchState.Paused)
+                && !Continuation.DialogOpen && !_confirmingQuit && _unavailableFeature == null && RequiredGame.State != MatchState.Paused)
             {
                 _pendingSeeds.Advance(Time.deltaTime);
             }
 
-            var openingBlocksSimulation = Opening.UpdateAdventureOpening(Time.deltaTime);
-            Opening.UpdateVaseInterlude(Time.deltaTime);
-            if (!openingBlocksSimulation && _currentView == ScreenView.Board && !_choosingSeeds && !RequiredOptionsView.IsOpen && (_profileDialog == null || !_profileDialog.IsOpen))
+            var openingBlocksSimulation = Continuation.DialogOpen || Opening.UpdateAdventureOpening(Time.deltaTime);
+            if (!Continuation.DialogOpen)
+            {
+                Opening.UpdateVaseInterlude(Time.deltaTime);
+            }
+            if (!openingBlocksSimulation && _unavailableFeature == null && _currentView == ScreenView.Board && !_choosingSeeds && !RequiredOptionsView.IsOpen && (_profileDialog == null || !_profileDialog.IsOpen))
             {
                 using (s_updateSimulationMarker.Auto())
                 {
@@ -450,7 +457,11 @@ namespace PlantsVsZombies.Game
                 Sounds.UpdateAdventureZombiePartAudio();
                 Sounds.UpdateAdventureVaseAudio();
             }
-            Rewards.UpdateAdventureRewardContinuation();
+            if (!Continuation.DialogOpen)
+            {
+                Rewards.UpdateAdventureRewardContinuation();
+            }
+            Continuation.DiscardFinishedCheckpoint();
             Router.HandleEscape();
 
             UpdateCursorVisibility();
@@ -468,7 +479,7 @@ namespace PlantsVsZombies.Game
                     || IndependentModes.IsModeBoard && IndependentModes._modeSession != null && IndependentModes._modeSession.Definition.Mechanic == ModeMechanic.Whack);
             var hidden = _currentView == ScreenView.Board && _game != null && _game.IsAdventure
                 && whackBoard
-                && !RequiredOptionsView.IsOpen && !_confirmingQuit && _unavailableFeature == null && !Loading._originalLoadingActive;
+                && !Continuation.DialogOpen && !RequiredOptionsView.IsOpen && !_confirmingQuit && _unavailableFeature == null && !Loading._originalLoadingActive;
             var visible = !hidden;
             if (!_cursorVisibilityInitialized || UnityEngine.Cursor.visible != visible)
             {
@@ -489,7 +500,12 @@ namespace PlantsVsZombies.Game
         {
             if (Sounds._audioLoadingFinished && Music.DynamicAudioReady)
             {
-                return true;
+                var saved = Continuation.TrySaveActive();
+                if (!saved)
+                {
+                    _quitRequested = false;
+                }
+                return saved;
             }
 
             RequestQuit(0);
@@ -501,6 +517,10 @@ namespace PlantsVsZombies.Game
         internal void RequestQuit(int exitCode)
         {
             if (_quitRequested)
+            {
+                return;
+            }
+            if (!Continuation.TrySaveActive())
             {
                 return;
             }
@@ -523,6 +543,22 @@ namespace PlantsVsZombies.Game
 
             yield return null;
             Application.Quit(exitCode);
+        }
+
+        /// <summary>Preserves the active Playing scene before a mobile or desktop application suspension.</summary>
+        /// <param name="paused">Whether the application is being suspended.</param>
+        private void OnApplicationPause(bool paused)
+        {
+            if (paused)
+            {
+                Continuation.TrySaveActive();
+            }
+        }
+
+        /// <summary>Preserves Editor stop and platform shutdown paths which do not query wantsToQuit.</summary>
+        private void OnApplicationQuit()
+        {
+            Continuation.TrySaveActive();
         }
 
         /// <summary>Performs on destroy.</summary>

@@ -1386,3 +1386,48 @@ bodies and mirrored poses against independently computed quad dimensions and
 centers, then verifies restoration of the original head. The existing garlic
 damage/face artwork comparison also passes. Physical devices and packaged
 Players were not tested.
+
+
+## Original in-progress game continuation
+
+PC `414A00` saves a Playing board for all game modes except 42 (Ice), 43 (Zen
+Garden), 50 (Tree of Wisdom), 71 (Upsell), and 72 (Intro). `464510`/`45C370` use
+per-user, per-mode files. `417CD0` saves survival at the final update before
+re-selection. `43EDF0` preserves that update-one backup on Continue, erases an
+ordinary accepted continuation, and leaves the save intact on Cancel. Original
+continue/restart text, the second confirmation, sizing, tall bottom and buttons
+come from `43E770`, `43EBC0`, `43EDF0`, `464B40`, `464FF0`, and `4651D0`.
+PC `418020` completes pending end-level persistence instead of saving a finished
+board, scores collecting coins, drops untouched loot and pays unused mowers.
+
+The new replica board files preserve the formation, health, sun and money pickups,
+projectiles, cooldowns, native actor states/clocks, waves, RNG, survival handoff,
+mode run identity and adventure attempt receipts. The host saves through options
+and mode-directory leave, quit, application suspension, and the survival boundary.
+New intros and initial choosers do not overwrite a Playing checkpoint. Continue
+bypasses initialization and opening RNG, rebinds account/audio callbacks, avoids
+spending another rake, and does not replay previously processed sound events.
+Native vase interlude poses and wave-banner origins also survive continuation.
+
+```powershell
+dotnet run --project Tools/Tests/CheckpointTests/CheckpointTests.csproj -c Release
+$env:PVZ_BOARD_STRESS_ASSETS = (Resolve-Path Assets/StreamingAssets).Path
+./Tools/Tests/Run-UnityTests.ps1 -Platform PlayMode -TestFilter 'MatchContinuationTests;OriginalSurvivalFlowTests'
+dotnet run --project Tools/Tests/ArchitectureTests/ArchitectureTests.csproj -c Release
+git diff --check
+```
+
+Focused model/disk regressions pass for all **55 implemented savable challenges**,
+eleven representative adventure stages, all plant/zombie capability owners,
+active cannon firing and homing shots, linked bungee cargo, cooldowns, exact RNG
+continuation, profile/mode isolation, corrupt reads and atomic write failure.
+Adventure receipts retain coin idempotency and do not consume an extra rake.
+The end-level exit settlement checks collecting drops and one-time mower credit.
+The eight selected production PlayMode cases pass on **Unity 7000.0.0a16 / Windows**;
+the four continuation cases were repeated after the final dialog sizing correction.
+The actual continue dialog capture was inspected. Architecture reports zero
+violations. All integration saves belong to disposable test profiles.
+
+Windows packaged Players, Mono/IL2CPP builds and Linux/macOS/mobile devices remain
+unverified. `link.xml` retains snapshot reflection metadata in stripped Players;
+Editor and standalone model tests do not establish AOT/device compatibility.

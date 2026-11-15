@@ -173,6 +173,41 @@ namespace PlantsVsZombies.Simulation
             return true;
         }
 
+        /// <summary>Applies PC 418020's end-level save cleanup: score collecting coins and retire untouched drops.</summary>
+        /// <param name="creditMowers">Whether this independent mode banks unused mowers here instead of through its campaign reward receipt.</param>
+        /// <returns>Whether all pending account writes completed.</returns>
+        internal bool FinishAdventureForSaving(bool creditMowers)
+        {
+            var board = _adventureModeRunner.Adventure;
+            board._coins.RemoveAll(coin => !coin.IsBeingCollected && !coin.PersistencePending);
+            if (!BankAdventureCoins())
+            {
+                return false;
+            }
+            if (creditMowers && !_world.Rules.AdventureDisableLoot)
+            {
+                var bonus = 0;
+                foreach (var mower in _world.Mowers)
+                {
+                    if (mower.Available && mower.SquishedTicks <= 0)
+                    {
+                        bonus += 5;
+                    }
+                }
+                var total = (int)Math.Min(int.MaxValue, (long)board.MoneyCollectedUnits + bonus);
+                if (bonus > 0 && _world.Rules.AdventureCoinCommit != null && !_world.Rules.AdventureCoinCommit(total))
+                {
+                    return false;
+                }
+                board.MoneyCollectedUnits = total;
+                foreach (var mower in _world.Mowers)
+                {
+                    mower.Available = false;
+                }
+            }
+            return true;
+        }
+
         /// <summary>Performs adventure packet context.</summary>
         /// <param name = "kind">The kind.</param>
         /// <param name = "playing">The playing.</param>

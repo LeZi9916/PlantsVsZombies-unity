@@ -76,6 +76,7 @@ namespace PlantsVsZombies.Game
             _hammerParticles?.Clear();
             _poolRenderer?.Dispose();
             _modeChooserDialog?.Dispose();
+            _continueDialog?.Dispose();
             _levelNameFont?.Dispose();
             _seedCostFont?.Dispose();
             CanvasUI.Dispose();
@@ -85,6 +86,38 @@ namespace PlantsVsZombies.Game
         private OriginalChooserDialog? _modeChooserDialog;
         /// <summary>Gets the native modal prepared when its opening input was accepted.</summary>
         internal OriginalChooserDialog RequiredModeChooserDialog => _modeChooserDialog ??= new OriginalChooserDialog(_textureLookup);
+        /// <summary>Owns the native continued-game dialog's fonts and layout.</summary>
+        private OriginalChooserDialog? _continueDialog;
+        /// <summary>Gets the native continuation modal layout.</summary>
+        internal OriginalChooserDialog RequiredContinueDialog => _continueDialog ??= new OriginalChooserDialog(_textureLookup);
+
+        /// <summary>Measures the unchanged PC continue/restart text and extra button row.</summary>
+        internal void PrepareContinueDialog()
+        {
+            var adventure = _owner.Continuation.IsAdventure;
+            var confirmation = _owner.Continuation.ConfirmingRestart;
+            var title = confirmation ? adventure ? "RESTART_LEVEL_HEADER" : "NEW_GAME_HEADER" : "CONTINUE_GAME_HEADER";
+            var body = confirmation ? adventure ? "RESTART_LEVEL" : "NEW_GAME" : adventure ? "CONTINUE_GAME_OR_RESTART" : "CONTINUE_GAME";
+            RequiredContinueDialog.Configure(OriginalProgressionText(title), OriginalProgressionText(body), false, !confirmation);
+        }
+
+        /// <summary>Draws the native continue/restart/cancel modal and original second confirmation.</summary>
+        private void DrawContinueDialog()
+        {
+            if (!_owner.Continuation.DialogOpen)
+            {
+                return;
+            }
+            var dialog = RequiredContinueDialog;
+            dialog.Draw();
+            var restart = _owner.Continuation.IsAdventure ? "RESTART_BUTTON" : "NEW_GAME_BUTTON";
+            DrawOriginalUiButton(dialog.YesBounds, OriginalProgressionText(_owner.Continuation.ConfirmingRestart ? restart : "CONTINUE_BUTTON"));
+            DrawOriginalUiButton(dialog.NoBounds, OriginalProgressionText(_owner.Continuation.ConfirmingRestart ? "DIALOG_BUTTON_CANCEL" : restart));
+            if (!_owner.Continuation.ConfirmingRestart)
+            {
+                DrawOriginalUiButton(dialog.CancelBounds, OriginalProgressionText("DIALOG_BUTTON_CANCEL"));
+            }
+        }
 
         /// <summary>Measures the exact original dialog content when a copy or confirmation dialog is opened.</summary>
         internal void PrepareModeChooserDialog()
@@ -272,7 +305,7 @@ namespace PlantsVsZombies.Game
                 }
 
                 CanvasUI.Matrix = ViewportMatrix();
-                CanvasUI.Enabled = !_owner.RequiredOptionsView.IsOpen && !_owner._confirmingQuit && _owner._unavailableFeature == null && (_owner._profileDialog == null || !_owner._profileDialog.IsOpen);
+                CanvasUI.Enabled = !_owner.Continuation.DialogOpen && !_owner.RequiredOptionsView.IsOpen && !_owner._confirmingQuit && _owner._unavailableFeature == null && (_owner._profileDialog == null || !_owner._profileDialog.IsOpen);
                 switch (_owner._currentView)
                 {
                     case PvZGame.ScreenView.Selector:
@@ -320,6 +353,7 @@ namespace PlantsVsZombies.Game
                 {
                     DrawModeChooserDialog();
                 }
+                DrawContinueDialog();
                 if (_owner._unavailableFeature != null)
                 {
                     DrawUnavailable();

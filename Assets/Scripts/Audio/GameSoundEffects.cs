@@ -14,6 +14,27 @@ namespace PlantsVsZombies.Audio
     /// <summary>Loads and plays the one-shot sound effects, pooled pitched voices and presentation cues of one game session.</summary>
     internal sealed class GameSoundEffects
     {
+        /// <summary>Resumes looping sound ownership while suppressing one-shot events already heard before saving.</summary>
+        internal void AttachRestoredBoard()
+        {
+            var game = _owner.RequiredGame;
+            _zombiePartAudioGame = game;
+            _zombieRiseSoundSerial = game.Presentation.ZombieRiseSoundSerial;
+            _zombieSoundReadIndex = game.Presentation.ZombieSounds.Count;
+            _zombiePartAudioSerial = 0;
+            _vaseAudioGame = game;
+            _vaseSwingSoundSerial = game.Presentation.VaseSwingSoundSerial;
+            _vaseBreakSoundSerial = game.Presentation.VaseBreakSoundSerial;
+            _potatoMineAudioGame = game;
+            _potatoMineRiseAudioSerial = game.Presentation.PotatoMineRiseSoundSerial;
+            _graveBusterChompAudioSerial = game.Presentation.GraveBusterChompSoundSerial;
+            _jackInTheBoxMusic?.Stop();
+            _jackInTheBoxMusicPaused = false;
+            _diggerTunnelingSound?.Stop();
+            _diggerTunnelingSoundPaused = false;
+            _stormRainSound?.Stop();
+            _stormRainPaused = false;
+        }
         /// <summary>Provides the game session whose shared state and services this component uses.</summary>
         private readonly PvZGame _owner;
 
@@ -336,7 +357,7 @@ namespace PlantsVsZombies.Audio
             _stormRainSound.volume = _soundVolume;
             // PC Board::Pause does not GamePause Foley during LevelIntro; the loss dialog pauses the board later.
             var paused = !_owner.Opening.AdventureIntroActive
-                && (game.State == MatchState.Paused || _owner._optionsView != null && _owner._optionsView.IsOpen
+                && (_owner.Continuation.DialogOpen || game.State == MatchState.Paused || _owner._optionsView != null && _owner._optionsView.IsOpen
                     || _owner._profileDialog != null && _owner._profileDialog.IsOpen || game.Adventure.Storm.LossDialogReady);
             if (paused)
             {
@@ -643,7 +664,7 @@ namespace PlantsVsZombies.Audio
             }
 
             _jackInTheBoxMusic.volume = _soundVolume;
-            if (game!.State == MatchState.Paused)
+            if (_owner.Continuation.DialogOpen || game!.State == MatchState.Paused)
             {
                 if (!_jackInTheBoxMusicPaused)
                 {
@@ -720,7 +741,7 @@ namespace PlantsVsZombies.Audio
             }
 
             _diggerTunnelingSound.volume = _soundVolume;
-            if (game!.State == MatchState.Paused)
+            if (_owner.Continuation.DialogOpen || game!.State == MatchState.Paused)
             {
                 if (!_diggerTunnelingSoundPaused)
                 {

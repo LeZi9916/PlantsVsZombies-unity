@@ -331,7 +331,7 @@ namespace PlantsVsZombies.Audio
                 PlayOriginalMusicCue(desired);
             }
 
-            var paused = _owner._optionsView != null && _owner._optionsView.IsOpen || _owner._currentView == PvZGame.ScreenView.Board && _owner._game != null && _owner._game.State == MatchState.Paused;
+            var paused = _owner.Continuation.DialogOpen || _owner._optionsView != null && _owner._optionsView.IsOpen || _owner._currentView == PvZGame.ScreenView.Board && _owner._game != null && _owner._game.State == MatchState.Paused;
             var now = AudioSettings.dspTime;
             var volume = _owner._optionsView != null && _owner._optionsView.IsOpen ? _owner._optionsView.MusicVolume : _musicVolume;
             if (paused)

@@ -10,6 +10,46 @@ namespace PlantsVsZombies.Progression
     /// <summary>Owns Crazy Dave's animation, held item, voice and dialogue text shared by the opening, store, garden and tree.</summary>
     internal sealed class CrazyDaveActor
     {
+        /// <summary>Captures the current native board dialogue without drawing speech randomness.</summary>
+        /// <param name="remainder">The opening controller's fractional native update.</param>
+        /// <returns>The complete current dialogue pose.</returns>
+        internal AdventureDialogueCheckpoint CaptureBoardDialogue(double remainder)
+        {
+            return new AdventureDialogueCheckpoint
+            {
+                Remainder = remainder,
+                Message = _crazyDaveMessageIndex,
+                Text = _crazyDaveText,
+                Animation = _crazyDaveAnimation,
+                Age = _crazyDaveAnimationAge,
+                Rate = _crazyDaveAnimationRate,
+                Loop = _crazyDaveAnimationLoop,
+                Handing = _crazyDaveHanding,
+                Item = _crazyDaveHeldItem,
+                ItemAge = _crazyDaveHeldItemAge,
+                Mouth = _crazyDaveIdleMouth,
+                BlinkTicks = _crazyDaveBlinkTicks,
+                BlinkAge = _crazyDaveBlinkAge
+            };
+        }
+
+        /// <summary>Restores an existing native dialogue pose without replaying its speech or entry actions.</summary>
+        /// <param name="state">The captured original message and clocks.</param>
+        internal void RestoreBoardDialogue(AdventureDialogueCheckpoint state)
+        {
+            _crazyDaveMessageIndex = state.Message;
+            _crazyDaveText = state.Text;
+            _crazyDaveAnimation = state.Animation;
+            _crazyDaveAnimationAge = state.Age;
+            _crazyDaveAnimationRate = state.Rate;
+            _crazyDaveAnimationLoop = state.Loop;
+            _crazyDaveHanding = state.Handing;
+            _crazyDaveHeldItem = state.Item;
+            _crazyDaveHeldItemAge = state.ItemAge;
+            _crazyDaveIdleMouth = state.Mouth;
+            _crazyDaveBlinkTicks = state.BlinkTicks;
+            _crazyDaveBlinkAge = state.BlinkAge;
+        }
         /// <summary>Samples the original shared stream during a board's dialogue, retaining the existing menu-only source without an active board.</summary>
         /// <param name="maximum">The original exclusive integer bound.</param>
         /// <returns>The next bounded original action ticket.</returns>

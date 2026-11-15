@@ -1,0 +1,34 @@
+<linker>
+  <!-- The checkpoint codec reads private model fields, including capability state.
+       Retain that metadata in stripped Players; callbacks and Unity services are excluded. -->
+  <assembly fullname="PlantsVsZombies.Runtime">
+    <type fullname="PlantsVsZombies.Simulation.*" preserve="fields" />
+    <type fullname="PlantsVsZombies.Adventure.*" preserve="fields" />
+    <type fullname="PlantsVsZombies.Modes.*" preserve="fields" />
+    <type fullname="PlantsVsZombies.Levels.*" preserve="fields" />
+    <type fullname="PlantsVsZombies.Plants.*" preserve="fields" />
+    <type fullname="PlantsVsZombies.Randomness.*" preserve="fields" />
+    <type fullname="PlantsVsZombies.Sun.*" preserve="fields" />
+    <type fullname="PlantsVsZombies.Timing.*" preserve="fields" />
+    <type fullname="PlantsVsZombies.Waves.*" preserve="fields" />
+    <type fullname="PlantsVsZombies.VerifiedData.*" preserve="fields" />
+  </assembly>
+  <!-- Logical containers are rebuilt through their normal constructors and insertion methods. -->
+  <assembly fullname="mscorlib" ignoreIfMissing="1">
+    <type fullname="System.Collections.Generic.List`1" preserve="all" />
+    <type fullname="System.Collections.Generic.Dictionary`2" preserve="all" />
+    <type fullname="System.Collections.Generic.Queue`1" preserve="all" />
+    <type fullname="System.Collections.Generic.HashSet`1" preserve="all" />
+    <type fullname="System.Collections.ObjectModel.ReadOnlyCollection`1" preserve="all" />
+  </assembly>
+  <assembly fullname="System.Core" ignoreIfMissing="1">
+    <type fullname="System.Collections.Generic.HashSet`1" preserve="all" />
+  </assembly>
+  <assembly fullname="System.Private.CoreLib" ignoreIfMissing="1">
+    <type fullname="System.Collections.Generic.List`1" preserve="all" />
+    <type fullname="System.Collections.Generic.Dictionary`2" preserve="all" />
+    <type fullname="System.Collections.Generic.Queue`1" preserve="all" />
+    <type fullname="System.Collections.Generic.HashSet`1" preserve="all" />
+    <type fullname="System.Collections.ObjectModel.ReadOnlyCollection`1" preserve="all" />
+  </assembly>
+</linker>

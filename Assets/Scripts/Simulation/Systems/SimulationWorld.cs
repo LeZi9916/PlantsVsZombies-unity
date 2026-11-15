@@ -16,19 +16,24 @@ namespace PlantsVsZombies.Simulation
         /// <summary>Creates cached read-only views of pooled object collections.</summary>
         internal SimulationWorld()
         {
+            RebuildViews();
+        }
+        /// <summary>Reconnects read-only facades after restoring the authoritative collection owners.</summary>
+        internal void RebuildViews()
+        {
             PeasView = new EntityView<Pea>(Peas);
             SunsView = new EntityView<global::PlantsVsZombies.Simulation.Sun>(Suns);
             MowersView = new EntityView<Mower>(Mowers);
             FlamesView = new EntityView<LaneFlame>(Flames);
         }
         /// <summary>Gets the cached read-only peas view.</summary>
-        internal EntityView<Pea> PeasView { get; }
+        internal EntityView<Pea> PeasView { get; private set; } = null!;
         /// <summary>Gets the cached read-only suns view.</summary>
-        internal EntityView<global::PlantsVsZombies.Simulation.Sun> SunsView { get; }
+        internal EntityView<global::PlantsVsZombies.Simulation.Sun> SunsView { get; private set; } = null!;
         /// <summary>Gets the cached read-only mowers view.</summary>
-        internal EntityView<Mower> MowersView { get; }
+        internal EntityView<Mower> MowersView { get; private set; } = null!;
         /// <summary>Gets the cached read-only flames view.</summary>
-        internal EntityView<LaneFlame> FlamesView { get; }
+        internal EntityView<LaneFlame> FlamesView { get; private set; } = null!;
         /// <summary>Reuses integer candidate lists independently across nested board actions.</summary>
         internal readonly ScratchBufferPool<int> IntegerScratch = new ScratchBufferPool<int>();
         /// <summary>Reuses coin targeting candidates without allocating one list per collection attempt.</summary>

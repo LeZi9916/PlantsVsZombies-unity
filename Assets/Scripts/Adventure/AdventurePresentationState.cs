@@ -8,6 +8,12 @@ namespace PlantsVsZombies.Adventure
     /// <summary>Defines adventure presentation state.</summary>
     public sealed class AdventurePresentationState
     {
+        /// <summary>Retains an active original vase interlude across board continuation.</summary>
+        internal AdventureDialogueCheckpoint? DialogueCheckpoint;
+        /// <summary>Retains the huge-wave banner's original elapsed-time origin.</summary>
+        internal float HugeWaveNoticeStart = -1f;
+        /// <summary>Retains the final-wave banner's original elapsed-time origin.</summary>
+        internal float FinalWaveNoticeStart = -1f;
         /// <summary>Defines the eight-frame, forty-FPS pot-opening hammer duration in native updates.</summary>
         internal const int VaseMalletDurationTicks = 20;
         /// <summary>Gets the column beneath the single active pot-opening hammer.</summary>

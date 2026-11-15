@@ -26,9 +26,29 @@ namespace PlantsVsZombies.Modes
         }
 
         /// <summary>Gets the remaining original 500-update delay before survival re-selection.</summary>
-        internal int SurvivalTransitionTicks { get; private set; } = -1;
+        internal int SurvivalTransitionTicks
+        {
+            get => _modeSession?.ReSelectionTicks ?? -1;
+            private set
+            {
+                if (_modeSession != null)
+                {
+                    _modeSession.ReSelectionTicks = value;
+                }
+            }
+        }
         /// <summary>Retains fractional native ticks during the survival stage handoff.</summary>
-        private double _survivalTransitionRemainder;
+        private double SurvivalTransitionRemainder
+        {
+            get => _modeSession?.ReSelectionRemainder ?? 0d;
+            set
+            {
+                if (_modeSession != null)
+                {
+                    _modeSession.ReSelectionRemainder = value;
+                }
+            }
+        }
         /// <summary>Retains the last persisted native survival flag count, including a partial hard/endless stage.</summary>
         private int _savedSurvivalFlags = -1;
         /// <summary>Tracks the original level-award light-fill sound.</summary>
@@ -219,6 +239,15 @@ namespace PlantsVsZombies.Modes
         /// <returns>The resulting start independent mode.</returns>
         private bool StartIndependentMode(int originalModeId)
         {
+            return StartIndependentMode(originalModeId, false);
+        }
+
+        /// <summary>Starts or restores a challenge before binding account receipts and purchased tools.</summary>
+        /// <param name="originalModeId">The selected PC mode.</param>
+        /// <param name="restart">Whether the caller explicitly discarded the previous board.</param>
+        /// <returns>Whether a board was attached.</returns>
+        private bool StartIndependentMode(int originalModeId, bool restart)
+        {
             ModeDefinition? definition;
             if (!ModeCatalog.TryGet(originalModeId, out definition))
             {
@@ -264,8 +293,17 @@ namespace PlantsVsZombies.Modes
                 var battleSeed = unchecked(Environment.TickCount ^ (int)DateTime.UtcNow.Ticks);
                 var waveContext = new ModeWaveContext(unchecked((uint)battleSeed),
                     profileProgress: progress.CompletedRuns, profileLevel: progress.NextLevel);
-                _modeSession = new ModeSession(originalModeId, account.SeedAccess(), account.PacketSlots, battleSeed,
-                    account.PurchaseCount(23) > 0, account.PurchaseCount(22) > 0, basicSeeds, waveContext, deferBossEntrance: !_owner._smokeMode || _owner.Opening.PlayOpeningInIsolatedSession);
+                var restored = !restart && _owner.Continuation.Store.Exists(_modeProfileId, originalModeId);
+                if (restored)
+                {
+                    var saved = _owner.Continuation.Store.Load(_modeProfileId, originalModeId, out _);
+                    _modeSession = saved.ModeSession ?? throw new InvalidDataException("Saved challenge state is missing.");
+                }
+                else
+                {
+                    _modeSession = new ModeSession(originalModeId, account.SeedAccess(), account.PacketSlots, battleSeed,
+                        account.PurchaseCount(23) > 0, account.PurchaseCount(22) > 0, basicSeeds, waveContext, deferBossEntrance: !_owner._smokeMode || _owner.Opening.PlayOpeningInIsolatedSession);
+                }
                 var coinProfile = _modeProfileId;
                 var coinReceipt = _modeSession.RunId.ToString("N");
                 _modeSession.Game.Rules.AdventurePacketSlots = account.PacketSlots;
@@ -311,40 +349,46 @@ namespace PlantsVsZombies.Modes
                     }
                 };
                 _modeRewardClaimed = false;
-                SurvivalTransitionTicks = -1;
+                if (!restored)
+                {
+                    SurvivalTransitionTicks = -1;
+                    SurvivalTransitionRemainder = 0;
+                }
                 _savedSurvivalFlags = -1;
-                _survivalTransitionRemainder = 0;
                 _survivalLightFillPlayed = false;
                 _modeNextSaveAttempt = 0;
                 _modeSavedStage = -1;
                 _modeSaveError = null;
                 _modeChoosingImitater = false;
                 _chooserWarnings = null;
-                _modeSession.Game.ApplyModePurchases(account.PurchaseCount(29) > 0, account.PurchaseCount(24) > 0 ? (Func<bool>)(() =>
+                if (!restored)
                 {
-                    try
+                    _modeSession.Game.ApplyModePurchases(account.PurchaseCount(29) > 0, account.PurchaseCount(24) > 0 ? (Func<bool>)(() =>
                     {
-                        if (_owner.Accounts.RequiredAccountStore.Get(coinProfile).PurchaseCount(24) <= 0)
+                        try
                         {
+                            if (_owner.Accounts.RequiredAccountStore.Get(coinProfile).PurchaseCount(24) <= 0)
+                            {
+                                return false;
+                            }
+
+                            _owner.Accounts.RequiredAccountStore.ConsumeRake(coinProfile);
+                            _modeAccountSnapshot = null;
+                            return true;
+                        }
+                        catch (IOException error)
+                        {
+                            _modeSaveError = "草耙尚未扣除，本局未放置：" + error.Message;
                             return false;
                         }
-
-                        _owner.Accounts.RequiredAccountStore.ConsumeRake(coinProfile);
-                        _modeAccountSnapshot = null;
-                        return true;
-                    }
-                    catch (IOException error)
-                    {
-                        _modeSaveError = "草耙尚未扣除，本局未放置：" + error.Message;
-                        return false;
-                    }
-                    catch (UnauthorizedAccessException error)
-                    {
-                        _modeSaveError = "草耙库存无法保存，本局未放置：" + error.Message;
-                        return false;
-                    }
-                }) : null);
-                _owner.Campaign.AttachAdventureGame(_modeSession.Game);
+                        catch (UnauthorizedAccessException error)
+                        {
+                            _modeSaveError = "草耙库存无法保存，本局未放置：" + error.Message;
+                            return false;
+                        }
+                    }) : null);
+                }
+                _owner.Campaign.AttachAdventureGame(_modeSession.Game, isRestored: restored);
                 _owner._deck.Clear();
                 _owner._deck.AddRange(_owner.RequiredGame.Adventure.SelectedSeeds);
                 if (!_owner.Opening.AdventureIntroActive)
@@ -357,6 +401,10 @@ namespace PlantsVsZombies.Modes
                     _owner._pendingSeeds = new AdventureSeedChooserState(_owner.RequiredGame.Adventure.SelectedSeeds);
                 }
                 _owner._currentView = PvZGame.ScreenView.Board;
+                if (restored)
+                {
+                    _owner.Continuation.OpenContinueDialog();
+                }
                 return true;
             }
             catch (Exception error)
@@ -380,7 +428,15 @@ namespace PlantsVsZombies.Modes
                 return true;
             }
 
-            StartIndependentMode(RequiredModeSession.Definition.Id);
+            try
+            {
+                _owner.Continuation.DeleteCurrent();
+                StartIndependentMode(RequiredModeSession.Definition.Id, true);
+            }
+            catch (Exception error)
+            {
+                _owner.Menus.SetUnavailable("对局进度无法更新", error.Message);
+            }
             return true;
         }
 
@@ -420,17 +476,26 @@ namespace PlantsVsZombies.Modes
                 {
                     // PC Board::FadeOutLevel 41869D sets +561C to 500 and displays ADVICE_MORE_ZOMBIES.
                     SurvivalTransitionTicks = 500;
-                    _survivalTransitionRemainder = 0;
+                    SurvivalTransitionRemainder = 0;
                     _owner.AdventureBoard.AdventureFeedback("[ADVICE_MORE_ZOMBIES]", 5f);
                     _owner.Sounds.PlayAdventureRewardSound("hugewave.ogg");
                 }
                 else if (dt > 0f && !float.IsNaN(dt) && !float.IsInfinity(dt))
                 {
-                    _survivalTransitionRemainder += dt;
-                    while (_survivalTransitionRemainder + .000000001 >= (double).01f && SurvivalTransitionTicks > 0)
+                    SurvivalTransitionRemainder += dt;
+                    while (SurvivalTransitionRemainder + .000000001 >= (double).01f && SurvivalTransitionTicks > 0)
                     {
-                        _survivalTransitionRemainder -= (double).01f;
+                        SurvivalTransitionRemainder -= (double).01f;
                         SurvivalTransitionTicks--;
+                        if (SurvivalTransitionTicks == 1)
+                        {
+                            // PC 417CD0 saves the completed board immediately before re-selection.
+                            if (!_owner.Continuation.TrySaveActive())
+                            {
+                                SurvivalTransitionTicks = 2;
+                                break;
+                            }
+                        }
                     }
                 }
                 if (SurvivalTransitionTicks == 0 && SaveModeRecord(false) && session.Continue())
@@ -481,7 +546,7 @@ namespace PlantsVsZombies.Modes
         /// <summary>Performs save mode record.</summary>
         /// <param name = "claimReward">The claim reward.</param>
         /// <returns>The resulting save mode record.</returns>
-        private bool SaveModeRecord(bool claimReward)
+        internal bool SaveModeRecord(bool claimReward)
         {
             if (_modeSession == null || _owner.Accounts._accountStore == null)
             {
@@ -527,6 +592,10 @@ namespace PlantsVsZombies.Modes
         /// <summary>Performs return to mode directory.</summary>
         private void ReturnToModeDirectory()
         {
+            if (!_owner.Continuation.TrySaveActive())
+            {
+                return;
+            }
             if (_modeSession != null && (_modeSession.Finished || _modeSession.HasNextStage))
             {
                 if (!SaveModeRecord(_modeSession.Phase == ModePhase.Won && !_modeRewardClaimed))
@@ -571,7 +640,10 @@ namespace PlantsVsZombies.Modes
                     {
                         if (_owner.RequiredGame.Adventure.Storm.LossDialogReady)
                         {
-                            _owner._currentView = PvZGame.ScreenView.Selector;
+                            if (_owner.Continuation.TrySaveActive())
+                            {
+                                _owner._currentView = PvZGame.ScreenView.Selector;
+                            }
                         }
                     }
                     else
