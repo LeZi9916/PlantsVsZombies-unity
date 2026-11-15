@@ -284,6 +284,12 @@ namespace PlantsVsZombies.Simulation
                 }
 
                 z.ChillRemaining = Math.Max(0, z.ChillRemaining - dt);
+                if (z.PlantZombieState?.Detached == true)
+                {
+                    z.Eating = false;
+                    continue;
+                }
+
                 if (z.Behavior.Advance(z, _behaviorContext, ZombieActionPhase.TimedSpecial, dt))
                 {
                     continue;

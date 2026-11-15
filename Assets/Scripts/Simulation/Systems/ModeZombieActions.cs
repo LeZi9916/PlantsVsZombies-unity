@@ -1,6 +1,7 @@
 #nullable enable
 
 using PlantsVsZombies.Modes;
+using PlantsVsZombies.Adventure;
 
 using System;
 
@@ -23,6 +24,14 @@ namespace PlantsVsZombies.Simulation
         private ProjectileSystem _projectileSystem = null!;
         /// <summary>Provides ZombieLifecycle operations.</summary>
         private ZombieLifecycle _zombieLifecycle = null!;
+        /// <summary>Provides original plant hit and row positions.</summary>
+        private BiteSystem _biteSystem = null!;
+        /// <summary>Provides original layered plant queries.</summary>
+        private BoardQueries _boardQueries = null!;
+        /// <summary>Provides the original Fwoosh row presentation.</summary>
+        private ExplosionEffects _explosionEffects = null!;
+        /// <summary>Provides the original independent child clocks and Foley requests.</summary>
+        private ZombieFeedbackSystem _zombieFeedbackSystem = null!;
         /// <summary>Creates the match collaborator without advancing any simulation state.</summary>
         /// <param name="world">The state owned by this match.</param>
         internal ModeZombieActions(SimulationWorld world)
@@ -36,7 +45,11 @@ namespace PlantsVsZombies.Simulation
         /// <param name="plantingSystem">The PlantingSystem collaborator.</param>
         /// <param name="projectileSystem">The ProjectileSystem collaborator.</param>
         /// <param name="zombieLifecycle">The ZombieLifecycle collaborator.</param>
-        internal void Connect(CombatSystem combatSystem, IndependentModeRunner independentModeRunner, LegacySimulation legacySimulation, PlantingSystem plantingSystem, ProjectileSystem projectileSystem, ZombieLifecycle zombieLifecycle)
+        /// <param name="biteSystem">The original plant collision and crush owner.</param>
+        /// <param name="boardQueries">The original layered plant lookup owner.</param>
+        /// <param name="explosionEffects">The original row fire presentation owner.</param>
+        /// <param name="zombieFeedbackSystem">The native animation and Foley owner.</param>
+        internal void Connect(CombatSystem combatSystem, IndependentModeRunner independentModeRunner, LegacySimulation legacySimulation, PlantingSystem plantingSystem, ProjectileSystem projectileSystem, ZombieLifecycle zombieLifecycle, BiteSystem biteSystem, BoardQueries boardQueries, ExplosionEffects explosionEffects, ZombieFeedbackSystem zombieFeedbackSystem)
         {
             _combatSystem = combatSystem;
             _independentModeRunner = independentModeRunner;
@@ -44,6 +57,10 @@ namespace PlantsVsZombies.Simulation
             _plantingSystem = plantingSystem;
             _projectileSystem = projectileSystem;
             _zombieLifecycle = zombieLifecycle;
+            _biteSystem = biteSystem;
+            _boardQueries = boardQueries;
+            _explosionEffects = explosionEffects;
+            _zombieFeedbackSystem = zombieFeedbackSystem;
         }
 
         /// <summary>Performs is mode zombie visible.</summary>
@@ -54,150 +71,205 @@ namespace PlantsVsZombies.Simulation
             return _world.ModeSession == null || _world.ModeSession.Definition.Mechanic != ModeMechanic.Invisible;
         }
 
-        // PC types: 26 pea, 27 wall-nut, 28 jalapeno, 29 gatling, 30 squash, 31 tall-nut; 0x53F110..0x53F857.
-        /// <summary>Performs tick mode special zombies.</summary>
-        /// <param name = "dt">The dt.</param>
+        /// <summary>Advances original hostile peas before newly allocated zombie projectiles and then updates native head actions.</summary>
+        /// <param name="dt">The fixed native update duration.</param>
         internal void TickModeSpecialZombies(float dt)
         {
-            var s = _independentModeRunner.RequiredModeSession;
-            foreach (var z in new PooledSnapshot<Zombie>(_world.Zombies))
+            AdvanceHeadProjectiles(dt);
+            foreach (var zombie in new PooledSnapshot<Zombie>(_world.Zombies))
             {
-                var raw = (int)z.Kind;
-                if (raw >= 26 && z.ModeHead < 0)
+                var state = zombie.PlantZombieState;
+                if (state == null)
                 {
-                    z.ModeHead = raw;
-                    z.Kind = raw == 32 ? ZombieKind.Gargantuar : ZombieKind.Normal;
-                    if (raw == 27)
+                    if (_independentModeRunner.RequiredModeSession.Definition.Mechanic == ModeMechanic.Speed && zombie.ModeHead != -2)
                     {
-                        z.ArmorHealth = 1100f;
+                        zombie.Speed *= 2f;
+                        zombie.ModeHead = -2;
                     }
-                    else if (raw == 31)
-                    {
-                        z.ArmorHealth = 2200f;
-                    }
-                    else if (raw == 28)
-                    {
-                        z.Health = 500f;
-                        z.StartingHealth = 500f;
-                        z._modeHeadTimer = 2f * (275 + _world._random.Next(175)) / (z.Speed * 80f);
-                    }
-                    else if (raw == 32)
-                    {
-                        z.Health = 6000f;
-                        z.StartingHealth = 6000f;
-                        z.Speed = 0.12f;
-                    }
+                    continue;
                 }
-
-                if (s.Definition.Mechanic == ModeMechanic.Speed && z.ModeHead != -2)
-                {
-                    z.Speed *= 2f;
-                    z.ModeHead = -2;
-                }
-
-                if (z.ModeHead < 26 || z.ModeHead > 31 || z.Headless || z.FrozenRemaining > 0)
+                if (state.ImmobilizedAtTickStart || zombie.FrozenRemaining > 0 || zombie.PresentationButter > 0)
                 {
                     continue;
                 }
-
-                var headBefore = z._modeHeadTimer;
-                z._modeHeadTimer -= dt * (z.ChillRemaining > 0 ? 0.5f : 1f);
-                if (z.ModeHead == 26 && z._modeHeadTimer <= 0)
+                if (state.Counter > 0)
                 {
-                    s.HeadShots.Add(new ModeHeadShot { X = z.X, Row = z.Row, Hypnotized = z.Hypnotized });
-                    z._modeHeadTimer = 1.5f;
+                    state.Counter--;
                 }
-                else if (z.ModeHead == 29)
+                if (state.NativeKind == 30)
                 {
-                    foreach (float threshold in new[]
+                    AdvanceSquashHead(zombie, state);
+                    continue;
+                }
+                if (zombie.Headless)
+                {
+                    continue;
+                }
+                if (state.NativeKind == 26)
+                {
+                    if (state.Counter == 35)
                     {
-                        0.69f,
-                        0.51f,
-                        0.36f,
-                        0.18f
+                        state.Play("anim_shooting", 35, false, 20);
                     }
-
-                    )
+                    else if (state.Counter == 0)
                     {
-                        if (headBefore > threshold && z._modeHeadTimer <= threshold)
-                        {
-                            s.HeadShots.Add(new ModeHeadShot { X = z.X, Row = z.Row, Hypnotized = z.Hypnotized });
-                        }
-                    }
-
-                    if (z._modeHeadTimer <= 0)
-                    {
-                        z._modeHeadTimer = 1.5f;
+                        state.Play("anim_head_idle", 15, false, 20);
+                        FireHeadPea(zombie, true);
+                        state.Counter = 150;
                     }
                 }
-                else if (z.ModeHead == 28 && z._modeHeadTimer <= 0)
+                else if (state.NativeKind == 29)
                 {
-                    foreach (var p in new PooledSnapshot<Plant>(_world.Plants))
+                    if (state.Counter == 100)
                     {
-                        if (p.Row == z.Row)
+                        state.Play("anim_shooting", 38, false, 20);
+                    }
+                    else if (state.Counter == 18 || state.Counter == 35 || state.Counter == 51 || state.Counter == 68)
+                    {
+                        FireHeadPea(zombie, false);
+                    }
+                    else if (state.Counter == 0)
+                    {
+                        state.Play("anim_head_idle", 15, false, 20);
+                        state.Counter = 150;
+                    }
+                }
+                else if (state.NativeKind == 28 && state.Counter == 0)
+                {
+                    // PC 543040 burns plants even after mind control; the mobile port's extra BurnRow branch is absent.
+                    _explosionEffects.AdventurePresentationExplosion(PlantKind.Jalapeno, zombie.X, zombie.Row);
+                    _zombieFeedbackSystem.RequestAdventureZombieFoley(65);
+                    foreach (var plant in new PooledSnapshot<Plant>(_world.Plants))
+                    {
+                        if (plant.Row == zombie.Row && !plant.PresentationBiteNotOnGround && plant.BungeeState != 2
+                            && !(plant.Kind == PlantKind.Squash && plant.SquashPresentation?.NativePhase >= 5))
                         {
-                            _plantingSystem.RemoveAdventurePlantAndStack(p);
+                            _plantingSystem.RemoveAdventurePlantAndStack(plant);
                         }
                     }
-
-                    _zombieLifecycle.KillAdventureZombie(z);
-                    _projectileSystem.EmitLaneFlame(z.Row);
+                    zombie.PresentationDeath = AdventureZombieDeathPresentation.Removed;
+                    _zombieLifecycle.KillAdventureZombie(zombie);
                     _legacySimulation.Raise(GameEvent.JalapenoExplosion);
                 }
-                else if (z.ModeHead == 30 && _world.Plants.Exists(p => p.Row == z.Row && Math.Abs(p.Column + 0.5f - z.X) < 0.8f))
-                {
-                    foreach (var p in new PooledSnapshot<Plant>(_world.Plants))
-                    {
-                        if (p.Row == z.Row && Math.Abs(p.Column + 0.5f - z.X) < 1f)
-                        {
-                            _plantingSystem.RemoveAdventurePlantAndStack(p);
-                        }
-                    }
+            }
+        }
 
-                    _zombieLifecycle.KillAdventureZombie(z);
-                    _legacySimulation.Raise(GameEvent.Explosion);
+        /// <summary>Creates PC 542E50/5431D0's original hostile pea at the authored head bone.</summary>
+        /// <param name="zombie">The shooting original zombie.</param>
+        /// <param name="subtractAltitude">Whether the original pea-head branch subtracts its current altitude.</param>
+        private void FireHeadPea(Zombie zombie, bool subtractAltitude)
+        {
+            var clip = _zombieFeedbackSystem.AdventurePresentationZombieAnimation(zombie);
+            AdventurePlantZombieHeadTrack.Sample(clip, zombie.PresentationAnimationAge,
+                _zombieFeedbackSystem.SynchronizeAdventureZombieRate(zombie), out var headX, out var headY);
+            var x = (int)(AdventureZombieNativeRules.NativePositionX(zombie.X, AdventureDancerRules.Scale(zombie)) + headX - 9f);
+            var y = (int)(_biteSystem.AdventureBiteNativeY(zombie, x) + headY + 6f - (subtractAltitude ? zombie.PresentationAltitude : 0f));
+            _independentModeRunner.RequiredModeSession.HeadShots.Add(new ModeHeadShot
+            {
+                NativeX = x, PreviousNativeX = x, NativeY = y, X = (x - 40f) / 80f, Row = zombie.Row
+            });
+            _zombieFeedbackSystem.RequestAdventureZombieFoley(3);
+        }
+
+        /// <summary>Runs PC 543520's detached Squash phases and original whole-cell crush.</summary>
+        /// <param name="zombie">The original squash-headed zombie body.</param>
+        /// <param name="state">The original child and phase state.</param>
+        private void AdvanceSquashHead(Zombie zombie, AdventurePlantZombieState state)
+        {
+            var x = AdventureZombieNativeRules.NativePositionX(zombie.X, AdventureDancerRules.Scale(zombie));
+            var y = _biteSystem.AdventureBiteNativeY(zombie, x);
+            var column = Math.Max(0, Math.Min(8, (int)((x - 40) / 80)));
+            var cellX = 40 + column * 80;
+            if (!zombie.Headless && zombie.Eating && state.SquashPhase == 92)
+            {
+                zombie.Eating = false;
+                zombie.Headless = true;
+                state.Detached = true;
+                state.SquashPhase = zombie.PresentationNativePhase = 93;
+                state.Counter = 95;
+                state.Play("anim_jumpup", 24, false, 20);
+                zombie.PresentationAnimation = "anim_idle";
+                zombie.PresentationAnimationAge = 0;
+                zombie._presentationWalkPhase = 0;
+                zombie._presentationWalkLoops = 0;
+                zombie.PresentationBodyBlendTicks = 20;
+            }
+            if (state.SquashPhase == 93)
+            {
+                state.DetachedX = x + 6 + AdventureIntroPresentation.Curve(20, 50, 70 - state.Counter, 0, (int)(cellX - x), 4);
+                state.DetachedY = y - 21 + AdventureIntroPresentation.Curve(20, 50, 70 - state.Counter, 0, -20, 4);
+                if (state.Counter == 0)
+                {
+                    state.SquashPhase = zombie.PresentationNativePhase = 94;
+                    state.Counter = 10;
+                    state.Play("anim_jumpdown", 60, false, 0);
                 }
             }
-
-            if (s == null)
+            if (state.SquashPhase == 94)
             {
-                throw new System.InvalidOperationException("The value 's' is not available.");
+                state.DetachedX = cellX + 6;
+                state.DetachedY = y - 21 + AdventureIntroPresentation.Curve(0, 10, 10 - state.Counter, -20, 74, 1);
+                if (state.Counter == 2)
+                {
+                    _biteSystem.CrushAdventurePlantCell(zombie.Row, column, false);
+                }
+                if (state.Counter == 0)
+                {
+                    state.SquashPhase = zombie.PresentationNativePhase = 95;
+                    state.Counter = 100;
+                    _world.Presentation.ScreenShake.Start(1, 4);
+                    _zombieFeedbackSystem.RequestAdventureZombieFoley(40);
+                }
             }
-
-            foreach (var shot in new PooledSnapshot<ModeHeadShot>(s.HeadShots))
+            if (state.SquashPhase == 95 && state.Counter == 0)
             {
-                if (shot.Hypnotized)
-                {
-                    shot.X += 4.5f * dt;
-                    var enemy = _world.Zombies.Find(z => !z.Hypnotized && z.Row == (int)shot.Row && Math.Abs(z.X - shot.X) < 0.35f);
-                    if (enemy != null)
-                    {
-                        _combatSystem.HitAdventureZombie(enemy, shot.Damage);
-                        s.HeadShots.Remove(shot);
-                    }
-                    else if (shot.X > 12)
-                    {
-                        s.HeadShots.Remove(shot);
-                    }
+                state.HeadRemoved = true;
+                _combatSystem.HitAdventureZombie(zombie, 1800, damageFlags: 9);
+            }
+        }
 
-                    continue;
+        /// <summary>Moves original backwards peas and applies their short-plant immunity and native collision rectangle.</summary>
+        /// <param name="dt">The fixed native update duration.</param>
+        private void AdvanceHeadProjectiles(float dt)
+        {
+            var shots = _independentModeRunner.RequiredModeSession.HeadShots;
+            for (var index = shots.Count - 1; index >= 0; index--)
+            {
+                var shot = shots[index];
+                shot.PreviousNativeX = shot.NativeX;
+                shot.NativeX -= 3.33f * dt * 100;
+                shot.X = (shot.NativeX - 40) / 80;
+                Plant? target = null;
+                foreach (var plant in _world.Plants)
+                {
+                    if (plant.Row != (int)shot.Row || plant.Kind == PlantKind.PuffShroom || plant.Kind == PlantKind.SunShroom
+                        || plant.Kind == PlantKind.PotatoMine || plant.Kind == PlantKind.Spikeweed || plant.Kind == PlantKind.Spikerock
+                        || plant.Kind == PlantKind.LilyPad)
+                    {
+                        continue;
+                    }
+                    var rectangle = _biteSystem.AdventurePlantEatingRectangle(plant);
+                    var overlap = Math.Min(shot.NativeX + 40, rectangle.X + rectangle.Width) - Math.Max(shot.NativeX - 15, rectangle.X);
+                    if (overlap > 8 && shot.NativeY < rectangle.Y + rectangle.Height && shot.NativeY + 40 > rectangle.Y)
+                    {
+                        target = _boardQueries.AdventurePlantAt(plant.Row, plant.Column, PlantLayer.Armor)
+                            ?? _boardQueries.AdventurePlantAt(plant.Row, plant.Column, PlantLayer.Main)
+                            ?? _boardQueries.AdventurePlantAt(plant.Row, plant.Column, PlantLayer.Support);
+                        break;
+                    }
                 }
-
-                shot.X -= 4.5f * dt;
-                var plant = _world.Plants.FindLast(p => p.Row == (int)shot.Row && Math.Abs(p.Column + 0.5f - shot.X) < 0.35f);
-                if (plant != null)
+                if (target != null)
                 {
-                    plant.Health -= shot.Damage;
-                    if (plant.Health <= 0)
+                    target.Health -= shot.Damage;
+                    if (target.Health <= 0)
                     {
-                        _plantingSystem.RemoveAdventurePlantAndStack(plant);
+                        _plantingSystem.RemoveAdventurePlantAndStack(target);
                     }
-
-                    s.HeadShots.Remove(shot);
+                    shots.RemoveAt(index);
                 }
-                else if (shot.X < -1)
+                else if (shot.NativeX < -40)
                 {
-                    s.HeadShots.Remove(shot);
+                    shots.RemoveAt(index);
                 }
             }
         }

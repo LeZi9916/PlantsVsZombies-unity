@@ -255,7 +255,7 @@ namespace PlantsVsZombies.Simulation
             _magnetPlantActions.Connect(_biteSystem, _diggerZombieActions, _pogoZombieActions, _zombieFeedbackSystem);
             _matchMode.Connect(_adventureModeRunner, _boardQueries, _independentModeRunner, _plantingSystem, _sunSystem);
             _modePlantActions.Connect(_projectileSystem);
-            _modeZombieActions.Connect(_combatSystem, _independentModeRunner, _legacySimulation, _plantingSystem, _projectileSystem, _zombieLifecycle);
+            _modeZombieActions.Connect(_combatSystem, _independentModeRunner, _legacySimulation, _plantingSystem, _projectileSystem, _zombieLifecycle, _biteSystem, _boardQueries, _explosionEffects, _zombieFeedbackSystem);
             _mowerSystem.Connect(_adventureModeRunner, _zombieLifecycle);
             _packetMode.Connect(_adventureModeRunner, _boardQueries, _independentModeRunner, _vaseSystem);
             _plantSystem.Connect(_adventureModeRunner, _boardQueries, _coinSystem, _combatSystem, _explosionEffects, _explosivePlantActions, _lootSystem, _magnetPlantActions, _plantTimingSystem, _plantingSystem, _projectileSystem, _specialPlantActions, _sunSystem, _upgradePlantActions, _zombieFeedbackSystem);

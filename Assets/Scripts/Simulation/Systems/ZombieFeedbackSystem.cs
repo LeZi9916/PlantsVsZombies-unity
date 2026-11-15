@@ -472,6 +472,11 @@ namespace PlantsVsZombies.Simulation
         /// <param name = "z">The z.</param>
         internal void RefreshAdventureZombieNativeSpeed(Zombie z)
         {
+            if (z.PlantZombieState?.Detached == true)
+            {
+                return;
+            }
+
             if (z.Kind == ZombieKind.Bungee && z.BungeeState != null)
             {
                 z.PresentationNativeVelocity = 0f;
@@ -744,6 +749,17 @@ namespace PlantsVsZombies.Simulation
         /// <param name = "dt">The dt.</param>
         internal void AdvanceAdventureZombieClock(Zombie z, float dt)
         {
+            if (z.PlantZombieState != null)
+            {
+                var head = z.PlantZombieState;
+                head.ImmobilizedAtTickStart = z.FrozenRemaining > 0 || z.PresentationButter > 0;
+                // Ice/chill change the body clock; ApplyButter alone explicitly stops the special child reanimation.
+                if (z.PresentationButter <= 0 || head.Detached)
+                {
+                    head.HeadSeconds += dt;
+                }
+                z.PresentationPlantHeadAge = head.HeadSeconds;
+            }
             EnsureAdventureZombieEquipment(z);
             if (z.BungeeCarrierId != 0)
             {
@@ -807,7 +823,10 @@ namespace PlantsVsZombies.Simulation
                 z.PresentationAnimationAge += step;
             }
 
-            z.PresentationPlantHeadAge += step;
+            if (z.PlantZombieState == null)
+            {
+                z.PresentationPlantHeadAge += step;
+            }
         }
 
         /// <summary>Performs adventure zombie feedback phase.</summary>
@@ -902,6 +921,11 @@ namespace PlantsVsZombies.Simulation
         /// <returns>The resulting adventure presentation zombie animation.</returns>
         internal string AdventurePresentationZombieAnimation(Zombie z)
         {
+            if (z.PlantZombieState?.Detached == true)
+            {
+                return "anim_idle";
+            }
+
             if (z.BungeeCarrierId != 0)
             {
                 return "anim_idle";
@@ -1263,6 +1287,11 @@ namespace PlantsVsZombies.Simulation
         /// <returns>The native playback rate after any original action transition.</returns>
         internal float SynchronizeAdventureZombieRate(Zombie z)
         {
+            if (z.PlantZombieState?.Detached == true)
+            {
+                return 12f;
+            }
+
             if (z.BungeeCarrierId == 0 && !(z.Kind == ZombieKind.Bungee && z.BungeeState != null)
                 && !(z.Kind == ZombieKind.Zomboni && z.ZomboniState?.FlatTires == true))
             {

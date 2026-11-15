@@ -62,6 +62,11 @@ namespace PlantsVsZombies.Simulation
                 return;
             }
 
+            if (z.PlantZombieState?.Detached == true)
+            {
+                z.PlantZombieState.HeadRemoved = true;
+            }
+
             if (z.Kind == ZombieKind.Bungee)
             {
                 _bungeeZombieActions.ReleaseAdventureBungeeCargo(z);

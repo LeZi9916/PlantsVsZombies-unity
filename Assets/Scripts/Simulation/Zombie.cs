@@ -352,6 +352,9 @@ namespace PlantsVsZombies.Simulation
         public bool Eating { get; internal set; }
         /// <summary>Stores mode head.</summary>
         public int ModeHead { get; internal set; } = -1;
+        /// <summary>Gets the original independent animation and phase state of a plant-headed zombie.</summary>
+        public global::PlantsVsZombies.Adventure.AdventurePlantZombieState? PlantZombieState { get; internal set; }
+
         /// <summary>Stores mode head timer.</summary>
         internal float _modeHeadTimer = 1.5f;
         /// <summary>Stores mode portal cooldown.</summary>

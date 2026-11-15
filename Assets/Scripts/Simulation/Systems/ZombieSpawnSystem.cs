@@ -293,6 +293,35 @@ namespace PlantsVsZombies.Simulation
                 z.PresentationNativeHeight = 0;
             }
 
+            var nativeKind = (int)kind;
+            if (nativeKind >= 26 && nativeKind <= 31)
+            {
+                z.ModeHead = nativeKind;
+                z.Kind = ZombieKind.Normal;
+                z.PresentationWalk2 = true;
+                var fuse = nativeKind == 28 ? 2 * (int)((275 + _world._random.Next(175)) / (double)z.PresentationNativeVelocity) : 0;
+                z.PlantZombieState = new AdventurePlantZombieState(nativeKind, fuse);
+                if (nativeKind == 28)
+                {
+                    z.Health = z.StartingHealth = 500;
+                }
+                if (nativeKind == 27 || nativeKind == 31)
+                {
+                    z.ArmorHealth = z.PresentationMaxArmor = nativeKind == 27 ? 1100 : 2200;
+                }
+                if (nativeKind == 30)
+                {
+                    z.PresentationNativePhase = 92;
+                    z._presentationSpeedPhase = 92;
+                }
+            }
+            else if (nativeKind == 32)
+            {
+                z.ModeHead = 32;
+                z.Kind = ZombieKind.Gargantuar;
+                z.Health = z.StartingHealth = 6000;
+            }
+
             // A new actor has no preceding movement sample. Seed interpolation after edge placement
             // and target selection so its first rendered frame starts at the actual spawn position.
             z.PresentationPreviousX = z.X;
@@ -326,7 +355,7 @@ namespace PlantsVsZombies.Simulation
         {
             var variant = _world._random.Next(5) == 0;
             var zombie = SpawnAdventureZombie(kind, row, x, wave);
-            zombie.NativeVariant = variant;
+            zombie.NativeVariant = zombie.PlantZombieState == null && variant;
             return zombie;
         }
     }

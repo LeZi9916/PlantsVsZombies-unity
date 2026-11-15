@@ -1217,3 +1217,29 @@ Original pool waterline and cracked-helm cases retain their coverage.
 Twelve distinct targeted PlayMode cases pass for this attachment repair. This is
 instruction-derived geometry and actual source-command validation, not native
 executable screenshot pixel equivalence or a target-device build.
+
+`PlantZombieLogicTests` checks the PC plant-zombie allocation prefix, both original
+shooters, Jalapeno and detached Squash. The six native states are allocated before
+publishing the actor, retain original helm/body health and pool tubes, and use
+integer counters. PC `542E50` starts the pea-head shoot at 35; `5431D0` starts the
+gatling clip at 100 and fires at 68/51/35/18. Both reset at 150. Executing those
+original functions verifies 15 boundary/headless/mind-control vectors, including
+type-13 backwards projectiles; the mobile port's friendly-pea/Jalapeno branches
+are absent from this supplied PC executable and are not copied.
+
+PC `543040` uses the velocity-derived, integer-truncated doubled Jalapeno fuse,
+original Fwoosh, ground-plant row removal and no-loot removal. PC `543520` retains
+Squash phases 92..95, the 95/10/100 counters, crush contact at falling counter two,
+original thump and final 1800 damage with flags 9. Counter immobilization and the
+independent head clock are separate: ice/chill do not rescale the special child,
+while ApplyButter explicitly stops it. Projectile launch samples use literal
+original Zombie.reanim `anim_head1` translations rather than guessed row centers.
+
+```powershell
+./Tools/Tests/Run-UnityTests.ps1 -Platform EditMode -TestFilter 'PlantZombieLogicTests;AdventureSpawnFidelityTests;AdventureGargantuarTests'
+```
+
+Ninety-one distinct focused EditMode cases pass across the allocation/action run
+and the extended tube, short-plant immunity, layered collision and delayed-crush
+cases. This does not certify all unrelated independent-mode mechanics or a full
+whole-game random stream.

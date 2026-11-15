@@ -31,7 +31,7 @@ namespace PlantsVsZombies.Adventure
         /// <returns>Whether this body uses the original Zombie reanimation's tube and water tracks.</returns>
         public static bool UsesPlainBody(ZombieKind kind)
         {
-            return kind == ZombieKind.Normal || kind == ZombieKind.Flag || kind == ZombieKind.Conehead
+            return (int)kind >= 26 && (int)kind <= 31 || kind == ZombieKind.Normal || kind == ZombieKind.Flag || kind == ZombieKind.Conehead
                 || kind == ZombieKind.Buckethead || kind == ZombieKind.DuckyTube;
         }
 
