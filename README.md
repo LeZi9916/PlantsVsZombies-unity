@@ -1,6 +1,6 @@
 # PlantsVsZombies Unity
 
-本项目使用 **Unity 6000.3.17f1**，主代码根命名空间为 `PlantsVsZombies`，许可证为 GPLv3。
+本项目使用 **Unity 7000.0.0a16**，主代码根命名空间为 `PlantsVsZombies`，许可证为 GPLv3。
 
 ## 开发
 

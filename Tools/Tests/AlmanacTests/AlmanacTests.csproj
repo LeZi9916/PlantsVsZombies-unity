@@ -1,12 +1,12 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net9.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <LangVersion>9.0</LangVersion>
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
     <GenerateTargetFrameworkAttribute>false</GenerateTargetFrameworkAttribute>
-    <UnityManaged Condition="'$(UnityManaged)' == ''">C:/Program Files/Unity Editors/6000.3.17f1/Editor/Data/Managed/UnityEngine</UnityManaged>
+    <UnityManaged Condition="'$(UnityManaged)' == ''">C:/Program Files/Unity Editors/7000.0.0a16/Editor/Data/Resources/Scripting/Managed/UnityEngine</UnityManaged>
     <RuntimeAssembly Condition="'$(RuntimeAssembly)' == ''">$(MSBuildThisFileDirectory)../../../Library/ScriptAssemblies/PlantsVsZombies.Runtime.dll</RuntimeAssembly>
   </PropertyGroup>
   <ItemGroup>
@@ -18,6 +18,6 @@
     <Reference Include="UnityEngine.TextRenderingModule"><HintPath>$(UnityManaged)/UnityEngine.TextRenderingModule.dll</HintPath></Reference>
   </ItemGroup>
   <Target Name="CheckUnityRuntime" BeforeTargets="ResolveReferences">
-    <Error Condition="!Exists('$(RuntimeAssembly)')" Text="Compile the project with Unity 6000.3.17f1 first, or pass -p:RuntimeAssembly=&lt;isolated-project&gt;/Library/ScriptAssemblies/PlantsVsZombies.Runtime.dll. Do not build the generated root csproj with dotnet." />
+    <Error Condition="!Exists('$(RuntimeAssembly)')" Text="Compile the project with Unity 7000.0.0a16 first, or pass -p:RuntimeAssembly=&lt;isolated-project&gt;/Library/ScriptAssemblies/PlantsVsZombies.Runtime.dll. Do not build the generated root csproj with dotnet." />
   </Target>
 </Project>

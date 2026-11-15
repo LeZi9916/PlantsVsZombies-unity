@@ -17,7 +17,7 @@ namespace PlantsVsZombies.Editor
     public static class RuntimeAssetVerification
     {
         /// <summary>The only Unity version allowed to import or verify this project's runtime assets.</summary>
-        private const string RequiredEditorVersion = "6000.3.17f1";
+        private const string RequiredEditorVersion = "7000.0.0a16";
         /// <summary>The ignored report location relative to the project root.</summary>
         private const string ReportPath = ".unity-runs/assets-import/unity-verification.json";
         /// <summary>The runtime source directory whose files are checked.</summary>

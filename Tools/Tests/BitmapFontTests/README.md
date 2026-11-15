@@ -9,7 +9,7 @@ dotnet run --project Tools/Tests/BitmapFontTests/BitmapFontTests.csproj -c Relea
 
 独立测试读取全部 25 层、逐项比较三套原始中文字体，验证 kerning、多页和异常输入。
 当前运行时是 `CanvasBitmapFont`，字形由原生 CanvasRenderer 显示，不依赖 GUI 事件。
-主工程的 `CanvasPresentationTests` 通过 Unity 6000.3.17f1 和实际图形设备检查 Canvas 图层、
+主工程的 `CanvasPresentationTests` 通过 Unity 7000.0.0a16 和实际图形设备检查 Canvas 图层、
 裁剪、复用、原生文本控件及位图字形；隔离运行目录由主工程测试脚本管理。
 
 本目录的 `UnitySmokeProject` 和 `RunUnitySmoke.ps1` 是历史 IMGUI 验证快照，

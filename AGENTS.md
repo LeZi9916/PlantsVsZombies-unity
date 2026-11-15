@@ -6,7 +6,7 @@
 
 PlantsVsZombies-unity 是PlantsVsZombies的同人项目，使用Unity进行实现，采用GPLv3开源许可。
 
-当前固定使用 **Unity 6000.3.17f1**（准确版本见 `ProjectSettings/ProjectVersion.txt`），目标平台包括 Windows（x86/x64/ARM64）、Linux、macOS、Android（ARMv7和ARM64） 和 iOS，使用mono和il2cpp后端。
+当前固定使用 **Unity 7000.0.0a16**（准确版本见 `ProjectSettings/ProjectVersion.txt`），目标平台包括 Windows（x86/x64/ARM64）、Linux、macOS、Android（ARMv7和ARM64） 和 iOS，使用mono和il2cpp后端。
 
 ## 必须遵守的规则
 
@@ -90,7 +90,7 @@ PlantsVsZombies-unity 是PlantsVsZombies的同人项目，使用Unity进行实�
 
 ### 主项目
 
-- 在 Unity 6000.3.17f1 中等待完整导入和脚本编译，确认 Console 没有新增错误。
+- 在 Unity 7000.0.0a16 中等待完整导入和脚本编译，确认 Console 没有新增错误。
 - 场景或交互改动应在相关场景进行 Play Mode 冒烟测试；场景列表以 `ProjectSettings/EditorBuildSettings.asset` 为准。
 - `Tools/Tests/Modules/Editor` 中的测试通过 Unity Test Runner 的 EditMode 运行。
 - 主项目（`Assets/Scripts`）的 Unity Test Framework 测试集位于 `Assets/Tests`，是标准的 Unity Test Framework 程序集（仅 `UNITY_INCLUDE_TESTS` 定义约束），可直接在主项目的 Test Runner 窗口运行；被测程序集通过其 asmdef 旁的 `AssemblyInfo.cs` 以 `InternalsVisibleTo` 只向引用它的测试程序集开放 internal 成员，新增或调整测试 asmdef 引用时需同步维护。批量运行使用 `./Tools/Tests/Run-UnityTests.ps1`，它在隔离副本中执行 EditMode 与 PlayMode 测试（`-AssemblyNames`/`-TestFilter` 选择范围，`-Coverage` 生成覆盖率报告），不会修改主项目；目录与编写约定见 `Assets/Tests/README.md`。

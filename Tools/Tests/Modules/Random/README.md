@@ -32,7 +32,7 @@ original voice admission and no-repeat sampling, constructor cell draws,
 original blink gates/counters, mine arming and native boss decision vectors.
 The latter checks every plant's original blink marker length, source-art
 blink/head attachment playback and boss action-clock rendering. Use Unity
-**6000.3.17f1** and the isolated runner documented in `Assets/Tests/README.md`.
+**7000.0.0a16** and the isolated runner documented in `Assets/Tests/README.md`.
 
 Original PC animation range selection at `482690` includes hidden frames between
 the first and last visible frame. Multiple nut blinks and Puff-shroom's hidden

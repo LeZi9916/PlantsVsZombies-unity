@@ -64,7 +64,7 @@ Missing file and folder `.meta` files receive fresh UUIDs and basic Unity YAML.
 Only metadata starting with the known malformed `fileFormatVersion: 2\\n` header
 (or its no-space equivalent) receives a literal-newline repair; its existing GUID
 is preserved. Other malformed GUIDs are refused, rather than regenerated. Open
-with Unity **6000.3.17f1** afterwards to perform the normal asset import and fill
+with Unity **7000.0.0a16** afterwards to perform the normal asset import and fill
 in importer-specific settings. Asset preparation does not replace that import.
 
 The JSON report contains source/target hashes, unchanged and equivalent paths,

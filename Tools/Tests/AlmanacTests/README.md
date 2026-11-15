@@ -32,7 +32,7 @@
 
 ## 验证
 
-当前 .NET 测试引用 Unity 6000.3.17f1 已编译的 `PlantsVsZombies.Runtime.dll`，不通过普通 dotnet 重编译 URP 主工程。默认读取主项目 `Library/ScriptAssemblies`；也可使用新隔离测试运行生成的程序集：
+当前测试需要 .NET 10 SDK，引用 Unity 7000.0.0a16 已编译的 `PlantsVsZombies.Runtime.dll`，不通过普通 dotnet 重编译 URP 主工程。默认读取主项目 `Library/ScriptAssemblies`；也可使用新隔离测试运行生成的程序集。`UnityManaged` 指向该 Editor 的 `Resources/Scripting/Managed/UnityEngine` 目录（macOS 位于 `Unity.app/Contents` 下）：
 
 ```powershell
 dotnet run --project Tools/Tests/AlmanacTests/AlmanacTests.csproj -c Release -p:RuntimeAssembly="D:/path/to/PvZUnity/.unity-runs/<run>/p/Library/ScriptAssemblies/PlantsVsZombies.Runtime.dll" -- Tools/Tests/AlmanacTests/PreparedAssets

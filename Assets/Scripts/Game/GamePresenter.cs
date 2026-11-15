@@ -72,6 +72,7 @@ namespace PlantsVsZombies.Game
         /// <summary>Releases retained interface objects when the game lifetime ends.</summary>
         internal void Dispose()
         {
+            ((IDisposable)_profileNameLayout).Dispose();
             _hammerParticles?.Clear();
             _poolRenderer?.Dispose();
             _levelNameFont?.Dispose();
@@ -195,6 +196,8 @@ namespace PlantsVsZombies.Game
         private CanvasBitmapFont? _seedCostFont;
         /// <summary>Stores label.</summary>
         private GUIStyle? _label;
+        /// <summary>Reuses Canvas font metrics when fitting the selected profile name.</summary>
+        private readonly TextGenerator _profileNameLayout = new TextGenerator();
         /// <summary>Wraps the localized original dialogue inside the speech bubble.</summary>
         private GUIStyle? _crazyDaveLabel;
 
@@ -413,7 +416,7 @@ namespace PlantsVsZombies.Game
                     _label.alignment = TextAnchor.MiddleCenter;
                     _label.normal.textColor = new Color(0.25f, 1f, 0.12f);
                     _label.fontSize = 18;
-                    while (_label.fontSize > 10 && _label.CalcSize(new GUIContent(profile.Name)).x > rect.width)
+                    while (_label.fontSize > 10 && MeasureProfileName(profile.Name, _label) > rect.width)
                     {
                         _label.fontSize--;
                     }
@@ -431,6 +434,29 @@ namespace PlantsVsZombies.Game
 
                 _owner._profileLoadError = error.Message;
             }
+        }
+
+        /// <summary>Measures the profile name with the same legacy Canvas layout used to draw it.</summary>
+        /// <param name="name">The selected profile's unchanged display name.</param>
+        /// <param name="style">The font and current candidate size used for rendering.</param>
+        /// <returns>The preferred unwrapped width in logical pixels.</returns>
+        private float MeasureProfileName(string name, GUIStyle style)
+        {
+            var font = style.font != null ? style.font : CanvasUI.DefaultFont;
+            var settings = new TextGenerationSettings
+            {
+                font = font,
+                fontSize = font.dynamic ? style.fontSize : 0,
+                fontStyle = style.fontStyle,
+                richText = style.richText,
+                textAnchor = style.alignment,
+                generationExtents = Vector2.zero,
+                horizontalOverflow = HorizontalWrapMode.Overflow,
+                verticalOverflow = VerticalWrapMode.Overflow,
+                lineSpacing = 1f,
+                scaleFactor = 1f
+            };
+            return _profileNameLayout.GetPreferredWidth(name, settings) + style.padding.horizontal;
         }
 
         /// <summary>Performs draw options bitmap.</summary>

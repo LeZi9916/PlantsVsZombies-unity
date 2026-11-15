@@ -1,6 +1,6 @@
 # Unity regression tests
 
-Open the project in Unity **6000.3.17f1** and use Window > General > Test Runner.
+Open the project in Unity **7000.0.0a16** and use Window > General > Test Runner.
 The EditMode and PlayMode assemblies reference `PlantsVsZombies.Runtime` and are
 enabled only with `UNITY_INCLUDE_TESTS`.
 

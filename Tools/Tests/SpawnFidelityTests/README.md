@@ -17,6 +17,6 @@ count, and dynamic candidate/limit boundaries. Zero-ticket cases are deliberatel
 separate from same-seed local generator comparisons.
 
 Unity integration and runtime row selection, scheduler, balloon, and puzzle
-regressions live in `Assets/Tests/EditMode`. Run those with Unity **6000.3.17f1**
+regressions live in `Assets/Tests/EditMode`. Run those with Unity **7000.0.0a16**
 using `Tools/Tests/Run-UnityTests.ps1`. These suites do not establish complete
 original-process startup replay or target-platform Player behavior.

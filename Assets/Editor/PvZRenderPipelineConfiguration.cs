@@ -19,9 +19,9 @@ namespace PlantsVsZombies.Editor
         [MenuItem("PlantsVsZombies/Configure Render Pipeline")]
         public static void Configure()
         {
-            if (Application.unityVersion != "6000.3.17f1")
+            if (Application.unityVersion != "7000.0.0a16")
             {
-                throw new InvalidOperationException("Use Unity 6000.3.17f1 to configure this project.");
+                throw new InvalidOperationException("Use Unity 7000.0.0a16 to configure this project.");
             }
 
             if (!AssetDatabase.IsValidFolder("Assets/Settings"))

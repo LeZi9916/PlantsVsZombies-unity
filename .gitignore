@@ -95,3 +95,7 @@ Assets/Scripts/Modes/COVERAGE.md
 Assets/Scripts/Audio/Tools/README.md.meta
 Assets/Scripts/Audio/Tools/README.md
 ADVENTURE_HANDOFF.md
+
+# Unity 7 regenerates local package policy and default auditor state on import.
+**/ProjectSettings/PackageManager.policy
+/ProjectSettings/ProjectAuditorSettings.asset

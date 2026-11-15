@@ -8,7 +8,7 @@ Stores project caches, logs, NUnit XML, and summaries in an ignored run director
 #>
 [CmdletBinding()]
 param(
-    [string]$Unity = 'C:\Program Files\Unity Editors\6000.3.17f1\Editor\Unity.exe',
+    [string]$Unity = 'C:\Program Files\Unity Editors\7000.0.0a16\Editor\Unity.exe',
     [ValidateSet('EditMode', 'PlayMode', 'All')]
     [string]$Platform = 'All',
     [string]$AssemblyNames,
@@ -30,7 +30,7 @@ if (-not (Test-Path -LiteralPath $Unity -PathType Leaf)) {
 $installedVersion = (Get-Item -LiteralPath $Unity).VersionInfo.ProductVersion
 if ([string]::IsNullOrWhiteSpace($installedVersion)) {
     $reportedVersion = & $Unity -version 2>&1
-    $installedVersion = [regex]::Match(($reportedVersion -join "`n"), '\b6000\.3\.17f1\b').Value
+    $installedVersion = [regex]::Match(($reportedVersion -join "`n"), ('\b' + [regex]::Escape($requiredVersion) + '\b')).Value
 }
 if (-not $installedVersion.StartsWith($requiredVersion + '_', [StringComparison]::Ordinal) -and $installedVersion -ne $requiredVersion) {
     throw "Expected Unity $requiredVersion; selected editor reports $installedVersion."

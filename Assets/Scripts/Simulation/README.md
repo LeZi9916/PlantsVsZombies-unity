@@ -99,7 +99,7 @@ clock stopping, nested scratch buffers, read-only queries, and warmed allocation
 checks the real draw path. Existing species tests retain their assertions and use
 explicit fixture synchronization when they deliberately change action state.
 
-Run Unity tests through `Tools/Tests/Run-UnityTests.ps1` with Unity 6000.3.17f1.
+Run Unity tests through `Tools/Tests/Run-UnityTests.ps1` with Unity 7000.0.0a16.
 `Tools/Tests/SimulationParityTests` compares compiled baseline and current pure
 simulation assemblies, including native state and random snapshots. These checks
 are distinct from original-artwork, Player, and target-device validation.

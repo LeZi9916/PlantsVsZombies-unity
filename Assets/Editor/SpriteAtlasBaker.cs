@@ -97,9 +97,9 @@ namespace PlantsVsZombies.Editor
         /// <exception cref="InvalidOperationException">The required Editor version or original resources are missing.</exception>
         public static void EnsureCurrent(bool force = false)
         {
-            if (Application.unityVersion != "6000.3.17f1")
+            if (Application.unityVersion != "7000.0.0a16")
             {
-                throw new InvalidOperationException("Use Unity 6000.3.17f1 to generate rendering atlases.");
+                throw new InvalidOperationException("Use Unity 7000.0.0a16 to generate rendering atlases.");
             }
             var root = RuntimeAssetPaths.ResolveRoot(Application.streamingAssetsPath);
             if (!Directory.Exists(Path.Combine(root, "reanim")) || !Directory.Exists(Path.Combine(root, "images")))
