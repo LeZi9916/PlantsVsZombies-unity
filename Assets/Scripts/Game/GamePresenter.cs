@@ -1519,8 +1519,8 @@ namespace PlantsVsZombies.Game
                     {
                         // PC 47F48E scales cached image offsets, retaining DrawSeedType's unscaled height +60 argument.
                         SpriteDrawState.Matrix = previous
-                            * Matrix4x4.Translate(new Vector3(40f + plant.Column * 80f,
-                                _owner.Layout.AdventureCellY(row, plant.Column) + height + 60f, 0f))
+                            * Matrix4x4.Translate(new Vector3(40f + plant.Column * 80f + plant.PositionOffsetX,
+                                _owner.Layout.AdventureCellY(row, plant.Column) + plant.PositionOffsetY + height + 60f, 0f))
                             * Matrix4x4.Scale(new Vector3(1f, .25f, 1f));
                         DrawAdventureCursorPlant(plant.Kind, Vector2.zero, 1f,
                             _presentationKeys.Get("squished-plant-", plant.Id));
@@ -3250,7 +3250,8 @@ namespace PlantsVsZombies.Game
         private void DrawAdventurePlant(Plant plant)
         {
             using var hierarchyActor = _owner.RequiredAnimations.Hierarchy.BeginActor("Plants", plant.Id, AdventurePlantAnimation(plant.Kind));
-            float x = BoardLayout.AdventureGridX + plant.Column * BoardLayout.CellWidth, y = _owner.Layout.AdventureCellY(plant.Row, plant.Column);
+            float x = BoardLayout.AdventureGridX + plant.Column * BoardLayout.CellWidth + plant.PositionOffsetX,
+                y = _owner.Layout.AdventureCellY(plant.Row, plant.Column) + plant.PositionOffsetY;
             var name = AdventurePlantAnimation(plant.Kind);
             var size = plant.IsSmall ? .5f : 1f;
             var drawHeight = AdventurePlantHeight(plant);

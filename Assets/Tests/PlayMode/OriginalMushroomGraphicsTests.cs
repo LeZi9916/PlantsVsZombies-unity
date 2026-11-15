@@ -36,6 +36,8 @@ namespace PlantsVsZombies.Tests.PlayMode
                 SpriteSourceTestUtilities.SetImage(fixture.Owner.Textures, "plantshadow.png", null!);
                 var plant = new Plant { Id = 91, Kind = sample.Item1, Row = 1, Column = 2, Asleep = true,
                     Health = 300f, Age = .37f, PresentationRate = 12f, IsSmall = sample.Item4 < 1f,
+                    PositionOffsetX = sample.Item1 == PlantKind.SunShroom || AdventurePuffShroomRules.IsShortRange(sample.Item1) ? -5 : 0,
+                    PositionOffsetY = sample.Item1 == PlantKind.SunShroom || AdventurePuffShroomRules.IsShortRange(sample.Item1) ? 2 : 0,
                     SleepingPresentation = new AdventureSleepingState { Rate = 7f, AnimationSeconds = .4f } };
                 SimulationFixture.Plants(fixture.Owner.RequiredGame).Clear();
                 SimulationFixture.Plants(fixture.Owner.RequiredGame).Add(plant);
@@ -62,7 +64,7 @@ namespace PlantsVsZombies.Tests.PlayMode
                     }
 
                     fixture.Animations.DrawNativePlayback(sample.Item2,
-                        new Vector2(200f + 40f * (1f - sample.Item4), cellY + bodyOffset + 80f * (1f - sample.Item4)),
+                        new Vector2(200f + plant.PositionOffsetX + 40f * (1f - sample.Item4), cellY + plant.PositionOffsetY + bodyOffset + 80f * (1f - sample.Item4)),
                         sample.Item4, .37f, "anim_sleep", true, 12f);
                     var zX = sample.Item1 == PlantKind.FumeShroom ? 262f : 250f;
                     var zY = cellY + (sample.Item1 == PlantKind.ScaredyShroom ? 20f : sample.Item1 == PlantKind.GloomShroom ? 28f : 40f);

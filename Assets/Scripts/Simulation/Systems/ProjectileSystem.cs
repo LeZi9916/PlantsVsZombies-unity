@@ -186,12 +186,12 @@ namespace PlantsVsZombies.Simulation
             _battlePresentationSystem.AdventurePresentationShot(p, shot);
             if (AdventurePuffShroomRules.IsShortRange(p.Kind))
             {
-                shot.X = AdventurePuffShroomRules.LaunchCenterX(p.Kind, p.Column);
+                shot.X = AdventurePuffShroomRules.LaunchCenterX(p.Kind, p.Column) + p.PositionOffsetX / 80f;
                 shot.StartX = shot.X;
                 shot.PresentationPreviousX = shot.X;
                 shot.VelocityX = AdventurePuffShroomRules.GridSpeed;
                 var pitch = _adventureModeRunner.Adventure.Level.HasPool || _adventureModeRunner.Adventure.Level.HasRoof ? 85f : 100f;
-                var plantY = 80f + p.Row * pitch + (_adventureModeRunner.Adventure.Level.HasRoof ? Math.Max(0, 5 - p.Column) * 20f - 10f : 0f);
+                var plantY = 80f + p.Row * pitch + p.PositionOffsetY + (_adventureModeRunner.Adventure.Level.HasRoof ? Math.Max(0, 5 - p.Column) * 20f - 10f : 0f);
                 shot.PresentationLaunchY = AdventurePuffShroomRules.LaunchCenterY(p.Kind, plantY,
                     _boardQueries.HasPlantKindAt(PlantKind.FlowerPot, p.Row, p.Column));
             }

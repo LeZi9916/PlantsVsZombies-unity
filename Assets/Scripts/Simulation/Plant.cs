@@ -25,6 +25,11 @@ namespace PlantsVsZombies.Simulation
             }
         }
 
+        /// <summary>Gets the original persistent horizontal planting displacement in board pixels.</summary>
+        public int PositionOffsetX { get; internal set; }
+        /// <summary>Gets the original persistent vertical planting displacement in board pixels.</summary>
+        public int PositionOffsetY { get; internal set; }
+
         /// <summary>Invalidates the owning store after indexed state changes.</summary>
         internal Action? IndexChanged;
 

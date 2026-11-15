@@ -103,8 +103,8 @@ namespace PlantsVsZombies.Simulation
                 {
                     foreach (var plant in new PooledSnapshot<Plant>(_world.Plants))
                     {
-                        var rect = AdventureZombieBiteRules.PlantRect((int)plant.Kind, 40 + plant.Column * 80,
-                            _specialPlantActions.AdventureSquashCellY(plant.Row, plant.Column), plant.Kind == PlantKind.Pumpkin ? 120 : 80);
+                        var rect = AdventureZombieBiteRules.PlantRect((int)plant.Kind, 40 + plant.Column * 80 + plant.PositionOffsetX,
+                            _specialPlantActions.AdventureSquashCellY(plant.Row, plant.Column) + plant.PositionOffsetY, plant.Kind == PlantKind.Pumpkin ? 120 : 80);
                         var dx = Math.Max(0, Math.Max(rect.X - x, x - rect.X - rect.Width));
                         var dy = Math.Max(0, Math.Max(rect.Y - y, y - rect.Y - rect.Height));
                         if (dx * dx + dy * dy <= 90 * 90)

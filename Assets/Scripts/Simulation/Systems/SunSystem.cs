@@ -155,8 +155,8 @@ namespace PlantsVsZombies.Simulation
             var pitch = _adventureModeRunner.Adventure.Level.HasPool || _adventureModeRunner.Adventure.Level.HasRoof ? 85f : 100f;
             if (producer != null)
             {
-                float nativeX = 40 + producer.Column * 80;
-                var nativeY = 80 + producer.Row * pitch + (_adventureModeRunner.Adventure.Level.HasRoof ? Math.Max(0, 5 - producer.Column) * 20 - 10 : 0);
+                float nativeX = 40 + producer.Column * 80 + producer.PositionOffsetX;
+                var nativeY = 80 + producer.Row * pitch + producer.PositionOffsetY + (_adventureModeRunner.Adventure.Level.HasRoof ? Math.Max(0, 5 - producer.Column) * 20 - 10 : 0);
                 InitializeAdventurePresentationPlantSunAtPoint(sun, nativeX, nativeY);
                 return;
             }

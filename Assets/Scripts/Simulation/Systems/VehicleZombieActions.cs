@@ -88,7 +88,7 @@ namespace PlantsVsZombies.Simulation
             {
                 if (plant.Row == zombie.Row && plant.Health > 0f && plant.BungeeState != 2
                     && !plant.PresentationBiteNotOnGround && plant.Kind != PlantKind.Spikeweed && plant.Kind != PlantKind.Spikerock
-                    && x >= 140 + plant.Column * 80 && (best == null || plant.Column < best.Column))
+                    && x >= 140 + plant.Column * 80 + plant.PositionOffsetX && (best == null || plant.Column < best.Column))
                 {
                     best = _biteSystem.AdventureAirAttackPlantAt(plant.Row, plant.Column);
                 }

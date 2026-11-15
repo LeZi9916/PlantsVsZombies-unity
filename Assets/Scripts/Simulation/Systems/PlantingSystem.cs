@@ -473,8 +473,15 @@ namespace PlantsVsZombies.Simulation
                 ActionTimer = kind == PlantKind.PotatoMine ? 15f : kind == PlantKind.CherryBomb || kind == PlantKind.Jalapeno || kind == PlantKind.DoomShroom || kind == PlantKind.IceShroom ? 1f : kind == PlantKind.GraveBuster ? global::PlantsVsZombies.Adventure.AdventureGraveBusterRules.TotalSeconds : kind == PlantKind.Sunflower || kind == PlantKind.SunShroom ? 5f + (float)_world._random.NextDouble() * 2.5f : 0.5f,
                 IsSmall = false
             };
-            _plantTimingSystem.InitializeAdventureNativePlantTiming(plant);
+            // PC 46BE80 creates the free sleep animation before the launch counter and planting displacement.
             InitializeAdventureSleepingPlant(plant);
+            _plantTimingSystem.InitializeAdventureNativePlantTiming(plant);
+            if (kind == PlantKind.SunShroom || AdventurePuffShroomRules.IsShortRange(kind))
+            {
+                // PC 46C6F5..46C712 / 46C998..46C9B5 changes mX/mY once; row/column occupancy stays on the selected square.
+                plant.PositionOffsetX = _world._random.Next(10) - 5;
+                plant.PositionOffsetY = kind == PlantKind.SunShroom ? _world._random.Next(10) - 5 : _world._random.Next(6) - 3;
+            }
             if (kind == PlantKind.CoffeeBean)
             {
                 plant.CoffeePresentation = new AdventureCoffeeBeanState();

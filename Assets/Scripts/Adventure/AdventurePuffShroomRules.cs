@@ -45,6 +45,7 @@ namespace PlantsVsZombies.Adventure
             }
 
             var attack = AttackRectangle(plant.Column);
+            attack = new NativeRect(attack.X + plant.PositionOffsetX, attack.Y, attack.Width, attack.Height);
             var body = AdventureZombieTargetingRules.BodyRectangle(zombie);
             return body.X + body.Width >= attack.X && body.X <= attack.X + attack.Width;
         }

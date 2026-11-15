@@ -96,7 +96,7 @@ namespace PlantsVsZombies.Simulation
         /// <returns>The resulting adventure plant eating rectangle.</returns>
         internal NativeRect AdventurePlantEatingRectangle(Plant p)
         {
-            return global::PlantsVsZombies.Adventure.AdventureZombieBiteRules.PlantRect((int)p.Kind, 40 + p.Column * 80, 80 + p.Row * (_adventureModeRunner.Adventure.Level.HasPool || _adventureModeRunner.Adventure.Level.HasRoof ? 85 : 100) + (_adventureModeRunner.Adventure.Level.HasRoof ? (int)(Math.Max(0f, 5f - p.Column) * 20f - 10f) : 0), p.Kind == PlantKind.Pumpkin ? 120 : 80);
+            return global::PlantsVsZombies.Adventure.AdventureZombieBiteRules.PlantRect((int)p.Kind, 40 + p.Column * 80 + p.PositionOffsetX, 80 + p.PositionOffsetY + p.Row * (_adventureModeRunner.Adventure.Level.HasPool || _adventureModeRunner.Adventure.Level.HasRoof ? 85 : 100) + (_adventureModeRunner.Adventure.Level.HasRoof ? (int)(Math.Max(0f, 5f - p.Column) * 20f - 10f) : 0), p.Kind == PlantKind.Pumpkin ? 120 : 80);
         }
 
         /// <summary>Uses the original BungeeOrder/CatapultOrder instead of plant creation order for a layered cell.</summary>
