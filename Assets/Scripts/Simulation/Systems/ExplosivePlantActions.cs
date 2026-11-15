@@ -231,10 +231,7 @@ namespace PlantsVsZombies.Simulation
             state.Detonated = true;
             state.Countdown = 0;
             plant.ActionTimer = 0f;
-            if (_adventureModeRunner.Adventure.BossHeadVulnerable)
-            {
-                _bossSystem.DamageAdventureBossWithFlags(1800f, 0x7FU);
-            }
+            _bossSystem.BurnAdventureBoss();
             _combatSystem.BurnAdventureRow(plant.Row);
             for (var i = _adventureModeRunner.Adventure._ice.Count - 1; i >= 0; i--)
             {

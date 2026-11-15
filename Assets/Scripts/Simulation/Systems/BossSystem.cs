@@ -737,6 +737,23 @@ namespace PlantsVsZombies.Simulation
             _zombieFeedbackSystem.RequestAdventureZombieFoley(foley);
         }
 
+        /// <summary>Runs PC BurnRow 474920's cold removal before the boss-specific BurnBody 54E920 damage.</summary>
+        internal void BurnAdventureBoss()
+        {
+            var board = _adventureModeRunner.Adventure;
+            var boss = board.Boss;
+            if (board.Level.Mode != AdventureMode.Boss || !board.BossHeadVulnerable || board.BossHealth <= 0f
+                || boss == null || boss.DeathStarted)
+            {
+                return;
+            }
+
+            boss.FrozenTicks = 0;
+            boss.ChilledTicks = 0;
+            // BurnBody uses damage flags 0x12; 0x7F is BurnRow's target-range mask.
+            DamageAdventureBossWithFlags(1800f, 0x12U);
+        }
+
         /// <summary>Performs damage adventure boss.</summary>
         /// <param name = "damage">The damage.</param>
         internal void DamageAdventureBoss(float damage)

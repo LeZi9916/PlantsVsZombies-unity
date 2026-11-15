@@ -243,6 +243,57 @@ namespace PlantsVsZombies.Tests.EditMode
             Assert.That(game.Presentation.ZombieSounds.Count(sound => sound.Foley == 18), Is.EqualTo(2));
         }
 
+        /// <summary>Checks PC BurnRow clears the boss's cold counters before BurnBody and restores the unscaled body clock.</summary>
+        /// <param name="phase">The original exposed head phase.</param>
+        /// <param name="frozen">Whether the boss has an ice trap in addition to chill.</param>
+        [TestCase(87, false)]
+        [TestCase(87, true)]
+        [TestCase(88, false)]
+        [TestCase(88, true)]
+        [TestCase(89, false)]
+        [TestCase(89, true)]
+        public void JalapenoThawsBossBeforeOriginalBurnDamage(int phase, bool frozen)
+        {
+            var game = Board();
+            var boss = game.Adventure.Boss!;
+            boss.Enter(phase, phase == 89 ? "anim_head_attack_1" : "anim_head_idle", 12f, 0);
+            boss.PhaseCountdown = 10000;
+            boss.AnimationSeconds = .2f;
+            boss.Time = .2f * 12f / boss.FrameCount();
+            boss.ChilledTicks = 2000;
+            boss.FrozenTicks = frozen ? 400 : 0;
+            boss.DriverRate = frozen ? 0f : 6f;
+            game.Adventure.BossHeadVulnerable = true;
+            var pepper = (Plant)Call(game, "PlaceAdventurePlant", PlantKind.Jalapeno, 4, 2)!;
+            Call(game, "DetonateAdventureJalapeno", pepper);
+            Assert.That(boss.FrozenTicks, Is.Zero);
+            Assert.That(boss.ChilledTicks, Is.Zero);
+            Assert.That(game.Adventure.BossHealth, Is.EqualTo(38200f));
+            Assert.That(game.Presentation.ZombieSounds.Count(sound => sound.Foley == 46), Is.EqualTo(1),
+                "PC BurnBody passes damage flags 0x12, retaining the boss's original ShieldHit request.");
+            game.Update(.01f);
+            Assert.That(boss.AnimationSeconds, Is.EqualTo(.21f).Within(.000001f), "The boss body must resume at its original unchilled rate.");
+        }
+
+        /// <summary>Checks BurnRow preserves the original damage admission gate instead of thawing a hidden head.</summary>
+        /// <param name="phase">An original non-targetable head transition.</param>
+        [TestCase(86)]
+        [TestCase(90)]
+        public void JalapenoDoesNotThawAnInvulnerableBossHead(int phase)
+        {
+            var game = Board();
+            var boss = game.Adventure.Boss!;
+            boss.Enter(phase, phase == 86 ? "anim_head_enter" : "anim_head_leave", 12f, 0);
+            boss.ChilledTicks = 2000;
+            boss.FrozenTicks = 400;
+            game.Adventure.BossHeadVulnerable = false;
+            var pepper = (Plant)Call(game, "PlaceAdventurePlant", PlantKind.Jalapeno, 1, 2)!;
+            Call(game, "DetonateAdventureJalapeno", pepper);
+            Assert.That(boss.FrozenTicks, Is.EqualTo(400));
+            Assert.That(boss.ChilledTicks, Is.EqualTo(2000));
+            Assert.That(game.Adventure.BossHealth, Is.EqualTo(40000f));
+        }
+
         /// <summary>Creates an isolated native boss roof without distant waves changing the contact under test.</summary>
         /// <param name="defer">Whether the original cutscene owns boss creation.</param>
         /// <returns>The playing production simulation.</returns>
