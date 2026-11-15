@@ -262,7 +262,7 @@ namespace PlantsVsZombies.Simulation
                         _world.Presentation._nativeShootSuppressions++;
                         _legacySimulation.Raise(GameEvent.Shoot);
                     }
-                    else if (p.Kind == PlantKind.Cattail && (tick == 19 || tick == 1))
+                    else if (p.Kind == PlantKind.Cattail && tick == 19)
                     {
                         var target = FindAdventureCattailTarget(p.Column + 0.5f, p.Row);
                         if (target != null)
@@ -271,18 +271,34 @@ namespace PlantsVsZombies.Simulation
                             dart.Homing = true;
                             dart.TargetZombieId = target.Id;
                             dart.HitsAir = true;
+                            // PC Fire 4752E0 creates projectile 8 at plant +(20,-3), with a 40x40 collision box.
+                            dart.X = p.Column + 20f / 80f;
+                            dart.StartX = dart.X;
+                            dart.PresentationPreviousX = dart.X;
+                            dart.VelocityX = 2f * 100f / 80f;
+                            dart.VelocityY = 0f;
+                            var pitch = _adventureModeRunner.Adventure.Level.HasPool || _adventureModeRunner.Adventure.Level.HasRoof ? 85f : 100f;
+                            dart.PresentationHomingY = 80f + p.Row * pitch - 3f
+                                + (_adventureModeRunner.Adventure.Level.HasRoof ? Math.Max(0, 5 - p.Column) * 20f - 10f : 0f)
+                                - (_boardQueries.HasPlantKindAt(PlantKind.FlowerPot, p.Row, p.Column) ? 5f : 0f);
+                            dart.PresentationPreviousHomingY = dart.PresentationHomingY;
                         }
                     }
                 }
 
-                if (p.ActionTimer <= 0.000001f)
+                var startsCattailSecondShot = p.Kind == PlantKind.Cattail && (int)Math.Round(p.ActionTimer * 100f) == 50;
+                if (p.ActionTimer <= 0.000001f || startsCattailSecondShot)
                 {
-                    p.ActionTimer = (LegacySimulation.DefinitionFor(p.Kind).ActionPeriodRaw - _world._random.Next(15)) * 0.01f;
+                    if (!startsCattailSecondShot)
+                    {
+                        p.ActionTimer = (LegacySimulation.DefinitionFor(p.Kind).ActionPeriodRaw - _world._random.Next(15)) * 0.01f;
+                    }
                     var target = p.Kind == PlantKind.GatlingPea ? _boardQueries.FindAdventureTarget(p.Row, p.Column + 0.4f, 20f, false) != null : p.Kind == PlantKind.Cattail ? FindAdventureCattailTarget(p.Column + 0.5f, p.Row) != null : _legacySimulation.HasUpgradeAreaTarget(p);
                     if (target)
                     {
                         p.UpgradeBurstTicks = p.Kind == PlantKind.GloomShroom ? 200 : p.Kind == PlantKind.GatlingPea ? 100 : 50;
                         p.ShootAge = 0;
+                        p.PresentationShotAge = 0f;
                     }
                 }
 
@@ -418,28 +434,49 @@ namespace PlantsVsZombies.Simulation
         internal Zombie? FindAdventureCattailTarget(float x, float row)
         {
             Zombie? best = null;
-            var distance = float.MaxValue;
-            foreach (Zombie z in _world.Zombies)
+            var score = int.MinValue;
+            var pitch = _adventureModeRunner.Adventure.Level.HasPool || _adventureModeRunner.Adventure.Level.HasRoof ? 85f : 100f;
+            var originX = 40f + x * 80f;
+            var originY = 80f + row * pitch + 40f
+                + (_adventureModeRunner.Adventure.Level.HasRoof ? Math.Max(0f, 5f - (x - .5f)) * 20f - 10f : 0f);
+            foreach (var zombie in _world.Zombies)
             {
-                if (z.Hypnotized || !AdventureZombieTargetingRules.CanBeAutoTargeted(z, PlantKind.Cattail) || z.Submerged || z.DropRemaining > 0 || z.Kind == ZombieKind.Bungee || z.X < 0 || z.X > 12f)
+                if (!_combatSystem.CanTakeAdventureAshDamage(zombie, 11U))
                 {
                     continue;
                 }
 
-                float dx = z.X - x, dy = z.Row - row, d = dx * dx + dy * dy;
-                if (best == null || z.Airborne && !best.Airborne || z.Airborne == best.Airborne && d < distance)
+                var body = CattailTargetBody(zombie);
+                var dx = body.X + body.Width / 2 - originX;
+                var dy = body.Y + body.Height / 2 - originY;
+                var candidate = -(int)Math.Sqrt(dx * dx + dy * dy) + (zombie.Airborne ? 10000 : 0);
+                if (best == null || candidate > score)
                 {
-                    best = z;
-                    distance = d;
+                    best = zombie;
+                    score = candidate;
                 }
             }
 
             return best;
         }
 
-        /// <summary>Performs update adventure homing velocity.</summary>
-        /// <param name = "p">The p.</param>
-        /// <param name = "dt">The dt.</param>
+        /// <summary>Gets the original body in board pixels for homing aim and collision.</summary>
+        /// <param name="zombie">The target whose physical row displacement is retained.</param>
+        /// <returns>The original unscaled body rectangle.</returns>
+        internal global::PlantsVsZombies.BoardUI.NativeRect CattailTargetBody(Zombie zombie)
+        {
+            var pitch = _adventureModeRunner.Adventure.Level.HasPool || _adventureModeRunner.Adventure.Level.HasRoof ? 85f : 100f;
+            var nativeX = AdventureZombieNativeRules.NativePositionX(zombie.X, AdventureDancerRules.Scale(zombie));
+            var nativeY = 80f + zombie.Row * pitch - 30f + zombie.PresentationGarlicRowOffset
+                + (_adventureModeRunner.Adventure.Level.HasRoof ? Math.Max(0f, 5f - nativeX / 80f) * 20f - 10f : 0f)
+                - (zombie.Kind == ZombieKind.Balloon ? 30f : 0f) - (zombie.Kind == ZombieKind.Pogo ? 16f : 0f)
+                + zombie.PresentationVaultPositionY + (zombie.ModeHead == 31 ? 30f : 0f);
+            return AdventureZombieTargetingRules.BodyRectangle(zombie, (int)nativeY);
+        }
+
+        /// <summary>Integrates PC 47CCB0 homing steering at two pixels per native tick without retargeting dead victims.</summary>
+        /// <param name="p">The original cactus spike carrying its chosen target identity.</param>
+        /// <param name="dt">One native simulation update in seconds.</param>
         internal void UpdateAdventureHomingVelocity(Pea p, float dt)
         {
             if (!p.Homing)
@@ -447,31 +484,35 @@ namespace PlantsVsZombies.Simulation
                 return;
             }
 
-            Zombie? target = null;
+            var pitch = _adventureModeRunner.Adventure.Level.HasPool || _adventureModeRunner.Adventure.Level.HasRoof ? 85f : 100f;
             foreach (var zombie in _world.Zombies)
             {
-                if (zombie.Id == p.TargetZombieId && !zombie.Hypnotized && AdventureZombieTargetingRules.CanBeAutoTargeted(zombie, PlantKind.Cattail) && !zombie.Submerged && zombie.DropRemaining <= 0)
+                if (zombie.Id != p.TargetZombieId || !_combatSystem.CanTakeAdventureAshDamage(zombie, 11U))
                 {
-                    target = zombie;
-                    break;
+                    continue;
                 }
-            }
-            if (target == null)
-            {
-                target = FindAdventureCattailTarget(p.X, p.FlightRow);
+
+                var body = CattailTargetBody(zombie);
+                var dx = body.X + body.Width / 2 - (40f + p.X * 80f + 20f);
+                var dy = body.Y + body.Height / 2 - (p.PresentationHomingY + 20f);
+                var distance = (float)Math.Sqrt(dx * dx + dy * dy);
+                if (distance > .000001f)
+                {
+                    var acceleration = .001f * (float)Math.Round((p.PresentationNativeAge + dt) * 100f);
+                    var vx = p.VelocityX * 80f / 100f + dx / distance * acceleration;
+                    var vy = p.VelocityY * pitch / 100f + dy / distance * acceleration;
+                    var magnitude = (float)Math.Sqrt(vx * vx + vy * vy);
+                    if (magnitude > .000001f)
+                    {
+                        p.VelocityX = vx / magnitude * 2f * 100f / 80f;
+                        p.VelocityY = vy / magnitude * 2f * 100f / pitch;
+                    }
+                }
+                break;
             }
 
-            if (target == null)
-            {
-                p.TargetZombieId = 0;
-                return;
-            }
-
-            p.TargetZombieId = target.Id;
-            float dx = target.X - p.X, dy = target.Row - p.FlightRow, d = (float)Math.Sqrt(dx * dx + dy * dy);
-            var speed = d <= 0.000001f ? 0 : Math.Min(5f, d / dt);
-            p.VelocityX = d <= 0.000001f ? 0 : dx / d * speed;
-            p.VelocityY = d <= 0.000001f ? 0 : dy / d * speed;
+            p.PresentationPreviousHomingY = p.PresentationHomingY;
+            p.PresentationHomingY += p.VelocityY * pitch * dt;
         }
 
         /// <summary>Performs morph adventure imitater.</summary>

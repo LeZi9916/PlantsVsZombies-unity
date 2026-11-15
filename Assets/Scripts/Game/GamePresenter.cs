@@ -2570,7 +2570,7 @@ namespace PlantsVsZombies.Game
                             continue;
                         }
 
-                        if (pea.FlightRow < 0 || pea.FlightRow >= _owner.RequiredGame.RowCount)
+                        if (!pea.Homing && (pea.FlightRow < 0 || pea.FlightRow >= _owner.RequiredGame.RowCount))
                         {
                             continue;
                         }
@@ -5402,7 +5402,13 @@ namespace PlantsVsZombies.Game
             }
             else if (pea.SourceKind == PlantKind.Cattail)
             {
-                image = "IMAGE_REANIM_CATTAIL_SPIKE";
+                // PC Fire selects projectile 8: the same 30x16 art used by Cactus, not the animated tail spike.
+                image = "IMAGE_PROJECTILECACTUS";
+                center.y = Mathf.Lerp(pea.PresentationPreviousHomingY, pea.PresentationHomingY, AdventureRenderRemainder * 100f);
+                if (_owner.RequiredAnimations.TryGetNativeSpriteSize(image, out var spikeSize))
+                {
+                    center += (Vector2)spikeSize * .5f;
+                }
                 rotation = Mathf.Atan2(pea.VelocityY * _owner.Layout.AdventurePitch, pea.VelocityX * BoardLayout.CellWidth) * Mathf.Rad2Deg;
             }
             else if (pea.SourceKind == PlantKind.Cactus)

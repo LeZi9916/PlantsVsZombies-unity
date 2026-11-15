@@ -33,6 +33,8 @@ namespace PlantsVsZombies.Simulation
         public float PresentationFireAge, PresentationFireRate;
         /// <summary>Stores a star's native shadow y, including original vertical motion and roof floor deltas.</summary>
         public float PresentationStarShadowY;
+        /// <summary>Retains a homing spike's physical top-left y and its preceding sample in native pixels.</summary>
+        public float PresentationHomingY, PresentationPreviousHomingY;
         /// <summary>Stores presentation motion initialized.</summary>
         public bool PresentationMotionInitialized;
         /// <summary>Gets or sets presentation can impact.</summary>
@@ -132,6 +134,8 @@ namespace PlantsVsZombies.Simulation
             PresentationFireAge = 0f;
             PresentationFireRate = 0f;
             PresentationStarShadowY = 0f;
+            PresentationHomingY = 0f;
+            PresentationPreviousHomingY = 0f;
             PresentationMotionInitialized = false;
             PresentationInitialized = false;
             Damage = 20f;

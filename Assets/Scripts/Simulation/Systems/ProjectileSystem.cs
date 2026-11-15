@@ -503,6 +503,18 @@ namespace PlantsVsZombies.Simulation
             }
         }
 
+        /// <summary>Checks PC CheckForCollision's chosen-target spike rectangle and strict physical y interval.</summary>
+        /// <param name="shot">The original forty-pixel homing hit box.</param>
+        /// <param name="target">The still-eligible chosen zombie.</param>
+        /// <returns>Whether this update reaches its original target body.</returns>
+        private bool AdventureCattailCollides(Pea shot, Zombie target)
+        {
+            var body = _upgradePlantActions.CattailTargetBody(target);
+            var x = (int)(40f + shot.X * 80f);
+            return x + 40 >= body.X && x - 25 <= body.X + body.Width
+                && shot.PresentationHomingY > body.Y && shot.PresentationHomingY < body.Y + body.Height;
+        }
+
         /// <summary>Performs advance adventure projectiles.</summary>
         /// <param name = "dt">The dt.</param>
         /// <param name="allowDamage">Whether live combat targets can receive hits before the level has completed.</param>
@@ -559,7 +571,16 @@ namespace PlantsVsZombies.Simulation
                     continue;
                 }
 
-                p.Row = (int)Math.Round(p.FlightRow);
+                if (p.Homing)
+                {
+                    var pitch = _adventureModeRunner.Adventure.Level.HasPool || _adventureModeRunner.Adventure.Level.HasRoof ? 85f : 100f;
+                    p.FlightRow = (p.PresentationHomingY - 80f) / pitch;
+                    p.Row = Math.Max(0, Math.Min(_world.RowCount - 1, (int)Math.Floor(p.FlightRow)));
+                }
+                else
+                {
+                    p.Row = (int)Math.Round(p.FlightRow);
+                }
                 _coldSystem.UpdateAdventureSnowTrail(p);
                 Zombie? hit = null;
                 foreach (Zombie z in _world.Zombies)
@@ -567,11 +588,12 @@ namespace PlantsVsZombies.Simulation
                     if (allowDamage && p.PresentationCanImpact && (p.Lobbed ? _combatSystem.CanTakeAdventureAshDamage(z, 13U) : AdventureZombieTargetingRules.CanBeAutoTargeted(z, p.SourceKind)) && z.GraveRiseTicks <= 0 && z.PresentationNativePhase != 50 && z.PresentationNativePhase != 74
                         && !(z.Kind == ZombieKind.DolphinRider && (z.PresentationNativePhase == 52 || z.PresentationNativePhase == 54))
                         && !(z.Kind == ZombieKind.Digger && z.PresentationNativePhase >= 33 && z.PresentationNativePhase <= 35)
-                        && (!p.Homing || z.Id == p.TargetZombieId) && !z.Hypnotized && Math.Abs(z.Row - p.FlightRow) < 0.45f && !p.HitIds.Contains(z.Id) && (!z.Airborne || p.HitsAir)
+                        && (!p.Homing || z.Id == p.TargetZombieId && _combatSystem.CanTakeAdventureAshDamage(z, 11U)) && !z.Hypnotized
+                        && (p.Homing || Math.Abs(z.Row - p.FlightRow) < 0.45f) && !p.HitIds.Contains(z.Id) && (!z.Airborne || p.HitsAir)
                         && (p.SourceKind != PlantKind.Cactus || z.Airborne == p.HitsAir && AdventureZombieTargetingRules.CanBeAutoTargeted(z, PlantKind.Cactus))
                         && (!z.Submerged || p.Lobbed) && (!p.Lobbed || z.PresentationNativePhase != 59
                             || p.PresentationLobContactHeight > 45f)
-                        && (p.Lobbed ? AdventureLobberCollides(p, beforeNativeX, z) : z.Kind == ZombieKind.Zomboni
+                        && (p.Homing ? AdventureCattailCollides(p, z) : p.Lobbed ? AdventureLobberCollides(p, beforeNativeX, z) : z.Kind == ZombieKind.Zomboni
                         ? AdventureZomboniRules.ProjectileCollides(p, z)
                         : AdventurePuffShroomRules.IsShortRange(p.SourceKind) ? AdventurePuffShroomRules.Collides(p, z)
                         : z.X >= Math.Min(before, p.X) - 0.25f && z.X <= Math.Max(before, p.X) + 0.25f))
@@ -664,7 +686,7 @@ namespace PlantsVsZombies.Simulation
                     remove = true;
                 }
 
-                if (remove || p.X > 12f || p.X < -2f || p.FlightRow < -1f || p.FlightRow > _world.RowCount || Math.Abs(p.X - p.StartX) > p.Range)
+                if (remove || p.X > 12f || p.X < -2f || !p.Homing && (p.FlightRow < -1f || p.FlightRow > _world.RowCount) || Math.Abs(p.X - p.StartX) > p.Range)
                 {
                     RemovePeaAt(i);
                 }
