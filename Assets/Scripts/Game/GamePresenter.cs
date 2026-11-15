@@ -2747,9 +2747,11 @@ namespace PlantsVsZombies.Game
                     var ticks = Math.Max(0, GameSimulation.AdventureCobFlightSeconds - shell.FlightRemaining + AdventureRenderRemainder) * 100f;
                     var rising = ticks < 88f;
                     var x = rising ? shell.LaunchX : shell.TargetX;
-                    var row = rising ? shell.LaunchRow : shell.TargetRow;
                     var z = rising ? -8f * ticks : -704f + 8f * (ticks - 88f);
-                    _owner.RequiredAnimations.DrawResourceSprite("IMAGE_REANIM_COBCANNON_COB", new Vector2(BoardLayout.AdventureGridX + x * BoardLayout.CellWidth, BoardLayout.AdventureGridY + row * _owner.Layout.AdventurePitch + _owner.Layout.AdventureSlope(x) + z), 1f, rising ? 90 : -90);
+                    var y = rising ? shell.LaunchNativeY : shell.TargetNativeY + 39f;
+                    // Native art rotates around its unscaled 162x78 center and is drawn at ninety percent size.
+                    _owner.RequiredAnimations.DrawResourceSprite("IMAGE_REANIM_COBCANNON_COB",
+                        new Vector2(BoardLayout.AdventureGridX + x * BoardLayout.CellWidth + (rising ? 0f : 1f), y + z), .9f, rising ? -90 : 90);
                 }
 
                 if (level.Mode == AdventureMode.Storm)
@@ -3664,6 +3666,7 @@ namespace PlantsVsZombies.Game
                 clip = plant.CannonPhase == CobCannonPhase.Firing ? "anim_shooting" : plant.CannonPhase == CobCannonPhase.Arming || plant.CannonPhase == CobCannonPhase.Reloading ? "anim_unarmed_idle" : plant.CannonPhase == CobCannonPhase.Loading ? "anim_charge" : "anim_idle";
                 loop = plant.CannonPhase != CobCannonPhase.Firing && plant.CannonPhase != CobCannonPhase.Loading;
                 rate = 12f;
+                age = plant.PhaseAge + AdventureRenderRemainder;
                 if (!loop)
                 {
                     age = Math.Max(0, (plant.CannonPhase == CobCannonPhase.Firing ? GameSimulation.AdventureCobFiringSeconds : GameSimulation.AdventureCobLoadingSeconds) - plant.CannonReloadRemaining) + AdventureRenderRemainder;
@@ -3797,7 +3800,8 @@ namespace PlantsVsZombies.Game
                 squash != null && squash.NativePhase != 0 ? squash.BlendTicks
                     : coffee != null ? coffee.Crumbling ? 20 : 0 : magnet != null ? magnet.BlendTicks : doom != null || blover != null ? 0 : scaredy != null && scaredy.NativePhase != 1 || plant.Kind == PlantKind.Threepeater || plant.Kind == PlantKind.Cattail ? 10 : 20, AdventureRenderRemainder,
                 _presentationKeys.Get("producer-plant-", plant.Id), highlighted, doom == null ? null : _doomTrackOffset,
-                plant.Kind == PlantKind.Pumpkin ? 0 : -1, size * wakeScale, cardboard: IsCardboardPlant);
+                plant.Kind == PlantKind.Pumpkin ? 0 : -1, size * wakeScale, cardboard: IsCardboardPlant,
+                boardTicks: _owner.RequiredGame.Adventure._ticks);
 
             // PC Plant::Draw 47420B draws the body before the local retained-metal pass at 4744D3.
             if (magnetItemVisible && !magnetOnTop)
@@ -5889,6 +5893,24 @@ namespace PlantsVsZombies.Game
             }
         }
 
+        /// <summary>Draws PC CursorObject's original half-alpha, native-size cannon crosshair at the actual pointer.</summary>
+        private void DrawAdventureCobCannonTarget()
+        {
+            if (_owner.RequiredGame.Adventure.SelectedCobCannonId.HasValue)
+            {
+                var target = _owner.Textures.LoadImage("CobCannon_target.png");
+                if (target != null)
+                {
+                    var previous = CanvasUI.Color;
+                    CanvasUI.Color = previous * new Color(1f, 1f, 1f, 127f / 255f);
+                    DrawImage("CobCannon_target.png", new Rect(_owner.AdventureBoard._adventurePointer.x - target.Width * .5f,
+                        _owner.AdventureBoard._adventurePointer.y - target.Height * .5f, target.Width, target.Height));
+                    CanvasUI.Color = previous;
+                }
+            }
+
+        }
+
         /// <summary>Performs draw adventure packet cost.</summary>
         /// <param name = "kind">The kind.</param>
         /// <param name = "card">The card.</param>
@@ -6435,10 +6457,7 @@ namespace PlantsVsZombies.Game
                 }
             }
 
-            if (board.SelectedCobCannonId.HasValue)
-            {
-                DrawImage("CobCannon_target.png", new Rect(_owner.AdventureBoard._adventurePointer.x - 36, _owner.AdventureBoard._adventurePointer.y - 36, 72, 72));
-            }
+            DrawAdventureCobCannonTarget();
 
             var advice = AdventureFirstWaveTutorialAdvice() ?? _owner.AdventureBoard.AdventureTutorialText(board.Tutorial);
             if (_owner.AdventureBoard._adventureFeedback != null && Time.unscaledTime < _owner.AdventureBoard._adventureFeedbackUntil)

@@ -494,15 +494,22 @@ namespace PlantsVsZombies.Adventure
             }
 
             var col = Mathf.FloorToInt((point.x - BoardLayout.AdventureGridX) / BoardLayout.CellWidth);
+            if (board.SelectedCobCannonId.HasValue)
+            {
+                if (point.y < BoardLayout.AdventureGridY)
+                {
+                    _owner.RequiredGame.CancelAdventureCobCannonAim();
+                }
+                else
+                {
+                    _owner.RequiredGame.TryFireAdventureCobCannon((point.x - BoardLayout.AdventureGridX) / BoardLayout.CellWidth,
+                        (point.y - BoardLayout.AdventureGridY - _owner.Layout.AdventureSlope(col)) / _owner.Layout.AdventurePitch);
+                }
+                return;
+            }
             var row = Mathf.FloorToInt((point.y - BoardLayout.AdventureGridY - _owner.Layout.AdventureSlope(col)) / _owner.Layout.AdventurePitch);
             if (col < 0 || col > 8 || row < 0 || row >= _owner.RequiredGame.RowCount)
             {
-                return;
-            }
-
-            if (board.SelectedCobCannonId.HasValue)
-            {
-                _owner.RequiredGame.TryFireAdventureCobCannonAtCell(row, col);
                 return;
             }
 
@@ -547,6 +554,8 @@ namespace PlantsVsZombies.Adventure
 
             if (_owner.RequiredGame.TryAimAdventureCobCannon(row, col))
             {
+                board.CobCannonAimX = point.x;
+                board.CobCannonAimY = point.y;
                 return;
             }
 

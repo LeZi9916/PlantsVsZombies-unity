@@ -285,7 +285,7 @@ namespace PlantsVsZombies.Tests.EditMode
             var game = Fixture();
             var plant = Place(game, PlantKind.CobCannon);
             plant.CannonPhase = CobCannonPhase.Loading;
-            plant.CannonReloadRemaining = 1.89f;
+            plant.CannonReloadRemaining = .64f;
             game.Presentation.ZombieSounds.Clear();
             Invoke(game, "AdvanceAdventureCannon", plant, .01f);
             Assert.That(CountSound(game, 64), Is.Zero);
@@ -294,13 +294,13 @@ namespace PlantsVsZombies.Tests.EditMode
             Invoke(game, "AdvanceAdventureCannon", plant, .01f);
             Assert.That(CountSound(game, 64), Is.EqualTo(1));
             plant.CannonPhase = CobCannonPhase.Firing;
-            plant.CannonReloadRemaining = .40f;
+            plant.CannonReloadRemaining = 1.84f;
             Invoke(game, "AdvanceAdventureCannon", plant, .01f);
             Assert.That(CountSound(game, 76), Is.Zero);
             Invoke(game, "AdvanceAdventureCannon", plant, .02f);
             Assert.That(CountSound(game, 76), Is.EqualTo(1));
             Assert.That(game.Adventure.CobShells, Is.Empty);
-            plant.CannonReloadRemaining = .01f;
+            plant.CannonReloadRemaining = 1.46f;
             Invoke(game, "AdvanceAdventureCannon", plant, .01f);
             Assert.That(game.Adventure.CobShells, Has.Count.EqualTo(1));
             Assert.That(CountSound(game, 3), Is.EqualTo(1));

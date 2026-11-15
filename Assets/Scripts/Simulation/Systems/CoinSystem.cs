@@ -227,6 +227,8 @@ namespace PlantsVsZombies.Simulation
                 _adventureModeRunner.Adventure.SelectedCobCannonId = null;
             }
 
+            _adventureModeRunner.Adventure.CobCannonAimDelayTicks = Math.Max(0,
+                _adventureModeRunner.Adventure.CobCannonAimDelayTicks - (int)Math.Round(dt * 100f));
             AdvanceAdventureCoins(dt);
 
             for (var i = _adventureModeRunner.Adventure._cobShells.Count - 1; i >= 0; i--)
@@ -239,8 +241,12 @@ namespace PlantsVsZombies.Simulation
                 }
 
                 var row = (int)Math.Round(shell.TargetRow);
-                _combatSystem.BlastAdventureRadius((int)(40f + shell.TargetX * 80f), _combatSystem.AdventureBlastCenterY(shell.TargetX, shell.TargetRow), row, 115, 1, 0x7F);
+                _combatSystem.BlastAdventureRadius((int)(40f + shell.TargetX * 80f), (int)(shell.TargetNativeY + 40f), row, 115, 1, 0x7F);
                 _battlePresentationSystem.AdventurePresentationCobImpact(shell.TargetX, shell.TargetRow);
+                var impact = _world.Presentation.Impacts[_world.Presentation.Impacts.Count - 1];
+                impact.NativeIcePoint = true;
+                impact.NativeParticleX = 40f + shell.TargetX * 80f;
+                impact.NativeParticleY = shell.TargetNativeY + 40f;
                 if (shell.TargetX >= 7.5f && Math.Abs(shell.TargetRow - 2f) <= 1f)
                 {
                     _bossSystem.DamageAdventureBossWithFlags(1800f, 0x7FU);

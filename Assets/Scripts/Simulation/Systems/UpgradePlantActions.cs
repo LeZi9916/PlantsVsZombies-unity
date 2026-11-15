@@ -573,7 +573,12 @@ namespace PlantsVsZombies.Simulation
 
             CancelAdventureCobCannonAim();
             cannon.CannonPhase = CobCannonPhase.Aiming;
-            _adventureModeRunner.Adventure.SelectedCobCannonId = plantId;
+            var board = _adventureModeRunner.Adventure;
+            board.SelectedCobCannonId = plantId;
+            board.CobCannonAimDelayTicks = 30;
+            board.CobCannonAimX = 80f + cannon.Column * 80f;
+            board.CobCannonAimY = 120f + cannon.Row * (board.Level.HasPool || board.Level.HasRoof ? 85f : 100f)
+                + (board.Level.HasRoof ? Math.Max(0f, 5f - cannon.Column) * 20f - 10f : 0f);
             _adventureModeRunner.Adventure.Notice(AdventureNoticeKind.CobAimStarted, plantId, cannon.Row, cannon.Column);
             return true;
         }
@@ -594,6 +599,7 @@ namespace PlantsVsZombies.Simulation
             }
 
             _adventureModeRunner.Adventure.SelectedCobCannonId = null;
+            _adventureModeRunner.Adventure.CobCannonAimDelayTicks = 0;
             return true;
         }
 
@@ -603,7 +609,7 @@ namespace PlantsVsZombies.Simulation
         /// <returns>The resulting try fire adventure cob cannon.</returns>
         internal bool TryFireAdventureCobCannon(float targetX, float targetRow)
         {
-            if (!_world.IsAdventure || _world.State != MatchState.Playing || _adventureModeRunner.Adventure.Phase != AdventurePhase.Playing || !_adventureModeRunner.Adventure.SelectedCobCannonId.HasValue || float.IsNaN(targetX) || float.IsInfinity(targetX) || float.IsNaN(targetRow) || float.IsInfinity(targetRow) || targetX < 0 || targetX >= SimulationWorld.Columns || targetRow < 0 || targetRow >= _world.RowCount)
+            if (!_world.IsAdventure || _world.State != MatchState.Playing || _adventureModeRunner.Adventure.Phase != AdventurePhase.Playing || !_adventureModeRunner.Adventure.SelectedCobCannonId.HasValue || float.IsNaN(targetX) || float.IsInfinity(targetX) || float.IsNaN(targetRow) || float.IsInfinity(targetRow) || targetX < -.5f || targetX >= 9.5f)
             {
                 return false;
             }
@@ -614,11 +620,28 @@ namespace PlantsVsZombies.Simulation
                 return false;
             }
 
+            var board = _adventureModeRunner.Adventure;
+            var nativeX = 40f + targetX * 80f;
+            var nativeY = 80f + targetRow * (board.Level.HasPool || board.Level.HasRoof ? 85f : 100f)
+                + (board.Level.HasRoof ? Math.Max(0f, 5f - (float)Math.Floor(targetX)) * 20f - 10f : 0f);
+            if (nativeY < 80f || nativeY >= 600f)
+            {
+                return false;
+            }
+            var dx = nativeX - board.CobCannonAimX;
+            var dy = nativeY - board.CobCannonAimY;
+            if (board.CobCannonAimDelayTicks > 0 && dx * dx + dy * dy < 2500f)
+            {
+                return false;
+            }
+
             p.CannonTargetX = targetX;
-            p.CannonTargetRow = targetRow;
+            p.CannonTargetRow = Math.Max(0f, Math.Min(_world.RowCount - 1, (float)Math.Floor(targetRow)));
             p.CannonPhase = CobCannonPhase.Firing;
+            p.PhaseAge = 0f;
             p.CannonReloadRemaining = SimulationWorld.AdventureCobFiringSeconds;
             _adventureModeRunner.Adventure.SelectedCobCannonId = null;
+            _adventureModeRunner.Adventure.CobCannonAimDelayTicks = 0;
             return true;
         }
 
@@ -642,8 +665,7 @@ namespace PlantsVsZombies.Simulation
             }
 
             var previousRemaining = p.CannonReloadRemaining;
-            p.CannonReloadRemaining = Math.Max(0, p.CannonReloadRemaining - dt);
-            // PC reanim markers: charge has 15 frames at 12 fps, shooting has 42 at 12 fps.
+            p.CannonReloadRemaining = Math.Max(0, (int)Math.Round(previousRemaining * 100f) - (int)Math.Round(dt * 100f)) * .01f;
             var cueRemaining = p.CannonPhase == CobCannonPhase.Loading
                 ? SimulationWorld.AdventureCobLoadingSeconds - .5f * 15f / 12f
                 : SimulationWorld.AdventureCobFiringSeconds - .48f * 42f / 12f;
@@ -652,11 +674,43 @@ namespace PlantsVsZombies.Simulation
             {
                 _zombieFeedbackSystem.RequestAdventureZombieFoley(p.CannonPhase == CobCannonPhase.Loading ? 64 : 76);
             }
+
+            var releaseRemaining = SimulationWorld.AdventureCobFiringSeconds - AdventureCobCannonRules.ReleaseSeconds;
+            if (p.CannonPhase == CobCannonPhase.Firing && previousRemaining > releaseRemaining + .000001f
+                && p.CannonReloadRemaining <= releaseRemaining + .000001f)
+            {
+                var level = _adventureModeRunner.Adventure.Level;
+                var pitch = level.HasPool || level.HasRoof ? 85f : 100f;
+                // PC CobCannonFire subtracts 47, Fire subtracts 40, and the impact adds 80 pixels.
+                var impactX = p.CannonTargetX - 7f / 80f;
+                var targetColumn = Math.Max(0, Math.Min(8, (int)Math.Floor(p.CannonTargetX - 87f / 80f)));
+                var targetY = 80f + p.CannonTargetRow * pitch
+                    + (level.HasRoof ? Math.Max(0, 5 - targetColumn) * 20f - 10f : 0f);
+                _adventureModeRunner.Adventure._cobShells.Add(new AdventureCobShell
+                {
+                    SourcePlantId = p.Id,
+                    TargetX = impactX,
+                    TargetRow = p.CannonTargetRow,
+                    TargetNativeY = targetY,
+                    LaunchX = p.Column + 37f / 80f,
+                    LaunchRow = p.Row,
+                    LaunchNativeY = 80f + p.Row * pitch - 145f
+                        + (level.HasRoof ? Math.Max(0, 5 - p.Column) * 20f - 10f : 0f)
+                        - (_boardQueries.HasPlantKindAt(PlantKind.FlowerPot, p.Row, p.Column) ? 5f : 0f),
+                    FlightRemaining = SimulationWorld.AdventureCobFlightSeconds
+                });
+                _zombieFeedbackSystem.RequestAdventureZombieFoley(3);
+                _world.Presentation._nativeShootSuppressions++;
+                _legacySimulation.Raise(GameEvent.Shoot);
+                _adventureModeRunner.Adventure.Notice(AdventureNoticeKind.CobFired, p.Id, p.Row, p.Column);
+            }
+
             if (p.CannonReloadRemaining > 0.000001f)
             {
                 return;
             }
 
+            p.PhaseAge = 0f;
             if (p.CannonPhase == CobCannonPhase.Arming || p.CannonPhase == CobCannonPhase.Reloading)
             {
                 p.CannonPhase = CobCannonPhase.Loading;
@@ -669,20 +723,8 @@ namespace PlantsVsZombies.Simulation
             }
             else if (p.CannonPhase == CobCannonPhase.Firing)
             {
-                _adventureModeRunner.Adventure._cobShells.Add(new AdventureCobShell {
-                    SourcePlantId = p.Id,
-                    TargetX = p.CannonTargetX,
-                    TargetRow = p.CannonTargetRow,
-                    LaunchX = p.Column + 1f,
-                    LaunchRow = p.Row,
-                    FlightRemaining = SimulationWorld.AdventureCobFlightSeconds
-                });
                 p.CannonPhase = CobCannonPhase.Reloading;
                 p.CannonReloadRemaining = 30f;
-                _zombieFeedbackSystem.RequestAdventureZombieFoley(3);
-                _world.Presentation._nativeShootSuppressions++;
-                _legacySimulation.Raise(GameEvent.Shoot);
-                _adventureModeRunner.Adventure.Notice(AdventureNoticeKind.CobFired, p.Id, p.Row, p.Column);
             }
         }
     }

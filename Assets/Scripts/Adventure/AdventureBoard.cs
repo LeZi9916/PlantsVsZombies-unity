@@ -303,6 +303,12 @@ namespace PlantsVsZombies.Adventure
         public PlantKind RequiredImitaterTarget => ImitaterTarget ?? throw new System.InvalidOperationException("The member 'ImitaterTarget' is not available.");
         /// <summary>Gets or sets selected cob cannon id.</summary>
         public int? SelectedCobCannonId { get; internal set; }
+        /// <summary>Retains the original thirty-tick delay protecting a newly selected cannon from nearby repeat clicks.</summary>
+        public int CobCannonAimDelayTicks { get; internal set; }
+        /// <summary>Retains the native pointer position at which the cannon was selected.</summary>
+        public float CobCannonAimX { get; internal set; }
+        /// <summary>Retains the native pointer height at which the cannon was selected.</summary>
+        public float CobCannonAimY { get; internal set; }
         /// <summary>Gets or sets money collected units.</summary>
         public int MoneyCollectedUnits { get; internal set; }
 

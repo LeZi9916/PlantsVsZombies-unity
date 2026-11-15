@@ -67,6 +67,8 @@ namespace PlantsVsZombies.Game
         private Vector2 _origin;
         /// <summary>The current native scale, playback time, frame rate, and interpolation remainder.</summary>
         private float _scale, _seconds, _rate, _remainder;
+        /// <summary>The original main board counter used by the ready cannon's single cob track.</summary>
+        private int _boardTicks;
         /// <summary>Whether the current clip loops or the actor faces backwards.</summary>
         private bool _loop, _backwards;
         /// <summary>Overrides the original plant body's vertical scale during coffee wake, or minus one for ordinary playback.</summary>
@@ -118,10 +120,12 @@ namespace PlantsVsZombies.Game
         /// <param name="trackOffset">Optional native per-track shake offsets for this plant's body animation.</param>
         /// <param name="pumpkinGroup">The native pumpkin render group, or minus one for an unsplit portrait.</param>
         /// <param name="verticalScale">The native coffee-wake vertical body scale, or minus one for ordinary playback.</param>
+        /// <param name="boardTicks">The original board counter for the ready cannon track.</param>
         /// <param name="cardboard">Whether PC 436AE0 draws the I, Zombie white-mask cardboard edges.</param>
         internal void DrawPlant(Plant plant, string name, Vector2 origin, float scale, float seconds, string clip,
-            bool loop, float rate, HeadPlayback[]? heads, string key, Rect viewport, int blendTicks, float remainder, string surfaceKey, bool highlighted = false, Func<string, Vector2>? trackOffset = null, int pumpkinGroup = -1, float verticalScale = -1f, bool cardboard = false)
+            bool loop, float rate, HeadPlayback[]? heads, string key, Rect viewport, int blendTicks, float remainder, string surfaceKey, bool highlighted = false, Func<string, Vector2>? trackOffset = null, int pumpkinGroup = -1, float verticalScale = -1f, bool cardboard = false, int boardTicks = 0)
         {
+            _boardTicks = boardTicks;
             _pumpkinGroup = pumpkinGroup;
             _plantVerticalScale = verticalScale;
             _plant = plant;
@@ -332,13 +336,16 @@ namespace PlantsVsZombies.Game
             _plantBlinkAnchor = blinking ? RequiredRenderer.NativePlantBlinkAnchor(_plant, _name!) : null;
             _plantInheritedMatrix = RequiredRenderer.CurrentSpriteMatrix;
             _plantInheritedTint = PlantsVsZombies.Rendering.SpriteDrawState.Color;
+            var readyCob = _plant.Kind == PlantKind.CobCannon && (_plant.CannonPhase == CobCannonPhase.Ready || _plant.CannonPhase == CobCannonPhase.Aiming);
+            var cobBrightness = readyCob ? AdventureCobCannonRules.ReadyBrightness(_boardTicks) / 255f : 1f;
             var drawn = _heads != null
                 ? RequiredRenderer.DrawNativeAttachedHeads(_name, _origin, _scale, _seconds, _rate, _heads, visible, _plant.ModeFacesLeft, _key, _blendTicks,
                     blinking ? _plantBlinkTrackDrawn : null, _plant.BlinkHead)
                 : RequiredRenderer.DrawNativePlayback(_name, _origin, _scale, _seconds, _clip, _loop, _rate, visible,
                     AdventureDefensivePlantRules.DamageTrack(_plant.Kind), AdventureDefensivePlantRules.DamageImage(_plant.Kind, _plant.Health),
                     _plant.ModeFacesLeft, _key, _blendTicks, verticalScale: _plantVerticalScale, trackOffset: _plantTrackOffset,
-                    trackDrawn: blinking ? _plantBlinkTrackDrawn : null);
+                    trackDrawn: blinking ? _plantBlinkTrackDrawn : null,
+                    colorTrack: readyCob ? "CobCannon_cob" : null, trackColor: readyCob ? new Color(cobBrightness, cobBrightness, cobBrightness, 1f) : (Color?)null);
 
             var mine = _plant.PotatoMinePresentation;
             if (_plant.Kind == PlantKind.PotatoMine && mine != null && mine.LightCreated && _plant.MinePhase == MinePhase.Armed)

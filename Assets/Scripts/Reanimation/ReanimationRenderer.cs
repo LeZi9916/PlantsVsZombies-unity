@@ -589,7 +589,9 @@ namespace PlantsVsZombies.Reanimation
         /// <param name="trackDrawn">Optional synchronous notification at each original track's attachment draw boundary.</param>
         /// <returns>The resulting draw internal.</returns>
         /// <param name="hiddenAttachmentTrack">The native hidden parent track retaining its attached effect and displayed pose.</param>
-        private bool DrawInternal(string? name, Rect destination, float seconds, string? animation, bool loop, ZombieVariant variant, bool equipmentIntact, Func<string, bool>? trackVisible, string? overrideTrack = null, SpriteImage? imageOverride = null, Matrix4x4? nativePlacement = null, bool cachedFlag = false, NativePoseBlend? blend = null, string? crazyDaveHeldItem = null, float crazyDaveHeldItemAge = 0f, Func<string, Vector2>? trackOffset = null, Action<string, Matrix4x4, Matrix4x4, float>? trackAttachment = null, Action<string>? trackDrawn = null, string? hiddenAttachmentTrack = null)
+        /// <param name="colorTrack">The single original track receiving an optional independent color.</param>
+        /// <param name="trackColor">The original multiplier for that track, or null to preserve its body color.</param>
+        private bool DrawInternal(string? name, Rect destination, float seconds, string? animation, bool loop, ZombieVariant variant, bool equipmentIntact, Func<string, bool>? trackVisible, string? overrideTrack = null, SpriteImage? imageOverride = null, Matrix4x4? nativePlacement = null, bool cachedFlag = false, NativePoseBlend? blend = null, string? crazyDaveHeldItem = null, float crazyDaveHeldItemAge = 0f, Func<string, Vector2>? trackOffset = null, Action<string, Matrix4x4, Matrix4x4, float>? trackAttachment = null, Action<string>? trackDrawn = null, string? hiddenAttachmentTrack = null, string? colorTrack = null, Color? trackColor = null)
         {
             using var profile = SpriteRenderingProfiler.Measure(SpriteRenderingProfiler.Animation);
             LastError = null;
@@ -770,6 +772,10 @@ namespace PlantsVsZombies.Reanimation
                             SpriteMatrix = sprite;
                             var alpha = originalColor.a * Math.Max(0f, Math.Min(1f, frame.Alpha));
                             SpriteDrawState.Color = _nativeCombatZombie == null ? new Color(originalColor.r, originalColor.g, originalColor.b, alpha) : NativeZombieTrackColor(isCombatBody, track.Name, group, alpha);
+                            if (trackColor.HasValue && TrackIs(track.Name, colorTrack))
+                            {
+                                SpriteDrawState.Color *= trackColor.Value;
+                            }
                             var image = imageOverride != null && TrackIs(track.Name, overrideTrack) ? imageOverride : from.Texture;
                             var nativeImage = NativeZombieImage(asset, isCombatBody, track.Name, image);
                             DrawTexturePart(nativeImage, nativeImage == image ? from.Texture.Width : nativeImage.Width, nativeImage == image ? from.Texture.Height : nativeImage.Height);
@@ -3285,7 +3291,9 @@ namespace PlantsVsZombies.Reanimation
         /// <param name="trackDrawn">Optional synchronous notification for a native attachment drawn immediately after its track.</param>
         /// <returns>The resulting draw native playback.</returns>
         /// <param name="hiddenAttachmentTrack">The original hidden placeholder whose attachment must retain its painter position and blended pose.</param>
-        public bool DrawNativePlayback(string? name, Vector2 origin, float scale, float seconds, string? animation, bool loop, float framesPerSecond = -1f, Func<string, bool>? visible = null, string? overrideTrack = null, string? overrideImage = null, bool facingLeft = false, string? instanceKey = null, int blendTicks = 20, float verticalScale = -1f, float mirrorWidth = 80f, string? crazyDaveHeldItem = null, float crazyDaveHeldItemAge = 0f, Func<string, Vector2>? trackOffset = null, Action<string, Matrix4x4, Matrix4x4, float>? trackAttachment = null, bool fullLastFrame = false, Action<string>? trackDrawn = null, string? hiddenAttachmentTrack = null)
+        /// <param name="colorTrack">The single original track receiving an optional independent color.</param>
+        /// <param name="trackColor">The original multiplier for that track, or null to preserve its body color.</param>
+        public bool DrawNativePlayback(string? name, Vector2 origin, float scale, float seconds, string? animation, bool loop, float framesPerSecond = -1f, Func<string, bool>? visible = null, string? overrideTrack = null, string? overrideImage = null, bool facingLeft = false, string? instanceKey = null, int blendTicks = 20, float verticalScale = -1f, float mirrorWidth = 80f, string? crazyDaveHeldItem = null, float crazyDaveHeldItemAge = 0f, Func<string, Vector2>? trackOffset = null, Action<string, Matrix4x4, Matrix4x4, float>? trackAttachment = null, bool fullLastFrame = false, Action<string>? trackDrawn = null, string? hiddenAttachmentTrack = null, string? colorTrack = null, Color? trackColor = null)
         {
             using var objectScope = BeginObjectScope();
             Reanimation? asset;
@@ -3303,7 +3311,7 @@ namespace PlantsVsZombies.Reanimation
                 placement.m11 = verticalScale;
             }
 
-            return DrawInternal(name, new Rect(0, 0, 1, 1), NativeSeconds(clip, seconds, rate, asset.Fps, loop, fullLastFrame), animation, false, ZombieVariant.Normal, false, visible, overrideTrack, image, placement, false, PrepareNativeBlend(instanceKey, animation, seconds, blendTicks), crazyDaveHeldItem, crazyDaveHeldItemAge, trackOffset, trackAttachment, trackDrawn, hiddenAttachmentTrack);
+            return DrawInternal(name, new Rect(0, 0, 1, 1), NativeSeconds(clip, seconds, rate, asset.Fps, loop, fullLastFrame), animation, false, ZombieVariant.Normal, false, visible, overrideTrack, image, placement, false, PrepareNativeBlend(instanceKey, animation, seconds, blendTicks), crazyDaveHeldItem, crazyDaveHeldItemAge, trackOffset, trackAttachment, trackDrawn, hiddenAttachmentTrack, colorTrack, trackColor);
         }
 
         /// <summary>Draws Dave's original blink attached to the current head pose.</summary>

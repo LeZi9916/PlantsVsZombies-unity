@@ -936,9 +936,9 @@ namespace PlantsVsZombies.Simulation
 
         // Native counters are interpreted at the replica's 100 Hz. Animation/loading/flight durations are approximations.
         /// <summary>Stores adventure cob firing seconds.</summary>
-        public const float AdventureCobFiringSeconds = 2.06f;
+        public const float AdventureCobFiringSeconds = AdventureCobCannonRules.FiringSeconds;
         /// <summary>Stores adventure cob loading seconds.</summary>
-        public const float AdventureCobLoadingSeconds = 2.5f;
+        public const float AdventureCobLoadingSeconds = AdventureCobCannonRules.LoadingSeconds;
         /// <summary>Stores adventure cob flight seconds.</summary>
         public const float AdventureCobFlightSeconds = AdventurePresentationCobFlightSeconds;
 

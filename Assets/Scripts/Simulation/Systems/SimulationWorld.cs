@@ -132,11 +132,11 @@ namespace PlantsVsZombies.Simulation
         /// <summary>Stores adventure sun reservation.</summary>
         internal int _adventureSunReservation;
 
-        // Native counters are interpreted at the replica's 100 Hz. Animation/loading/flight durations are approximations.
+        // Original PC animation and projectile milestones, interpreted at the native 100 Hz.
         /// <summary>Stores adventure cob firing seconds.</summary>
-        internal const float AdventureCobFiringSeconds = 2.06f;
+        internal const float AdventureCobFiringSeconds = AdventureCobCannonRules.FiringSeconds;
         /// <summary>Stores adventure cob loading seconds.</summary>
-        internal const float AdventureCobLoadingSeconds = 2.5f;
+        internal const float AdventureCobLoadingSeconds = AdventureCobCannonRules.LoadingSeconds;
         /// <summary>Stores adventure cob flight seconds.</summary>
         internal const float AdventureCobFlightSeconds = AdventurePresentationCobFlightSeconds;
 
