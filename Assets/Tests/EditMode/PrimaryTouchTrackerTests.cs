@@ -2,6 +2,7 @@
 using NUnit.Framework;
 using PlantsVsZombies.Inputs;
 using UnityEngine;
+using TouchPhase = UnityEngine.InputSystem.TouchPhase;
 
 namespace PlantsVsZombies.Tests.EditMode
 {

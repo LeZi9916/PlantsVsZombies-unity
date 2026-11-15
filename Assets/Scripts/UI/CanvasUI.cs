@@ -399,6 +399,7 @@ namespace PlantsVsZombies.UI
                 var graphic = buttonObject.AddComponent<Image>();
                 graphic.color = UnityEngine.Color.clear;
                 var control = new ButtonControl { Button = buttonObject.AddComponent<Button>() };
+                buttonObject.AddComponent<CanvasPointerCapture>();
                 control.Button.targetGraphic = graphic;
                 control.Button.transition = Selectable.Transition.None;
                 control.Button.onClick.AddListener(() => control.Clicked = true);
@@ -769,6 +770,7 @@ namespace PlantsVsZombies.UI
             textTransform.offsetMin = Vector2.zero;
             textTransform.offsetMax = Vector2.zero;
             var field = fieldObject.AddComponent<InputField>();
+            fieldObject.AddComponent<CanvasPointerCapture>();
             field.targetGraphic = inputSurface;
             field.textComponent = text;
             field.transition = Selectable.Transition.None;

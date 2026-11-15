@@ -9,6 +9,7 @@ using System.Collections.ObjectModel;
 using System.IO;
 using System.Text;
 using UnityEngine;
+using PlantsVsZombies.Inputs;
 
 namespace PlantsVsZombies.UI
 {
@@ -1181,7 +1182,7 @@ namespace PlantsVsZombies.UI
         /// <param name = "textOffset">The text offset.</param>
         private void DrawButton(Rect rect, string normal, string highlight, string text, GUIStyle? style, int textOffset)
         {
-            bool hovered = rect.Contains(_pointer), down = hovered && Input.GetMouseButton(0);
+            bool hovered = rect.Contains(_pointer), down = hovered && GameInput.Current.Held;
             if (normal == "button_middle.png")
             {
                 OriginalUiWidgets.StoneButton(Texture, rect, hovered, down);

@@ -1,5 +1,6 @@
 #nullable enable
 using UnityEngine;
+using TouchPhase = UnityEngine.InputSystem.TouchPhase;
 
 namespace PlantsVsZombies.Inputs
 {
@@ -16,6 +17,17 @@ namespace PlantsVsZombies.Inputs
         private bool _waitForAllReleased;
         /// <summary>The primary transition assembled from this frame's native touches.</summary>
         private TouchPointerSample _sample;
+
+        /// <summary>Clears the captured finger and optionally waits for a neutral touch frame.</summary>
+        /// <param name="waitForAllReleased">Whether remaining fingers must leave before a new gesture.</param>
+        internal void Reset(bool waitForAllReleased = false)
+        {
+            _fingerId = null;
+            _hasTouches = false;
+            _foundPrimary = false;
+            _waitForAllReleased = waitForAllReleased;
+            _sample = default;
+        }
 
         /// <summary>Starts sampling a new native touch frame without changing the captured finger.</summary>
         internal void BeginFrame()

@@ -83,7 +83,7 @@ namespace PlantsVsZombies.Game
             }
 
             if (_owner._currentView == PvZGame.ScreenView.Store && _owner.Store._storeIntroTalking && !_owner._confirmingQuit && _owner._unavailableFeature == null
-                && (input.EnterPressed || Input.GetKeyDown(KeyCode.Space)))
+                && (input.EnterPressed || input.SpacePressed))
             {
                 _owner.Store.AdvanceStoreIntro();
                 return;
@@ -108,7 +108,7 @@ namespace PlantsVsZombies.Game
 
             if (_owner._currentView == PvZGame.ScreenView.Board && _owner.Dave._crazyDaveMessageIndex >= 0 && !_owner._confirmingQuit && _owner._unavailableFeature == null)
             {
-                if ((input.Pressed && input.InsideViewport) || input.EnterPressed || Input.GetKeyDown(KeyCode.Space))
+                if ((input.Pressed && input.InsideViewport) || input.EnterPressed || input.SpacePressed)
                 {
                     _owner.Opening.AdvanceCrazyDaveDialogue();
                 }
@@ -135,7 +135,7 @@ namespace PlantsVsZombies.Game
 
             if (_owner._currentView == PvZGame.ScreenView.Garden && _owner.Garden._gardenDaveIntroActive && _owner.Dave._crazyDaveMessageIndex >= 0)
             {
-                if ((input.Pressed && input.InsideViewport) || input.EnterPressed || Input.GetKeyDown(KeyCode.Space))
+                if ((input.Pressed && input.InsideViewport) || input.EnterPressed || input.SpacePressed)
                 {
                     _owner.Garden.AdvanceZenGardenIntroduction();
                 }
@@ -145,7 +145,7 @@ namespace PlantsVsZombies.Game
 
             if (_owner._currentView == PvZGame.ScreenView.Tree && _owner.Tree._treeDaveIntroPending)
             {
-                if (_owner.Dave._crazyDaveMessageIndex == 3200 && ((input.Pressed && input.InsideViewport) || input.EnterPressed || Input.GetKeyDown(KeyCode.Space)))
+                if (_owner.Dave._crazyDaveMessageIndex == 3200 && ((input.Pressed && input.InsideViewport) || input.EnterPressed || input.SpacePressed))
                 {
                     _owner.Tree.CompleteWisdomTreeIntroduction();
                 }
@@ -645,7 +645,7 @@ namespace PlantsVsZombies.Game
                     }
                 }
             }
-            else if (_owner._currentView == PvZGame.ScreenView.Help && !_owner.RequiredOptionsView.IsOpen && (GameInput.Current.EnterPressed || Input.GetKeyDown(KeyCode.Space)))
+            else if (_owner._currentView == PvZGame.ScreenView.Help && !_owner.RequiredOptionsView.IsOpen && (GameInput.Current.EnterPressed || GameInput.Current.SpacePressed))
             {
                 _owner.RequiredHelpView.HandleKey(KeyCode.Return);
                 _owner._currentView = PvZGame.ScreenView.Selector;

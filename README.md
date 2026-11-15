@@ -38,6 +38,7 @@ python3 -B Tools/PrepareRuntimeAssets.py \
 | `Assets/Scripts/Rendering` | 自定义渲染管线（`Pipeline/`）、相机、对象池、MeshRenderer 和渲染资源生命周期 |
 | `Assets/Scripts/Reanimation` | 原版动画解析、采样与渲染命令生成 |
 | `Assets/Scripts/UI` | Canvas 界面、独立输入路由及位图字体 |
+| `Assets/Scripts/Inputs` | Input System 设备采样、触控归属及逻辑输入快照 |
 | `Assets/Scripts/VerifiedData` | 原版静态数据模型、只读目录与可重生成的数据表 |
 | `Assets/Editor` | 场景、构建、资源导入与渲染管线配置工具 |
 | `Assets/Tests` | Unity Test Runner 的 EditMode、PlayMode 回归与冒烟场景 |
@@ -59,6 +60,10 @@ python3 -B Tools/PrepareRuntimeAssets.py \
 Hierarchy 的 `PvZ Actors/Plants` 和 `PvZ Actors/Zombies` 下按实体 ID 管理部件、头部、旗帜和阴影。节点开关控制显隐，动画继续负责姿态；选中 sprite 可在只读 Inspector 查看源资源和完整变换，实际 Renderer 由批次池管理。透明网格会保守剔除空白区域并保留双线性边缘，符合条件的命中、灰度及生产亮度反馈直接绘制，局部合成仍保留原混合语义。
 
 界面图像、文字、输入框、滑块与弹窗由 Canvas 组件显示，`GamePresenter` 提交每帧表现，`PvZGame` 只保留生命周期、跨界面共享状态与每帧执行顺序；音效与音乐（`Audio`）、输入路由与菜单（`Game`）、冒险开场/关卡/奖励（`Adventure`）、独立模式（`Modes`）、商店/花园/智慧树/Dave（`Progression`）、存档工具（`Profiles`）、纹理缓存（`Rendering`）和棋盘布局（`BoardUI`）分别由 `PvZGame` 按需创建的协作类负责。架构测试限制 `PvZGame.cs` 不超过 700 行。输入在帧更新时独立采样，使用与相机、Canvas 相同的 800×600 逻辑视口换算；宽屏留边不参与棋盘点击。运行时不再依赖 `OnGUI`、`GUI` 绘制或 `Event.current`。
+
+输入使用 Unity 7 随附的 **Input System 7.0.0**，Player Settings 的 Active Input Handling 为 **Input System Package (New)**。设备输入统一采样到 `GameInputSnapshot`，保留鼠标左右键、滚轮、稳定的主触控、Escape、Return/小键盘 Enter、Space 和 F9。触摸历史在首个输入更新前启用；失焦或设备移除会取消捕获，并等待旧手势结束。滚轮保留原来的方向和每格三单位缩放。
+
+原生 Canvas 控件使用官方 `InputSystemUIInputModule`，由现有 `CanvasInputModule` 处理取消时的 pointer-up/end-drag 和后续手势；文本框的组合串、IME 开关及候选窗位置接到新键盘接口。游戏热键、按钮按下状态和图鉴都读取统一快照。修改输入后端后，已打开的 Editor 需要重启才能启用新的原生后端。
 
 原版动画中需要局部合成的特效仍使用有界的 RenderTexture；棋盘不会先渲染成整屏纹理再交给界面显示。界面与世界对象的绘制顺序由各自的场景组件和 Canvas 层级维护。
 

@@ -5,6 +5,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using UnityEngine;
+using PlantsVsZombies.Inputs;
 
 namespace PlantsVsZombies.UI
 {
@@ -34,7 +35,7 @@ namespace PlantsVsZombies.UI
         /// <returns>The resulting pressed.</returns>
         public static bool Pressed(Rect rect)
         {
-            return Hovered(rect) && Input.GetMouseButton(0);
+            return Hovered(rect) && GameInput.Current.Held;
         }
 
         /// <summary>Performs dialog frame.</summary>

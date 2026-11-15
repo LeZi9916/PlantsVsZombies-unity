@@ -25,6 +25,28 @@ unchanged pre-migration `ae4bc4c` with Unity 6000.3.17f1. They retain obsolete
 voice-replacement/admission assertions; this migration preserves those existing
 failures. Packaged Players and other target platforms were not validated.
 
+Input System regressions use the Editor's built-in `com.unity.inputsystem` 7.0.0
+with Active Input Handling set to the new backend only. `GameInputSystemTests`
+queues isolated mouse, keyboard and touch events through the production sampler;
+`CanvasInputSystemTests` uses real Canvas controls and official UI actions to
+check click/drag, cancellation, focus return, keyboard replacement and IME
+composition. Its input fixture is owned for the complete Unity setup/test/teardown
+lifetime. `PrimaryTouchTrackerTests`, `PointerRoutingTests` and `GameViewportTests`
+retain independent ownership and coordinate coverage.
+
+```powershell
+./Tools/Tests/Run-UnityTests.ps1 -Platform EditMode -TestFilter 'PrimaryTouchTrackerTests;PointerRoutingTests;GameViewportTests;SceneBindingTests'
+./Tools/Tests/Run-UnityTests.ps1 -Platform PlayMode -TestFilter 'GameInputSystemTests;CanvasInputSystemTests;CanvasPresentationTests'
+```
+
+The focused migration run passes 28 EditMode and 37 PlayMode cases, including
+the original-resource UI, single-row and campaign smoke scenarios.
+
+These checks use virtual Input System devices and a real graphics backend. They
+do not replace physical touch devices, native OS IME/candidate-window inspection,
+mobile software keyboards or packaged Player verification. Restart an already
+open Editor after changing Active Input Handling.
+
 Run isolated tests from the repository root:
 
 ```powershell

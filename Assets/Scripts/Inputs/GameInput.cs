@@ -1,57 +1,123 @@
 #nullable enable
 using UnityEngine;
+using UnityEngine.InputSystem;
+using UnityEngine.InputSystem.EnhancedTouch;
+using EnhancedTouch = UnityEngine.InputSystem.EnhancedTouch.Touch;
 
 namespace PlantsVsZombies.Inputs
 {
-    /// <summary>Samples native input once per game update without relying on GUI events.</summary>
+    /// <summary>Samples Input System devices into the original game's logical input frame.</summary>
     public static class GameInput
     {
-        /// <summary>The stable primary finger and interruption state shared between game updates.</summary>
+        /// <summary>Keeps the primary finger stable while other fingers enter and leave.</summary>
         private static readonly PrimaryTouchTracker s_touchTracker = new PrimaryTouchTracker();
-        /// <summary>Whether the previous frame used native touches rather than mouse emulation.</summary>
+        /// <summary>Suppresses mouse input for the frame after the final touch.</summary>
         private static bool s_previousTouchFrame;
+        /// <summary>Tracks the Enhanced Touch reference owned by this game.</summary>
+        private static bool s_ownsEnhancedTouch;
+        /// <summary>Tracks application focus without accepting device reset releases as clicks.</summary>
+        private static bool s_focused = true;
+        /// <summary>Waits for a neutral mouse after an interrupted gesture.</summary>
+        private static bool s_waitForMouseRelease;
         /// <summary>Gets the most recently sampled input frame.</summary>
         public static GameInputSnapshot Current { get; private set; }
 
-        /// <summary>Samples the primary touch or mouse, wheel, and navigation keys.</summary>
-        /// <returns>The input snapshot to dispatch before simulation and presentation.</returns>
+        /// <summary>Releases input subscriptions and clears state between Play Mode sessions.</summary>
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        internal static void Reset()
+        {
+            Application.focusChanged -= SetFocus;
+            Application.quitting -= Reset;
+            if (s_ownsEnhancedTouch && EnhancedTouchSupport.enabled)
+            {
+                EnhancedTouchSupport.Disable();
+            }
+            s_ownsEnhancedTouch = false;
+            s_previousTouchFrame = false;
+            s_focused = true;
+            s_waitForMouseRelease = false;
+            s_touchTracker.Reset();
+            Current = default;
+        }
+
+        /// <summary>Cancels pointer ownership when focus changes, waiting for held devices to become neutral.</summary>
+        /// <param name="focused">Whether the application currently owns input focus.</param>
+        internal static void SetFocus(bool focused)
+        {
+            s_focused = focused;
+            s_waitForMouseRelease = true;
+            s_touchTracker.Reset(waitForAllReleased: true);
+        }
+
+        /// <summary>Starts touch history before the first native input update can deliver a press.</summary>
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
+        internal static void Initialize()
+        {
+            if (!s_ownsEnhancedTouch)
+            {
+                EnhancedTouchSupport.Enable();
+                s_ownsEnhancedTouch = true;
+                Application.focusChanged += SetFocus;
+                Application.quitting += Reset;
+            }
+        }
+
+        /// <summary>Samples mouse, primary touch, wheel, and existing keyboard shortcuts without allocations.</summary>
+        /// <returns>The original logical frame dispatched before simulation and presentation.</returns>
         public static GameInputSnapshot Capture()
         {
-            var screen = (Vector2)UnityEngine.Input.mousePosition;
-            var pressed = UnityEngine.Input.GetMouseButtonDown(0);
-            var released = UnityEngine.Input.GetMouseButtonUp(0);
-            var held = UnityEngine.Input.GetMouseButton(0);
-            var touchCount = UnityEngine.Input.touchCount;
-            s_touchTracker.BeginFrame();
-            for (var index = 0; index < touchCount; index++)
+            Initialize();
+
+            var mouse = Mouse.current;
+            var keyboard = Keyboard.current;
+            var screen = mouse?.position.ReadValue() ?? new Vector2(-1f, -1f);
+            var pressed = mouse?.leftButton.wasPressedThisFrame ?? false;
+            var released = mouse?.leftButton.wasReleasedThisFrame ?? false;
+            var held = mouse?.leftButton.isPressed ?? false;
+            if (s_waitForMouseRelease)
             {
-                var touch = UnityEngine.Input.GetTouch(index);
-                s_touchTracker.AddTouch(touch.fingerId, touch.phase, touch.position);
+                s_waitForMouseRelease = held;
+                pressed = false;
+                released = false;
+                held = false;
             }
 
+            var touches = EnhancedTouch.activeTouches;
+            s_touchTracker.BeginFrame();
+            for (var index = 0; index < touches.Count; index++)
+            {
+                var touch = touches[index];
+                s_touchTracker.AddTouch(touch.touchId, touch.phase, touch.screenPosition);
+            }
             var touchSample = s_touchTracker.CompleteFrame();
-            var touchFrame = touchCount > 0 || touchSample.Released || s_previousTouchFrame;
-            var position = GameViewport.ScreenToLogical(screen);
+            var touchFrame = touches.Count > 0 || touchSample.Released || s_previousTouchFrame;
+            var position = mouse == null ? new Vector2(-1f, -1f) : GameViewport.ScreenToLogical(screen);
             if (touchFrame)
             {
                 position = touchSample.Canceled || (!touchSample.Held && !touchSample.Released)
-                    ? new Vector2(-1f, -1f)
-                    : GameViewport.ScreenToLogical(touchSample.ScreenPosition);
+                    ? new Vector2(-1f, -1f) : GameViewport.ScreenToLogical(touchSample.ScreenPosition);
                 pressed = touchSample.Pressed;
                 released = touchSample.Released;
                 held = touchSample.Held;
             }
 
-            if (Current.Held && !held && !released)
+            if (!s_focused || Current.Held && !held && !released)
             {
                 position = new Vector2(-1f, -1f);
-                released = true;
+                pressed = false;
+                released = Current.Held;
+                held = false;
             }
 
-            s_previousTouchFrame = touchCount > 0;
-            Current = new GameInputSnapshot(position, new Rect(0f, 0f, GameViewport.Width, GameViewport.Height).Contains(position),
-                pressed, released, held, !touchFrame && UnityEngine.Input.GetMouseButtonDown(1), touchFrame ? 0f : -UnityEngine.Input.mouseScrollDelta.y * 3f,
-                UnityEngine.Input.GetKeyDown(KeyCode.Escape), UnityEngine.Input.GetKeyDown(KeyCode.Return) || UnityEngine.Input.GetKeyDown(KeyCode.KeypadEnter));
+            s_previousTouchFrame = touches.Count > 0;
+            Current = new GameInputSnapshot(position,
+                new Rect(0f, 0f, GameViewport.Width, GameViewport.Height).Contains(position), pressed, released, held,
+                s_focused && !touchFrame && (mouse?.rightButton.wasPressedThisFrame ?? false),
+                !s_focused || touchFrame ? 0f : -(mouse?.scroll.ReadValue().y ?? 0f) * 3f,
+                s_focused && (keyboard?.escapeKey.wasPressedThisFrame ?? false),
+                s_focused && ((keyboard?.enterKey.wasPressedThisFrame ?? false) || (keyboard?.numpadEnterKey.wasPressedThisFrame ?? false)),
+                s_focused && (keyboard?.spaceKey.wasPressedThisFrame ?? false),
+                s_focused && (keyboard?.f9Key.wasPressedThisFrame ?? false));
             return Current;
         }
     }

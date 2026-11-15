@@ -3,7 +3,9 @@
   "rootNamespace": "PlantsVsZombies.Tests.PlayMode",
   "references": [
     "PlantsVsZombies.Runtime", "PlantsVsZombies.Tests.Shared",
-    "UnityEngine.UI"
+    "UnityEngine.UI",
+    "Unity.InputSystem",
+    "Unity.InputSystem.TestFramework"
   ],
   "autoReferenced": false,
   "defineConstraints": ["UNITY_INCLUDE_TESTS"],

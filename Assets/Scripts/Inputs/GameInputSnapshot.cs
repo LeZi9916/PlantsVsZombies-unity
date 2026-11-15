@@ -30,6 +30,11 @@ namespace PlantsVsZombies.Inputs
         /// <summary>Gets whether Return or keypad Enter was pressed this frame.</summary>
         public bool EnterPressed { get; }
 
+        /// <summary>Gets whether Space was pressed this frame.</summary>
+        public bool SpacePressed { get; }
+        /// <summary>Gets whether the developer save utility shortcut was pressed this frame.</summary>
+        public bool SaveUtilityPressed { get; }
+
         /// <summary>Creates a fully sampled input frame.</summary>
         /// <param name="position">The logical pointer position.</param>
         /// <param name="insideViewport">Whether the pointer lies inside the viewport.</param>
@@ -40,7 +45,9 @@ namespace PlantsVsZombies.Inputs
         /// <param name="scrollDelta">The downward wheel displacement.</param>
         /// <param name="escapePressed">Whether Escape was pressed.</param>
         /// <param name="enterPressed">Whether Return or keypad Enter was pressed.</param>
-        public GameInputSnapshot(Vector2 position, bool insideViewport, bool pressed, bool released, bool held, bool rightPressed, float scrollDelta, bool escapePressed, bool enterPressed)
+        /// <param name="spacePressed">Whether Space was pressed.</param>
+        /// <param name="saveUtilityPressed">Whether F9 was pressed.</param>
+        public GameInputSnapshot(Vector2 position, bool insideViewport, bool pressed, bool released, bool held, bool rightPressed, float scrollDelta, bool escapePressed, bool enterPressed, bool spacePressed = false, bool saveUtilityPressed = false)
         {
             Position = position;
             InsideViewport = insideViewport;
@@ -51,6 +58,8 @@ namespace PlantsVsZombies.Inputs
             ScrollDelta = scrollDelta;
             EscapePressed = escapePressed;
             EnterPressed = enterPressed;
+            SpacePressed = spacePressed;
+            SaveUtilityPressed = saveUtilityPressed;
         }
 
         /// <summary>Retrieves a pointer transition without allocating a temporary collection.</summary>

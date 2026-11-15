@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using UnityEngine;
+using PlantsVsZombies.Inputs;
 using PlantsVsZombies.Game;
 
 namespace PlantsVsZombies.Profiles
@@ -23,7 +24,7 @@ namespace PlantsVsZombies.Profiles
         /// <summary>Opens the save utility when the developer shortcut is pressed outside the board and dialogs.</summary>
         internal void OpenWhenRequested()
         {
-            if (Input.GetKeyDown(KeyCode.F9) && _owner._currentView != PvZGame.ScreenView.Board && !_owner.RequiredOptionsView.IsOpen
+            if (GameInput.Current.SaveUtilityPressed && _owner._currentView != PvZGame.ScreenView.Board && !_owner.RequiredOptionsView.IsOpen
                 && (_owner._profileDialog == null || !_owner._profileDialog.IsOpen))
             {
                 _owner._currentView = PvZGame.ScreenView.Import;

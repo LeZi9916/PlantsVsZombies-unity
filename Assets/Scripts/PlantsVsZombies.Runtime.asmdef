@@ -3,7 +3,8 @@
     "rootNamespace": "PlantsVsZombies",
     "references": [
         "UnityEngine.UI",
-        "Unity.Burst"
+        "Unity.Burst",
+        "Unity.InputSystem"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],
