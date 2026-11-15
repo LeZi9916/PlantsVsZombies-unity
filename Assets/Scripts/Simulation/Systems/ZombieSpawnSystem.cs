@@ -201,6 +201,30 @@ namespace PlantsVsZombies.Simulation
         /// <returns>The resulting spawn adventure zombie.</returns>
         internal Zombie SpawnAdventureZombie(ZombieKind kind, int row, float x, int wave)
         {
+            return CreateAdventureZombie(kind, row, x, wave, -1);
+        }
+
+        /// <summary>Creates PC 551020's bungee with one column-constrained target selection.</summary>
+        /// <param name="column">The original column selected by the boss.</param>
+        /// <returns>The bungee at its native roof-relative initial altitude.</returns>
+        internal Zombie SpawnAdventureBossBungee(int column)
+        {
+            var variant = _world._random.Next(5) == 0;
+            var zombie = CreateAdventureZombie(ZombieKind.Bungee, 0, 0f, 0, column);
+            zombie.NativeVariant = variant;
+            zombie.PresentationAltitude = 80f + zombie.Row * 85f + Math.Max(0f, 5f - column) * 20f - 70f;
+            return zombie;
+        }
+
+        /// <summary>Initializes a native zombie while preserving an optional boss target constraint.</summary>
+        /// <param name="kind">The original species.</param>
+        /// <param name="row">The original initial row.</param>
+        /// <param name="x">The requested lawn position.</param>
+        /// <param name="wave">The original source wave.</param>
+        /// <param name="bungeeColumn">The boss-constrained target column, or minus one.</param>
+        /// <returns>The newly initialized native zombie.</returns>
+        private Zombie CreateAdventureZombie(ZombieKind kind, int row, float x, int wave, int bungeeColumn)
+        {
             var health = kind == ZombieKind.Yeti ? 1350f : kind == ZombieKind.Bungee ? 450f : kind == ZombieKind.Ladder ? 500f : kind == ZombieKind.Gargantuar ? 3000f : kind == ZombieKind.Zomboni ? 1350f : kind == ZombieKind.Catapult ? 850f : kind == ZombieKind.PoleVaulter || kind == ZombieKind.DolphinRider || kind == ZombieKind.JackInTheBox || kind == ZombieKind.Pogo || kind == ZombieKind.Dancing ? 500f : 270f;
             var armor = global::PlantsVsZombies.Adventure.AdventureZombieEquipmentRules.StartingArmor(kind);
             var shield = global::PlantsVsZombies.Adventure.AdventureZombieEquipmentRules.StartingShield(kind);
@@ -241,7 +265,7 @@ namespace PlantsVsZombies.Simulation
                 z.PresentationNativeVelocity = 0f;
                 z.Speed = 0f;
                 z.PresentationNativePhase = 4;
-                _bungeeZombieActions.PickAdventureBungeeTarget(z);
+                _bungeeZombieActions.PickAdventureBungeeTarget(z, bungeeColumn);
             }
 
             if (kind == ZombieKind.JackInTheBox)

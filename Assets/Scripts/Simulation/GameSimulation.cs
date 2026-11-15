@@ -229,7 +229,7 @@ namespace PlantsVsZombies.Simulation
             _boardEnvironment.Connect(_adventureModeRunner, _zombieFeedbackSystem);
             _boardQueries.Connect(_biteSystem, _combatSystem);
             _bobsledZombieActions.Connect(_adventureModeRunner, _combatSystem, _vaultZombieActions, _zombieFeedbackSystem);
-            _bossSystem.Connect(_adventureModeRunner, _legacySimulation, _plantingSystem, _zombieSpawnSystem);
+            _bossSystem.Connect(_adventureModeRunner, _legacySimulation, _zombieSpawnSystem, _biteSystem, _zombieFeedbackSystem);
             _bowlingSystem.Connect(_adventureModeRunner, _biteSystem, _combatSystem, _explosionEffects, _independentModeRunner, _legacySimulation, _zombieFeedbackSystem);
             _bungeeZombieActions.Connect(_adventureModeRunner, _biteSystem, _boardQueries, _plantingSystem, _zombieFeedbackSystem, _zombieLifecycle, _zombieSpawnSystem);
             _coinSystem.Connect(_adventureModeRunner, _battlePresentationSystem, _boardQueries, _bossSystem, _combatSystem, _legacySimulation, _zombieFeedbackSystem);

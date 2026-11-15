@@ -14,6 +14,63 @@ namespace PlantsVsZombies.Tests.EditMode
     /// <summary>Checks original x86 boss decision vectors and native blink random-consumption boundaries.</summary>
     public sealed class AdventureNativeRandomTests
     {
+        /// <summary>Stores PC 551ED0 vectors executed from the hash-identified original PE with sound muted and external row/plant probes controlled.</summary>
+        private static readonly string[] s_bossVectors =
+        {
+            "1,40000,0,-1,-1,5000,500,15|79,0,123,499,-1,-1,4999,0,0|101",
+            "1,31999,0,-1,-1,5000,500,15|82,1,0,499,4539,-1,4999,0,0|1001,3",
+            "1,19999,0,-1,-1,5000,500,15|85,2,0,499,-1,-1,4999,1,0|4,3",
+            "1,30000,1,1,-1,5000,500,6|81,1,0,499,-1,6039,4999,2,0|1001,2",
+            "1,40000,0,1,-1,5000,500,0|81,0,0,499,-1,6039,4999,0,0|1001",
+            "1,40000,0,-1,1,5000,500,15|82,0,0,499,4232,-1,4999,0,1|4,1001,3",
+            "1,40000,0,-1,-1,1,500,15|86,0,0,499,-1,-1,4539,0,0|1001",
+            "1,40000,0,-1,-1,5000,1,15|80,0,0,473,-1,-1,4999,2,0|101",
+            "4357,40000,0,-1,-1,5000,500,15|79,0,136,499,-1,-1,4999,0,0|101",
+            "4357,31999,0,-1,-1,5000,500,15|82,1,0,499,4238,-1,4999,0,1|1001,3",
+            "4357,19999,0,-1,-1,5000,500,15|85,2,0,499,-1,-1,4999,0,1|4,3",
+            "4357,30000,1,1,-1,5000,500,6|81,1,0,499,-1,5738,4999,2,0|1001,2",
+            "4357,40000,0,1,-1,5000,500,0|81,0,0,499,-1,5738,4999,0,0|1001",
+            "4357,40000,0,-1,1,5000,500,15|85,0,0,499,4594,-1,4999,3,1|4,1001,4,3",
+            "4357,40000,0,-1,-1,1,500,15|86,0,0,499,-1,-1,4238,0,0|1001",
+            "4357,40000,0,-1,-1,5000,1,15|80,0,0,486,-1,-1,4999,2,0|101",
+            "7529,40000,0,-1,-1,5000,500,15|79,0,121,499,-1,-1,4999,0,0|101",
+            "7529,31999,0,-1,-1,5000,500,15|82,1,0,499,4521,-1,4999,0,0|1001,3",
+            "7529,19999,0,-1,-1,5000,500,15|85,2,0,499,-1,-1,4999,0,0|4,3",
+            "7529,30000,1,1,-1,5000,500,6|81,1,0,499,-1,6021,4999,2,0|1001,2",
+            "7529,40000,0,1,-1,5000,500,0|81,0,0,499,-1,6021,4999,0,0|1001",
+            "7529,40000,0,-1,1,5000,500,15|85,0,0,499,4765,-1,4999,2,1|4,1001,4,3",
+            "7529,40000,0,-1,-1,1,500,15|86,0,0,499,-1,-1,4521,0,0|1001",
+            "7529,40000,0,-1,-1,5000,1,15|80,0,0,471,-1,-1,4999,2,0|101",
+        };
+
+        /// <summary>Checks real production decisions against isolated original x86 execution, including exact draw bounds and output counters.</summary>
+        /// <param name="vector">The original input state, resulting state and ordered exclusive random bounds.</param>
+        [TestCaseSource(nameof(s_bossVectors))]
+        public void BossDecisionsMatchOriginalMachineInstructions(string vector)
+        {
+            var parts = vector.Split('|');
+            var input = parts[0].Split(',').Select(int.Parse).ToArray();
+            var expected = parts[1].Split(',').Select(int.Parse).ToArray();
+            var bounds = parts[2].Split(',').Select(int.Parse).ToArray();
+            var game = Board(50);
+            game.Adventure.BossHealth = input[1];
+            game.Adventure.RakeAttracting = true;
+            game.Adventure.RakeRow = 2;
+            var boss = new AdventureBossState { Phase = 79, Mode = input[2], StompCountdown = input[3],
+                BungeeCountdown = input[4], HeadCountdown = input[5], SummonCountdown = input[6] };
+            game.Adventure.Boss = boss;
+            if (input[7] == 6)
+            {
+                SimulationFixture.Plants(game).Add(new Plant { Kind = PlantKind.Wallnut, Row = 2, Column = 5, Health = 4000f });
+            }
+
+            var random = Attach(game, (uint)input[0]);
+            Invoke(game, "AdvanceAdventureBoss", .01f);
+            Assert.That(new[] { boss.Phase, boss.Mode, boss.PhaseCountdown, boss.SummonCountdown, boss.BungeeCountdown,
+                boss.StompCountdown, boss.HeadCountdown, boss.TargetRow, boss.TargetColumn }, Is.EqualTo(expected));
+            Assert.That(random.Bounds, Is.EqualTo(bounds));
+        }
+
         /// <summary>Checks blink attempts reset their original countdown before rejecting a firing or airborne plant.</summary>
         /// <param name="shooting">Whether the original shooter counter blocks attachment.</param>
         /// <param name="airborne">Whether the original NotOnGround gate blocks attachment.</param>
@@ -158,6 +215,48 @@ namespace PlantsVsZombies.Tests.EditMode
             Assert.That(expected.Generator.DrawCount, Is.EqualTo(162UL));
         }
 
+        /// <summary>Checks actual native ball rolls consume the trail gate once per update and preserve the formation's draw-free interval.</summary>
+        [Test]
+        public void BossBallTrailDrawsOnlyAfterOriginalFormation()
+        {
+            var game = Board(50);
+            game.Adventure.Boss = new AdventureBossState { Phase = 79, PhaseCountdown = 1000 };
+            var ball = new AdventureBossBall { Row = 2, IsIce = true };
+            game.Adventure._balls.Add(ball);
+            var random = Attach(game, 1);
+            Invoke(game, "AdvanceAdventureBoss", .01f);
+            Assert.That(random.Bounds, Is.Empty);
+            ball.AnimationSeconds = 1f;
+            Invoke(game, "AdvanceAdventureBoss", .01f);
+            Assert.That(ball.Rolling, Is.True);
+            Assert.That(random.Bounds, Is.EqualTo(new[] { 10 }));
+            var x = ball.NativeX;
+            Invoke(game, "AdvanceAdventureBoss", .01f);
+            Assert.That(ball.NativeX, Is.LessThan(x));
+            Assert.That(random.Bounds, Is.EqualTo(new[] { 10, 10 }));
+        }
+
+        /// <summary>Checks Zomboss's Revenge uses the original sixty-thousand health thresholds rather than adventure's forty thousand.</summary>
+        /// <param name="health">The remaining original challenge health.</param>
+        /// <param name="phase">The original damage-transition action.</param>
+        /// <param name="mode">The original damage mode selected at this boundary.</param>
+        [TestCase(47999f, 82, 1)]
+        [TestCase(29999f, 85, 2)]
+        public void ChallengeBossUsesItsOriginalHealthAndDamageThresholds(float health, int phase, int mode)
+        {
+            var game = new PlantsVsZombies.Modes.ModeSession(35, randomSeed: 7529).Game;
+            Assert.That(game.Adventure.BossHealth, Is.EqualTo(60000f));
+            Assert.That(game.Adventure.BossMaxHealth, Is.EqualTo(60000f));
+            game.Rules.AdventureSoundMuted = true;
+            game.Adventure.BossHealth = health;
+            var boss = game.Adventure.Boss!;
+            boss.Enter(79, "anim_idle", 6f);
+            Attach(game, 1);
+            Invoke(game, "AdvanceAdventureBoss", .01f);
+            Assert.That(boss.Phase, Is.EqualTo(phase));
+            Assert.That(boss.Mode, Is.EqualTo(mode));
+        }
+
         /// <summary>Checks original initialization counters are sampled even for plants whose specialized state may later ignore them.</summary>
         /// <param name="kind">The original plant species.</param>
         /// <param name="bound">The original counter's exclusive bound.</param>
@@ -233,6 +332,46 @@ namespace PlantsVsZombies.Tests.EditMode
             Assert.That(random.Bounds, Is.EqualTo(new[] { 7, 400, 1, 7, 400 }));
         }
 
+        /// <summary>Checks the original head-contact Foley calls occur at native animation markers before later scheduler draws.</summary>
+        /// <param name="phase">The original boss head phase.</param>
+        /// <param name="time">The normalized body time immediately before the marker.</param>
+        /// <param name="foley">The original requested Foley category.</param>
+        /// <param name="rawCalls">The original optional pitch draw count.</param>
+        [TestCase(86, .549f, 90, 0)]
+        [TestCase(89, .369f, 93, 0)]
+        [TestCase(89, .419f, 89, 1)]
+        [TestCase(90, .479f, 40, 1)]
+        [TestCase(90, .799f, 40, 1)]
+        public void BossHeadMarkersRetainTheirOriginalSoundDraws(int phase, float time, int foley, int rawCalls)
+        {
+            var game = Board(50);
+            game.Rules.AdventureSoundMuted = false;
+            var boss = new AdventureBossState();
+            boss.Enter(phase, phase == 86 ? "anim_head_enter" : phase == 89 ? "anim_head_attack_1" : "anim_head_leave", 12f);
+            boss.Time = time;
+            game.Adventure.Boss = boss;
+            var random = Attach(game, 1);
+            Invoke(game, "AdvanceAdventureBoss", .01f);
+            Assert.That(game.Presentation.ZombieSounds.Last().Foley, Is.EqualTo(foley));
+            Assert.That(random.Bounds, Is.EqualTo(new[] { 1 }));
+            Assert.That(random.RawCalls, Is.EqualTo(rawCalls));
+        }
+
+        /// <summary>Checks the native trail caller uses GetPosYBasedOnRow at X minus forty on the left roof.</summary>
+        [Test]
+        public void BossBallTrailCallerKeepsItsOriginalRoofCoordinates()
+        {
+            var game = Board(50);
+            game.Adventure.Boss = new AdventureBossState { Phase = 79, PhaseCountdown = 1000 };
+            game.Adventure._balls.Add(new AdventureBossBall { Row = 1, X = 100f / 80f, AnimationSeconds = 1f });
+            SimulationInspection.GetField("_random", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(game, new ZeroRandom());
+            Invoke(game, "AdvanceAdventureBoss", .01f);
+            var trail = game.Presentation.ZomboniParticles.Single();
+            Assert.That(trail.Particle, Is.EqualTo("FireballTrail"));
+            Assert.That(trail.X, Is.EqualTo(200f));
+            Assert.That(trail.Y, Is.EqualTo(265f));
+        }
+
         /// <summary>Creates a playing board without asynchronous game boot or persistent data.</summary>
         /// <param name="level">The original adventure level.</param>
         /// <returns>The controlled production board.</returns>
@@ -264,6 +403,22 @@ namespace PlantsVsZombies.Tests.EditMode
             var random = new RecordingRandom(seed);
             SimulationInspection.GetField("_random", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(game, random);
             return random;
+        }
+
+        /// <summary>Supplies valid zero tickets to exercise the native trail creation endpoint.</summary>
+        private sealed class ZeroRandom : Random
+        {
+            /// <inheritdoc/>
+            public override int Next(int maxValue)
+            {
+                return 0;
+            }
+
+            /// <inheritdoc/>
+            public override int Next()
+            {
+                return 0;
+            }
         }
 
         /// <summary>Records integer bounds without changing the original thirty-one-bit sequence.</summary>

@@ -131,8 +131,7 @@ namespace PlantsVsZombies.Simulation
                 _nextSkySun = _world.Rules.DeferAdventureWaveInitialization || level.IsNight ? 0f
                     : (425 + _world._random.Next(276)) * .01f,
                 _nextHammerSun = 8f,
-                BossHealth = level.Mode == AdventureMode.Boss ? 40000f : 0f,
-                _bossTimer = 12f
+                BossHealth = level.Mode == AdventureMode.Boss ? 40000f : 0f
             };
             Array.Copy(enabledZombieTypes, Adventure.EnabledZombieTypes, enabledZombieTypes.Length);
             Adventure.Fog = _world._boardCells;
@@ -191,8 +190,9 @@ namespace PlantsVsZombies.Simulation
                 _vaseSystem.AddAdventurePacket(PlantKind.Wallnut);
             }
 
-            if (level.Mode == AdventureMode.Boss)
+            if (level.Mode == AdventureMode.Boss && !_world.Rules.DeferAdventureWaveInitialization)
             {
+                _bossSystem.InitializeAdventureBoss();
                 _vaseSystem.AddAdventurePacket(PlantKind.CabbagePult);
                 _vaseSystem.AddAdventurePacket(PlantKind.Jalapeno);
                 _vaseSystem.AddAdventurePacket(PlantKind.CabbagePult);

@@ -403,6 +403,11 @@ namespace PlantsVsZombies.Simulation
 
             _packetMode.InitializeModePackets();
             a.Waves = ModeWavePlan.Build(session, _world._random);
+            if (d.Mechanic == ModeMechanic.Boss)
+            {
+                a.BossMaxHealth = a.BossHealth = 60000f;
+                _bossSystem.InitializeAdventureBoss();
+            }
             _waveSystem.ResetAdventureWaveSchedule((int)Math.Round(a.WaveCountdown * 100), ModeNeedsFinalAmbush);
             if (d.Mechanic == ModeMechanic.Whack)
             {

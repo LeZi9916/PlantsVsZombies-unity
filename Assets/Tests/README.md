@@ -894,3 +894,122 @@ flattened layers and expiry, actual roof launches/muzzles/impact particles,
 original decoded recordings and playing audio voices, and nearby existing
 vehicle/projectile behavior. They do not establish a packaged Player playthrough,
 physical-speaker listening, or Windows/Linux/mobile/IL2CPP device validation.
+
+## Original PC random placement and randomness audit
+
+The supplied PC disassembly is authoritative. Plant initialization `46BE80`
+(`plant_timing/asm/46BE80.asm` in the supplied analysis) changes the native
+position only for three in-play species:
+
+| Plant | Persistent X offset | Persistent Y offset |
+| --- | --- | --- |
+| Puff-shroom / Sea-shroom | `R(10)-5` (-5..4 pixels) | `R(6)-3` (-3..2 pixels) |
+| Sun-shroom | `R(10)-5` (-5..4 pixels) | `R(10)-5` (-5..4 pixels) |
+
+`R(n)` is the original exclusive integer remainder draw. X precedes Y. Offsets
+are sampled once on placement, including an Imitater's resulting mushroom,
+without changing the occupied row/column. Body, shadow, cached crushed picture,
+bite/explosion rectangles, short-range attack boundary, spore muzzle, plant sun
+origin and catapult acquisition use the displaced position. Cursor previews and
+cell-based planting particles retain their original coordinates. `46CB90`
+creates the free sleeping Z before the displacement, so that independent object
+retains its earlier position.
+
+PC zombie initialization `53DD90` draws `R(40)+780` at `53DE17`, then the
+400..500 groan clock at `53DED5`. Explicit lawn placements still consume this
+initial X draw before their caller replaces the position. `53E018` adds forty
+pixels for a flag wave before species overrides: ordinary X is 780..819, or
+820..859 on a flag wave. Pole-vaulter uses 870..879, Zomboni 800..809, Catapult
+825..834, Gargantuar 845..854, flag zombies 800 and riding Bobsleds 880.
+Scheduled actors sample independently; their list index supplies no spacing.
+
+The broader source inspection found these existing random paths: the original
+31-bit MT/remainder generator, weighted wave species and smoothed lane picks,
+shooter countdowns and kernel butter, native zombie speed ranges, Jack-in-the-box
+fuses, Pogo phases, Gargantuar weapons, garlic lane choices, freeze durations,
+loot, pickup motion, grave appearances, storm/rain and original particle tracks.
+Their presence does not establish a complete original-process random replay.
+
+The audit also corrected production paths that bypassed existing native rules:
+Sun-shroom initialization is 300..1250 updates, Marigold initialization 0..2500,
+and their repeat interval is 2350..2500. Twin Sunflower now draws its reset
+before constructing either pickup. Sky initialization uses `425+R(276)`;
+subsequent drops draw X, increment the drop count, draw
+`min(950,425+10*drops)+R(275)`, then construct the pickup and draw landing Y.
+These replace fixed production intervals, floating sky intervals, the delayed
+sky count increment and the incorrect additive cap.
+
+The follow-up native-random repair restores the ordinary plant blink lifecycle,
+original boss phases/counters/contact markers and adventure/challenge health
+thresholds. Board cell looks/jitter now consume the shared stream once before
+level initialization; later graves reuse the constructor-selected cell. Street
+previews and Dave actions also use the active game's stream. Native Foley
+pitch, admission and variation are sampled at the request boundary and retained
+on the event, so drawing or delayed audio playback does not resample the game.
+The original initialization draws discarded by specialized plant/zombie paths
+are retained, including repeat speed selection and unused plant launch counters.
+Night boards no longer draw an unused sky countdown, and first-play level one
+uses the original integer sky initializer.
+
+A complete original-process replay is still **not established**. Particle models
+remain independently seeded and advanced by the renderer; the original ten
+emitter/sixteen particle interpolation samples, native creation order, fields
+and cross-fades require a simulation-owned implementation. No generator is
+shared from `Draw`, and no guessed replacement probabilities are added.
+Debug legacy/demo and experimental level-one entry points retain their separate
+fixtures. Detailed provenance, regeneration commands and exact scope are in
+[`Tools/Tests/Modules/Random/README.md`](../../Tools/Tests/Modules/Random/README.md).
+
+Focused regressions:
+
+```powershell
+./Tools/Tests/Run-UnityTests.ps1 -Platform EditMode -TestFilter 'AdventureRandomPlacementTests|AdventureSpawnFidelityTests|AdventureZombieGroanTests|AdventurePlantSoundTests|AdventureMushroomTests|AdventurePlantingEffectsTests|AdventureNativeMotionTests|AdventureCatapultTests'
+# Set PVZ_BOARD_STRESS_ASSETS to the read-only original runtime resources.
+./Tools/Tests/Run-UnityTests.ps1 -Platform PlayMode -TestFilter 'OriginalPuffShroomTests.NightPuffUsesOriginalHalfSizeShadow|OriginalPuffShroomTests.DayPuffUsesOriginalHalfSizeShadow|OriginalPuffShroomTests.OriginalSporeUsesNativeMuzzleAndGrowth|OriginalPuffShroomTests.FirstAttackDisplaysOriginalWindupBeforeLaunching|OriginalMushroomGraphicsTests.SleepingBodiesAndZUseTheOriginalClipsAndIndependentOffsets'
+```
+
+The checks cover integer endpoints/draw order, persistent placement, native
+combat coordinates, production timers, sky interval caps and original-artwork
+body/shadow/muzzle/Z rendering. They do not constitute a packaged Player
+playthrough or Windows/Linux/mobile/IL2CPP device validation.
+
+
+### Follow-up native randomness regressions
+
+```powershell
+./Tools/Tests/Run-UnityTests.ps1 -Platform EditMode -TestFilter 'AdventureNativeRandomTests|AdventureRandomPlacementTests|AdventureSpawnFidelityTests|AdventureZombieGroanTests|AdventureGravePresentationTests|AdventureFogTests|AdventureDancerTests|AdventurePlantSoundTests|AdventureMushroomTests|AdventureJalapenoTests|ReanimationHotPathTests|ReanimationPoseIdentityTests|ReanimationPoseBlendTests|AdventureIntroPerformanceTests|AdventureNativeMotionTests|AdventureCatapultTests'
+# Set PVZ_BOARD_STRESS_ASSETS to the read-only original runtime resources.
+# Set PVZ_DAVE_AUDIO_ASSETS to that directory's sounds subdirectory.
+./Tools/Tests/Run-UnityTests.ps1 -Platform PlayMode -TestFilter 'OriginalNativeRandomGraphicsTests|OriginalMushroomGraphicsTests.SleepingBodiesAndZUseTheOriginalClipsAndIndependentOffsets|OriginalPuffShroomTests.FirstAttackDisplaysOriginalWindupBeforeLaunching|OriginalPlantSoundTests|OriginalZombieGroanAudioTests|CrazyDaveOpeningIntegrationTests.OriginalVoiceReachesAudioSource'
+```
+
+The native fixture export checks 24 boss machine-code vectors, 104 Foley rows
+and 132 recording headers. Boss action probabilities, priorities, counters,
+spawn-age gates and the twelve-entry summon table come from `551ED0`,
+`550900..551260` and `747F28`. Adventure uses 40000 maximum health; challenge
+35 uses 60000, with native strict eighty/fifty-percent transition thresholds.
+Ball formation, ground-track movement and the one-in-ten trail gate follow
+`5518B0`/`551AA0` and the original reanimation tracks. Cold counters pause
+native scheduler clocks; zero-ready counters retain the original selection
+priority.
+
+Blink initialization and rejection ordering follow `46BE80`, `472670`, `472370`
+and `472860`. Successful shooting ends the old blink. Sleep pauses only the
+attempt clock; independent blink playback can finish. Mine arming stores its
+new 400..799 countdown. Body and selected-head attachments retain their native
+base pose, fifteen-FPS full-last-frame playback and unmodified source images.
+`482690` keeps internal hidden frames in animation ranges, preserving multiple
+nut blinks and the original Puff-shroom gap.
+
+Foley flags, pitch ranges and weighted recordings are the original PC table.
+Pitch is drawn before admission; rejected requests draw no variation. Loop,
+one-at-a-time and no-repeat flags preserve their native selection behavior.
+Voice retirement uses imported sample counts, native pitch/frequency limits and
+a continuous opening/dialogue/combat clock. Physical device completion can
+still differ and is not a full-process audio/RNG replay guarantee. The loader
+accepts the original converted WAV diamond recording as well as OGG resources.
+
+The boss driver's idle/drive/laugh clock remains independent of the body and
+respects original freeze/chill rate changes. Native head-contact Foley markers
+(.37/.42/.55 and leave .48/.8) consume their original request-time draws; normal
+head leave does not borrow the distinct `551E00` death branch's audio.

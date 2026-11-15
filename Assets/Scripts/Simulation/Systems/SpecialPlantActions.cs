@@ -438,8 +438,12 @@ namespace PlantsVsZombies.Simulation
             }
 
             _adventureModeRunner.Adventure._balls.RemoveAll(ball => !ball.IsIce);
-            if (_adventureModeRunner.Adventure.BossHeadVulnerable)
+            var boss = _adventureModeRunner.Adventure.Boss;
+            if (boss != null && AdventureIceRules.CanChill(25, boss.Phase, false, false, false))
             {
+                var cold = boss.ChilledTicks > 0 || boss.FrozenTicks > 0;
+                boss.FrozenTicks = (cold ? 300 : 400) + _world._random.Next(cold ? 101 : 201);
+                boss.ChilledTicks = 2000;
                 _bossSystem.DamageAdventureBoss(20f);
             }
 

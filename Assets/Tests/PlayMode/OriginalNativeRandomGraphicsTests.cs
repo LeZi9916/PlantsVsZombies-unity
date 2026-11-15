@@ -68,5 +68,24 @@ namespace PlantsVsZombies.Tests.PlayMode
             }
         }
 
+        /// <summary>Checks the live boss renderer samples its original action clock rather than whole-level elapsed time.</summary>
+        /// <returns>Source-art camera frames comparing distinct native action poses and a paused repeat.</returns>
+        [UnityTest]
+        public IEnumerator BossUsesOriginalActionMarkersAndItsOwnClock()
+        {
+            using var fixture = new OriginalStormGraphicsTests.StormFixture(50);
+            var state = new AdventureBossState();
+            state.Enter(80, "anim_spawn_2", 12f);
+            state.AnimationSeconds = .4f;
+            yield return fixture.Capture(null, () => fixture.Animations.DrawBossNative(Vector2.zero, 1f, 0f, false, state));
+            var first = fixture.Pixels.GetPixels32();
+            state.Enter(81, "anim_stomp_3", 12f);
+            state.AnimationSeconds = 1.2f;
+            yield return fixture.Capture(null, () => fixture.Animations.DrawBossNative(Vector2.zero, 1f, 0f, false, state));
+            var next = fixture.Pixels.GetPixels32();
+            Assert.That(next.Where((color, index) => !color.Equals(first[index])).Count(), Is.GreaterThan(100));
+            yield return fixture.Capture(null, () => fixture.Animations.DrawBossNative(Vector2.zero, 1f, 0f, false, state));
+            Assert.That(fixture.Pixels.GetPixels32(), Is.EqualTo(next));
+        }
     }
 }

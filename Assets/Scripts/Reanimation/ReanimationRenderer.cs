@@ -1299,10 +1299,11 @@ namespace PlantsVsZombies.Reanimation
         /// <param name = "seconds">The seconds.</param>
         /// <param name = "headLowered">The head lowered.</param>
         /// <returns>The resulting draw boss native.</returns>
-        public bool DrawBossNative(Vector2 origin, float scale, float seconds, bool headLowered)
+        /// <param name="state">The live native action state, or null for a static fixture.</param>
+        public bool DrawBossNative(Vector2 origin, float scale, float seconds, bool headLowered, AdventureBossState? state = null)
         {
             using var objectScope = BeginObjectScope();
-            return DrawBossComposite(origin, scale, seconds, false, headLowered ? "anim_head_idle" : "anim_idle", false);
+            return DrawBossComposite(origin, scale, seconds, false, state?.Animation ?? (headLowered ? "anim_head_idle" : "anim_idle"), false, state);
         }
 
         /// <summary>Performs draw boss composite.</summary>
@@ -1313,7 +1314,8 @@ namespace PlantsVsZombies.Reanimation
         /// <param name = "animation">The animation.</param>
         /// <param name = "almanacOnly">The almanac only.</param>
         /// <returns>The resulting draw boss composite.</returns>
-        private bool DrawBossComposite(Vector2 origin, float scale, float seconds, bool cachedThumbnail, string animation, bool almanacOnly)
+        /// <param name="state">The original live boss clock, or null for portraits.</param>
+        private bool DrawBossComposite(Vector2 origin, float scale, float seconds, bool cachedThumbnail, string animation, bool almanacOnly, AdventureBossState? state = null)
         {
             if (!IsFinite(origin.x) || !IsFinite(origin.y) || !IsFinite(scale) || scale <= 0f || !IsFinite(seconds))
             {
@@ -1322,7 +1324,7 @@ namespace PlantsVsZombies.Reanimation
 
             Reanimation? boss, driver;
             Clip? head, driverIdle;
-            if (!TryGetClip("Zombie_boss", animation, out boss, out head) || !TryGetClip("Zombie_Boss_driver", "anim_idle", out driver, out driverIdle))
+            if (!TryGetClip("Zombie_boss", animation, out boss, out head) || !TryGetClip("Zombie_Boss_driver", state?.DriverAnimation ?? "anim_idle", out driver, out driverIdle))
             {
                 return false;
             }
@@ -1333,6 +1335,9 @@ namespace PlantsVsZombies.Reanimation
                 return Fail("Boss driver attachment track is missing.");
             }
 
+            var nativeLoop = state == null || state.Phase == 79 || state.Phase == 83 || state.Phase == 87 || state.Phase == 88;
+            var bodySeconds = state == null ? seconds : NativeSeconds(head, state.AnimationSeconds, state.AnimationRate, boss.Fps, nativeLoop);
+            var driverSeconds = state == null ? seconds : NativeSeconds(driverIdle, state.DriverFrames, 1f, driver.Fps, true);
             var previous = SpriteMatrix;
             var tint = SpriteDrawState.Color;
             try
@@ -1347,7 +1352,7 @@ namespace PlantsVsZombies.Reanimation
                 else
                 {
                     bodyMatrix = previous * NativeMatrix(origin, scale);
-                    var sample = SampleFrame(head, seconds, boss.Fps, true);
+                    var sample = SampleFrame(head, bodySeconds, boss.Fps, state == null);
                     var pose = Interpolate(GetFrame(anchor, sample.Current), GetFrame(anchor, sample.Next), sample.Fraction);
                     Matrix4x4 inverseBase;
                     if (!TryInverseAffine(PartMatrix(GetFrame(anchor, 0)), out inverseBase))
@@ -1360,9 +1365,9 @@ namespace PlantsVsZombies.Reanimation
                 }
 
                 var visible = almanacOnly ? (Func<string, bool>)BossAlmanacTrack : track => !TrackIs(track, "zombie_butter");
-                var drawn = DrawClipPose(boss, head, seconds, boss.Fps, true, bodyMatrix, tint, null, null, visible);
-                drawn |= DrawClipPose(driver, driverIdle, seconds, cachedThumbnail ? driver.Fps : 18f, true, driverMatrix, tint);
-                drawn |= DrawClipPose(boss, head, seconds, boss.Fps, true, bodyMatrix, tint, null, null, track => visible(track) && !TrackIs(track, "boss_body1") && !TrackIs(track, "Boss_neck") && !TrackIs(track, "Boss_head2"));
+                var drawn = DrawClipPose(boss, head, bodySeconds, boss.Fps, state == null, bodyMatrix, tint, null, null, visible);
+                drawn |= DrawClipPose(driver, driverIdle, driverSeconds, state == null && !cachedThumbnail ? 18f : driver.Fps, state == null, driverMatrix, tint);
+                drawn |= DrawClipPose(boss, head, bodySeconds, boss.Fps, state == null, bodyMatrix, tint, null, null, track => visible(track) && !TrackIs(track, "boss_body1") && !TrackIs(track, "Boss_neck") && !TrackIs(track, "Boss_head2"));
                 return drawn || Fail("Boss portrait has no visible head or driver tracks.");
             }
             finally

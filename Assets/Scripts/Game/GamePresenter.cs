@@ -2201,7 +2201,7 @@ namespace PlantsVsZombies.Game
 
                 if (level.Mode == AdventureMode.Boss)
                 {
-                    _owner.RequiredAnimations.DrawBossNative(new Vector2(0, 0), 1f, _owner.RequiredGame.Elapsed, _owner.RequiredGame.Adventure.BossHeadVulnerable);
+                    _owner.RequiredAnimations.DrawBossNative(new Vector2(0, 0), 1f, _owner.RequiredGame.Elapsed, _owner.RequiredGame.Adventure.BossHeadVulnerable, _owner.RequiredGame.Adventure.Boss);
                 }
 
                 for (var row = 0; row < _owner.RequiredGame.RowCount; row++)
@@ -2396,7 +2396,10 @@ namespace PlantsVsZombies.Game
                         var ball = _owner.RequiredGame.Adventure.BossBalls[ballIndex];
                         if (ball.Row == row)
                         {
-                            _owner.RequiredAnimations.Draw(ball.IsIce ? "Zombie_boss_iceball" : "Zombie_boss_fireball", new Rect(BoardLayout.AdventureGridX + ball.X * BoardLayout.CellWidth - 40, _owner.Layout.AdventureCellY(row, ball.X) - 2, 80, 80), _owner.RequiredGame.Elapsed, "anim_role");
+                            var y = AdventureFloorYAtPixel(row, ball.NativeX + 75f) - 90f;
+                            _owner.RequiredAnimations.DrawNativePlayback(ball.IsIce ? "Zombie_boss_iceball" : "Zombie_boss_fireball",
+                                new Vector2(ball.NativeX, y), 1f, ball.AnimationSeconds + AdventureRenderRemainder,
+                                ball.Animation, ball.Rolling, ball.AnimationRate);
                         }
                     }
 
