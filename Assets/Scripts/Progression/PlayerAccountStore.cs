@@ -59,6 +59,43 @@ namespace PlantsVsZombies.Progression
             }
         }
 
+#if UNITY_EDITOR
+        /// <summary>Copies the exact disk baseline read or committed by this store for editor draft recovery.</summary>
+        /// <returns>The last accepted file bytes, or null when the account file did not exist.</returns>
+        internal byte[]? GetEditorSavedBytes()
+        {
+            lock (_gate)
+            {
+                return _savedBytes == null ? null : (byte[])_savedBytes.Clone();
+            }
+        }
+
+        /// <summary>Validates and persists an isolated account draft from the save editor without changing other profiles.</summary>
+        /// <param name="snapshot">The complete account draft, including reward receipts and garden records.</param>
+        /// <exception cref="ArgumentNullException">The draft is null.</exception>
+        /// <exception cref="InvalidDataException">The draft cannot be read back as a valid account file.</exception>
+        /// <exception cref="InvalidOperationException">The account limit has been reached.</exception>
+        /// <exception cref="IOException">The file changed externally or could not be saved.</exception>
+        internal void SaveEditorSnapshot(PlayerAccount snapshot)
+        {
+            if (snapshot == null)
+            {
+                throw new ArgumentNullException(nameof(snapshot));
+            }
+
+            lock (_gate)
+            {
+                var copy = snapshot.Copy();
+                var next = new Dictionary<Guid, PlayerAccount>(_records)
+                {
+                    [copy.ProfileId] = copy
+                };
+                var validated = Decode(Encode(next));
+                Commit(validated[copy.ProfileId]);
+            }
+        }
+#endif
+
         /// <summary>Performs change.</summary>
         /// <param name = "id">The id.</param>
         /// <param name = "change">The change.</param>
@@ -293,16 +330,16 @@ namespace PlantsVsZombies.Progression
             p.Coins = (int)Math.Min(99999L, (long)p.Coins + amount);
         }
 
-        /// <summary>Performs trim receipts.</summary>
-        /// <param name = "p">The p.</param>
-        private static void TrimReceipts(PlayerAccount p)
+        /// <summary>Bounds transient reward receipts while retaining tutorial markers and persistent mode access overrides.</summary>
+        /// <param name="p">The account whose oldest transient receipts may be removed to fit the supported limit.</param>
+        internal static void TrimReceipts(PlayerAccount p)
         {
             while (p._receipts.Count > 256)
             {
                 string? oldest = null;
                 foreach (var key in p._receipts.Keys)
                 {
-                    if (key == "taco:pending" || key == "zen:tutorial" || key == "zen:fertilizer")
+                    if (key == "taco:pending" || key == "zen:tutorial" || key == "zen:fertilizer" || PlantsVsZombies.Modes.ModeAccessRules.IsOverrideReceipt(key))
                     {
                         continue;
                     }

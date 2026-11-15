@@ -58,7 +58,7 @@ namespace PlantsVsZombies.Progression
 
             try
             {
-                _accountStore = new PlayerAccountStore(Path.Combine(_owner._smokeMode ? Application.temporaryCachePath : Application.persistentDataPath, _owner._smokeMode ? "pvz-account-" + Guid.NewGuid().ToString("N") + ".account" : "replica-player.account"));
+                _accountStore = new PlayerAccountStore(Path.Combine(_owner._smokeMode ? Application.temporaryCachePath : Application.persistentDataPath, _owner._smokeMode ? "pvz-account-" + Guid.NewGuid().ToString("N") + ".account" : "player.account"));
                 return true;
             }
             catch (Exception e)

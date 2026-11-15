@@ -9,7 +9,7 @@ using System.Text;
 namespace PlantsVsZombies.Profiles
 {
     /// <summary>
-    /// Stores replica-only profiles. This is not an original game save format.
+    /// Stores only profiles. This is not an original game save format.
     /// Each successful mutation is persisted before its snapshot is published.
     /// </summary>
     public sealed class ProfileCatalog

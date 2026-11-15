@@ -66,7 +66,7 @@ namespace PlantsVsZombies.Adventure
             {
                 if (_adventureSavePath == null)
                 {
-                    _adventureSavePath = _owner._smokeMode ? Path.Combine(Application.temporaryCachePath, "pvz-campaign-" + Guid.NewGuid().ToString("N") + ".adventure") : Path.Combine(Application.persistentDataPath, "replica-campaign.adventure");
+                    _adventureSavePath = _owner._smokeMode ? Path.Combine(Application.temporaryCachePath, "pvz-campaign-" + Guid.NewGuid().ToString("N") + ".adventure") : Path.Combine(Application.persistentDataPath, "campaign.adventure");
                 }
 
                 _adventureStore = new AdventureProgressStore(_adventureSavePath);
