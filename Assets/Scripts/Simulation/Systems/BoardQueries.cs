@@ -157,6 +157,11 @@ namespace PlantsVsZombies.Simulation
                 }
             }
 
+            var boss = _world._adventure?.Boss;
+            if (boss?.HeadVulnerable == true && 700 < bestLeft && Math.Min(left + 800, 790) >= Math.Max(left, 700))
+            {
+                return boss.Target;
+            }
             return best;
         }
 

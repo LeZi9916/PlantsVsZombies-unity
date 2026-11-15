@@ -192,7 +192,10 @@ namespace PlantsVsZombies.Simulation
 
             if (level.Mode == AdventureMode.Boss && !_world.Rules.DeferAdventureWaveInitialization)
             {
-                _bossSystem.InitializeAdventureBoss();
+                if (!_world.Rules.DeferAdventureBossEntrance)
+                {
+                    _bossSystem.InitializeAdventureBoss();
+                }
                 _vaseSystem.AddAdventurePacket(PlantKind.CabbagePult);
                 _vaseSystem.AddAdventurePacket(PlantKind.Jalapeno);
                 _vaseSystem.AddAdventurePacket(PlantKind.CabbagePult);
@@ -414,7 +417,7 @@ namespace PlantsVsZombies.Simulation
             var cleared = _world.Zombies.TrueForAll(zombie => zombie.Hypnotized);
             if (Adventure.Level.Mode == AdventureMode.Boss)
             {
-                cleared &= Adventure.BossHealth <= 0f && Adventure._balls.Count == 0;
+                cleared &= Adventure.Boss?.DeathComplete == true && Adventure._balls.Count == 0;
             }
             else if (Adventure.Level.Mode == AdventureMode.Vasebreaker)
             {

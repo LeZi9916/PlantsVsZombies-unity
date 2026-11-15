@@ -88,6 +88,10 @@ namespace PlantsVsZombies.Simulation
         /// <returns>The resulting adventure bite native y.</returns>
         internal float AdventureBiteNativeY(Zombie z, float x)
         {
+            if (z.Kind == ZombieKind.Boss)
+            {
+                return 0f;
+            }
             return 80f + z.Row * (_adventureModeRunner.Adventure.Level.HasPool || _adventureModeRunner.Adventure.Level.HasRoof ? 85f : 100f) + (_adventureModeRunner.Adventure.Level.HasRoof ? Math.Max(0f, 5f - x / 80f) * 20f - 10f : 0f) - 30f - (z.Kind == ZombieKind.Balloon ? 30f : 0f) - (z.Kind == ZombieKind.Pogo ? 16f : 0f) + z.PresentationVaultPositionY;
         }
 

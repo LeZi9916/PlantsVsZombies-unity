@@ -20,6 +20,8 @@ namespace PlantsVsZombies.Adventure
         /// <summary>Identifies intro finished.</summary>
         IntroFinished,
         /// <summary>Identifies the original forced storm flash while panning to the street or returning to the lawn.</summary>
-        StormFlashStarted
+        StormFlashStarted,
+        /// <summary>Creates the original Zomboss only after the empty roof preview and return pan.</summary>
+        BossEnterStarted
     }
 }

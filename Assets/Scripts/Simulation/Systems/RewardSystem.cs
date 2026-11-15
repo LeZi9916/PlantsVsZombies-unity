@@ -206,6 +206,18 @@ namespace PlantsVsZombies.Simulation
         {
             _boardEnvironment.AdvanceAdventurePoolEffect();
             _world.Elapsed += .01f;
+            if (_adventureModeRunner.Adventure.Boss?.DeathComplete == true)
+            {
+                _adventureModeRunner.Adventure.Boss.AdvanceDriver();
+                _adventureModeRunner.Adventure.Boss.AdvanceEffects();
+            }
+            foreach (var mower in _world.Mowers)
+            {
+                if (mower.SquishedTicks > 0)
+                {
+                    mower.SquishedTicks--;
+                }
+            }
             _battlePresentationSystem.AdventurePresentationTick(.01f);
             // Original Board::UpdateGameObjects keeps existing projectiles moving through the award sequence.
             _projectileSystem.AdvanceAdventureProjectiles(.01f, allowDamage: false);

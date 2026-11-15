@@ -432,21 +432,13 @@ namespace PlantsVsZombies.Simulation
             _zombieFeedbackSystem.RequestAdventureZombieFoley(18);
             _waveSystem.NotifyAdventureIceTrap();
             _explosionEffects.AdventurePresentationExplosion(PlantKind.IceShroom, plant.Column + .5f, plant.Row);
+            _bossSystem.ApplyAdventureBossIceTrap();
             foreach (var zombie in new PooledSnapshot<Zombie>(_world.Zombies))
             {
                 _coldSystem.ApplyAdventureIceTrap(zombie);
             }
 
-            _adventureModeRunner.Adventure._balls.RemoveAll(ball => !ball.IsIce);
-            var boss = _adventureModeRunner.Adventure.Boss;
-            if (boss != null && AdventureIceRules.CanChill(25, boss.Phase, false, false, false))
-            {
-                var cold = boss.ChilledTicks > 0 || boss.FrozenTicks > 0;
-                boss.FrozenTicks = (cold ? 300 : 400) + _world._random.Next(cold ? 101 : 201);
-                boss.ChilledTicks = 2000;
-                _bossSystem.DamageAdventureBoss(20f);
-            }
-
+            _bossSystem.DestroyBossBalls(false);
             _plantingSystem.RemoveAdventurePlantAndStack(plant);
         }
 

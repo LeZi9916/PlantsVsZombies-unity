@@ -227,7 +227,7 @@ namespace PlantsVsZombies.Simulation
             {
                 float time;
                 _world.Presentation.MowerTimes.TryGetValue(mower, out time);
-                _world.Presentation.MowerTimes[mower] = mower.Active ? time + dt : 0f;
+                _world.Presentation.MowerTimes[mower] = mower.Active || mower.SquishedTicks > 0 && mower.SquishedWhileActive ? time + dt : 0f;
             }
 
             var nuts = _adventureModeRunner.Adventure.BowlingNuts;

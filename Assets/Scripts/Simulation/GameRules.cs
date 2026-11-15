@@ -11,6 +11,9 @@ namespace PlantsVsZombies.Simulation
         /// <summary>Defers adventure wave generation until an independent mode supplies its own native plan.</summary>
         internal bool DeferAdventureWaveInitialization;
 
+        /// <summary>Lets the original opening create Zomboss at PlayBossEnter instead of during board construction.</summary>
+        internal bool DeferAdventureBossEntrance;
+
         /// <summary>Provides explicitly known native adventure generation flags without inferring unverified application state.</summary>
         public AdventureWaveGenerationContext AdventureWaveContext;
 

@@ -393,7 +393,7 @@ namespace PlantsVsZombies.Simulation
         /// <returns>The resulting can shoot adventure boss.</returns>
         internal bool CanShootAdventureBoss(Plant p)
         {
-            return _adventureModeRunner.Adventure.Level.Mode == AdventureMode.Boss && _adventureModeRunner.Adventure.BossHeadVulnerable && p.Row >= 1 && p.Row <= 3 && _adventureModeRunner.Adventure.BossHealth > 0;
+            return _adventureModeRunner.Adventure.Level.Mode == AdventureMode.Boss && _adventureModeRunner.Adventure.BossHeadVulnerable && _adventureModeRunner.Adventure.BossHealth > 0f;
         }
 
         /// <summary>Advances PC 47CCB0's star motion and 47C130's native row and horizontal-rectangle collision.</summary>
@@ -585,6 +585,14 @@ namespace PlantsVsZombies.Simulation
                     }
                 }
 
+                var boss = _adventureModeRunner.Adventure.Boss;
+                var bossHit = allowDamage && p.Lobbed && p.PresentationCanImpact && boss?.HeadVulnerable == true
+                    && AdventureLobberCollides(p, beforeNativeX, boss.Target);
+                if (bossHit)
+                {
+                    // PC FindProjectileCollision compares native actor X; the boss at X=0 wins this overlap.
+                    hit = null;
+                }
                 var remove = false;
                 if (hit != null)
                 {
@@ -613,9 +621,10 @@ namespace PlantsVsZombies.Simulation
                     remove = !p.PiercesZombies;
                 }
 
-                if (allowDamage && !remove && p.X >= 8.25f && p.Lobbed && p.PresentationCanImpact && _adventureModeRunner.Adventure.BossHeadVulnerable && p.Row >= 1 && p.Row <= 3)
+                if (bossHit && !remove)
                 {
-                    _battlePresentationSystem.AdventurePresentationImpact(p, null);
+                    _battlePresentationSystem.AdventurePresentationImpact(p, boss!.Target);
+                    _bossSystem.ApplyAdventureBossProjectileCold(p);
                     _bossSystem.DamageAdventureBoss(p.Damage);
                     remove = true;
                 }

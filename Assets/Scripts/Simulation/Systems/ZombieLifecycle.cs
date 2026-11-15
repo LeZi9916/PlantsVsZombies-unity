@@ -39,6 +39,19 @@ namespace PlantsVsZombies.Simulation
             _zombieFeedbackSystem = zombieFeedbackSystem;
         }
 
+        /// <summary>Applies the original boss cleanup's DieNoLoot followed by DropLoot without starting a body death animation.</summary>
+        /// <param name="zombie">The live follower removed by BossDie or the boss bungee retreat.</param>
+        internal void KillAdventureZombieInstantWithLoot(Zombie zombie)
+        {
+            if (!_world.Zombies.Contains(zombie))
+            {
+                return;
+            }
+            zombie.PresentationDeath = AdventureZombieDeathPresentation.Removed;
+            KillAdventureZombie(zombie);
+            _lootSystem.DropAdventureLoot(zombie);
+        }
+
         /// <summary>Performs kill adventure zombie.</summary>
         /// <param name = "z">The z.</param>
         /// <param name="damageFlags">The original damage flags controlling whether death animation is permitted.</param>

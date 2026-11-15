@@ -229,7 +229,7 @@ namespace PlantsVsZombies.Simulation
             _boardEnvironment.Connect(_adventureModeRunner, _zombieFeedbackSystem);
             _boardQueries.Connect(_biteSystem, _combatSystem);
             _bobsledZombieActions.Connect(_adventureModeRunner, _combatSystem, _vaultZombieActions, _zombieFeedbackSystem);
-            _bossSystem.Connect(_adventureModeRunner, _legacySimulation, _zombieSpawnSystem, _biteSystem, _zombieFeedbackSystem);
+            _bossSystem.Connect(_adventureModeRunner, _legacySimulation, _zombieSpawnSystem, _biteSystem, _zombieFeedbackSystem, _zombieLifecycle);
             _bowlingSystem.Connect(_adventureModeRunner, _biteSystem, _combatSystem, _explosionEffects, _independentModeRunner, _legacySimulation, _zombieFeedbackSystem);
             _bungeeZombieActions.Connect(_adventureModeRunner, _biteSystem, _boardQueries, _plantingSystem, _zombieFeedbackSystem, _zombieLifecycle, _zombieSpawnSystem);
             _coinSystem.Connect(_adventureModeRunner, _battlePresentationSystem, _boardQueries, _bossSystem, _combatSystem, _legacySimulation, _zombieFeedbackSystem);
@@ -653,6 +653,18 @@ namespace PlantsVsZombies.Simulation
         public bool TryShovelAdventurePlant(Plant? plant)
         {
             return _plantingSystem.TryShovelAdventurePlant(plant);
+        }
+
+        /// <summary>Allocates Zomboss at PC CutScene::AnimateBoard's original entrance boundary.</summary>
+        internal void BeginAdventureBossEntrance()
+        {
+            _bossSystem.InitializeAdventureBoss();
+        }
+
+        /// <summary>Advances only the original Zomboss entrance and its timed contacts while the opening owns the board.</summary>
+        internal void AdvanceAdventureBossIntro()
+        {
+            _bossSystem.AdvanceAdventureBossIntro();
         }
 
         /// <summary>Applies the original storm state before the level introduction.</summary>

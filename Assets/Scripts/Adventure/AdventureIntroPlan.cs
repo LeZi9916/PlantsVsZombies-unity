@@ -123,6 +123,9 @@ namespace PlantsVsZombies.Adventure
             }
         }
 
+        /// <summary>Gets PC AnimateBoard's PlayBossEnter boundary, before the four-second entrance delay.</summary>
+        public int BossEnterStart => 6000 + DaveTime + LawnMowerTime;
+
         /// <summary>Gets or sets ready start.</summary>
         public int ReadyStart
         {

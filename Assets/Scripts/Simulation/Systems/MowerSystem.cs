@@ -35,6 +35,11 @@ namespace PlantsVsZombies.Simulation
         {
             foreach (Mower m in _world.Mowers)
             {
+                if (m.SquishedTicks > 0)
+                {
+                    m.SquishedTicks--;
+                    continue;
+                }
                 if (!m.Active)
                 {
                     continue;

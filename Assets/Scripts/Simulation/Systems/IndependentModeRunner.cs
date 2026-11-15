@@ -745,7 +745,7 @@ namespace PlantsVsZombies.Simulation
             }
             else if (d.Mechanic == ModeMechanic.Boss)
             {
-                cleared = _adventureModeRunner.Adventure.BossHealth <= 0f && _world.Zombies.TrueForAll(zombie => zombie.Hypnotized) && _adventureModeRunner.Adventure._balls.Count == 0;
+                cleared = _adventureModeRunner.Adventure.Boss?.DeathComplete == true && _world.Zombies.TrueForAll(zombie => zombie.Hypnotized) && _adventureModeRunner.Adventure._balls.Count == 0;
             }
             else
             {

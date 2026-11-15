@@ -280,6 +280,7 @@ namespace PlantsVsZombies.Adventure
                     }
                 }
 
+                _owner.RequiredGame.AdvanceAdventureBossIntro();
                 _owner.RequiredGame.AdvanceAdventurePoolEffect(RequiredAdventureIntro.Plan.RequiredContext.SurvivalRepick);
                 _owner.Dave.UpdateCrazyDaveAnimation(.01f);
                 _owner.RequiredGame.AdvanceAdventureGraves();
@@ -484,6 +485,11 @@ namespace PlantsVsZombies.Adventure
             if (item == AdventureIntroEvent.StormFlashStarted)
             {
                 _owner.RequiredGame.Adventure.Storm.BeginIntroFlash();
+            }
+
+            if (item == AdventureIntroEvent.BossEnterStarted)
+            {
+                _owner.RequiredGame.BeginAdventureBossEntrance();
             }
 
             if (item == AdventureIntroEvent.IntroFinished)

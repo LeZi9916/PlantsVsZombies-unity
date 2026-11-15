@@ -243,7 +243,7 @@ namespace PlantsVsZombies.Simulation
                 _battlePresentationSystem.AdventurePresentationCobImpact(shell.TargetX, shell.TargetRow);
                 if (shell.TargetX >= 7.5f && Math.Abs(shell.TargetRow - 2f) <= 1f)
                 {
-                    _bossSystem.DamageAdventureBoss(1800f);
+                    _bossSystem.DamageAdventureBossWithFlags(1800f, 0x7FU);
                 }
 
                 _adventureModeRunner.Adventure._cobShells.RemoveAt(i);
