@@ -104,8 +104,8 @@ namespace PlantsVsZombies.Tests.PlayMode
                         PresentationAnimationAge = sample.Seconds, PresentationMovementRate = sample.Rate,
                         _presentationMovementAnimation = sample.Clip, Eating = sample.Eating
                     };
-                    owner._game.Zombies.Add(zombie);
-                    Assert.That(owner._game.AdventurePresentationZombieAnimation(zombie), Is.EqualTo(sample.Clip));
+                    SimulationFixture.Zombies(owner._game).Add(zombie);
+                    Assert.That(SimulationFixture.SynchronizeZombieAnimation(owner._game, zombie), Is.EqualTo(sample.Clip));
                     Assert.That(owner._game.AdventurePresentationZombieRate(zombie), Is.EqualTo(sample.Rate));
                     Begin(animations);
                     draw.Invoke(presenter, new object[] { zombie });
@@ -140,7 +140,7 @@ namespace PlantsVsZombies.Tests.PlayMode
                         zombie.PresentationFlash = 0f;
                     }
 
-                    owner._game.Zombies.Remove(zombie);
+                    SimulationFixture.Zombies(owner._game).Remove(zombie);
                 }
 
                 var dying = new Zombie
@@ -150,7 +150,7 @@ namespace PlantsVsZombies.Tests.PlayMode
                     PresentationInPool = true, PresentationNativePhase = 55,
                     PresentationAnimation = "anim_swim", PresentationAnimationAge = .3f
                 };
-                typeof(GameSimulation).GetMethod("AdventurePresentationZombieDeath", flags)!.Invoke(owner._game, new object[] { dying, 0U });
+                SimulationInspection.GetMethod("AdventurePresentationZombieDeath", flags)!.Invoke(owner._game, new object[] { dying, 0U });
                 Assert.That(owner._game.Presentation.Corpses, Has.Count.EqualTo(1));
                 var corpse = owner._game.Presentation.Corpses[0];
                 Assert.That(corpse.Animation, Is.EqualTo("anim_death"), "The original dolphin source has no anim_waterdeath layer.");
@@ -211,7 +211,7 @@ namespace PlantsVsZombies.Tests.PlayMode
                 var flags = BindingFlags.Instance | BindingFlags.NonPublic;
                 typeof(GamePresenter).GetField("_renderingBoardObjects", flags)!.SetValue(presenter, true);
                 var draw = typeof(GamePresenter).GetMethod("DrawAdventureZombie", flags)!;
-                var land = typeof(GameSimulation).GetMethod("AdvanceAdventureDolphin", flags)!;
+                var land = SimulationInspection.GetMethod("AdvanceAdventureDolphin", flags)!;
                 foreach (var eating in new[] { false, true })
                 {
                     var zombie = new Zombie
@@ -230,8 +230,8 @@ namespace PlantsVsZombies.Tests.PlayMode
                         DolphinState = new AdventureDolphinState()
                     };
                     zombie.PresentationPreviousX = zombie.X;
-                    owner._game.Zombies.Add(zombie);
-                    owner._game.AdventurePresentationZombieAnimation(zombie);
+                    SimulationFixture.Zombies(owner._game).Add(zombie);
+                    SimulationFixture.SynchronizeZombieAnimation(owner._game, zombie);
                     zombie.PresentationAnimationAge = 2.299f;
                     Begin(animations);
                     draw.Invoke(presenter, new object[] { zombie });
@@ -244,7 +244,7 @@ namespace PlantsVsZombies.Tests.PlayMode
                     Assert.That(zombie.PresentationNativePhase, Is.EqualTo(55));
                     Assert.That(zombie.PresentationPreviousX, Is.EqualTo(zombie.X));
                     zombie.Eating = eating;
-                    var clip = owner._game.AdventurePresentationZombieAnimation(zombie);
+                    var clip = SimulationFixture.SynchronizeZombieAnimation(owner._game, zombie);
                     var rate = owner._game.AdventurePresentationZombieRate(zombie);
                     Assert.That(clip, Is.EqualTo(eating ? "anim_eat" : "anim_swim"));
                     Assert.That(zombie.DolphinState!.AnimationBlendTicks, Is.EqualTo(eating ? 20 : 0));
@@ -272,7 +272,7 @@ namespace PlantsVsZombies.Tests.PlayMode
                             "Landing must discard the old jump placement before " + clip + " at native tick " + (int)(seconds * 100f) + ".");
                     }
 
-                    owner._game.Zombies.Remove(zombie);
+                    SimulationFixture.Zombies(owner._game).Remove(zombie);
                 }
             }
             finally

@@ -169,19 +169,19 @@ namespace PlantsVsZombies.UI.BitmapFonts
             try
             {
                 CanvasUI.Color = previous * color;
+                using var profile = PlantsVsZombies.Rendering.SpriteRenderingProfiler.Measure(PlantsVsZombies.Rendering.SpriteRenderingProfiler.BitmapText);
                 var glyphs = layout.Glyphs;
-                for (var i = 0; i < glyphs.Count; i++)
+                var first = 0;
+                while (first < glyphs.Count)
                 {
-                    var placed = glyphs[i];
-                    var glyph = placed.Glyph;
-                    if (glyph.Width == 0 || glyph.Height == 0)
+                    var page = glyphs[first].Glyph.Page;
+                    var end = first + 1;
+                    while (end < glyphs.Count && end - first < 1024 && glyphs[end].Glyph.Page == page)
                     {
-                        continue;
+                        end++;
                     }
-
-                    var destination = new Rect(x + placed.X, y + placed.Y, placed.Width, placed.Height);
-                    var uv = new Rect((float)glyph.X / Data.AtlasWidth, 1f - (float)(glyph.Y + glyph.Height) / Data.AtlasHeight, (float)glyph.Width / Data.AtlasWidth, (float)glyph.Height / Data.AtlasHeight);
-                    CanvasUI.DrawTextureWithTexCoords(destination, _pages[glyph.Page], uv, true);
+                    CanvasUI.DrawBitmapRun(layout, first, end - first, _pages[page], new Vector2(x, y));
+                    first = end;
                 }
             }
             finally

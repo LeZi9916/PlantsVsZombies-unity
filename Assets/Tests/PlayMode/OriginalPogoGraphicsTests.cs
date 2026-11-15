@@ -78,7 +78,7 @@ namespace PlantsVsZombies.Tests.PlayMode
                             AnimationBlendTicks = sample.Eating ? 20 : 0
                         }
                     };
-                    Assert.That(owner._game.AdventurePresentationZombieAnimation(zombie), Is.EqualTo(animation));
+                    Assert.That(SimulationFixture.SynchronizeZombieAnimation(owner._game, zombie), Is.EqualTo(animation));
                     Assert.That(owner._game.AdventurePresentationZombieRate(zombie), Is.EqualTo(rate));
                     BeginFrame(animations);
                     draw.Invoke(presenter, new object[] { zombie });

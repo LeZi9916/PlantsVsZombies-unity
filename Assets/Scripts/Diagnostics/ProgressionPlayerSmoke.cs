@@ -278,13 +278,13 @@ namespace PlantsVsZombies.Diagnostics
             RequiredController.Campaign.StartAdventureTestLevel(8, accounts.Get(id).SeedAccess());
             Check(Sim.ChooseDefaultAdventureSeeds(), "Test board seed chooser");
             Set("_choosingSeeds", false);
-            var plantMethod = typeof(GameSimulation).GetMethod("PlaceAdventurePlant", Private);
+            var plantMethod = SimulationInspection.GetMethod("PlaceAdventurePlant", Private);
             var peashooter = (Plant)plantMethod.Invoke(Sim, new object[] { PlantKind.Peashooter, 2, 2 });
             peashooter.Timing = global::PlantsVsZombies.Timing.PlantTiming.FromRaw(global::PlantsVsZombies.Timing.PlantKind.Peashooter, 1, 0);
             var sunflower = (Plant)plantMethod.Invoke(Sim, new object[] { PlantKind.Sunflower, 1, 1 });
             sunflower.Timing = global::PlantsVsZombies.Timing.PlantTiming.FromRaw(global::PlantsVsZombies.Timing.PlantKind.Sunflower, 1, 0);
             plantMethod.Invoke(Sim, new object[] { PlantKind.CabbagePult, 3, 2 });
-            var spawn = typeof(GameSimulation).GetMethod("SpawnAdventureZombie", Private);
+            var spawn = SimulationInspection.GetMethod("SpawnAdventureZombie", Private);
             var zombie = (Zombie)spawn.Invoke(Sim, new object[] {
                 ZombieKind.Normal,
                 2,
@@ -299,7 +299,7 @@ namespace PlantsVsZombies.Diagnostics
             });
             yield return new WaitForSecondsRealtime(.6f);
             yield return Capture("10-board-animations");
-            typeof(GameSimulation).GetMethod("HitAdventureZombie", Private).Invoke(Sim, new object[] {
+            SimulationInspection.GetMethod("HitAdventureZombie", Private).Invoke(Sim, new object[] {
                 zombie,
                 2000f,
                 false,

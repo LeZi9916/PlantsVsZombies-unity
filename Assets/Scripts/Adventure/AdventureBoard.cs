@@ -193,22 +193,19 @@ namespace PlantsVsZombies.Adventure
         public float FogBlownRemaining { get; internal set; }
 
         /// <summary>Retains the original overlapping fog tiles and their rolling displacement.</summary>
-        internal AdventureFogState Fog { get; } = new AdventureFogState();
+        internal AdventureFogState Fog { get; set; } = new AdventureFogState();
         /// <summary>Retains the original storm challenge, rain and flash presentation.</summary>
         internal AdventureStormState Storm { get; } = new AdventureStormState();
         /// <summary>Gets whether the original storm challenge is inside one of its flash windows.</summary>
         public bool StormFlash => Level.Mode == AdventureMode.Storm && Storm.FlashVisible;
+        /// <summary>Gets the original boss scheduler and native animation state when this board contains a boss.</summary>
+        public AdventureBossState? Boss { get; internal set; }
+
         /// <summary>Gets or sets boss health.</summary>
         public float BossHealth { get; internal set; }
 
         /// <summary>Gets or sets boss max health.</summary>
-        public float BossMaxHealth
-        {
-            get
-            {
-                return 40000f;
-            }
-        }
+        public float BossMaxHealth { get; internal set; } = 40000f;
 
         /// <summary>Gets or sets boss head vulnerable.</summary>
         public bool BossHeadVulnerable { get; internal set; }
@@ -268,10 +265,6 @@ namespace PlantsVsZombies.Adventure
         internal int _plantedSunflowers;
         /// <summary>Stores collected sun.</summary>
         internal bool _collectedSun;
-        /// <summary>Stores boss timer.</summary>
-        internal float _bossTimer;
-        /// <summary>Stores boss cycle.</summary>
-        internal int _bossCycle;
         /// <summary>Stores next hammer sun.</summary>
         internal float _nextHammerSun;
         /// <summary>Stores the Whack-a-Zombie seed-bank vertical position.</summary>

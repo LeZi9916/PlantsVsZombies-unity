@@ -75,11 +75,11 @@ namespace PlantsVsZombies.Tests.PlayMode
                 camera.targetTexture = target;
                 for (var pass = 0; pass < frames.Length; pass++)
                 {
-                    owner._game.Zombies.Clear();
+                    SimulationFixture.Zombies(owner._game).Clear();
                     owner._game.Presentation.FootstepEffects.Clear();
                     if (pass >= 2)
                     {
-                        owner._game.Zombies.Add(zombie);
+                        SimulationFixture.Zombies(owner._game).Add(zombie);
                     }
 
                     if (pass == 1 || pass == 3)
@@ -228,7 +228,7 @@ namespace PlantsVsZombies.Tests.PlayMode
                         ChillRemaining = item.Chilled ? 1f : 0f,
                         PresentationAnimationAge = .3f
                     };
-                    owner._game.Zombies.Add(zombie);
+                    SimulationFixture.Zombies(owner._game).Add(zombie);
                     ObjectSpriteRenderer.BeginSceneFrame();
                     animations.BeginObjectFrame();
                     animations.DrawNativeImage(white, new Rect(0, 0, Screen.width, Screen.height), new Rect(0, 0, 1, 1));
@@ -319,12 +319,12 @@ namespace PlantsVsZombies.Tests.PlayMode
                 owner._game = new GameSimulation(new GameRules { AdventureLevel = 9 }, 7529);
                 Assert.That(owner._game.ChooseDefaultAdventureSeeds(), Is.True);
                 owner._game.ResetAdventureWaveSchedule(1000000, false, false);
-                typeof(GameSimulation).GetProperty(nameof(GameSimulation.Elapsed))!.SetValue(owner._game, 100f);
+                SimulationInspection.GetProperty(nameof(GameSimulation.Elapsed))!.SetValue(owner._game, 100f);
                 owner.WaveNotices._waveNoticeGame = owner._game;
                 owner._deck.Clear();
                 owner._deck.AddRange(new[] { PlantKind.Peashooter, PlantKind.Sunflower, PlantKind.Wallnut, PlantKind.PotatoMine, PlantKind.SnowPea, PlantKind.Imitater });
                 owner._game.Adventure.ImitaterTarget = PlantKind.Peashooter;
-                var cooldowns = (int[])typeof(GameSimulation).GetField("_seedCooldownTicks", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(owner._game)!;
+                var cooldowns = (int[])SimulationInspection.GetField("_seedCooldownTicks", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(owner._game)!;
                 Array.Fill(cooldowns, 500);
                 presenter.SetPointerPosition(new Vector2(-1000f, -1000f));
                 camera.targetTexture = target;
@@ -337,7 +337,7 @@ namespace PlantsVsZombies.Tests.PlayMode
                 {
                     for (var column = 0; column < 6; column++)
                     {
-                        owner._game.Plants.Add(new Plant
+                        SimulationFixture.Plants(owner._game).Add(new Plant
                         {
                             Id = row * 6 + column + 1,
                             Kind = kinds[column],
@@ -362,10 +362,10 @@ namespace PlantsVsZombies.Tests.PlayMode
                 {
                     owner.WaveNotices._hugeWaveNoticeStart = 100f - frame * .08f;
                     owner.WaveNotices._finalWaveNoticeStart = 100f - frame * .08f;
-                    owner._game.Zombies.Clear();
+                    SimulationFixture.Zombies(owner._game).Clear();
                     for (var index = 0; index < 100; index++)
                     {
-                        owner._game.Zombies.Add(new Zombie
+                        SimulationFixture.Zombies(owner._game).Add(new Zombie
                         {
                             Id = 1000 + frame * 100 + index,
                             Kind = index == 1 ? ZombieKind.Flag : index % 3 == 0 ? ZombieKind.PoleVaulter : index % 3 == 1 ? ZombieKind.Buckethead : ZombieKind.Normal,

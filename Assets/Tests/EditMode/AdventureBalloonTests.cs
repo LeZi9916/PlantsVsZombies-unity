@@ -41,7 +41,7 @@ namespace PlantsVsZombies.Tests.EditMode
             Assert.That(balloon.Health, Is.EqualTo(270f));
             Assert.That(balloon.FlyingHealth, Is.Zero);
             Assert.That(balloon.PresentationNativeVelocity, Is.EqualTo(velocity));
-            Assert.That(game.AdventurePresentationZombieAnimation(balloon), Is.EqualTo("anim_pop"));
+            Assert.That(SimulationFixture.SynchronizeZombieAnimation(game, balloon), Is.EqualTo("anim_pop"));
             Assert.That(game.AdventurePresentationZombieRate(balloon), Is.EqualTo(24f));
             Assert.That(AdventureZombieMotionRules.PlaysOnce(balloon), Is.True);
             Assert.That(balloon.PresentationBalloonBlendTicks, Is.EqualTo(20));
@@ -63,7 +63,7 @@ namespace PlantsVsZombies.Tests.EditMode
             Assert.That(balloon.PresentationNativePhase, Is.EqualTo(75));
             Assert.That(balloon.Airborne, Is.False);
             Assert.That(balloon.PresentationBalloonBlendTicks, Is.Zero);
-            Assert.That(game.AdventurePresentationZombieAnimation(balloon), Is.EqualTo("anim_walk"));
+            Assert.That(SimulationFixture.SynchronizeZombieAnimation(game, balloon), Is.EqualTo("anim_walk"));
             Assert.That(balloon.PresentationNativeVelocity, Is.InRange(.23f, .37f));
         }
 
@@ -97,7 +97,7 @@ namespace PlantsVsZombies.Tests.EditMode
             game.Update(.01f);
             Assert.That((balloon.X - before) * 80f, Is.EqualTo(10f - velocity).Within(.001f));
             Assert.That(balloon.PresentationNativePhase, Is.EqualTo(73));
-            Assert.That(game.AdventurePresentationZombieAnimation(balloon), Is.EqualTo("anim_idle"));
+            Assert.That(SimulationFixture.SynchronizeZombieAnimation(game, balloon), Is.EqualTo("anim_idle"));
             balloon.FrozenRemaining = 1f;
             before = balloon.X;
             game.Update(.01f);
@@ -150,7 +150,7 @@ namespace PlantsVsZombies.Tests.EditMode
         /// <returns>The original operation result.</returns>
         private static object? Invoke(GameSimulation game, string name, params object[] arguments)
         {
-            return typeof(GameSimulation).GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(game, arguments);
+            return SimulationInspection.GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(game, arguments);
         }
     }
 }

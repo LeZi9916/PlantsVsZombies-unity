@@ -41,7 +41,7 @@ namespace PlantsVsZombies.Tests.EditMode
             Assert.That(trail.MinX, Is.EqualTo(618), "A second or reversing vehicle cannot shorten existing ice.");
             Assert.That(trail.RemainingTicks, Is.EqualTo(3000));
             Assert.That(Invoke(game, "ChooseAdventureZombieRow", ZombieKind.Bobsled), Is.EqualTo(1));
-            game.Zombies.Remove(vehicle);
+            SimulationFixture.Zombies(game).Remove(vehicle);
             for (var tick = 0; tick < 2999; tick++)
             {
                 game.Update(.01f);
@@ -138,7 +138,7 @@ namespace PlantsVsZombies.Tests.EditMode
         /// <returns>The production result.</returns>
         private static object? Invoke(GameSimulation game, string name, params object[] arguments)
         {
-            return typeof(GameSimulation).GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(game, arguments);
+            return SimulationInspection.GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(game, arguments);
         }
     }
 }

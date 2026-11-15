@@ -49,8 +49,8 @@ namespace PlantsVsZombies.Tests.EditMode
         public void IZombieRetainsTheOriginalStaticReloadedIdle()
         {
             var game = new ModeSession(61, randomSeed: 7529).Game;
-            game.Plants.Clear();
-            game.Zombies.Clear();
+            SimulationFixture.Plants(game).Clear();
+            SimulationFixture.Zombies(game).Clear();
             var plant = Place(game, PlantKind.KernelPult, 1, 2);
             plant.PresentationShotAge = 34f / 35f;
             Invoke(game, "AdventurePresentationTick", .01f);
@@ -87,7 +87,7 @@ namespace PlantsVsZombies.Tests.EditMode
             var zombie = Spawn(game, ZombieKind.Normal, 1, 500f);
             var projectile = new Pea { SourceKind = PlantKind.KernelPult, Butter = true, Row = 1,
                 FlightRow = 1f, X = zombie.X, StartX = zombie.X, VelocityX = 0f, Damage = 40f };
-            game.Peas.Add(projectile);
+            SimulationFixture.Peas(game).Add(projectile);
             Invoke(game, "AdvanceAdventureProjectiles", .01f, true);
             Assert.That(zombie.PresentationButter, Is.EqualTo(4f));
             Assert.That(zombie.FrozenRemaining, Is.Zero);
@@ -223,8 +223,8 @@ namespace PlantsVsZombies.Tests.EditMode
             var game = new GameSimulation(new GameRules { AdventureLevel = level }, 7529);
             game.ChooseDefaultAdventureSeeds();
             game.ResetAdventureWaveSchedule(100000, false, false);
-            game.Plants.Clear();
-            game.Zombies.Clear();
+            SimulationFixture.Plants(game).Clear();
+            SimulationFixture.Zombies(game).Clear();
             game.Adventure._graves.Clear();
             return game;
         }
@@ -272,7 +272,7 @@ namespace PlantsVsZombies.Tests.EditMode
         /// <returns>The original method result.</returns>
         private static object? Invoke(GameSimulation game, string method, params object[] arguments)
         {
-            return typeof(GameSimulation).GetMethod(method, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(game, arguments);
+            return SimulationInspection.GetMethod(method, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(game, arguments);
         }
     }
 }

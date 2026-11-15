@@ -280,6 +280,11 @@ namespace PlantsVsZombies.Adventure
                 }
             }
 
+            if (p.BossTime > 0 && Crossed(previous, current, p.BossEnterStart))
+            {
+                emit(AdventureIntroEvent.BossEnterStarted);
+            }
+
             if (p.ReadyTime > 0 && Crossed(previous, current, p.ReadyStart))
             {
                 emit(AdventureIntroEvent.ReadySetPlantStarted);

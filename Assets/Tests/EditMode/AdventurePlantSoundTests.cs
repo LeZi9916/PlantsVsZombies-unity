@@ -338,7 +338,7 @@ namespace PlantsVsZombies.Tests.EditMode
         private static Zombie Target(GameSimulation game, ZombieKind kind, int row, float x)
         {
             var zombie = new Zombie { Id = 1000, Kind = kind, Row = row, X = x, Health = 270f, StartingHealth = 270f, PresentationNativeHeight = 0 };
-            game.Zombies.Add(zombie);
+            SimulationFixture.Zombies(game).Add(zombie);
             return zombie;
         }
 
@@ -373,7 +373,7 @@ namespace PlantsVsZombies.Tests.EditMode
         /// <exception cref="TargetInvocationException">The production action throws.</exception>
         private static object? Invoke(GameSimulation game, string name, params object[] arguments)
         {
-            return typeof(GameSimulation).GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(game, arguments);
+            return SimulationInspection.GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(game, arguments);
         }
     }
 }

@@ -174,12 +174,13 @@ namespace PlantsVsZombies.Adventure
         /// <param name="zombies">The current live board actors.</param>
         /// <param name="id">The requested identifier.</param>
         /// <returns>The matching live zombie, or null after removal.</returns>
-        public static Zombie? Find(List<Zombie> zombies, int id)
+        public static Zombie? Find(IReadOnlyList<Zombie> zombies, int id)
         {
             if (id != 0)
             {
-                foreach (var zombie in zombies)
+                for (var index = 0; index < zombies.Count; index++)
                 {
+                    var zombie = zombies[index];
                     if (zombie.Id == id)
                     {
                         return zombie;
@@ -195,7 +196,7 @@ namespace PlantsVsZombies.Adventure
         /// <param name="corpses">The original death presentations still awaiting removal.</param>
         /// <param name="id">The slot's stable zombie identifier.</param>
         /// <returns>True until the actor and its original death animation have both left the board.</returns>
-        public static bool Occupied(List<Zombie> zombies, List<AdventureZombieCorpse> corpses, int id)
+        public static bool Occupied(IReadOnlyList<Zombie> zombies, List<AdventureZombieCorpse> corpses, int id)
         {
             if (Find(zombies, id) != null)
             {
@@ -231,7 +232,7 @@ namespace PlantsVsZombies.Adventure
         /// <param name="corpses">The board's retained death presentations.</param>
         /// <param name="level">The current row terrain.</param>
         /// <returns>True when at least one permitted slot has no living or dying backup.</returns>
-        public static bool NeedsBackup(Zombie zombie, List<Zombie> zombies, List<AdventureZombieCorpse> corpses, AdventureLevelSpec level)
+        public static bool NeedsBackup(Zombie zombie, IReadOnlyList<Zombie> zombies, List<AdventureZombieCorpse> corpses, AdventureLevelSpec level)
         {
             var state = zombie.DancerState;
             if (state == null)
@@ -340,7 +341,7 @@ namespace PlantsVsZombies.Adventure
         /// <param name="zombies">The board's live actors.</param>
         /// <param name="chillOnly">Whether to inspect chill instead of eating, ice, and butter.</param>
         /// <returns>True when the requested original condition holds in the linked group.</returns>
-        public static bool GroupAffected(Zombie zombie, List<Zombie> zombies, bool chillOnly)
+        public static bool GroupAffected(Zombie zombie, IReadOnlyList<Zombie> zombies, bool chillOnly)
         {
             if (Affected(zombie, chillOnly))
             {
@@ -374,7 +375,7 @@ namespace PlantsVsZombies.Adventure
         /// <param name="zombie">The dancer attempting to walk.</param>
         /// <param name="zombies">The board's live actors.</param>
         /// <returns>True when the dancer can advance horizontally.</returns>
-        public static bool CanWalk(Zombie zombie, List<Zombie> zombies)
+        public static bool CanWalk(Zombie zombie, IReadOnlyList<Zombie> zombies)
         {
             var phase = zombie.PresentationNativePhase;
             return (phase == 40 || phase == 44) && !GroupAffected(zombie, zombies, false);
@@ -383,7 +384,7 @@ namespace PlantsVsZombies.Adventure
         /// <summary>Disconnects original dancer relationships when this actor is mind-controlled.</summary>
         /// <param name="zombie">The newly hypnotized dancer.</param>
         /// <param name="zombies">The board's live actors.</param>
-        public static void DetachForMindControl(Zombie zombie, List<Zombie> zombies)
+        public static void DetachForMindControl(Zombie zombie, IReadOnlyList<Zombie> zombies)
         {
             var state = zombie.DancerState;
             if (state == null)

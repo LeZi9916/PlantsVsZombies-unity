@@ -209,7 +209,7 @@ namespace PlantsVsZombies.Tests.EditMode
                 StartingHealth = 270f,
                 Wave = game.Adventure.Waves.Count - 1
             };
-            game.Zombies.Add(zombie);
+            SimulationFixture.Zombies(game).Add(zombie);
             Invoke(game, "InitializeAdventureZombieNative", zombie, false);
             return zombie;
         }
@@ -232,7 +232,7 @@ namespace PlantsVsZombies.Tests.EditMode
             }
 
             Assert.That(zombie.Hypnotized, Is.True, "The production awake-mushroom chew must apply mind control.");
-            Assert.That(game.Plants.Exists(plant => plant.Kind == PlantKind.HypnoShroom), Is.False);
+            Assert.That(SimulationFixture.Plants(game).Exists(plant => plant.Kind == PlantKind.HypnoShroom), Is.False);
         }
 
         /// <summary>Checks unmet end-level conditions keep the board active without an award.</summary>
@@ -252,7 +252,7 @@ namespace PlantsVsZombies.Tests.EditMode
         /// <exception cref="TargetInvocationException">The production hook throws.</exception>
         private static object? Invoke(GameSimulation game, string name, params object[] arguments)
         {
-            return typeof(GameSimulation).GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(game, arguments);
+            return SimulationInspection.GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(game, arguments);
         }
     }
 }

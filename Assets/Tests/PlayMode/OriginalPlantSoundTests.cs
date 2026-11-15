@@ -70,7 +70,7 @@ namespace PlantsVsZombies.Tests.PlayMode
                 Assert.That(owner._game.ChooseDefaultAdventureSeeds(), Is.True);
                 owner._game.EventRaised = effects.PlaySound;
                 var plant = new Plant { Kind = PlantKind.FumeShroom, Row = 1, Column = 2 };
-                typeof(GameSimulation).GetMethod("FireAdventureFume", BindingFlags.Instance | BindingFlags.NonPublic)!
+                SimulationInspection.GetMethod("FireAdventureFume", BindingFlags.Instance | BindingFlags.NonPublic)!
                     .Invoke(owner._game, new object[] { plant });
                 effects.UpdateAdventureZombiePartAudio();
                 yield return null;

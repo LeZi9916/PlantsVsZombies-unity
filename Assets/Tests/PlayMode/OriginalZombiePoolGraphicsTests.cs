@@ -304,7 +304,7 @@ namespace PlantsVsZombies.Tests.PlayMode
         /// <returns>The production-initialized actor at a stable original water position.</returns>
         private Zombie Swimmer(ZombieKind kind, bool eating, bool small, bool chilled)
         {
-            _owner.RequiredGame.Zombies.Clear();
+            SimulationFixture.Zombies(_owner.RequiredGame).Clear();
             var zombie = (Zombie)Invoke(_owner.RequiredGame, "SpawnAdventureZombie", kind, 2, AdventureZombieNativeRules.GridX(400f), 0)!;
             for (var tick = 0; tick < 41; tick++)
             {
@@ -318,7 +318,7 @@ namespace PlantsVsZombies.Tests.PlayMode
             zombie.PoolState.SplashAge = -1f;
             zombie.Eating = eating;
             zombie.ChillRemaining = chilled ? 10f : 0f;
-            _owner.RequiredGame.AdventurePresentationZombieAnimation(zombie);
+            SimulationFixture.SynchronizeZombieAnimation(_owner.RequiredGame, zombie);
             zombie.PresentationAnimationAge = .35f;
             return zombie;
         }
@@ -327,7 +327,7 @@ namespace PlantsVsZombies.Tests.PlayMode
         /// <returns>One original normal or armored pool-emergence actor.</returns>
         private Zombie Ambush()
         {
-            _owner.RequiredGame.Zombies.Clear();
+            SimulationFixture.Zombies(_owner.RequiredGame).Clear();
             Invoke(_owner.RequiredGame, "SpawnScheduledFinalAmbush");
             foreach (var zombie in _owner.RequiredGame.Zombies)
             {
@@ -635,7 +635,11 @@ namespace PlantsVsZombies.Tests.PlayMode
         /// <returns>The production operation's result, when present.</returns>
         private static object? Invoke(object target, string name, params object[] arguments)
         {
-            return target.GetType().GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(target, arguments);
+            if (target is GameSimulation game)
+            {
+                target = game.MemberOwner(name);
+            }
+            return target.GetType().GetMethod(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)!.Invoke(target, arguments);
         }
     }
 }

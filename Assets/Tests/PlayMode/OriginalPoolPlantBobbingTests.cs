@@ -61,7 +61,7 @@ namespace PlantsVsZombies.Tests.PlayMode
                         {
                             foreach (var kind in cases)
                             {
-                                owner._game.Plants.Clear();
+                                SimulationFixture.Plants(owner._game).Clear();
                                 var plant = new Plant
                                 {
                                     Id = 1, Kind = kind, Row = row, Column = column,
@@ -70,11 +70,11 @@ namespace PlantsVsZombies.Tests.PlayMode
                                         : kind == PlantKind.Pumpkin ? PlantLayer.Armor
                                         : kind == PlantKind.CoffeeBean ? PlantLayer.Effect : PlantLayer.Main
                                 };
-                                owner._game.Plants.Add(plant);
+                                SimulationFixture.Plants(owner._game).Add(plant);
                                 if (kind != PlantKind.LilyPad && kind != PlantKind.TangleKelp
                                     && kind != PlantKind.SeaShroom && kind != PlantKind.Cattail)
                                 {
-                                    owner._game.Plants.Add(new Plant
+                                    SimulationFixture.Plants(owner._game).Add(new Plant
                                     {
                                         Id = 2, Kind = PlantKind.LilyPad, Row = row, Column = column,
                                         Layer = PlantLayer.Support, Health = 300f

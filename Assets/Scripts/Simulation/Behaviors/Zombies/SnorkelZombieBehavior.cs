@@ -1,0 +1,19 @@
+#nullable enable
+
+namespace PlantsVsZombies.Simulation
+{
+    /// <summary>Owns the Snorkel native action state and transitions.</summary>
+    internal sealed class SnorkelZombieBehavior : WalkingZombieBehavior
+    {
+        /// <inheritdoc/>
+        public override bool Advance(Zombie zombie, ZombieBehaviorContext context, ZombieActionPhase phase, float dt, float previousX = 0f)
+        {
+            switch (phase)
+            {
+                case ZombieActionPhase.Motion:
+                    return context._waterZombieActions.AdvanceAdventureSnorkel(zombie, dt);
+            }
+            return false;
+        }
+    }
+}

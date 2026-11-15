@@ -90,7 +90,7 @@ namespace PlantsVsZombies.Tests.EditMode
             else if (kind == PlantKind.PotatoMine)
             {
                 plant.MinePhase = MinePhase.Armed;
-                game.Zombies.Add(new Zombie
+                SimulationFixture.Zombies(game).Add(new Zombie
                 {
                     Id = 1000,
                     Kind = ZombieKind.Normal,
@@ -330,7 +330,7 @@ namespace PlantsVsZombies.Tests.EditMode
             Assert.That(game.Presentation.ScreenShake.OffsetX, Is.EqualTo(x));
             Assert.That(game.Presentation.ScreenShake.OffsetY, Is.EqualTo(y));
             game.TogglePause();
-            typeof(GameSimulation).GetProperty(nameof(GameSimulation.State))!.SetValue(game, MatchState.Won);
+            SimulationInspection.GetProperty(nameof(GameSimulation.State))!.SetValue(game, MatchState.Won);
             game.Adventure.Phase = AdventurePhase.Reward;
             game.Adventure.RewardPresentation = new AdventureRewardPresentation(15, 400f, 300f, 91, 78, .5f, .5f, 0);
             game.Update(.06f);
@@ -358,7 +358,7 @@ namespace PlantsVsZombies.Tests.EditMode
         /// <exception cref="TargetInvocationException">The production method throws.</exception>
         private static object? Invoke(GameSimulation game, string name, params object[] arguments)
         {
-            return typeof(GameSimulation).GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(game, arguments);
+            return SimulationInspection.GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(game, arguments);
         }
     }
 }

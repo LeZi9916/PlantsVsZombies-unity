@@ -61,7 +61,7 @@ namespace PlantsVsZombies.Tests.Modes
             session.SlotSymbols[1] = second;
             session.SlotSymbols[2] = third;
             session.SlotRollingRemaining = .01f;
-            typeof(GameSimulation).GetMethod("TickModeSlot", BindingFlags.Instance | BindingFlags.NonPublic)!
+            SimulationInspection.GetMethod("TickModeSlot", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(session.Game, new object[] { .02f });
             return session.Advice;
         }

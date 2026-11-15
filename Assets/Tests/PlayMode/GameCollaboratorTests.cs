@@ -2,6 +2,9 @@
 using NUnit.Framework;
 using PlantsVsZombies.Diagnostics;
 using PlantsVsZombies.Game;
+using PlantsVsZombies.Audio;
+using PlantsVsZombies.Reanimation;
+using PlantsVsZombies.Simulation;
 using System;
 using System.Collections.Generic;
 using System.Reflection;
@@ -94,6 +97,29 @@ namespace PlantsVsZombies.Tests.PlayMode
             Assert.Throws<MissingMemberException>(() => GameMemberReflection.GetField(_game, "_noSuchMember"));
             GameMemberReflection.SetField(_game, "_soundVolume", .4f);
             Assert.That(_game.Sounds._soundVolume, Is.EqualTo(.4f));
+        }
+
+        /// <summary>Checks boss hierarchy and fade integration remain inactive for the legacy demo and menu simulation.</summary>
+        [Test]
+        public void LegacySessionsDoNotReadAdventureBossState()
+        {
+            _game._game = new GameSimulation();
+            using var animations = new ReanimationRenderer(Application.temporaryCachePath);
+            _game._animations = animations;
+            var presenter = new GamePresenter(_game);
+            var hierarchy = typeof(GamePresenter).GetMethod("BeginHierarchyFrame", BindingFlags.Instance | BindingFlags.NonPublic)!;
+            Assert.DoesNotThrow(() => hierarchy.Invoke(presenter, null));
+            var stems = new[] { new OriginalMusicStem(_host), new OriginalMusicStem(_host), new OriginalMusicStem(_host) };
+            GameMemberReflection.SetField(_game, "_dynamicMusicStems", stems);
+            try
+            {
+                Assert.DoesNotThrow(() => _game.Music.UpdateDynamicAudio());
+            }
+            finally
+            {
+                _game.Music.DisposeDynamicAudio();
+                presenter.Dispose();
+            }
         }
 
         /// <summary>Lists the internal properties through which the coordinator exposes its collaborators.</summary>

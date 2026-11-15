@@ -75,7 +75,7 @@ namespace PlantsVsZombies.Editor
                 AddOptional(AdventureZombieEquipmentRules.HelmImage(1, stage), imageIdentities, result);
                 AddOptional(AdventureZombieEquipmentRules.HelmImage(2, stage), imageIdentities, result);
                 AddOptional(AdventureZombieEquipmentRules.HelmImage(8, stage), imageIdentities, result);
-                AddOptional(AdventureZombieEquipmentRules.ShieldImage(new Zombie { Kind = ZombieKind.ScreenDoor }, stage), imageIdentities, result);
+                AddOptional(AdventureZombieEquipmentRules.ShieldImage(new Zombie(ZombieKind.ScreenDoor), stage), imageIdentities, result);
             }
             AddOptional(AdventureZombieFeedbackRules.ArmImage((int)ZombieKind.Normal), imageIdentities, result);
             AddOptional(AdventureZombieFeedbackRules.ArmReplacement((int)ZombieKind.Normal, "Zombie_outerarm_upper"), imageIdentities, result);

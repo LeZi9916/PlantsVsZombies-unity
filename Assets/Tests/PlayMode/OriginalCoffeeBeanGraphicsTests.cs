@@ -28,7 +28,7 @@ namespace PlantsVsZombies.Tests.PlayMode
             {
                 using var fixture = new OriginalStormGraphicsTests.StormFixture(level);
                 var game = fixture.Owner.RequiredGame;
-                game.Plants.Clear();
+                SimulationFixture.Plants(game).Clear();
                 var row = level == 29 ? 2 : 1;
                 if (level != 9)
                 {
@@ -69,10 +69,10 @@ namespace PlantsVsZombies.Tests.PlayMode
         {
             using var fixture = new OriginalStormGraphicsTests.StormFixture(49);
             SpriteSourceTestUtilities.SetImage(fixture.Owner.Textures, "plantshadow.png", null!);
-            fixture.Owner.RequiredGame.Plants.Clear();
+            SimulationFixture.Plants(fixture.Owner.RequiredGame).Clear();
             var plant = new Plant { Id = 91, Kind = PlantKind.PuffShroom, Row = 1, Column = 4,
                 Asleep = true, Health = 300f, Age = 1.4f, PresentationRate = 12f };
-            fixture.Owner.RequiredGame.Plants.Add(plant);
+            SimulationFixture.Plants(fixture.Owner.RequiredGame).Add(plant);
             foreach (var remaining in new[] { 70, 60, 35, 10 })
             {
                 plant.WakeTimer = remaining * .01f;
@@ -196,7 +196,7 @@ namespace PlantsVsZombies.Tests.PlayMode
         /// <exception cref="TargetInvocationException">The production action throws an exception.</exception>
         private static object? Invoke(GameSimulation game, string method, params object[] arguments)
         {
-            return typeof(GameSimulation).GetMethod(method, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(game, arguments);
+            return SimulationInspection.GetMethod(method, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(game, arguments);
         }
     }
 }

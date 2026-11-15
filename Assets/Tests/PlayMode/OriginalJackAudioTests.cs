@@ -54,14 +54,14 @@ namespace PlantsVsZombies.Tests.PlayMode
                 owner._game = new GameSimulation(new GameRules { AdventureLevel = 18 }, 7529);
                 owner._currentView = PvZGame.ScreenView.Board;
                 Assert.That(owner._game.ChooseDefaultAdventureSeeds(), Is.True);
-                var first = (Zombie)typeof(GameSimulation).GetMethod("SpawnAdventureZombie", flags)!
+                var first = (Zombie)SimulationInspection.GetMethod("SpawnAdventureZombie", flags)!
                     .Invoke(owner._game, new object[] { ZombieKind.JackInTheBox, 2, 8f, 5 })!;
                 update.Invoke(effects, null);
                 yield return null;
                 var loop = (AudioSource)typeof(GameSoundEffects).GetField("_jackInTheBoxMusic", flags)!.GetValue(effects)!;
                 Assert.That(loop.clip, Is.SameAs(clip));
                 Assert.That(loop.loop && loop.isPlaying, Is.True, "A box zombie starts the actual original tune on entry.");
-                var second = (Zombie)typeof(GameSimulation).GetMethod("SpawnAdventureZombie", flags)!
+                var second = (Zombie)SimulationInspection.GetMethod("SpawnAdventureZombie", flags)!
                     .Invoke(owner._game, new object[] { ZombieKind.JackInTheBox, 3, 8f, 5 })!;
                 first.PresentationNativePhase = 16;
                 update.Invoke(effects, null);

@@ -209,8 +209,8 @@ namespace PlantsVsZombies.Tests.PlayMode
             Assert.That(_owner.Opening.AdventureIntroActive, Is.False);
             Assert.That(_owner.Layout.AdventureSeedRect(1), Is.EqualTo(lastIntro));
             Assert.That(lastIntro.x, Is.EqualTo(140));
-            typeof(GameSimulation).GetProperty(nameof(GameSimulation.SunAmount))!.SetValue(_owner._game, 9990);
-            var cooldowns = (int[])typeof(GameSimulation).GetField("_seedCooldownTicks", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(_owner._game)!;
+            SimulationInspection.GetProperty(nameof(GameSimulation.SunAmount))!.SetValue(_owner._game, 9990);
+            var cooldowns = (int[])SimulationInspection.GetField("_seedCooldownTicks", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(_owner._game)!;
             Array.Clear(cooldowns, 0, cooldowns.Length);
             GameMemberReflection.Invoke(_owner, "HandleAdventureClick", new object[] { lastIntro.center });
             Assert.That(_owner._selected, Is.EqualTo(1), "The first gameplay click uses the retained final bank origin.");
@@ -281,7 +281,7 @@ namespace PlantsVsZombies.Tests.PlayMode
             var flags = BindingFlags.Instance | BindingFlags.NonPublic;
             var opening = typeof(GamePresenter).GetMethod("DrawAdventureOpeningInterface", flags)!;
             var playing = typeof(GamePresenter).GetMethod("DrawAdventureSeedBankContents", flags)!;
-            var add = typeof(GameSimulation).GetMethod("AddAdventurePacket", flags)!;
+            var add = SimulationInspection.GetMethod("AddAdventurePacket", flags)!;
             foreach (var number in new[] { 5, 10, 20, 25, 30, 40, 45, 50 })
             {
                 _owner._game = new GameSimulation(new GameRules { AdventureLevel = number }, 9151);

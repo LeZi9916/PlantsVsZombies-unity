@@ -54,7 +54,7 @@ namespace PlantsVsZombies.Tests.PlayMode
                     PresentationInPool = false, PresentationAnimation = "anim_drive", PresentationAnimationAge = .3f,
                     ZomboniState = new AdventureZomboniState()
                 };
-                owner._game.Zombies.Add(zombie);
+                SimulationFixture.Zombies(owner._game).Add(zombie);
                 Color32[]? previous = null;
                 foreach (var health in new[] { 1350f, 899f, 449f })
                 {

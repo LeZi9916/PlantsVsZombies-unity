@@ -50,7 +50,7 @@ namespace PlantsVsZombies.Tests.PlayMode
                 {
                     owner._game = new GameSimulation(new GameRules { AdventureLevel = 8 }, 7529);
                     Assert.That(owner._game.ChooseDefaultAdventureSeeds(), Is.True);
-                    owner._game.Mowers.Clear();
+                    SimulationFixture.Mowers(owner._game).Clear();
                     var coin = owner._game.RequiredSpawnAdventureCoin(kind, 5f, 2f);
                     Assert.That(owner._game.CollectAdventureCoin(coin), Is.True);
                     for (var frame = 0; frame < 2; frame++)
@@ -187,7 +187,7 @@ namespace PlantsVsZombies.Tests.PlayMode
                     owner._game = new GameSimulation(new GameRules { AdventureLevel = 8 }, 7529);
                     Assert.That(owner._game.ChooseDefaultAdventureSeeds(), Is.True);
                     owner._game.ResetAdventureWaveSchedule(100000, false, false);
-                    owner._game.Mowers.Clear();
+                    SimulationFixture.Mowers(owner._game).Clear();
                     var coin = owner._game.RequiredSpawnAdventureCoin(kind, 5f, 2f);
                     Assert.That(coin.HitGround, Is.False);
                     var airborne = DrawMoneySnapshot(animations, presenter, draw);

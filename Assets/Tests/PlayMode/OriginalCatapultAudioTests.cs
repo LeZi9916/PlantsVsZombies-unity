@@ -50,7 +50,7 @@ namespace PlantsVsZombies.Tests.PlayMode
                 owner._game = new GameSimulation(new GameRules { AdventureLevel = 49 }, 7529);
                 owner._game.ChooseDefaultAdventureSeeds();
                 owner._game.ResetAdventureWaveSchedule(100000, false, false);
-                owner._game.Plants.Clear();
+                SimulationFixture.Plants(owner._game).Clear();
                 effects._audioSource = source;
                 effects._soundVolume = .7f;
                 effects._soundVoices = new AudioVoicePool(audio, source, 32);
@@ -130,7 +130,7 @@ namespace PlantsVsZombies.Tests.PlayMode
         /// <returns>The production action result.</returns>
         private static object? Invoke(GameSimulation game, string method, params object[] arguments)
         {
-            return typeof(GameSimulation).GetMethod(method, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(game, arguments);
+            return SimulationInspection.GetMethod(method, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(game, arguments);
         }
     }
 }

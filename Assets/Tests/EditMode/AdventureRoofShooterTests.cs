@@ -94,7 +94,7 @@ namespace PlantsVsZombies.Tests.EditMode
             AdventureGargantuarTests.Invoke(game, "PlaceAdventurePlant", PlantKind.FlowerPot, 1, column);
             var plant = (Plant)AdventureGargantuarTests.Invoke(game, "PlaceAdventurePlant", kind, 1, column)!;
             var pea = (Pea)AdventureGargantuarTests.Invoke(game, "FireAdventurePea", plant, 1, false, 20f)!;
-            game.Plants.Remove(plant);
+            SimulationFixture.Plants(game).Remove(plant);
             var launchX = 40f + pea.X * 80f - 14f;
             var topY = pea.PresentationLaunchY - 14f;
             var cell = Math.Max(0, Math.Min(8, ((int)launchX - 40) / 80));

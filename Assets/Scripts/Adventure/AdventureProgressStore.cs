@@ -9,7 +9,7 @@ using System.Text;
 
 namespace PlantsVsZombies.Adventure
 {
-    /// <summary>Separate replica-only sidecar keyed by the unchanged v1 ProfileCatalog GUID. Does not open original user files.</summary>
+    /// <summary>Separate only sidecar keyed by the unchanged v1 ProfileCatalog GUID. Does not open original user files.</summary>
     public sealed class AdventureProgressStore
     {
         /// <summary>Stores magic.</summary>
@@ -67,6 +67,43 @@ namespace PlantsVsZombies.Adventure
                 };
             }
         }
+
+#if UNITY_EDITOR
+        /// <summary>Copies the exact disk baseline read or committed by this store for editor draft recovery.</summary>
+        /// <returns>The last accepted file bytes, or null when the adventure file did not exist.</returns>
+        internal byte[]? GetEditorSavedBytes()
+        {
+            lock (_gate)
+            {
+                return _savedBytes == null ? null : (byte[])_savedBytes.Clone();
+            }
+        }
+
+        /// <summary>Validates and persists an isolated adventure draft without resetting its loadout or changing other profiles.</summary>
+        /// <param name="snapshot">The complete checkpoint draft, including its reward mask and selected seeds.</param>
+        /// <exception cref="ArgumentNullException">The draft is null.</exception>
+        /// <exception cref="InvalidDataException">The draft cannot be read back as a valid adventure file.</exception>
+        /// <exception cref="InvalidOperationException">The profile limit has been reached.</exception>
+        /// <exception cref="IOException">The file changed externally or could not be saved.</exception>
+        internal void SaveEditorSnapshot(AdventureProgress snapshot)
+        {
+            if (snapshot == null)
+            {
+                throw new ArgumentNullException(nameof(snapshot));
+            }
+
+            lock (_gate)
+            {
+                var copy = snapshot.Copy();
+                var next = new Dictionary<Guid, AdventureProgress>(_records)
+                {
+                    [copy.ProfileId] = copy
+                };
+                var validated = Decode(Encode(next));
+                Commit(validated[copy.ProfileId]);
+            }
+        }
+#endif
 
         /// <summary>Performs save attempt.</summary>
         /// <param name = "profileId">The profile id.</param>

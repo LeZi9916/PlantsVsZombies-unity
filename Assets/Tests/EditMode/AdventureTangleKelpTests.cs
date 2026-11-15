@@ -120,7 +120,7 @@ namespace PlantsVsZombies.Tests.EditMode
             var kelp = Place(game, PlantKind.TangleKelp, 4);
             var target = Target(game, ZombieKind.Normal, 4.5f);
             game.Update(.01f);
-            game.Zombies.Remove(target);
+            SimulationFixture.Zombies(game).Remove(target);
             for (var tick = 0; tick < 80; tick++)
             {
                 game.Update(.01f);
@@ -256,7 +256,7 @@ namespace PlantsVsZombies.Tests.EditMode
         /// <returns>The initializer's return value.</returns>
         private static object? Invoke(GameSimulation game, string name, params object[] arguments)
         {
-            return typeof(GameSimulation).GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(game, arguments);
+            return SimulationInspection.GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(game, arguments);
         }
     }
 }

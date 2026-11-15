@@ -47,7 +47,7 @@ internal static class ExperimentalModeTests
         for (int i = 0; i < 2; i++)
         {
             Sun sun = new Sun { X = 1f, Y = 1f, TargetY = 1f };
-            game.Suns.Add(sun);
+            SimulationFixture.Suns(game).Add(sun);
             Check(game.CollectSun(sun), "collect a prepared sun");
         }
     }
@@ -214,7 +214,7 @@ internal static class ExperimentalModeTests
         Check(Math.Abs(game.Zombies[3].X - 9f) < 0.00001f && Math.Abs(game.Zombies[4].X - 9.5f) < 0.00001f,
             "replaceable in-wave spawn spacing");
         Check(completionCalls > 0 && game.State == MatchState.Playing, "custom completion can wait for reward handling");
-        game.Zombies.Clear();
+        SimulationFixture.Zombies(game).Clear();
         game.Update(0.01f);
         Equal(MatchState.Playing, game.State, "clearing zombies alone does not override custom completion");
         complete = true;
@@ -308,7 +308,7 @@ internal static class ExperimentalModeTests
         ReachOnslaught(game);
         game.Update(0.1f);
         Equal(4, game.LevelOneWavesDispatched, "options are captured at construction");
-        game.Zombies.Clear();
+        SimulationFixture.Zombies(game).Clear();
         game.Update(0.01f);
         Equal(MatchState.Playing, game.State, "captured completion policy remains in force");
     }

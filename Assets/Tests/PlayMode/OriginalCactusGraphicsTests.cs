@@ -46,7 +46,7 @@ namespace PlantsVsZombies.Tests.PlayMode
                 Assert.That(owner._game.ChooseDefaultAdventureSeeds(), Is.True);
                 var flags = BindingFlags.Instance | BindingFlags.NonPublic;
                 typeof(GamePresenter).GetField("_renderingBoardObjects", flags)!.SetValue(presenter, true);
-                var plant = (Plant)typeof(GameSimulation).GetMethod("PlaceAdventurePlant", flags)!
+                var plant = (Plant)SimulationInspection.GetMethod("PlaceAdventurePlant", flags)!
                     .Invoke(owner._game, new object[] { PlantKind.Cactus, 1, 3 })!;
                 plant.PresentationRate = 12f;
                 Tick(owner._game, plant, 1);
@@ -55,7 +55,7 @@ namespace PlantsVsZombies.Tests.PlayMode
                 var low = pixels.GetPixels32();
                 var lowTop = HighestGreen(low, target.width, target.height);
 
-                owner._game.Zombies.Add(new Zombie
+                SimulationFixture.Zombies(owner._game).Add(new Zombie
                 {
                     Id = 91,
                     Kind = ZombieKind.Balloon,
@@ -84,7 +84,7 @@ namespace PlantsVsZombies.Tests.PlayMode
                 Assert.That(highTop, Is.LessThan(lowTop - 30f), "The original high body must extend upward without shifting the plant's ground origin.");
                 Assert.That(Changed(rising, high), Is.GreaterThan(100));
 
-                owner._game.Zombies.Clear();
+                SimulationFixture.Zombies(owner._game).Clear();
                 Tick(owner._game, plant, 18);
                 Assert.That(plant.CactusPresentation.Animation, Is.EqualTo("anim_lower"));
                 yield return Capture(animations, presenter, plant, target, pixels);
@@ -118,7 +118,7 @@ namespace PlantsVsZombies.Tests.PlayMode
         /// <param name="ticks">The number of native hundred-Hz updates.</param>
         private static void Tick(GameSimulation game, Plant plant, int ticks)
         {
-            var update = typeof(GameSimulation).GetMethod("AdvanceAdventureNativeTimedPlant", BindingFlags.Instance | BindingFlags.NonPublic)!;
+            var update = SimulationInspection.GetMethod("AdvanceAdventureNativeTimedPlant", BindingFlags.Instance | BindingFlags.NonPublic)!;
             for (var tick = 0; tick < ticks; tick++)
             {
                 update.Invoke(game, new object[] { plant });

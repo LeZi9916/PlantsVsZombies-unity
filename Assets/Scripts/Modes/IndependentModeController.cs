@@ -171,13 +171,7 @@ namespace PlantsVsZombies.Modes
             }
 
             ReadModeRecord(originalModeId);
-            var giftAccess = originalModeId <= 15 ? RequiredModeAccountSnapshot.SurvivalUnlocked : originalModeId <= 35 ? RequiredModeAccountSnapshot.MinigamesUnlocked : RequiredModeAccountSnapshot.PuzzleUnlocked;
-            if (!giftAccess && !ModeUnlockRules.CategoryUnlocked(originalModeId, _modeAdventureNextLevel, _modeHasFinishedAdventure))
-            {
-                return originalModeId <= 15 ? "通关冒险模式后解锁生存模式。" : originalModeId <= 35 ? "通过冒险模式3-2，领取小游戏礼物后解锁。" : "通过冒险模式4-6，领取解谜模式礼物后解锁。";
-            }
-
-            return ModeUnlockRules.LockReason(originalModeId, _modeHasFinishedAdventure, index => RequiredModeAccountSnapshot.ModeRecord(index));
+            return ModeAccessRules.LockReason(originalModeId, RequiredModeAccountSnapshot, _modeAdventureNextLevel, _modeHasFinishedAdventure);
         }
 
         /// <summary>Performs start independent mode.</summary>

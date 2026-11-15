@@ -112,8 +112,8 @@ namespace PlantsVsZombies.Tests.PlayMode
         {
             _owner._game = new GameSimulation(new GameRules { AdventureLevel = 11 }, 7529);
             Assert.That(_owner._game.ChooseDefaultAdventureSeeds(), Is.True);
-            var plant = new Plant { Id = 81, Kind = PlantKind.PuffShroom, Row = 0, Column = 1, Health = 300f };
-            var fire = typeof(GameSimulation).GetMethod("FireAdventurePea", BindingFlags.Instance | BindingFlags.NonPublic)!;
+            var plant = new Plant { Id = 81, Kind = PlantKind.PuffShroom, Row = 0, Column = 1, Health = 300f, PositionOffsetX = -5, PositionOffsetY = 2 };
+            var fire = SimulationInspection.GetMethod("FireAdventurePea", BindingFlags.Instance | BindingFlags.NonPublic)!;
             var shot = (Pea)fire.Invoke(_owner._game, new object[] { plant, 0, false, 20f })!;
             var draw = typeof(GamePresenter).GetMethod("DrawAdventureProjectile", BindingFlags.Instance | BindingFlags.NonPublic)!;
             yield return Capture(() => draw.Invoke(_presenter, new object[] { shot }));
@@ -121,8 +121,8 @@ namespace PlantsVsZombies.Tests.PlayMode
             Save("puff-spore-initial.png");
             Assert.That(initial.width, Is.InRange(4f, 13f), "The original new spore should start at scale0.3.");
             Assert.That(initial.height, Is.InRange(3f, 12f));
-            Assert.That(initial.center.x, Is.EqualTo(176f).Within(4f));
-            Assert.That(initial.center.y, Is.EqualTo(133.5f).Within(4f), "The generic pea Y=cell+30 places the puff too high.");
+            Assert.That(initial.center.x, Is.EqualTo(171f).Within(4f));
+            Assert.That(initial.center.y, Is.EqualTo(135.5f).Within(4f), "The generic pea Y=cell+30 places the puff too high.");
 
             shot.PresentationNativeAge = .3f;
             shot.PresentationAge = .3f;
@@ -131,12 +131,12 @@ namespace PlantsVsZombies.Tests.PlayMode
             Save("puff-spore-grown.png");
             Assert.That(grown.width, Is.GreaterThan(initial.width * 2f));
             Assert.That(grown.height, Is.GreaterThan(initial.height * 2f));
-            Assert.That(grown.center.x, Is.EqualTo(176f).Within(4f));
-            Assert.That(grown.center.y, Is.EqualTo(133.5f).Within(4f));
-            Assert.That(grown.xMin, Is.GreaterThanOrEqualTo(158f));
-            Assert.That(grown.xMax, Is.LessThanOrEqualTo(194f));
-            Assert.That(grown.yMin, Is.GreaterThanOrEqualTo(118f));
-            Assert.That(grown.yMax, Is.LessThanOrEqualTo(149f));
+            Assert.That(grown.center.x, Is.EqualTo(171f).Within(4f));
+            Assert.That(grown.center.y, Is.EqualTo(135.5f).Within(4f));
+            Assert.That(grown.xMin, Is.GreaterThanOrEqualTo(153f));
+            Assert.That(grown.xMax, Is.LessThanOrEqualTo(189f));
+            Assert.That(grown.yMin, Is.GreaterThanOrEqualTo(120f));
+            Assert.That(grown.yMax, Is.LessThanOrEqualTo(151f));
         }
 
         /// <summary>Checks the production presenter displays the original shooting frames before the first spore launches.</summary>
@@ -148,10 +148,10 @@ namespace PlantsVsZombies.Tests.PlayMode
             _owner._game = game;
             Assert.That(game.ChooseDefaultAdventureSeeds(), Is.True);
             game.ResetAdventureWaveSchedule(100000, false, false);
-            var place = typeof(GameSimulation).GetMethod("PlaceAdventurePlant", BindingFlags.Instance | BindingFlags.NonPublic)!;
+            var place = SimulationInspection.GetMethod("PlaceAdventurePlant", BindingFlags.Instance | BindingFlags.NonPublic)!;
             var plant = (Plant)place.Invoke(game, new object[] { PlantKind.PuffShroom, 0, 1 })!;
             plant.Timing = PlantsVsZombies.Timing.PlantTiming.FromRaw(PlantsVsZombies.Timing.PlantKind.PuffShroom, 0, 0);
-            game.Zombies.Add(new Zombie
+            SimulationFixture.Zombies(game).Add(new Zombie
             {
                 Id = 91,
                 Kind = ZombieKind.Normal,
@@ -173,7 +173,7 @@ namespace PlantsVsZombies.Tests.PlayMode
             yield return Capture(() => draw.Invoke(_presenter, new object[] { plant }));
             var actual = _pixels.GetPixels32();
             Save("puff-first-attack-windup.png");
-            var origin = new Vector2(120f, 80f + AlmanacPortraitLayout.PlantHeightOffset(8));
+            var origin = new Vector2(120f + plant.PositionOffsetX, 80f + plant.PositionOffsetY + AlmanacPortraitLayout.PlantHeightOffset(8));
             yield return Capture(() => _animations.DrawNativePlayback("Puffshroom", origin, 1f,
                 plant.PresentationShotAge, "anim_shooting", false, 35f));
             Assert.That(ChangedPixels(actual, _pixels.GetPixels32()), Is.LessThan(10),
@@ -195,7 +195,7 @@ namespace PlantsVsZombies.Tests.PlayMode
             _owner._game = game;
             Assert.That(game.ChooseDefaultAdventureSeeds(), Is.True);
             game.ResetAdventureWaveSchedule(100000, false, false);
-            var place = typeof(GameSimulation).GetMethod("PlaceAdventurePlant", BindingFlags.Instance | BindingFlags.NonPublic)!;
+            var place = SimulationInspection.GetMethod("PlaceAdventurePlant", BindingFlags.Instance | BindingFlags.NonPublic)!;
             var plant = (Plant)place.Invoke(game, new object[] { PlantKind.FumeShroom, 0, 1 })!;
             plant.Timing = PlantsVsZombies.Timing.PlantTiming.FromRaw(PlantsVsZombies.Timing.PlantKind.FumeShroom, 0, 0);
             var zombie = new Zombie
@@ -208,7 +208,7 @@ namespace PlantsVsZombies.Tests.PlayMode
                 StartingHealth = 270f,
                 FrozenRemaining = 1000f
             };
-            game.Zombies.Add(zombie);
+            SimulationFixture.Zombies(game).Add(zombie);
             game.Update(.01f);
             game.Update(.14f);
             Assert.That(zombie.Health, Is.EqualTo(270f));
@@ -240,9 +240,9 @@ namespace PlantsVsZombies.Tests.PlayMode
             game.ResetAdventureWaveSchedule(100000, false, false);
             SpriteSourceTestUtilities.SetImage(_owner.Textures, "plantshadow.png", null!);
             SpriteSourceTestUtilities.SetImage(_owner.Textures, "plantshadow2.png", null!);
-            var plant = (Plant)typeof(GameSimulation).GetMethod("PlaceAdventurePlant", BindingFlags.Instance | BindingFlags.NonPublic)!
+            var plant = (Plant)SimulationInspection.GetMethod("PlaceAdventurePlant", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(game, new object[] { PlantKind.Squash, 1, 4 })!;
-            game.Zombies.Add(new Zombie
+            SimulationFixture.Zombies(game).Add(new Zombie
             {
                 Id = 1000, Kind = ZombieKind.Normal, Row = 1,
                 X = AdventureZombieNativeRules.GridX(390), Health = 270f, StartingHealth = 270f,
@@ -310,7 +310,7 @@ namespace PlantsVsZombies.Tests.PlayMode
                 PresentationRate = 12f,
                 ScaredyShroomPresentation = state
             };
-            game.Plants.Add(plant);
+            SimulationFixture.Plants(game).Add(plant);
             var draw = typeof(GamePresenter).GetMethod("DrawAdventurePlant", BindingFlags.Instance | BindingFlags.NonPublic)!;
             var origin = new Vector2(120f, 80f + AlmanacPortraitLayout.PlantHeightOffset(13));
             state.Tick(true, false, 0f);
@@ -380,10 +380,12 @@ namespace PlantsVsZombies.Tests.PlayMode
                 Column = 1,
                 Health = 300f,
                 Age = .5f,
+                PositionOffsetX = 4,
+                PositionOffsetY = -3,
                 PresentationRate = 12f,
                 Asleep = level == 9
             };
-            _owner._game.Plants.Add(plant);
+            SimulationFixture.Plants(_owner._game).Add(plant);
             var method = typeof(GamePresenter).GetMethod("DrawAdventurePlant", BindingFlags.Instance | BindingFlags.NonPublic)!;
             Action draw = () => method.Invoke(_presenter, new object[] { plant });
             yield return Capture(draw);
@@ -396,7 +398,7 @@ namespace PlantsVsZombies.Tests.PlayMode
             yield return Capture(draw);
             SpriteSourceTestUtilities.SetLogicalImage(_owner.Textures, shadowName, shadow);
             var withoutShadow = _pixels.GetPixels32();
-            var expected = new Rect(138.5f, 136f, 43f, 18f);
+            var expected = new Rect(142.5f, 133f, 43f, 18f);
             var tolerance = new Rect(expected.x - 2f, expected.y - 2f, expected.width + 4f, expected.height + 4f);
             var shadowPixels = 0;
             for (var y = 0; y < _pixels.height; y++)

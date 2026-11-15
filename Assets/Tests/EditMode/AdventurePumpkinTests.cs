@@ -37,14 +37,14 @@ namespace PlantsVsZombies.Tests.EditMode
             var game = new GameSimulation(new GameRules { AdventureLevel = 31 }, 91);
             game.ChooseDefaultAdventureSeeds();
             var flags = BindingFlags.Instance | BindingFlags.NonPublic;
-            var place = typeof(GameSimulation).GetMethod("PlaceAdventurePlant", flags)!;
+            var place = SimulationInspection.GetMethod("PlaceAdventurePlant", flags)!;
             var main = (Plant)place.Invoke(game, new object[] { PlantKind.Peashooter, 1, 4 })!;
             var shell = (Plant)place.Invoke(game, new object[] { PlantKind.Pumpkin, 1, 4 })!;
-            var zombie = (Zombie)typeof(GameSimulation).GetMethod("SpawnAdventureBoardZombie", flags)!
+            var zombie = (Zombie)SimulationInspection.GetMethod("SpawnAdventureBoardZombie", flags)!
                 .Invoke(game, new object[] { ZombieKind.Normal, 1, 5f, 0 })!;
-            var find = typeof(GameSimulation).GetMethod("FindAdventureNativePlantTarget", flags)!;
+            var find = SimulationInspection.GetMethod("FindAdventureNativePlantTarget", flags)!;
             Assert.That(find.Invoke(game, new object[] { zombie, AdventureBiteAttack.Chew }), Is.SameAs(shell));
-            var advance = typeof(GameSimulation).GetMethod("AdvanceAdventureZombies", flags)!;
+            var advance = SimulationInspection.GetMethod("AdvanceAdventureZombies", flags)!;
             for (var tick = 0; tick < 200 && shell.Health == 4000f; tick++)
             {
                 advance.Invoke(game, new object[] { .01f });
@@ -52,7 +52,7 @@ namespace PlantsVsZombies.Tests.EditMode
 
             Assert.That(shell.Health, Is.EqualTo(3996f));
             Assert.That(main.Health, Is.EqualTo(300f));
-            game.Plants.Remove(shell);
+            SimulationFixture.Plants(game).Remove(shell);
             Assert.That(find.Invoke(game, new object[] { zombie, AdventureBiteAttack.Chew }), Is.SameAs(main));
         }
 
@@ -68,10 +68,10 @@ namespace PlantsVsZombies.Tests.EditMode
             var game = new GameSimulation(new GameRules { AdventureLevel = 31 }, 91);
             var main = new Plant { Id = 1, Kind = PlantKind.Peashooter, Layer = PlantLayer.Main, Row = 1, Column = 4, Health = 300f };
             var shell = new Plant { Id = 2, Kind = PlantKind.Pumpkin, Layer = PlantLayer.Armor, Row = 1, Column = 4, Health = 4000f };
-            game.Plants.Add(shellFirst ? shell : main);
-            game.Plants.Add(shellFirst ? main : shell);
+            SimulationFixture.Plants(game).Add(shellFirst ? shell : main);
+            SimulationFixture.Plants(game).Add(shellFirst ? main : shell);
             var flags = BindingFlags.Instance | BindingFlags.NonPublic;
-            var zombie = (Zombie)typeof(GameSimulation).GetMethod("SpawnAdventureBoardZombie", flags)!
+            var zombie = (Zombie)SimulationInspection.GetMethod("SpawnAdventureBoardZombie", flags)!
                 .Invoke(game, new object[] { kind, 1, 7f, 0 })!;
             zombie.TargetColumn = 4;
             zombie.AbilityTimer = 0f;
@@ -83,7 +83,7 @@ namespace PlantsVsZombies.Tests.EditMode
                 zombie.PresentationAltitude = 0f;
             }
 
-            typeof(GameSimulation).GetMethod("AdvanceAdventureZombies", flags)!.Invoke(game, new object[] { .01f });
+            SimulationInspection.GetMethod("AdvanceAdventureZombies", flags)!.Invoke(game, new object[] { .01f });
             Assert.That(shell.Health, Is.EqualTo(4000f));
             Assert.That(game.Plants.Contains(shell), Is.True);
             if (kind == ZombieKind.Bungee)
@@ -96,9 +96,9 @@ namespace PlantsVsZombies.Tests.EditMode
                 Assert.That(main.Health, Is.EqualTo(300f), "The catapult must launch a real ball before dealing damage.");
                 for (var tick = 0; tick < 300 && main.Health == 300f; tick++)
                 {
-                    typeof(GameSimulation).GetMethod("AdventurePresentationTick", flags)!.Invoke(game, new object[] { .01f });
-                    typeof(GameSimulation).GetMethod("AdvanceAdventureZombies", flags)!.Invoke(game, new object[] { .01f });
-                    typeof(GameSimulation).GetMethod("AdvanceAdventureProjectiles", flags)!.Invoke(game, new object[] { .01f, true });
+                    SimulationInspection.GetMethod("AdventurePresentationTick", flags)!.Invoke(game, new object[] { .01f });
+                    SimulationInspection.GetMethod("AdvanceAdventureZombies", flags)!.Invoke(game, new object[] { .01f });
+                    SimulationInspection.GetMethod("AdvanceAdventureProjectiles", flags)!.Invoke(game, new object[] { .01f, true });
                 }
 
                 Assert.That(main.Health, Is.EqualTo(225f));
@@ -113,10 +113,10 @@ namespace PlantsVsZombies.Tests.EditMode
             var game = new GameSimulation(new GameRules { AdventureLevel = 31 }, 91);
             var cattail = new Plant { Id = 1, Kind = PlantKind.Cattail, Layer = PlantLayer.Main, Row = 2, Column = 4, Health = 300f };
             var shell = new Plant { Id = 2, Kind = PlantKind.Pumpkin, Layer = PlantLayer.Armor, Row = 2, Column = 4, Health = 4000f };
-            game.Plants.Add(cattail);
-            game.Plants.Add(shell);
+            SimulationFixture.Plants(game).Add(cattail);
+            SimulationFixture.Plants(game).Add(shell);
             var flags = BindingFlags.Instance | BindingFlags.NonPublic;
-            var zombie = (Zombie)typeof(GameSimulation).GetMethod("SpawnAdventureBoardZombie", flags)!
+            var zombie = (Zombie)SimulationInspection.GetMethod("SpawnAdventureBoardZombie", flags)!
                 .Invoke(game, new object[] { ZombieKind.Bungee, 2, 7f, 0 })!;
             zombie.TargetColumn = 4;
             zombie.AbilityTimer = 0f;
@@ -127,7 +127,7 @@ namespace PlantsVsZombies.Tests.EditMode
             cattail.BungeeState = 1;
             zombie.PresentationNativePhase = 7;
             zombie.PresentationAltitude = 0f;
-            typeof(GameSimulation).GetMethod("AdvanceAdventureZombies", flags)!.Invoke(game, new object[] { .01f });
+            SimulationInspection.GetMethod("AdvanceAdventureZombies", flags)!.Invoke(game, new object[] { .01f });
             Assert.That(cattail.BungeeState, Is.EqualTo(2));
             Assert.That(game.AdventurePlantAt(2, 4, PlantLayer.Support)?.Kind, Is.EqualTo(PlantKind.LilyPad));
             Assert.That(game.Plants.Contains(shell), Is.True);
@@ -140,8 +140,8 @@ namespace PlantsVsZombies.Tests.EditMode
             var game = new GameSimulation(new GameRules { AdventureLevel = 31 }, 91);
             game.ChooseDefaultAdventureSeeds();
             var shell = new Plant { Kind = PlantKind.Pumpkin, Row = 1, Column = 4, Layer = PlantLayer.Armor, Health = 4000f };
-            game.Plants.Add(shell);
-            var method = typeof(GameSimulation).GetMethod("CheckAdventurePlanting", BindingFlags.Instance | BindingFlags.NonPublic)!;
+            SimulationFixture.Plants(game).Add(shell);
+            var method = SimulationInspection.GetMethod("CheckAdventurePlanting", BindingFlags.Instance | BindingFlags.NonPublic)!;
             Assert.That(method.Invoke(game, new object[] { PlantKind.FlowerPot, 1, 4, true }), Is.EqualTo(AdventurePlantingFailure.Occupied));
         }
 
@@ -155,18 +155,18 @@ namespace PlantsVsZombies.Tests.EditMode
             var game = new GameSimulation(new GameRules { AdventureLevel = 31 }, 91);
             Assert.That(game.ChooseDefaultAdventureSeeds(), Is.True);
             game.ResetAdventureWaveSchedule(100000, false, false);
-            game.Plants.Clear();
-            game.Zombies.Clear();
+            SimulationFixture.Plants(game).Clear();
+            SimulationFixture.Zombies(game).Clear();
             var main = new Plant { Id = 1, Kind = PlantKind.Peashooter, Layer = PlantLayer.Main, Row = 1, Column = 4, Health = 300f };
             var shell = new Plant { Id = 2, Kind = PlantKind.Pumpkin, Layer = PlantLayer.Armor, Row = 1, Column = 4, Health = 4000f };
-            game.Plants.Add(main);
-            game.Plants.Add(shell);
+            SimulationFixture.Plants(game).Add(main);
+            SimulationFixture.Plants(game).Add(shell);
             var flags = BindingFlags.Instance | BindingFlags.NonPublic;
-            var zombie = (Zombie)typeof(GameSimulation).GetMethod("SpawnAdventureBoardZombie", flags)!
+            var zombie = (Zombie)SimulationInspection.GetMethod("SpawnAdventureBoardZombie", flags)!
                 .Invoke(game, new object[] { kind, 1, 4.6f, 0 })!;
             zombie.AbilityPhase = 12;
             zombie.BiteTimer = 0f;
-            typeof(GameSimulation).GetMethod("AdvanceAdventureZombies", flags)!.Invoke(game, new object[] { .01f });
+            SimulationInspection.GetMethod("AdvanceAdventureZombies", flags)!.Invoke(game, new object[] { .01f });
             if (kind == ZombieKind.Gargantuar)
             {
                 Assert.That(game.Plants.Contains(shell), Is.True, "The original giant must finish the smash windup first.");
@@ -193,8 +193,8 @@ namespace PlantsVsZombies.Tests.EditMode
         {
             var game = new GameSimulation(new GameRules { AdventureLevel = 31, AdventureFirstAid = true }, 91);
             var shell = new Plant { Kind = PlantKind.Pumpkin, Row = 1, Column = 4, Layer = PlantLayer.Armor, Health = health };
-            game.Plants.Add(shell);
-            var method = typeof(GameSimulation).GetMethod("IsAdventureFirstAid", BindingFlags.Instance | BindingFlags.NonPublic)!;
+            SimulationFixture.Plants(game).Add(shell);
+            var method = SimulationInspection.GetMethod("IsAdventureFirstAid", BindingFlags.Instance | BindingFlags.NonPublic)!;
             Assert.That(method.Invoke(game, new object[] { PlantKind.Pumpkin, 1, 4 }), Is.EqualTo(repair));
             Assert.That(AdventureDefensivePlantRules.DamageTrack(PlantKind.Pumpkin), Is.EqualTo("Pumpkin_front"));
             Assert.That(AdventureDefensivePlantRules.DamageImage(PlantKind.Pumpkin, health), Is.EqualTo(image));

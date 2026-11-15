@@ -18,20 +18,20 @@ namespace PlantsVsZombies.Rendering
         /// <summary>Identifies immutable prepared geometry independently of transient painter state.</summary>
         private readonly struct RegionCacheKey : IEquatable<RegionCacheKey>
         {
-            /// <summary>The canonical original image identity.</summary>
-            private readonly string _identity;
+            /// <summary>The provider-local stable image identifier.</summary>
+            private readonly int _imageId;
             /// <summary>The exact normalized original source request, including either reversed axis.</summary>
             private readonly Rect _sourceUv;
             /// <summary>Whether transparent cell rectangles participate in this cached geometry.</summary>
             private readonly bool _useTightGeometry;
 
             /// <summary>Creates a value-type cache lookup without allocating a composite string.</summary>
-            /// <param name="identity">The original image identity.</param>
+            /// <param name="imageId">The provider-local stable image identifier.</param>
             /// <param name="sourceUv">The requested original normalized rectangle.</param>
             /// <param name="useTightGeometry">Whether transparent cell pruning is enabled.</param>
-            internal RegionCacheKey(string identity, Rect sourceUv, bool useTightGeometry)
+            internal RegionCacheKey(int imageId, Rect sourceUv, bool useTightGeometry)
             {
-                _identity = identity;
+                _imageId = imageId;
                 _sourceUv = sourceUv;
                 _useTightGeometry = useTightGeometry;
             }
@@ -41,7 +41,7 @@ namespace PlantsVsZombies.Rendering
             /// <returns>True when both keys represent the same source sampling request.</returns>
             public bool Equals(RegionCacheKey other)
             {
-                return string.Equals(_identity, other._identity, StringComparison.Ordinal) && _sourceUv.Equals(other._sourceUv) && _useTightGeometry == other._useTightGeometry;
+                return _imageId == other._imageId && _sourceUv.Equals(other._sourceUv) && _useTightGeometry == other._useTightGeometry;
             }
 
             /// <summary>Checks an object for equality with this source request.</summary>
@@ -56,36 +56,8 @@ namespace PlantsVsZombies.Rendering
             /// <returns>The dictionary hash for this image/crop request.</returns>
             public override int GetHashCode()
             {
-                return unchecked(((_identity.GetHashCode() * 397) ^ _sourceUv.GetHashCode()) * 397 ^ (_useTightGeometry ? 1 : 0));
+                return unchecked(((_imageId * 397) ^ _sourceUv.GetHashCode()) * 397 ^ (_useTightGeometry ? 1 : 0));
             }
-        }
-
-        /// <summary>Retains one bounded prepared image/crop result across different intervening sprite submissions.</summary>
-        private sealed class RegionCacheEntry
-        {
-            /// <summary>The reusable paired geometry and imported page references.</summary>
-            internal SpriteImageRegion[] Regions = Array.Empty<SpriteImageRegion>();
-            /// <summary>The valid region count in the reusable array.</summary>
-            internal int Count;
-            /// <summary>The complete layout generation used by the cached page mappings.</summary>
-            internal int LayoutVersion = -1;
-            /// <summary>The page-retirement generation used by the cached texture references.</summary>
-            internal int StorageVersion = -1;
-            /// <summary>The monotonic usage stamp used for bounded least-recently-used replacement.</summary>
-            internal long LastUse;
-        }
-
-        /// <summary>Touches each original image's page residency at most once per complete scene frame.</summary>
-        private sealed class ImageFrameState
-        {
-            /// <summary>The complete frame whose required pages have been prepared.</summary>
-            internal int Frame = -1;
-            /// <summary>The complete layout generation supplying the metadata.</summary>
-            internal int LayoutVersion = -1;
-            /// <summary>The page-retirement generation supplying the imported page references.</summary>
-            internal int StorageVersion = -1;
-            /// <summary>The metadata for the successfully prepared complete layout.</summary>
-            internal SpriteAtlasImage? Image;
         }
 
         /// <summary>The generated catalog's extensionless Resources path.</summary>
@@ -113,9 +85,11 @@ namespace PlantsVsZombies.Rendering
         /// <summary>The reusable list of inactive page IDs awaiting safe eviction.</summary>
         private readonly List<int> _unusedPageIds = new List<int>();
         /// <summary>The bounded cross-image geometry cache, populated only by actually sampled source requests.</summary>
-        private readonly Dictionary<RegionCacheKey, RegionCacheEntry> _regionCache = new Dictionary<RegionCacheKey, RegionCacheEntry>(MaximumRegionCacheEntries);
-        /// <summary>The page-residency states retained for original images sampled during this provider's lifetime.</summary>
-        private readonly Dictionary<string, ImageFrameState> _imageFrameStates = new Dictionary<string, ImageFrameState>(StringComparer.Ordinal);
+        private readonly Dictionary<RegionCacheKey, SpriteRegionCacheEntry> _regionCache = new Dictionary<RegionCacheKey, SpriteRegionCacheEntry>(MaximumRegionCacheEntries);
+        /// <summary>Assigns stable integer identities to logical images without hashing paths during submission.</summary>
+        private int _nextImageId;
+        /// <summary>Gets the number of existing handles rebound after a complete layout change.</summary>
+        internal int ImageMetadataRebindCount { get; private set; }
         /// <summary>The reusable scratch buffer used only when an image/crop cache entry must be built.</summary>
         private SpriteImageRegion[] _regionBuildBuffer = Array.Empty<SpriteImageRegion>();
         /// <summary>The currently selected cached array, read directly by indexed region access.</summary>
@@ -123,7 +97,7 @@ namespace PlantsVsZombies.Rendering
         /// <summary>The monotonic usage stamp assigned to the most recently selected bounded cache entry.</summary>
         private long _regionCacheUse;
         /// <summary>The logical image whose cropped regions currently occupy the reusable output buffer.</summary>
-        private string? _preparedIdentity;
+        private SpriteImageBinding? _preparedBinding;
         /// <summary>The exact requested source rectangle used to prepare the reusable regions.</summary>
         private Rect _preparedSourceUv;
         /// <summary>The geometry policy of the currently prepared source request.</summary>
@@ -319,6 +293,14 @@ namespace PlantsVsZombies.Rendering
             LayoutVersion++;
         }
 
+        /// <summary>Creates a stable handle for one canonical image resolved by this provider.</summary>
+        /// <param name="image">The currently selected image metadata.</param>
+        /// <returns>A handle whose identity survives page retirement and layout fallback.</returns>
+        internal SpriteImageBinding CreateBinding(SpriteAtlasImage image)
+        {
+            return new SpriteImageBinding(++_nextImageId, image, LayoutVersion);
+        }
+
         /// <summary>Loads a logical image by original resource ID or original relative filename.</summary>
         /// <param name="imageId">An IMAGE identifier, a relative image path, or a bare images filename.</param>
         /// <returns>The stable logical image, without allocating a source texture for baked images.</returns>
@@ -477,42 +459,42 @@ namespace PlantsVsZombies.Rendering
         }
 
         /// <summary>Prepares and borrows the complete cropped region list for synchronous consumption.</summary>
-        /// <param name="identity">The original image identity.</param>
+        /// <param name="binding">The stable metadata and residency handle.</param>
         /// <param name="sourceUv">The requested original source rectangle.</param>
         /// <param name="useTightGeometry">Whether transparent source pieces may be pruned.</param>
         /// <returns>A borrowed view invalidated by subsequent provider queries.</returns>
-        internal SpriteRegionView GetRegions(string identity, Rect sourceUv, bool useTightGeometry)
+        internal SpriteRegionView GetRegions(SpriteImageBinding binding, Rect sourceUv, bool useTightGeometry)
         {
-            PrepareRegions(identity, sourceUv, useTightGeometry);
+            PrepareRegions(binding, sourceUv, useTightGeometry);
             return new SpriteRegionView(_preparedRegions, _preparedCount);
         }
 
         /// <summary>Counts the cropped geometry pieces after preparing every page used by the logical image.</summary>
-        /// <param name="identity">The original image identity.</param>
+        /// <param name="binding">The stable metadata and residency handle.</param>
         /// <param name="sourceUv">The requested source rectangle.</param>
         /// <returns>The number of visible source intersections.</returns>
         /// <param name="useTightGeometry">Whether transparent cell rectangles may subdivide the source tiles.</param>
-        internal int GetRegionCount(string identity, Rect sourceUv, bool useTightGeometry)
+        internal int GetRegionCount(SpriteImageBinding binding, Rect sourceUv, bool useTightGeometry)
         {
-            PrepareRegions(identity, sourceUv, useTightGeometry);
+            PrepareRegions(binding, sourceUv, useTightGeometry);
             return _preparedCount;
         }
 
         /// <summary>Resolves one source intersection to its already prepared atlas page.</summary>
-        /// <param name="identity">The original image identity.</param>
+        /// <param name="binding">The stable metadata and residency handle.</param>
         /// <param name="sourceUv">The requested source rectangle.</param>
         /// <param name="index">The visible intersection to return.</param>
         /// <param name="region">Receives paired positive original and texture UVs.</param>
         /// <returns>True when the requested visible intersection exists.</returns>
         /// <param name="useTightGeometry">Whether transparent cell rectangles may subdivide the source tiles.</param>
-        internal bool TryGetRegion(string identity, Rect sourceUv, int index, bool useTightGeometry, out SpriteImageRegion region)
+        internal bool TryGetRegion(SpriteImageBinding binding, Rect sourceUv, int index, bool useTightGeometry, out SpriteImageRegion region)
         {
             region = default;
             if (index < 0)
             {
                 return false;
             }
-            PrepareRegions(identity, sourceUv, useTightGeometry);
+            PrepareRegions(binding, sourceUv, useTightGeometry);
             if (index >= _preparedCount)
             {
                 return false;
@@ -522,25 +504,33 @@ namespace PlantsVsZombies.Rendering
         }
 
         /// <summary>Prepares a sprite's complete cropped output once so indexed region access remains constant-time.</summary>
-        /// <param name="identity">The logical original image identity.</param>
+        /// <param name="binding">The logical original image identity.</param>
         /// <param name="sourceUv">The exact requested original source rectangle.</param>
         /// <param name="useTightGeometry">Whether transparent cell rectangles may subdivide the source tiles.</param>
-        private void PrepareRegions(string identity, Rect sourceUv, bool useTightGeometry)
+        private void PrepareRegions(SpriteImageBinding binding, Rect sourceUv, bool useTightGeometry)
         {
             using var profile = SpriteRenderingProfiler.Measure(SpriteRenderingProfiler.Regions);
             ThrowIfDisposed();
-            var sameSource = string.Equals(_preparedIdentity, identity, StringComparison.Ordinal) && _preparedSourceUv.Equals(sourceUv) && _preparedTightGeometry == useTightGeometry;
+            var sameSource = ReferenceEquals(_preparedBinding, binding) && _preparedSourceUv.Equals(sourceUv) && _preparedTightGeometry == useTightGeometry;
             if (sameSource && _preparedLayoutVersion == LayoutVersion && _preparedStorageVersion == _pageStorageVersion
                 && _preparedFrame == SpriteDrawState.FrameVersion)
             {
                 return;
             }
-            var image = PrepareImageForFrame(identity);
-            var key = new RegionCacheKey(identity, sourceUv, useTightGeometry);
-            if (!_regionCache.TryGetValue(key, out var entry))
+            var image = PrepareImageForFrame(binding);
+            var entry = binding.RecentRegions;
+            if (entry == null || !entry.Matches(binding.Id, sourceUv, useTightGeometry))
             {
-                entry = AcquireRegionCacheEntry();
-                _regionCache.Add(key, entry);
+                var key = new RegionCacheKey(binding.Id, sourceUv, useTightGeometry);
+                if (!_regionCache.TryGetValue(key, out entry))
+                {
+                    entry = AcquireRegionCacheEntry();
+                    entry.ImageId = binding.Id;
+                    entry.SourceUv = sourceUv;
+                    entry.UseTightGeometry = useTightGeometry;
+                    _regionCache.Add(key, entry);
+                }
+                binding.RecentRegions = entry;
             }
             if (entry.LayoutVersion != LayoutVersion || entry.StorageVersion != _pageStorageVersion)
             {
@@ -557,7 +547,7 @@ namespace PlantsVsZombies.Rendering
             entry.LastUse = ++_regionCacheUse;
             _preparedRegions = entry.Regions;
             _preparedCount = entry.Count;
-            _preparedIdentity = identity;
+            _preparedBinding = binding;
             _preparedSourceUv = sourceUv;
             _preparedTightGeometry = useTightGeometry;
             _preparedLayoutVersion = LayoutVersion;
@@ -567,15 +557,15 @@ namespace PlantsVsZombies.Rendering
 
         /// <summary>Reuses one retired cache slot when the bounded image/crop cache is full.</summary>
         /// <returns>A new or safely detached reusable cache entry with invalid generation stamps.</returns>
-        private RegionCacheEntry AcquireRegionCacheEntry()
+        private SpriteRegionCacheEntry AcquireRegionCacheEntry()
         {
             if (_regionCache.Count < MaximumRegionCacheEntries)
             {
-                return new RegionCacheEntry();
+                return new SpriteRegionCacheEntry();
             }
             var oldestUse = long.MaxValue;
             var oldestKey = default(RegionCacheKey);
-            RegionCacheEntry? oldest = null;
+            SpriteRegionCacheEntry? oldest = null;
             foreach (var candidate in _regionCache)
             {
                 if (candidate.Value.LastUse < oldestUse)
@@ -592,23 +582,18 @@ namespace PlantsVsZombies.Rendering
         }
 
         /// <summary>Prepares required pages once per image and complete frame, independently of changing source crops.</summary>
-        /// <param name="identity">The canonical original image identity.</param>
+        /// <param name="binding">The stable metadata and residency handle.</param>
         /// <returns>The metadata whose complete page set is ready for this frame.</returns>
-        private SpriteAtlasImage PrepareImageForFrame(string identity)
+        private SpriteAtlasImage PrepareImageForFrame(SpriteImageBinding binding)
         {
-            if (!_imageFrameStates.TryGetValue(identity, out var state))
+            if (binding.Frame != SpriteDrawState.FrameVersion || binding.LayoutVersion != LayoutVersion || binding.StorageVersion != _pageStorageVersion)
             {
-                state = new ImageFrameState();
-                _imageFrameStates.Add(identity, state);
+                binding.Image = PrepareImage(binding);
+                binding.Frame = SpriteDrawState.FrameVersion;
+                binding.LayoutVersion = LayoutVersion;
+                binding.StorageVersion = _pageStorageVersion;
             }
-            if (state.Frame != SpriteDrawState.FrameVersion || state.LayoutVersion != LayoutVersion || state.StorageVersion != _pageStorageVersion)
-            {
-                state.Image = PrepareImage(identity);
-                state.Frame = SpriteDrawState.FrameVersion;
-                state.LayoutVersion = LayoutVersion;
-                state.StorageVersion = _pageStorageVersion;
-            }
-            return state.Image!;
+            return binding.Image!;
         }
 
         /// <summary>Writes disjoint interior, edge, and corner zones once while preserving original Clamp sampling.</summary>
@@ -703,16 +688,22 @@ namespace PlantsVsZombies.Rendering
         }
 
         /// <summary>Loads every page for an image and retries recoverable failures with a smaller complete layout.</summary>
-        /// <param name="identity">The original source image identity.</param>
+        /// <param name="binding">The stable handle rebound when a complete layout changes.</param>
         /// <returns>Metadata from the successfully prepared complete layout.</returns>
         /// <exception cref="InvalidOperationException">All hardware-compatible layouts fail normal resource loading.</exception>
-        private SpriteAtlasImage PrepareImage(string identity)
+        private SpriteAtlasImage PrepareImage(SpriteImageBinding binding)
         {
             ThrowIfDisposed();
             CollectRetiredPages();
             while (true)
             {
-                var image = _metadata[identity];
+                if (binding.LayoutVersion != LayoutVersion)
+                {
+                    binding.Image = _metadata[binding.Image.SourceIdentity];
+                    binding.LayoutVersion = LayoutVersion;
+                    ImageMetadataRebindCount++;
+                }
+                var image = binding.Image;
                 try
                 {
                     foreach (var tile in image.Tiles)
@@ -727,7 +718,7 @@ namespace PlantsVsZombies.Rendering
                     var next = SpriteGeometryUtility.SelectLayout(_catalog.Layouts, Math.Min(_hardwareMaximum, layout.MaximumPageSize - 1));
                     if (next < 0)
                     {
-                        throw new InvalidOperationException("Every compatible baked atlas layout failed to load image: " + identity, error);
+                        throw new InvalidOperationException("Every compatible baked atlas layout failed to load image: " + binding.Image.SourceIdentity, error);
                     }
                     foreach (var page in _pages.Values)
                     {
@@ -748,9 +739,12 @@ namespace PlantsVsZombies.Rendering
         /// <exception cref="InvalidOperationException">The page is missing, oversized, or unexpectedly resized.</exception>
         private void LoadPage(SpriteAtlasTile tile)
         {
-            if (_pages.ContainsKey(tile.Page))
+            if (_pageLastSeen.TryGetValue(tile.Page, out var lastFrame))
             {
-                _pageLastSeen[tile.Page] = SpriteDrawState.FrameVersion;
+                if (lastFrame != SpriteDrawState.FrameVersion)
+                {
+                    _pageLastSeen[tile.Page] = SpriteDrawState.FrameVersion;
+                }
                 return;
             }
             var layout = _catalog!.Layouts[_layoutIndex];
@@ -1028,11 +1022,18 @@ namespace PlantsVsZombies.Rendering
             _looseTextures.Clear();
             _images.Clear();
             _texts.Clear();
+            foreach (var entry in _regionCache.Values)
+            {
+                // Logical images can outlive the provider; their recent-entry references must not retain released pages.
+                entry.Regions = Array.Empty<SpriteImageRegion>();
+                entry.Count = 0;
+                entry.LayoutVersion = -1;
+                entry.StorageVersion = -1;
+            }
             _regionCache.Clear();
-            _imageFrameStates.Clear();
             _preparedRegions = Array.Empty<SpriteImageRegion>();
             _regionBuildBuffer = Array.Empty<SpriteImageRegion>();
-            _preparedIdentity = null;
+            _preparedBinding = null;
             s_providers.Remove(_root);
             _disposed = true;
         }

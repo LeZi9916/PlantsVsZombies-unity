@@ -17,6 +17,14 @@ namespace PlantsVsZombies.Rendering
             internal readonly Transform RootTransform;
             /// <summary>The stable source-track nodes owned by this actor.</summary>
             internal readonly Dictionary<(object Asset, int Track, int Attachment), Node> Sprites = new Dictionary<(object, int, int), Node>();
+            /// <summary>The per-source numeric track tables retaining the same nodes as the inspection dictionary.</summary>
+            internal readonly Dictionary<(object Asset, int Attachment), TrackNodes> TrackTables = new Dictionary<(object, int), TrackNodes>();
+            /// <summary>The source asset whose numeric table was most recently used by this actor.</summary>
+            internal object? LastTrackAsset;
+            /// <summary>The attachment slot owning the most recently used numeric table.</summary>
+            internal int LastTrackAttachment;
+            /// <summary>The most recently used source table, avoiding repeated composite-key hashing.</summary>
+            internal TrackNodes? LastTrackTable;
             /// <summary>The small attachment groups separating repeated body and head artwork in the hierarchy.</summary>
             internal readonly Dictionary<int, GameObject> Attachments = new Dictionary<int, GameObject>();
             /// <summary>The readable species name most recently associated with this logical identity.</summary>
@@ -36,6 +44,16 @@ namespace PlantsVsZombies.Rendering
                 DisplayName = name;
             }
         }
+
+        /// <summary>Retains direct numeric source-track access for one actor, asset, and attachment slot.</summary>
+        private sealed class TrackNodes
+        {
+            /// <summary>The lazily expanded source-index table, bounded independently of sparse external indices.</summary>
+            internal Node?[] Nodes = new Node?[16];
+        }
+
+        /// <summary>The largest source-track table retained for one asset and attachment slot.</summary>
+        private const int MaximumTrackTableLength = 4096;
 
         /// <summary>Tracks the previously observed visibility of one inspectable sprite.</summary>
         private sealed class Node
@@ -149,8 +167,30 @@ namespace PlantsVsZombies.Rendering
             var scope = SaveContext();
             if (_actor != null)
             {
+                TrackNodes? table = null;
+                Node? node = null;
+                if ((uint)trackIndex < MaximumTrackTableLength)
+                {
+                    if (!ReferenceEquals(_actor.LastTrackAsset, asset) || _actor.LastTrackAttachment != _attachment
+                        || _actor.LastTrackTable == null)
+                    {
+                        if (!_actor.TrackTables.TryGetValue((asset, _attachment), out var tracks))
+                        {
+                            tracks = new TrackNodes();
+                            _actor.TrackTables.Add((asset, _attachment), tracks);
+                        }
+                        _actor.LastTrackAsset = asset;
+                        _actor.LastTrackAttachment = _attachment;
+                        _actor.LastTrackTable = tracks;
+                    }
+                    table = _actor.LastTrackTable;
+                    if (trackIndex < table.Nodes.Length)
+                    {
+                        node = table.Nodes[trackIndex];
+                    }
+                }
                 var key = (asset, trackIndex, _attachment);
-                if (!_actor.Sprites.TryGetValue(key, out var node))
+                if (node == null && !_actor.Sprites.TryGetValue(key, out node))
                 {
                     var parent = _actor.Root;
                     if (_attachment != 0 && !_actor.Attachments.TryGetValue(_attachment, out parent))
@@ -163,6 +203,19 @@ namespace PlantsVsZombies.Rendering
 
                     node = new Node(parent.transform, displayName);
                     _actor.Sprites.Add(key, node);
+                }
+                if (table != null && (trackIndex >= table.Nodes.Length || table.Nodes[trackIndex] == null))
+                {
+                    if (trackIndex >= table.Nodes.Length)
+                    {
+                        var length = table.Nodes.Length;
+                        while (length <= trackIndex)
+                        {
+                            length *= 2;
+                        }
+                        Array.Resize(ref table.Nodes, length);
+                    }
+                    table.Nodes[trackIndex] = node;
                 }
 
                 CurrentSprite = node.Transform;
@@ -189,7 +242,7 @@ namespace PlantsVsZombies.Rendering
         /// <param name="matrix">The complete source-to-target affine matrix.</param>
         /// <param name="color">The vertex tint and opacity.</param>
         /// <param name="mode">The source compositing mode.</param>
-        internal static void RecordCurrentSprite(SpriteImage image, float width, float height, Rect uv, Matrix4x4 matrix, Color color, int mode)
+        internal static void RecordCurrentSprite(SpriteImage image, float width, float height, Rect uv, in Matrix4x4 matrix, Color color, int mode)
         {
             if (s_currentMetadata != null)
             {

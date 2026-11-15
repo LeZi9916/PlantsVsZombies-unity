@@ -626,6 +626,78 @@ namespace PlantsVsZombies.Tests.PlayMode
             }
         }
 
+        /// <summary>Checks compact native output retains mixed polygon sizes and copies only the valid prefix.</summary>
+        /// <param name="executionValue">The managed or Burst numeric executor.</param>
+        [TestCase((int)SpriteGeometryExecution.Managed)]
+        [TestCase((int)SpriteGeometryExecution.Burst)]
+        public void CompactCompletedPrefixPreservesVisibleAndCulledRegionOffsets(int executionValue)
+        {
+            using var arena = new SpriteGeometryArena();
+            var input = new SpriteRegionInput
+            {
+                Matrix = Matrix4x4.identity, SourcePixels = new Rect(0f, 0f, 8f, 8f),
+                TextureUv = new Rect(0f, 0f, 1f, 1f), SourceUv = new Rect(0f, 0f, 1f, 1f),
+                ImageSize = new Vector2(8f, 8f), Size = new Vector2(8f, 8f),
+                Clip = new Rect(0f, 0f, 8f, 8f), ClipEnabled = true, PixelStepX = 1d, PixelStepY = 1d
+            };
+            arena.Inputs[0] = input;
+            input.Clip = new Rect(100f, 100f, 1f, 1f);
+            arena.Inputs[1] = input;
+            input.Clip = new Rect(0f, 0f, 10f, 8f);
+            input.Matrix.m01 = .5f;
+            arena.Inputs[2] = input;
+            arena.RegionCount = 3;
+            arena.Execute((SpriteGeometryExecution)executionValue);
+            Assert.That(arena.CompletedResults[0].Offset, Is.Zero);
+            Assert.That(arena.CompletedResults[0].Count, Is.EqualTo(4));
+            Assert.That(arena.CompletedResults[1].Offset, Is.EqualTo(4));
+            Assert.That(arena.CompletedResults[1].Count, Is.Zero);
+            Assert.That(arena.CompletedResults[2].Offset, Is.EqualTo(4));
+            Assert.That(arena.CompletedResults[2].Count, Is.EqualTo(5));
+            for (var index = 0; index < 9; index++)
+            {
+                Assert.That(arena.CompletedVertices[index].Position, Is.EqualTo(arena.Vertices[index].Position));
+                Assert.That(arena.CompletedVertices[index].Coordinates, Is.EqualTo(arena.Vertices[index].Coordinates));
+            }
+            // A later shorter segment must not expose stale descriptors or trailing native vertices.
+            input.Matrix = Matrix4x4.identity;
+            input.Clip = new Rect(0f, 0f, 4f, 8f);
+            arena.Inputs[0] = input;
+            arena.RegionCount = 1;
+            arena.Execute((SpriteGeometryExecution)executionValue);
+            Assert.That(arena.CompletedResults[0].Offset, Is.Zero);
+            Assert.That(arena.CompletedResults[0].Count, Is.EqualTo(4));
+            Assert.That(arena.CompletedResults[0].Area, Is.EqualTo(32f).Within(.0001f));
+            arena.RegionCount = 0;
+            Assert.DoesNotThrow(() => arena.Execute((SpriteGeometryExecution)executionValue));
+        }
+
+        /// <summary>Checks a reused batch uploads only live array prefixes after shrinking and retains full precision.</summary>
+        [Test]
+        public void ReusedBatchDropsStaleVerticesIndicesAndColorsAfterShrinking()
+        {
+            _renderer.BeginBatch();
+            for (var index = 0; index < 160; index++)
+            {
+                _renderer.DrawQuad(_image, 8f, 8f, new Rect(0f, 0f, 1f, 1f),
+                    Matrix4x4.Translate(new Vector3(index, 0f)), Color.red, 0);
+            }
+            var batch = Batches(_renderer)[0];
+            batch.Publish();
+            Assert.That(batch.Mesh.vertexCount, Is.EqualTo(640));
+            _renderer.BeginBatch();
+            var tint = new Color(1.25f, -.125f, .1234567f, .8123456f);
+            _renderer.DrawQuad(_image, 3f, 2f, new Rect(0f, 0f, 1f, 1f),
+                Matrix4x4.Translate(new Vector3(3f, 4f)), tint, 0);
+            batch.Publish();
+            Assert.That(batch.Mesh.vertexCount, Is.EqualTo(4));
+            Assert.That(batch.Mesh.triangles.Length, Is.EqualTo(6));
+            Assert.That(batch.Mesh.colors[0], Is.EqualTo(tint));
+            Assert.That(batch.Mesh.bounds.min.x, Is.EqualTo(3f).Within(.00001f));
+            Assert.That(batch.Mesh.bounds.max.x, Is.EqualTo(6f).Within(.00001f));
+            Assert.That(batch.Mesh.indexFormat, Is.EqualTo(IndexFormat.UInt16));
+        }
+
         /// <summary>Checks portable mesh capacity splits happen at 65532 vertices independently of numeric chunks.</summary>
         [Test]
         public void MeshCapacityBoundaryKeepsPortableIndicesAndOneAdditionalBatch()

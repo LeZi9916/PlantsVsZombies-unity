@@ -32,6 +32,14 @@ namespace PlantsVsZombies.Game
         private readonly Func<string, bool> _zombieVisible;
         /// <summary>The retained original pool attachment callback, shared by all synchronous zombie draws.</summary>
         private readonly Action<string, Matrix4x4, Matrix4x4, float> _poolTrackAttachment;
+        /// <summary>The retained notification inserting an original blink immediately after its attachment track.</summary>
+        private readonly Action<string> _plantBlinkTrackDrawn;
+        /// <summary>The original selected face or idle track at which the blink is attached.</summary>
+        private string? _plantBlinkAnchor;
+        /// <summary>The inherited scene or capture transform before sampling the current plant's tracks.</summary>
+        private Matrix4x4 _plantInheritedMatrix;
+        /// <summary>The inherited actor tint before individual track opacity.</summary>
+        private Color _plantInheritedTint;
         /// <summary>The original particle systems supplying the current zombie's attached seaweed.</summary>
         private OriginalParticleRenderer? _poolParticles;
         /// <summary>The cached head, upper-arm, and tube particle identities for the current zombie.</summary>
@@ -80,6 +88,7 @@ namespace PlantsVsZombies.Game
             _plantVisible = IsPlantTrackVisible;
             _zombieVisible = IsZombieTrackVisible;
             _poolTrackAttachment = DrawPoolTrackAttachment;
+            _plantBlinkTrackDrawn = DrawPlantBlinkAfterTrack;
         }
 
         /// <summary>Draws a plant and its optional hit, imitation, or producer feedback.</summary>
@@ -276,13 +285,20 @@ namespace PlantsVsZombies.Game
         /// <returns>Whether native plant artwork was submitted.</returns>
         private bool DrawPlantPose()
         {
-            var visible = _plant.Kind == PlantKind.KernelPult || _plant.Kind == PlantKind.PotatoMine
+            var visible = _plant.BlinkAnimation != null || _plant.Kind == PlantKind.KernelPult || _plant.Kind == PlantKind.PotatoMine
                 || _plant.Kind == PlantKind.Pumpkin && _pumpkinGroup >= 0 ? _plantVisible : null;
+            var blinking = _plant.BlinkAnimation != null;
+            _plantBlinkAnchor = blinking ? RequiredRenderer.NativePlantBlinkAnchor(_plant, _name!) : null;
+            _plantInheritedMatrix = RequiredRenderer.CurrentSpriteMatrix;
+            _plantInheritedTint = PlantsVsZombies.Rendering.SpriteDrawState.Color;
             var drawn = _heads != null
-                ? RequiredRenderer.DrawNativeAttachedHeads(_name, _origin, _scale, _seconds, _rate, _heads, visible, _plant.ModeFacesLeft, _key, _blendTicks)
+                ? RequiredRenderer.DrawNativeAttachedHeads(_name, _origin, _scale, _seconds, _rate, _heads, visible, _plant.ModeFacesLeft, _key, _blendTicks,
+                    blinking ? _plantBlinkTrackDrawn : null, _plant.BlinkHead)
                 : RequiredRenderer.DrawNativePlayback(_name, _origin, _scale, _seconds, _clip, _loop, _rate, visible,
                     AdventureDefensivePlantRules.DamageTrack(_plant.Kind), AdventureDefensivePlantRules.DamageImage(_plant.Kind, _plant.Health),
-                    _plant.ModeFacesLeft, _key, _blendTicks, verticalScale: _plantVerticalScale, trackOffset: _plantTrackOffset);
+                    _plant.ModeFacesLeft, _key, _blendTicks, verticalScale: _plantVerticalScale, trackOffset: _plantTrackOffset,
+                    trackDrawn: blinking ? _plantBlinkTrackDrawn : null);
+
             var mine = _plant.PotatoMinePresentation;
             if (_plant.Kind == PlantKind.PotatoMine && mine != null && mine.LightCreated && _plant.MinePhase == MinePhase.Armed)
             {
@@ -293,11 +309,27 @@ namespace PlantsVsZombies.Game
             return drawn;
         }
 
+        /// <summary>Inserts a blink before later foreground leaves, as PC DrawRenderGroup does for attached reanimations.</summary>
+        /// <param name="track">The original track after which its attached blink is drawn.</param>
+        private void DrawPlantBlinkAfterTrack(string track)
+        {
+            if (_plantBlinkAnchor != null && string.Equals(track, _plantBlinkAnchor, StringComparison.OrdinalIgnoreCase))
+            {
+                RequiredRenderer.DrawNativePlantBlink(_plant, _name!, _origin, _scale, _seconds, _clip!, _loop, _rate, _heads, _remainder,
+                    _plantInheritedMatrix, _plantInheritedTint);
+            }
+        }
+
         /// <summary>Tests the current kernel or butter animation layer.</summary>
         /// <param name="track">The native track name.</param>
         /// <returns>Whether the current plant should display the track.</returns>
         private bool IsPlantTrackVisible(string track)
         {
+            if (_plant.BlinkAnimation != null && track.StartsWith("anim_eye", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
             if (_plant.Kind == PlantKind.PotatoMine)
             {
                 return !string.Equals(track, "anim_glow", StringComparison.OrdinalIgnoreCase);

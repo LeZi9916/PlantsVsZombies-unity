@@ -235,7 +235,7 @@ namespace PlantsVsZombies.Tests.EditMode
 
             Assert.That(storm.Countdown, Is.EqualTo(900));
             Assert.That(storm.EffectTicks, Is.Zero);
-            typeof(GameSimulation).GetProperty(nameof(GameSimulation.State))!.SetValue(game, MatchState.Lost);
+            SimulationInspection.GetProperty(nameof(GameSimulation.State))!.SetValue(game, MatchState.Lost);
             for (var tick = 0; tick < 1100; tick++)
             {
                 game.Update(.01f);
@@ -266,7 +266,7 @@ namespace PlantsVsZombies.Tests.EditMode
             game.Update(.05f);
             Assert.That(game.Adventure.Storm.Countdown, Is.EqualTo(295));
             Assert.That(game.Adventure.Storm.EffectTicks, Is.EqualTo(effects));
-            typeof(GameSimulation).GetProperty(nameof(GameSimulation.State))!.SetValue(game, MatchState.Lost);
+            SimulationInspection.GetProperty(nameof(GameSimulation.State))!.SetValue(game, MatchState.Lost);
             game.Adventure.Storm.Countdown = 1;
             game.Update(.01f);
             Assert.That(game.Adventure.Storm.Phase, Is.EqualTo(7));

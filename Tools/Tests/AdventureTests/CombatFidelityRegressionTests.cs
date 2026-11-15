@@ -46,7 +46,7 @@ internal static class CombatFidelityRegressionTests
     /// <returns>The hook's result.</returns>
     private static object? Invoke(GameSimulation game, string method, params object[] arguments)
     {
-        return typeof(GameSimulation).GetMethod(method, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(game, arguments);
+        return SimulationInspection.GetMethod(method, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(game, arguments);
     }
 
     /// <summary>Creates an explicitly isolated legal adventure fixture with distant wave scheduling.</summary>
@@ -142,7 +142,7 @@ internal static class CombatFidelityRegressionTests
             ChillRemaining = chilled ? 10f : 0f,
             IsSmall = small
         };
-        game.Zombies.Add(zombie);
+        SimulationFixture.Zombies(game).Add(zombie);
         Invoke(game, "InitializeAdventureZombieNative", zombie, false);
         var attack = game.AdventureZombieAttackRectangle(zombie);
         var plant = game.AdventurePlantEatingRectangle(mushroom);
@@ -249,7 +249,7 @@ internal static class CombatFidelityRegressionTests
         var game = Fixture(19);
         zombie = new Zombie { Id = 2000, Kind = ZombieKind.Football, Row = 2, X = 5f, Health = 270f,
             StartingHealth = 270f, UsedAbility = true, AbilityTimer = 1000f };
-        game.Zombies.Add(zombie);
+        SimulationFixture.Zombies(game).Add(zombie);
         Invoke(game, "InitializeAdventureZombieNative", zombie, false);
         zombie.PresentationNativeVelocity = .67f;
         zombie.Speed = .8375f;
@@ -328,7 +328,7 @@ internal static class CombatFidelityRegressionTests
             IsSmall = small,
             UsedAbility = usedAbility
         };
-        game.Zombies.Add(zombie);
+        SimulationFixture.Zombies(game).Add(zombie);
         Invoke(game, "AdvanceAdventurePotatoMine", mine);
         return !game.Plants.Contains(mine);
     }
@@ -375,7 +375,7 @@ internal static class CombatFidelityRegressionTests
         };
         var offset = AdventureZombieTargetingRules.BodyRectangle(zombie).X - (int)AdventureZombieNativeRules.NativePositionX(zombie.X);
         zombie.X = AdventureZombieNativeRules.GridX(bodyLeft - offset);
-        game.Zombies.Add(zombie);
+        SimulationFixture.Zombies(game).Add(zombie);
         return zombie;
     }
 
@@ -580,7 +580,7 @@ internal static class CombatFidelityRegressionTests
         Check(AdventureZombieTargetingRules.CanBeAutoTargeted(sled), "Original bobsled screen-boundary exception remains available.");
         var game = Fixture();
         var shooter = (Plant)Invoke(game, "PlaceAdventurePlant", PlantKind.Peashooter, 2, 4)!;
-        game.Zombies.Add(new Zombie { Kind = ZombieKind.Normal, Row = 2, X = 11, Health = 270, StartingHealth = 270 });
+        SimulationFixture.Zombies(game).Add(new Zombie { Kind = ZombieKind.Normal, Row = 2, X = 11, Health = 270, StartingHealth = 270 });
         shooter.ActionTimer = 0;
         Invoke(game, "AdvanceAdventurePlants", .01f);
         Check(game.Peas.Count == 0 && shooter.PresentationShotAge < 0, "An offscreen spawn cannot start a peashooter windup or projectile.");
@@ -643,8 +643,8 @@ internal static class CombatFidelityRegressionTests
             plant.Timing = PlantsVsZombies.Timing.PlantTiming.FromRaw((PlantsVsZombies.Timing.PlantKind)(int)kind, 0, 0);
         }
 
-        game.Plants.Add(plant);
-        game.Zombies.Add(new Zombie
+        SimulationFixture.Plants(game).Add(plant);
+        SimulationFixture.Zombies(game).Add(new Zombie
         {
             Kind = ZombieKind.Normal,
             Row = zombieRow,
@@ -691,11 +691,11 @@ internal static class CombatFidelityRegressionTests
             var lateGame = Fixture(item.Item1 == PlantKind.ScaredyShroom ? 11 : 49);
             var latePlant = new Plant { Kind = item.Item1, Row = 2, Column = 4,
                 Timing = PlantsVsZombies.Timing.PlantTiming.FromRaw(kind, 0, 0) };
-            lateGame.Plants.Add(latePlant);
+            SimulationFixture.Plants(lateGame).Add(latePlant);
             Invoke(lateGame, "AdvanceAdventurePlants", .01f);
             Check(latePlant.Timing!.Value.Countdown >= item.Item2 - 14 && latePlant.Timing.Value.ShootingCountdown == 0,
                 "An empty attack attempt resets the original full cycle: " + item.Item1);
-            lateGame.Zombies.Add(new Zombie { Kind = ZombieKind.Normal, Row = 2, X = 6f, Health = 270, StartingHealth = 270 });
+            SimulationFixture.Zombies(lateGame).Add(new Zombie { Kind = ZombieKind.Normal, Row = 2, X = 6f, Health = 270, StartingHealth = 270 });
             for (var tick = 0; tick < item.Item3; tick++)
             {
                 Invoke(lateGame, "AdvanceAdventurePlants", .01f);
@@ -707,9 +707,9 @@ internal static class CombatFidelityRegressionTests
             var game = Fixture(item.Item1 == PlantKind.ScaredyShroom ? 11 : 49);
             var plant = new Plant { Kind = item.Item1, Row = 2, Column = 4,
                 Timing = PlantsVsZombies.Timing.PlantTiming.FromRaw(kind, 0, 0) };
-            game.Plants.Add(plant);
+            SimulationFixture.Plants(game).Add(plant);
             var target = new Zombie { Kind = ZombieKind.Normal, Row = 2, X = 6f, Health = 270, StartingHealth = 270 };
-            game.Zombies.Add(target);
+            SimulationFixture.Zombies(game).Add(target);
             Invoke(game, "AdvanceAdventurePlants", .01f);
             var delay = plant.Timing!.Value.ShootingCountdown;
             Check(delay == item.Item3,
@@ -717,7 +717,7 @@ internal static class CombatFidelityRegressionTests
             Check(plant.PresentationShotAge == 0f && game.Peas.Count == 0,
                 "An attack starts its complete animation before creating a projectile: " + item.Item1);
 
-            game.Zombies.Remove(target);
+            SimulationFixture.Zombies(game).Remove(target);
             for (var tick = 0; tick < delay - 2; tick++)
             {
                 Invoke(game, "AdvanceAdventurePlants", .01f);
@@ -747,12 +747,12 @@ internal static class CombatFidelityRegressionTests
                 var movedGame = Fixture(49);
                 var movedPlant = new Plant { Kind = item.Item1, Row = 2, Column = 4,
                     Timing = PlantsVsZombies.Timing.PlantTiming.FromRaw(kind, 0, 0) };
-                movedGame.Plants.Add(movedPlant);
+                SimulationFixture.Plants(movedGame).Add(movedPlant);
                 var oldTarget = new Zombie { Kind = ZombieKind.Normal, Row = 2, X = 6f, Health = 270, StartingHealth = 270 };
-                movedGame.Zombies.Add(oldTarget);
+                SimulationFixture.Zombies(movedGame).Add(oldTarget);
                 Invoke(movedGame, "AdvanceAdventurePlants", .01f);
-                movedGame.Zombies.Remove(oldTarget);
-                movedGame.Zombies.Add(new Zombie { Kind = ZombieKind.Normal, Row = 2, X = 7f, Health = 270, StartingHealth = 270 });
+                SimulationFixture.Zombies(movedGame).Remove(oldTarget);
+                SimulationFixture.Zombies(movedGame).Add(new Zombie { Kind = ZombieKind.Normal, Row = 2, X = 7f, Health = 270, StartingHealth = 270 });
                 var movedDelay = movedPlant.Timing!.Value.ShootingCountdown;
                 for (var tick = 0; tick < movedDelay - 1; tick++)
                 {
@@ -833,7 +833,7 @@ internal static class CombatFidelityRegressionTests
         var game = Fixture();
         var chomper = (Plant)Invoke(game, "PlaceAdventurePlant", PlantKind.Chomper, 2, 4)!;
         var zombie = new Zombie { Kind = ZombieKind.Normal, Row = 2, X = AdventureZombieNativeRules.GridX(470 - 36), Health = 270, StartingHealth = 270 };
-        game.Zombies.Add(zombie);
+        SimulationFixture.Zombies(game).Add(zombie);
         Invoke(game, "AdvanceAdventureChomper", chomper);
         var state = chomper.ChomperPresentation!;
         Check(state.NativePhase == 10 && state.Animation == "anim_bite" && state.Rate == 24 && !state.Loop && game.Zombies.Contains(zombie), "Chomper starts the original bite before consuming its target.");
@@ -871,9 +871,9 @@ internal static class CombatFidelityRegressionTests
         Check(state.NativePhase == 1 && state.Animation == "anim_idle", "Swallowing returns to original idle.");
 
         zombie = new Zombie { Kind = ZombieKind.Normal, Row = 2, X = AdventureZombieNativeRules.GridX(470 - 36), Health = 270, StartingHealth = 270 };
-        game.Zombies.Add(zombie);
+        SimulationFixture.Zombies(game).Add(zombie);
         Invoke(game, "AdvanceAdventureChomper", chomper);
-        game.Zombies.Remove(zombie);
+        SimulationFixture.Zombies(game).Remove(zombie);
         for (var tick = 0; tick < 105; tick++)
         {
             Invoke(game, "AdvanceAdventureChomper", chomper);
@@ -881,7 +881,7 @@ internal static class CombatFidelityRegressionTests
 
         Check(state.NativePhase == 1, "A target lost during windup finishes the bite and returns to idle without chewing.");
         var giant = new Zombie { Kind = ZombieKind.Gargantuar, Row = 2, X = AdventureZombieNativeRules.GridX(470 + 17), Health = 3000, StartingHealth = 3000 };
-        game.Zombies.Add(giant);
+        SimulationFixture.Zombies(game).Add(giant);
         Invoke(game, "AdvanceAdventureChomper", chomper);
         for (var tick = 0; tick < 70; tick++)
         {
@@ -909,7 +909,7 @@ internal static class CombatFidelityRegressionTests
         var game = Fixture();
         var zombie = BreakNewspaper(game);
         Check(zombie.Health == 270f && zombie.ShieldHealth == 0f && !zombie.Eating, "Breaking the newspaper stops eating without damaging the body.");
-        Check(zombie.PresentationNativePhase == 30 && game.AdventurePresentationZombieAnimation(zombie) == "anim_gasp"
+        Check(zombie.PresentationNativePhase == 30 && SimulationFixture.SynchronizeZombieAnimation(game, zombie) == "anim_gasp"
             && game.AdventurePresentationZombieRate(zombie) == 8f, "The original thirteen-frame eight-fps gasp plays before angry walking.");
         Check(zombie.PresentationNewspaperSurpriseAge == 0f && game.Presentation.ZombieSounds.FindAll(sound => sound.Foley == 67).Count == 1,
             "Unsuppressed paper loss creates one original surprise attachment and rip sound.");
@@ -925,7 +925,7 @@ internal static class CombatFidelityRegressionTests
         Check(zombie.PresentationNewspaperSurpriseAge < 0f && zombie.PresentationNativePhase == 30,
             "The surprise attachment ends independently before the slower gasp.");
         Invoke(game, "AdvanceAdventureZombieFeedback", .38f);
-        Check(zombie.PresentationNativePhase == 31 && game.AdventurePresentationZombieAnimation(zombie) == "anim_walk_nopaper",
+        Check(zombie.PresentationNativePhase == 31 && SimulationFixture.SynchronizeZombieAnimation(game, zombie) == "anim_walk_nopaper",
             "Completing the gasp enters original angry walking.");
         Check(zombie.PresentationNativeVelocity >= .89f && zombie.PresentationNativeVelocity <= .91f,
             "Angry newspaper walking uses the original native speed interval.");

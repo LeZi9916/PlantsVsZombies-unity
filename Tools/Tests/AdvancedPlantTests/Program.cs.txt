@@ -39,7 +39,7 @@ internal static class Program
             Kind = kind, Row = row, X = x, Health = health,
             ArmorHealth = armor, ShieldHealth = shield
         };
-        game.Zombies.Add(zombie);
+        SimulationFixture.Zombies(game).Add(zombie);
         return zombie;
     }
 
@@ -249,8 +249,8 @@ internal static class Program
         GameSimulation game = EmptyGame();
         List<GameEvent> events = new List<GameEvent>();
         game.EventRaised = events.Add;
-        game.Plants.Add(new Plant { Kind = PlantKind.Jalapeno, Row = 2, Column = 1, Health = 300f, ActionTimer = 0.01f });
-        game.Plants.Add(new Plant { Kind = PlantKind.Jalapeno, Row = 2, Column = 7, Health = 300f, ActionTimer = 0.01f });
+        SimulationFixture.Plants(game).Add(new Plant { Kind = PlantKind.Jalapeno, Row = 2, Column = 1, Health = 300f, ActionTimer = 0.01f });
+        SimulationFixture.Plants(game).Add(new Plant { Kind = PlantKind.Jalapeno, Row = 2, Column = 7, Health = 300f, ActionTimer = 0.01f });
         Zombie survivor = AddZombie(game, ZombieKind.Normal, 2, 4f, health: 4000f);
         game.Update(0.01f);
         Check(game.Plants.Count == 0 && game.Flames.Count == 2, "multiple plants detonate without skipping");

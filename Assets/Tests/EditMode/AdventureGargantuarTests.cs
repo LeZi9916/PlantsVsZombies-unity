@@ -66,7 +66,7 @@ namespace PlantsVsZombies.Tests.EditMode
             giant.FrozenRemaining = .5f;
             Tick(game, 40);
             Assert.That(giant.PresentationAnimationAge, Is.EqualTo(age));
-            game.Plants.Remove(main);
+            SimulationFixture.Plants(game).Remove(main);
             giant.FrozenRemaining = 0f;
             Tick(game, 32);
             Assert.That(Sounds(game, 40), Is.EqualTo(1));
@@ -101,6 +101,7 @@ namespace PlantsVsZombies.Tests.EditMode
             var imp = game.Zombies.Single(zombie => zombie.Kind == ZombieKind.Imp);
             Assert.That(giant.ThrownImp, Is.True);
             Assert.That(AdventureZombieNativeRules.NativePositionX(imp.X), Is.EqualTo(517f).Within(.001f));
+            Assert.That(imp.PresentationPreviousX, Is.EqualTo(imp.X), "The release frame must draw at the throwing hand before the imp's first movement tick.");
             Assert.That(imp.PresentationNativePhase, Is.EqualTo(71));
             Assert.That(imp.PresentationAltitude, Is.EqualTo(88f));
             Assert.That(AdventureZombieTargetingRules.CanBeAutoTargeted(imp), Is.False);
@@ -228,6 +229,62 @@ namespace PlantsVsZombies.Tests.EditMode
             Assert.That(game.Presentation.Explosions.Single().Effect, Is.EqualTo(AdventureExplosionEffect.IceTrap));
         }
 
+        /// <summary>Checks the PC 54F27F death groan is requested immediately, separately from the later falling thump.</summary>
+        /// <param name="chilled">Whether the giant retains the original cold slowdown at death.</param>
+        [TestCase(false)]
+        [TestCase(true)]
+        public void GiantDeathRequestsOriginalGroanBeforeItsFallingContact(bool chilled)
+        {
+            var game = Board();
+            var giant = Spawn(game, 500f);
+            giant.ChillRemaining = chilled ? 10f : 0f;
+            Invoke(game, "HitAdventureZombie", giant, 10000f, true, 0U);
+            Assert.That(Sounds(game, 91), Is.EqualTo(1), "PC 54F27F requests gargantudeath before starting the death clip.");
+            Assert.That(Sounds(game, 28), Is.Zero);
+            Assert.That(Sounds(game, 40), Is.Zero);
+            var corpse = game.Presentation.Corpses.Single();
+            Assert.That(corpse.Rate, Is.EqualTo(chilled ? 7f : 14f));
+            for (var tick = 0; tick < 2000 && !corpse.FallSoundPlayed; tick++)
+            {
+                Tick(game, 1);
+            }
+
+            Assert.That(corpse.FallSoundPlayed, Is.True);
+            Assert.That(Sounds(game, 28), Is.EqualTo(1));
+            Assert.That(Sounds(game, 40), Is.EqualTo(1));
+            Tick(game, 1);
+            Assert.That(Sounds(game, 91), Is.EqualTo(1));
+        }
+
+        /// <summary>Checks PC SetAnimRate/ApplyAnimRate retains one cold multiplier for every supported death definition.</summary>
+        [Test]
+        public void AllZombieDeathDefinitionsRetainOriginalChillSlowdown()
+        {
+            var checkedKinds = 0;
+            foreach (ZombieKind kind in Enum.GetValues(typeof(ZombieKind)))
+            {
+                var game = Board();
+                var zombie = new Zombie { Kind = kind, Row = 1, X = 5f, Health = 0f, ChillRemaining = 10f };
+                var corpse = (AdventureZombieCorpse)Invoke(game, "InitializeAdventureZombieCorpse",
+                    new AdventureZombieCorpse { Zombie = zombie, Animation = "anim_death", Rate = 28f })!;
+                if (corpse.Duration == 0f)
+                {
+                    continue;
+                }
+
+                checkedKinds++;
+                Assert.That(corpse.Rate, Is.EqualTo(14f), kind + " uses the retained cold rate exactly once.");
+                Assert.That(corpse.AnimationDuration, Is.EqualTo(AdventureZombieDeathRules.AnimationSeconds(
+                    AdventureZombieDeathData.TryGet(AdventureAnimationCatalog.AdventureZombieAnimation(kind), corpse.Animation, out var frames) ? frames : 0, 14f)), kind.ToString());
+                game.Presentation.Corpses.Add(corpse);
+                Tick(game, 2);
+                Assert.That(corpse.Rate, Is.EqualTo(14f), kind + " must not apply the multiplier repeatedly.");
+                Assert.That(zombie.ChillRemaining, Is.EqualTo(10f), "The original dying chill counter is retained.");
+            }
+
+            Assert.That(checkedKinds, Is.GreaterThan(20));
+        }
+
         /// <summary>Checks drive-over respects PC Squish's triggered-Squash immunity while flattening its roof support.</summary>
         /// <param name="kind">The original crushing vehicle.</param>
         /// <param name="phase">The original look or prelaunch plant state.</param>
@@ -273,8 +330,8 @@ namespace PlantsVsZombies.Tests.EditMode
             var game = new GameSimulation(new GameRules { AdventureLevel = level }, 7529);
             Assert.That(game.ChooseDefaultAdventureSeeds(), Is.True);
             game.ResetAdventureWaveSchedule(100000, false, false);
-            game.Plants.Clear();
-            game.Zombies.Clear();
+            SimulationFixture.Plants(game).Clear();
+            SimulationFixture.Zombies(game).Clear();
             game.Adventure._graves.Clear();
             return game;
         }
@@ -324,7 +381,7 @@ namespace PlantsVsZombies.Tests.EditMode
         /// <returns>The entry point result.</returns>
         internal static object? Invoke(GameSimulation game, string method, params object[] arguments)
         {
-            return typeof(GameSimulation).GetMethod(method, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(game, arguments);
+            return SimulationInspection.GetMethod(method, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(game, arguments);
         }
     }
 }

@@ -119,9 +119,9 @@ namespace PlantsVsZombies.Tests.EditMode
         {
             var game = new GameSimulation(new GameRules { AdventureLevel = 32 }, 91);
             game.ChooseDefaultAdventureSeeds();
-            typeof(GameSimulation).GetMethod("PlaceAdventurePlant", BindingFlags.Instance | BindingFlags.NonPublic)!
+            SimulationInspection.GetMethod("PlaceAdventurePlant", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(game, new object[] { PlantKind.Blover, 0, 4 });
-            var advance = typeof(GameSimulation).GetMethod("AdvanceAdventurePlants", BindingFlags.Instance | BindingFlags.NonPublic)!;
+            var advance = SimulationInspection.GetMethod("AdvanceAdventurePlants", BindingFlags.Instance | BindingFlags.NonPublic)!;
             // PC PlantInit 46C23A sets fifty updates before DoSpecial, independently of the initial blow animation.
             for (var tick = 0; tick < 49; tick++)
             {

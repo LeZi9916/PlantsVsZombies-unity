@@ -19,13 +19,13 @@ internal static class UpgradePlantTests
         Check(g.ChooseAdventureSeeds(deck),"fixture selects six earned/explicitly granted seeds");
         g.Adventure.CurrentWave=g.Adventure.Waves.Count;g.Adventure._finalAmbush=false;g.Adventure._nextSkySun=float.MaxValue;
         // Explicit isolated fixture funding is independent of native collectible sun denominations.
-        typeof(GameSimulation).GetProperty(nameof(GameSimulation.SunAmount))!.SetValue(g, 9990);
+        SimulationInspection.GetProperty(nameof(GameSimulation.SunAmount))!.SetValue(g, 9990);
         Check(g.SunAmount == 9990, "isolated unit fixture credit");
         return g;
     }
     private static Zombie Spawn(GameSimulation g,ZombieKind kind,int row,float x)
     {
-        var method=typeof(GameSimulation).GetMethod("SpawnAdventureZombie",BindingFlags.Instance|BindingFlags.NonPublic);
+        var method=SimulationInspection.GetMethod("SpawnAdventureZombie",BindingFlags.Instance|BindingFlags.NonPublic);
         var z=(Zombie)method.Invoke(g,new object[]{kind,row,x,0});z.Speed=0;return z;
     }
     public static int Run(string root)
@@ -178,7 +178,7 @@ internal static class UpgradePlantTests
         var lob=Fixture(49,null,PlantKind.CabbagePult,PlantKind.KernelPult,PlantKind.MelonPult);lob.TryPlant(PlantKind.CabbagePult,0,1);lob.TryPlant(PlantKind.KernelPult,1,1);lob.TryPlant(PlantKind.MelonPult,2,1);for(int row=0;row<3;row++)Spawn(lob,ZombieKind.Buckethead,row,9f);
         var lobbedSources = ObserveProjectileSources(lob, true);
         foreach(var k in new[]{PlantKind.CabbagePult,PlantKind.KernelPult,PlantKind.MelonPult})Check(lobbedSources.Contains(k),"lobbed projectile captures source "+k);
-        var legacy=new GameSimulation(new GameRules{StartingSun=1000,ZombieCount=0,SkySunInterval=0});legacy.TryPlant(PlantKind.SnowPea,2,2);legacy.Zombies.Add(new Zombie{Kind=ZombieKind.Normal,Row=2,X=9,Health=270});legacy.Update(2.1f);Check(legacy.Peas.Count>0&&legacy.Peas.All(p=>p.SourceKind==PlantKind.SnowPea&&p.IsSnow),"legacy timed projectile also records source");
+        var legacy=new GameSimulation(new GameRules{StartingSun=1000,ZombieCount=0,SkySunInterval=0});legacy.TryPlant(PlantKind.SnowPea,2,2);SimulationFixture.Zombies(legacy).Add(new Zombie{Kind=ZombieKind.Normal,Row=2,X=9,Health=270});legacy.Update(2.1f);Check(legacy.Peas.Count>0&&legacy.Peas.All(p=>p.SourceKind==PlantKind.SnowPea&&p.IsSnow),"legacy timed projectile also records source");
     }
 
     /// <summary>Observes projectile metadata across native randomized launch times and transient impacts.</summary>

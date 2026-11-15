@@ -2,6 +2,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
 using NUnit.Framework;
 using PlantsVsZombies.Adventure;
@@ -12,7 +13,7 @@ namespace PlantsVsZombies.Tests.EditMode
     /// <summary>Checks the local PC executable's ambient vocal countdown, population draw, and species gates.</summary>
     public sealed class AdventureZombieGroanTests
     {
-        /// <summary>Checks both inclusive native initialization boundaries and the first constructor draw.</summary>
+        /// <summary>Checks both inclusive native initialization boundaries after the original position draw.</summary>
         /// <param name="lastTicket">Whether the original bounded draw chooses its last valid value.</param>
         /// <param name="ticks">The expected initial native countdown.</param>
         [TestCase(false, 400)]
@@ -22,7 +23,7 @@ namespace PlantsVsZombies.Tests.EditMode
             var game = Board();
             var random = Attach(game, lastTicket);
             var zombie = Spawn(game, ZombieKind.Normal);
-            Assert.That(random.Bounds[0], Is.EqualTo(101));
+            Assert.That(random.Bounds.Take(2), Is.EqualTo(new[] { 40, 101 }));
             Assert.That(zombie.GroanTicks, Is.EqualTo(ticks));
         }
 
@@ -47,7 +48,7 @@ namespace PlantsVsZombies.Tests.EditMode
             Assert.That(game.Presentation.ZombieSounds, Has.Count.EqualTo(1));
             Assert.That(game.Presentation.ZombieSounds[0].Foley, Is.EqualTo(foley));
             Assert.That(game.Presentation.ZombieSounds[0].Pitch, Is.Zero);
-            Assert.That(random.Bounds, Is.EqualTo(new[] { 1, 1000 }));
+            Assert.That(random.Bounds, Is.EqualTo(new[] { 1, foley == 11 ? 6 : foley == 12 ? 9 : 2, 1000 }));
             Assert.That(zombie.GroanTicks, Is.EqualTo(500));
         }
 
@@ -84,7 +85,7 @@ namespace PlantsVsZombies.Tests.EditMode
         {
             var game = Board();
             var zombie = new Zombie { Kind = kind, Health = 270f, GroanTicks = 1, Headless = headless, PresentationNativePhase = phase, Wave = wave };
-            game.Zombies.Add(zombie);
+            SimulationFixture.Zombies(game).Add(zombie);
             Attach(game);
             Groan(game, zombie);
             Assert.That(game.Presentation.ZombieSounds, Is.Empty);
@@ -149,7 +150,7 @@ namespace PlantsVsZombies.Tests.EditMode
         /// <returns>The initialized actor.</returns>
         private static Zombie Spawn(GameSimulation game, ZombieKind kind)
         {
-            return (Zombie)typeof(GameSimulation).GetMethod("SpawnAdventureZombie", BindingFlags.Instance | BindingFlags.NonPublic)!
+            return (Zombie)SimulationInspection.GetMethod("SpawnAdventureZombie", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(game, new object[] { kind, 1, 6f, 0 })!;
         }
 
@@ -158,7 +159,7 @@ namespace PlantsVsZombies.Tests.EditMode
         /// <param name="zombie">The actor whose counter is advanced.</param>
         private static void Groan(GameSimulation game, Zombie zombie)
         {
-            typeof(GameSimulation).GetMethod("AdvanceAdventureZombieGroan", BindingFlags.Instance | BindingFlags.NonPublic)!
+            SimulationInspection.GetMethod("AdvanceAdventureZombieGroan", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(game, new object[] { zombie });
         }
 
@@ -169,7 +170,7 @@ namespace PlantsVsZombies.Tests.EditMode
         private static VocalRandom Attach(GameSimulation game, bool lastTicket = false)
         {
             var random = new VocalRandom(lastTicket);
-            typeof(GameSimulation).GetField("_random", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(game, random);
+            SimulationInspection.GetField("_random", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(game, random);
             return random;
         }
 

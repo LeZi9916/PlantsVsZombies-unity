@@ -58,23 +58,23 @@ internal static class Program
 
         game = EmptyGame();
         game.TryPlant(PlantKind.Peashooter, 2, 0);
-        game.Zombies.Add(new Zombie { Row = 2, X = 2.5f, Health = 20f });
+        SimulationFixture.Zombies(game).Add(new Zombie { Row = 2, X = 2.5f, Health = 20f });
         game.Update(2f);
         Check(game.Zombies.Count == 0, "pea hits and kills zombie");
 
         game = EmptyGame();
         game.TryPlant(PlantKind.Peashooter, 2, 0);
-        game.Zombies.Add(new Zombie { Row = 2, X = 2.5f, Health = 20f });
-        game.Zombies.Add(new Zombie { Row = 2, X = 3.5f, Health = 20f });
-        game.Zombies.Add(new Zombie { Row = 3, X = 2.5f, Health = 20f });
+        SimulationFixture.Zombies(game).Add(new Zombie { Row = 2, X = 2.5f, Health = 20f });
+        SimulationFixture.Zombies(game).Add(new Zombie { Row = 2, X = 3.5f, Health = 20f });
+        SimulationFixture.Zombies(game).Add(new Zombie { Row = 3, X = 2.5f, Health = 20f });
         game.Update(1f);
-        Check(game.Zombies.Count == 2 && game.Zombies.Exists(z => z.Row == 2 && z.X > 3f)
-            && game.Zombies.Exists(z => z.Row == 3), "pea hits nearest zombie in the same lane");
+        Check(game.Zombies.Count == 2 && SimulationFixture.Zombies(game).Exists(z => z.Row == 2 && z.X > 3f)
+            && SimulationFixture.Zombies(game).Exists(z => z.Row == 3), "pea hits nearest zombie in the same lane");
 
         game = EmptyGame();
         game.TryPlant(PlantKind.Peashooter, 2, 0);
         Zombie armored = new Zombie { Row = 2, X = 2.5f, Health = 270f, ArmorHealth = 30f, Kind = ZombieKind.Conehead };
-        game.Zombies.Add(armored);
+        SimulationFixture.Zombies(game).Add(armored);
         game.Update(1f);
         Check(armored.ArmorHealth == 10f && armored.Health == 270f, "armor absorbs projectile damage");
         game.Update(1.6f);
@@ -83,7 +83,7 @@ internal static class Program
         game = EmptyGame();
         game.TryPlant(PlantKind.Peashooter, 2, 0);
         Zombie shielded = new Zombie { Row = 2, X = 2.5f, Health = 270f, ShieldHealth = 30f, Kind = ZombieKind.ScreenDoor };
-        game.Zombies.Add(shielded);
+        SimulationFixture.Zombies(game).Add(shielded);
         game.Update(1f);
         Check(shielded.ShieldHealth == 10f && shielded.Health == 270f, "shield absorbs projectile damage");
         game.Update(1.6f);
@@ -92,7 +92,7 @@ internal static class Program
         game = EmptyGame();
         Check(game.TryPlant(PlantKind.SnowPea, 2, 0) && game.SunAmount == 325, "snow pea cost");
         Zombie chilled = new Zombie { Row = 2, X = 2.5f, Health = 270f };
-        game.Zombies.Add(chilled);
+        SimulationFixture.Zombies(game).Add(chilled);
         game.Update(1f);
         Check(chilled.ChillRemaining > 9f && chilled.Health == 250f, "snow pea damages and chills");
         float chilledX = chilled.X;
@@ -102,7 +102,7 @@ internal static class Program
         game = EmptyGame();
         Check(game.TryPlant(PlantKind.Repeater, 2, 0) && game.SunAmount == 300, "repeater cost");
         Zombie repeatTarget = new Zombie { Row = 2, X = 2.5f, Health = 270f };
-        game.Zombies.Add(repeatTarget);
+        SimulationFixture.Zombies(game).Add(repeatTarget);
         for (int tick = 0; tick < 300 && repeatTarget.Health > 230f; tick++) game.Update(0.01f);
         Check(repeatTarget.Health == 230f, "repeater fires two damaging peas");
 
@@ -115,15 +115,15 @@ internal static class Program
         Check(mine.MinePhase == MinePhase.Rising, "potato mine rises after charging");
         game.Update(1.1f);
         Check(mine.MinePhase == MinePhase.Armed, "potato mine arms after rising");
-        game.Zombies.Add(new Zombie { Row = 2, X = 2.5f, Health = 270f });
-        game.Zombies.Add(new Zombie { Row = 3, X = 2.5f, Health = 270f });
+        SimulationFixture.Zombies(game).Add(new Zombie { Row = 2, X = 2.5f, Health = 270f });
+        SimulationFixture.Zombies(game).Add(new Zombie { Row = 3, X = 2.5f, Health = 270f });
         game.Update(0.1f);
         Check(game.PlantAt(2, 2) == null && game.Zombies.Count == 1 && game.Zombies[0].Row == 3,
             "armed mine detonates in its lane");
 
         game = EmptyGame();
         game.TryPlant(PlantKind.PotatoMine, 2, 2);
-        game.Zombies.Add(new Zombie { Row = 2, X = 2.5f, Health = 270f });
+        SimulationFixture.Zombies(game).Add(new Zombie { Row = 2, X = 2.5f, Health = 270f });
         game.Update(1f);
         Check(game.PlantAt(2, 2).Health > 190f && game.PlantAt(2, 2).Health <= 200f,
             "zombie chewing applies incremental damage");
@@ -132,21 +132,21 @@ internal static class Program
 
         game = EmptyGame();
         game.TryPlant(PlantKind.Wallnut, 0, 0);
-        game.Zombies.Add(new Zombie { Row = 0, X = 0.8f, Health = 200f });
+        SimulationFixture.Zombies(game).Add(new Zombie { Row = 0, X = 0.8f, Health = 200f });
         game.Update(1.1f);
         Check(game.Plants[0].Health < 4000f && game.Zombies[0].Eating, "zombie bites plant");
 
         game = EmptyGame();
         game.TryPlant(PlantKind.CherryBomb, 2, 4);
-        game.Zombies.Add(new Zombie { Row = 1, X = 4.5f, Health = 200f });
-        game.Zombies.Add(new Zombie { Row = 4, X = 4.5f, Health = 200f });
+        SimulationFixture.Zombies(game).Add(new Zombie { Row = 1, X = 4.5f, Health = 200f });
+        SimulationFixture.Zombies(game).Add(new Zombie { Row = 4, X = 4.5f, Health = 200f });
         game.Update(1.3f);
         Check(game.Zombies.Count == 1 && game.Zombies[0].Row == 4, "cherry blast area");
         Check(game.Plants.Count == 0, "cherry consumed");
 
         game = EmptyGame();
         game.TryPlant(PlantKind.CherryBomb, 2, 4);
-        game.Zombies.Add(new Zombie { Row = 2, X = 4.5f, Health = 270f });
+        SimulationFixture.Zombies(game).Add(new Zombie { Row = 2, X = 4.5f, Health = 270f });
         game.Update(0.5f);
         Check(game.PlantAt(2, 4) != null && game.PlantAt(2, 4).Health == 300f,
             "armed explosive plant cannot be chewed before detonating");
@@ -154,11 +154,11 @@ internal static class Program
         Check(game.Plants.Count == 0 && game.Zombies.Count == 0, "cherry detonates after its countdown");
 
         game = EmptyGame();
-        game.Zombies.Add(new Zombie { Row = 3, X = 0.1f, Health = 200f });
+        SimulationFixture.Zombies(game).Add(new Zombie { Row = 3, X = 0.1f, Health = 200f });
         game.Update(0.1f);
         Check(game.Zombies.Count == 0 && !game.Mowers[3].Available, "mower clears lane");
         game.Update(3f);
-        game.Zombies.Add(new Zombie { Row = 3, X = -0.64f, Health = 200f });
+        SimulationFixture.Zombies(game).Add(new Zombie { Row = 3, X = -0.64f, Health = 200f });
         game.Update(0.2f);
         Check(game.State == MatchState.Lost, "used mower cannot protect lane twice");
 
@@ -189,7 +189,7 @@ internal static class Program
         Check(smallFrames.Elapsed == before, "non-finite time is rejected");
 
         game = EmptyGame(mowers: false);
-        game.Zombies.Add(new Zombie { Row = 0, X = -0.64f, Health = 200f });
+        SimulationFixture.Zombies(game).Add(new Zombie { Row = 0, X = -0.64f, Health = 200f });
         game.Update(0.2f);
         Check(game.State == MatchState.Lost, "zombie reaches house");
 

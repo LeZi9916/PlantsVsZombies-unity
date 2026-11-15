@@ -48,7 +48,7 @@ namespace PlantsVsZombies.Tests.PlayMode
                 typeof(GamePresenter).GetField("_renderingBoardObjects", flags)!.SetValue(presenter, true);
                 for (var position = 0; position < 4; position++)
                 {
-                    owner._game.Zombies.Add(new Zombie
+                    SimulationFixture.Zombies(owner._game).Add(new Zombie
                     {
                         Id = 81 + position, Kind = ZombieKind.Bobsled, Row = 1,
                         X = AdventureZombieNativeRules.GridX(340f + position * 50f),
@@ -99,7 +99,7 @@ namespace PlantsVsZombies.Tests.PlayMode
                 foreach (var member in owner._game.Zombies)
                 {
                     member.PresentationNativePhase = 18;
-                    owner._game.AdventurePresentationZombieAnimation(member);
+                    SimulationFixture.SynchronizeZombieAnimation(owner._game, member);
                     member.PresentationAnimationAge = .9f;
                     member.PresentationAltitude = 18f;
                 }

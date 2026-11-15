@@ -50,10 +50,10 @@ namespace PlantsVsZombies.Tests.EditMode
         {
             var game = Board(level);
             var plant = new Plant { Kind = PlantKind.SplitPea, Row = 2, Column = 3, PresentationRate = 20f };
-            game.Plants.Clear();
+            SimulationFixture.Plants(game).Clear();
             if (flowerPot)
             {
-                game.Plants.Add(new Plant { Kind = PlantKind.FlowerPot, Row = 2, Column = 3 });
+                SimulationFixture.Plants(game).Add(new Plant { Kind = PlantKind.FlowerPot, Row = 2, Column = 3 });
             }
 
             var forward = Fire(game, plant, false);
@@ -80,7 +80,7 @@ namespace PlantsVsZombies.Tests.EditMode
         /// <returns>The newly created original pea.</returns>
         private static Pea Fire(GameSimulation game, Plant plant, bool backward)
         {
-            return (Pea)typeof(GameSimulation).GetMethod("FireAdventurePea", BindingFlags.Instance | BindingFlags.NonPublic)!
+            return (Pea)SimulationInspection.GetMethod("FireAdventurePea", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(game, new object[] { plant, plant.Row, backward, 20f })!;
         }
     }

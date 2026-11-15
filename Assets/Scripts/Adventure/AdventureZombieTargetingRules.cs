@@ -60,6 +60,11 @@ namespace PlantsVsZombies.Adventure
         /// <returns>The body rectangle in original board pixels; visual scaling does not shrink it.</returns>
         public static NativeRect BodyRectangle(Zombie z)
         {
+            if (z.Kind == ZombieKind.Boss)
+            {
+                return new NativeRect(700, 80, 90, 430);
+            }
+
             var x = (int)AdventureZombieNativeRules.NativePositionX(z.X, AdventureDancerRules.Scale(z));
             var backwards = z.PresentationWalkingBackwards ?? (z.Hypnotized || z.Kind == ZombieKind.Digger && AdventureDiggerState.WalksBackwards(z));
             if (z.Kind == ZombieKind.Bobsled && z.PresentationNativePhase != 19 && (z.PresentationHasSled ?? !z.UsedAbility))
@@ -76,6 +81,11 @@ namespace PlantsVsZombies.Adventure
         /// <returns>The body rectangle in original board pixels.</returns>
         public static NativeRect BodyRectangle(Zombie z, int y)
         {
+            if (z.Kind == ZombieKind.Boss)
+            {
+                return new NativeRect(700, 80, 90, 430);
+            }
+
             var x = (int)AdventureZombieNativeRules.NativePositionX(z.X, AdventureDancerRules.Scale(z));
             var backwards = z.PresentationWalkingBackwards ?? (z.Hypnotized || z.Kind == ZombieKind.Digger && AdventureDiggerState.WalksBackwards(z));
             if (z.Kind == ZombieKind.Bobsled && z.PresentationNativePhase != 19 && (z.PresentationHasSled ?? !z.UsedAbility))

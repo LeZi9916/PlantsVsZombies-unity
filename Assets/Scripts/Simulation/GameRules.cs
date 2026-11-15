@@ -11,6 +11,9 @@ namespace PlantsVsZombies.Simulation
         /// <summary>Defers adventure wave generation until an independent mode supplies its own native plan.</summary>
         internal bool DeferAdventureWaveInitialization;
 
+        /// <summary>Lets the original opening create Zomboss at PlayBossEnter instead of during board construction.</summary>
+        internal bool DeferAdventureBossEntrance;
+
         /// <summary>Provides explicitly known native adventure generation flags without inferring unverified application state.</summary>
         public AdventureWaveGenerationContext AdventureWaveContext;
 
@@ -18,6 +21,8 @@ namespace PlantsVsZombies.Simulation
         public int AdventureCycle = 1;
         /// <summary>Stores adventure dave seed.</summary>
         public int AdventureDaveSeed = 12345;
+        /// <summary>Mirrors the original SFX-muted gate for original Foley request sampling.</summary>
+        public bool AdventureSoundMuted;
         /// <summary>Stores adventure packet slots.</summary>
         public int AdventurePacketSlots = 6;
         /// <summary>Stores adventure coin commit.</summary>

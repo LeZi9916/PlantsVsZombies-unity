@@ -65,7 +65,7 @@ namespace PlantsVsZombies.Tests.EditMode
             Assert.That(plant.StarfruitShootingCountdown, Is.EqualTo(40));
             Assert.That(plant.StarfruitLaunchCountdown, Is.InRange(136, 150));
             var interval = plant.StarfruitLaunchCountdown;
-            game.Zombies.Clear();
+            SimulationFixture.Zombies(game).Clear();
             for (var tick = 0; tick < 38; tick++)
             {
                 Invoke(game, "AdvanceAdventureStarfruit", plant);
@@ -133,8 +133,8 @@ namespace PlantsVsZombies.Tests.EditMode
             Invoke(game, "PlaceAdventurePlant", PlantKind.Torchwood, 2, 3);
             Invoke(game, "FireAdventureStarfruit", plant);
             var shot = game.Peas[0];
-            game.Peas.Clear();
-            game.Peas.Add(shot);
+            SimulationFixture.Peas(game).Clear();
+            SimulationFixture.Peas(game).Add(shot);
             Move(game, 20);
             Assert.That(shot.Fire, Is.False);
             Assert.That(shot.Damage, Is.EqualTo(20f));
@@ -159,8 +159,8 @@ namespace PlantsVsZombies.Tests.EditMode
             var game = Board();
             Invoke(game, "FireAdventureStarfruit", Plant(game));
             var shot = game.Peas[1];
-            game.Peas.Clear();
-            game.Peas.Add(shot);
+            SimulationFixture.Peas(game).Clear();
+            SimulationFixture.Peas(game).Add(shot);
             Move(game, 22);
             Assert.That(shot.FlightRow, Is.GreaterThan(2.7f));
             Assert.That(shot.Row, Is.EqualTo(2), "PC maps y=378.26 to row two despite being nearer row three's center.");
@@ -181,8 +181,8 @@ namespace PlantsVsZombies.Tests.EditMode
             Invoke(game, "FireAdventureStarfruit", Plant(game));
             var shot = game.Peas[index];
             shot.PresentationNativeAge = age;
-            game.Peas.Clear();
-            game.Peas.Add(shot);
+            SimulationFixture.Peas(game).Clear();
+            SimulationFixture.Peas(game).Add(shot);
             var zombie = Spawn(game, ZombieKind.Digger, 350f);
             zombie.PresentationNativePhase = 37;
             zombie.AbilityPhase = 2;
@@ -253,7 +253,7 @@ namespace PlantsVsZombies.Tests.EditMode
         /// <returns>The original operation result.</returns>
         private static object? Invoke(GameSimulation game, string name, params object[] arguments)
         {
-            return typeof(GameSimulation).GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(game, arguments);
+            return SimulationInspection.GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(game, arguments);
         }
     }
 }

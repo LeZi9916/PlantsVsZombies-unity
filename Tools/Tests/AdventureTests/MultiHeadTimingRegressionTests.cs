@@ -192,7 +192,7 @@ internal static class MultiHeadTimingRegressionTests
     /// <returns>The production method's result.</returns>
     private static object? Invoke(GameSimulation game, string method, params object[] arguments)
     {
-        return typeof(GameSimulation).GetMethod(method, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(game, arguments);
+        return SimulationInspection.GetMethod(method, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(game, arguments);
     }
 
     /// <summary>Creates an isolated lawn without an imminent automatic wave.</summary>
@@ -251,13 +251,13 @@ internal static class MultiHeadTimingRegressionTests
         var game = Fixture();
         var plant = PlaceShooter(game, PlantKind.Threepeater, 2, 3, 0);
         var target = Target(2, 6f);
-        game.Zombies.Add(target);
+        SimulationFixture.Zombies(game).Add(target);
         AdvancePlantTick(game);
         Check(plant.MultiHeadTiming!.Value.ShootingCountdown == 35,
             "Production Threepeater starts its 35-count shooting delay on the first attempt.");
         Check(plant.PresentationHeadAge[0] == 0f && plant.PresentationHeadAge[1] == 0f && plant.PresentationHeadAge[2] == 0f,
             "One center-lane target starts all three production head animations.");
-        game.Zombies.Remove(target);
+        SimulationFixture.Zombies(game).Remove(target);
         for (var tick = 1; tick <= 33; tick++)
         {
             AdvancePlantTick(game);
@@ -276,7 +276,7 @@ internal static class MultiHeadTimingRegressionTests
     {
         var game = Fixture();
         var plant = PlaceShooter(game, PlantKind.Threepeater, 0, 3, 0);
-        game.Zombies.Add(Target(0, 6f));
+        SimulationFixture.Zombies(game).Add(Target(0, 6f));
         AdvancePlantTick(game);
         Check(plant.MultiHeadTiming!.Value.ActiveHeads == (AdventureShootingHeads.First | AdventureShootingHeads.Second),
             "The off-board upper head never begins shooting on row zero.");
@@ -296,16 +296,16 @@ internal static class MultiHeadTimingRegressionTests
         var plant = PlaceShooter(game, PlantKind.SplitPea, 2, 4, 0);
         var rear = Target(2, 2f);
         var front = Target(2, 7f);
-        game.Zombies.Add(rear);
-        game.Zombies.Add(front);
+        SimulationFixture.Zombies(game).Add(rear);
+        SimulationFixture.Zombies(game).Add(front);
         AdvancePlantTick(game);
         Check(plant.MultiHeadTiming!.Value.ShootingCountdown == 26
             && plant.MultiHeadTiming.Value.ActiveHeads == AdventureShootingHeads.Second,
             "The first Split Pea attempt starts the rear head, independent of a front target.");
         Check(plant.PresentationHeadAge[1] == 0f && game.Peas.Count == 0,
             "The rear animation starts immediately but its projectile remains pending.");
-        game.Zombies.Remove(rear);
-        game.Zombies.Remove(front);
+        SimulationFixture.Zombies(game).Remove(rear);
+        SimulationFixture.Zombies(game).Remove(front);
         for (var tick = 1; tick <= 24; tick++)
         {
             AdvancePlantTick(game);
@@ -322,8 +322,8 @@ internal static class MultiHeadTimingRegressionTests
     {
         var game = Fixture();
         var plant = PlaceShooter(game, PlantKind.SplitPea, 2, 4, 26);
-        game.Zombies.Add(Target(2, 2f));
-        game.Zombies.Add(Target(2, 7f));
+        SimulationFixture.Zombies(game).Add(Target(2, 2f));
+        SimulationFixture.Zombies(game).Add(Target(2, 7f));
         AdvancePlantTick(game);
         Check(plant.MultiHeadTiming!.Value.Countdown == 25 && plant.MultiHeadTiming.Value.ShootingCountdown == 26,
             "The production Split Pea makes its extra attack attempt when the primary countdown becomes 25.");

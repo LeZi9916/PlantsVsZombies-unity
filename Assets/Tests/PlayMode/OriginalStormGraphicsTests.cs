@@ -131,7 +131,7 @@ namespace PlantsVsZombies.Tests.PlayMode
         {
             using var fixture = new StormFixture();
             var game = fixture.Owner.RequiredGame;
-            game.Mowers.Clear();
+            SimulationFixture.Mowers(game).Clear();
             fixture.Owner.AdventureBoard._adventurePointer = new Vector2(-1000f, -1000f);
             game.RequiredSpawnAdventureCoin(AdventureCoinKind.Gold, 4.5f, 2);
             game.Adventure.Storm.Countdown = 300;
@@ -206,9 +206,9 @@ namespace PlantsVsZombies.Tests.PlayMode
             using var fixture = new StormFixture();
             var game = fixture.Owner.RequiredGame;
             var flags = BindingFlags.Instance | BindingFlags.NonPublic;
-            var spawn = typeof(GameSimulation).GetMethod("SpawnAdventureBoardZombie", flags)!;
+            var spawn = SimulationInspection.GetMethod("SpawnAdventureBoardZombie", flags)!;
             var pogo = (Zombie)spawn.Invoke(game, new object[] { ZombieKind.Pogo, 2, 4.5f, 0 })!;
-            typeof(GameSimulation).GetMethod("BreakAdventurePogo", flags)!.Invoke(game, new object[] { pogo, 0u });
+            SimulationInspection.GetMethod("BreakAdventurePogo", flags)!.Invoke(game, new object[] { pogo, 0u });
             Assert.That(game.Presentation.ZombiePartDrops.Exists(drop => drop.ParticleId == 16), Is.True);
             spawn.Invoke(game, new object[] { ZombieKind.Normal, 5, 5f, 0 });
             game.Adventure.Storm.Phase = 6;
@@ -254,7 +254,7 @@ namespace PlantsVsZombies.Tests.PlayMode
             game.Adventure.Storm.Countdown = 150;
             yield return fixture.Capture("DrawAdventureBoard", wholeBoard: true);
             var empty = fixture.Pixels.GetPixels32();
-            var zombie = (Zombie)typeof(GameSimulation).GetMethod("SpawnAdventureBoardZombie", BindingFlags.Instance | BindingFlags.NonPublic)!
+            var zombie = (Zombie)SimulationInspection.GetMethod("SpawnAdventureBoardZombie", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(game, new object[] { ZombieKind.Buckethead, 0, 5f, 0 })!;
             yield return fixture.Capture("DrawAdventureBoard", wholeBoard: true);
             var native = fixture.Pixels.GetPixels32();

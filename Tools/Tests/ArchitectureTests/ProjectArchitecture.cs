@@ -130,6 +130,8 @@ namespace PlantsVsZombies.Tests.Architecture
                 violations.Add(path + ": filename must match the top-level type.");
             }
 
+            InspectSimulationOwnership(path, root, violations);
+
             foreach (var node in root.DescendantNodes())
             {
                 var statement = node switch
@@ -153,6 +155,78 @@ namespace PlantsVsZombies.Tests.Architecture
             InspectPresentationOwnership(path, root, violations);
             InspectCoordinatorSize(path, text, violations);
             return violations;
+        }
+
+        /// <summary>Keeps native species dispatch and actor construction outside the simulation facade.</summary>
+        /// <param name="path">The source path used for diagnostics.</param>
+        /// <param name="root">The parsed source compilation unit.</param>
+        /// <param name="violations">The destination for ownership violations.</param>
+        private static void InspectSimulationOwnership(string path, CompilationUnitSyntax root, List<string> violations)
+        {
+            if (Path.GetFileName(path) != "GameSimulation.cs")
+            {
+                return;
+            }
+
+            var kindTypes = new HashSet<string>(StringComparer.Ordinal) { "PlantKind", "ZombieKind" };
+            var actorTypes = new HashSet<string>(StringComparer.Ordinal) { "Plant", "Zombie" };
+            foreach (var directive in root.Usings.Where(directive => directive.Alias != null))
+            {
+                var name = SimpleTypeName(directive.Name);
+                if (kindTypes.Contains(name))
+                {
+                    kindTypes.Add(directive.Alias!.Name.Identifier.ValueText);
+                }
+                if (actorTypes.Contains(name))
+                {
+                    actorTypes.Add(directive.Alias!.Name.Identifier.ValueText);
+                }
+            }
+
+            var kindValues = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var parameter in root.DescendantNodes().OfType<ParameterSyntax>().Where(parameter => kindTypes.Contains(SimpleTypeName(parameter.Type))))
+            {
+                kindValues.Add(parameter.Identifier.ValueText);
+            }
+            foreach (var declaration in root.DescendantNodes().OfType<VariableDeclarationSyntax>().Where(declaration => kindTypes.Contains(SimpleTypeName(declaration.Type))))
+            {
+                foreach (var variable in declaration.Variables)
+                {
+                    kindValues.Add(variable.Identifier.ValueText);
+                }
+            }
+            foreach (var property in root.DescendantNodes().OfType<PropertyDeclarationSyntax>().Where(property => kindTypes.Contains(SimpleTypeName(property.Type))))
+            {
+                kindValues.Add(property.Identifier.ValueText);
+            }
+
+            var conditions = root.DescendantNodes().OfType<IfStatementSyntax>().Select(branch => branch.Condition)
+                .Concat(root.DescendantNodes().OfType<ConditionalExpressionSyntax>().Select(branch => branch.Condition));
+            var speciesBranch = conditions.Any(condition => condition.DescendantNodesAndSelf().OfType<IdentifierNameSyntax>()
+                .Any(identifier => kindTypes.Contains(identifier.Identifier.ValueText) || kindValues.Contains(identifier.Identifier.ValueText)));
+            var actorCreation = root.DescendantNodes().OfType<ObjectCreationExpressionSyntax>()
+                .Any(creation => actorTypes.Contains(SimpleTypeName(creation.Type)));
+            if (speciesBranch || actorCreation || root.DescendantNodes().OfType<SwitchStatementSyntax>().Any()
+                || root.DescendantNodes().OfType<SwitchExpressionSyntax>().Any())
+            {
+                violations.Add(path + ": keep species dispatch and actor creation in simulation collaborators.");
+            }
+        }
+
+        /// <summary>Reads a type's terminal identifier while preserving qualified and aliased syntax support.</summary>
+        /// <param name="type">The parsed type or using target.</param>
+        /// <returns>The terminal identifier, or an empty string for an unsupported type shape.</returns>
+        private static string SimpleTypeName(TypeSyntax? type)
+        {
+            return type switch
+            {
+                IdentifierNameSyntax identifier => identifier.Identifier.ValueText,
+                GenericNameSyntax generic => generic.Identifier.ValueText,
+                QualifiedNameSyntax qualified => SimpleTypeName(qualified.Right),
+                AliasQualifiedNameSyntax alias => SimpleTypeName(alias.Name),
+                NullableTypeSyntax nullable => SimpleTypeName(nullable.ElementType),
+                _ => string.Empty
+            };
         }
 
         /// <summary>The longest allowed game coordinator source, so new responsibilities move to collaborators instead of accumulating there.</summary>

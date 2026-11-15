@@ -17,6 +17,10 @@ namespace PlantsVsZombies.Rendering
         internal NativeArray<SpriteClipVertex> Vertices = new NativeArray<SpriteClipVertex>(Capacity * 12, Allocator.Persistent);
         /// <summary>The ordered result descriptors.</summary>
         internal NativeArray<SpriteRegionResult> Results = new NativeArray<SpriteRegionResult>(Capacity, Allocator.Persistent);
+        /// <summary>The bounded result mirror copied once after a synchronous numeric segment completes.</summary>
+        internal readonly SpriteRegionResult[] CompletedResults = new SpriteRegionResult[Capacity];
+        /// <summary>The compact completed vertex prefix consumed without per-vertex native safety transitions.</summary>
+        internal readonly SpriteClipVertex[] CompletedVertices = new SpriteClipVertex[Capacity * 12];
         /// <summary>The first clipping scratch buffer, independent of all inputs and outputs.</summary>
         private NativeArray<SpriteClipVertex> _first = new NativeArray<SpriteClipVertex>(12, Allocator.Persistent);
         /// <summary>The second clipping scratch buffer, independent of all inputs and outputs.</summary>
@@ -52,6 +56,12 @@ namespace PlantsVsZombies.Rendering
             else
             {
                 job.Run();
+            }
+            if (RegionCount > 0)
+            {
+                NativeArray<SpriteRegionResult>.Copy(Results, CompletedResults, RegionCount);
+                var last = CompletedResults[RegionCount - 1];
+                NativeArray<SpriteClipVertex>.Copy(Vertices, CompletedVertices, last.Offset + last.Count);
             }
         }
 

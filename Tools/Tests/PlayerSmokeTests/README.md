@@ -65,3 +65,10 @@ The Adventure test is enabled by -pvz-adventure-smoke and keeps its profile/chec
 The Adventure slice also grants two explicit test entitlements to check Imitater target selection, target pricing, a delayed transformation and GPU grayscale output. It separately checks actual Marigold production and coin collection. This does not test or imply a completed shop/purchase flow; upgrade entitlements and wallets are not yet persisted.
 
 Legacy screenshot writers now use CaptureScreenshotAsTexture after EndOfFrame, encode to PNG and finish the file write before image reads. The old asynchronous filename-exists check could race Unity's still-open writer; the failed 20261109-194806 run is retained as failure evidence.
+
+The adventure fixture waits for the native vase hammer duration and checks that
+contents remain hidden before completion. Imitater verification explicitly captures
+the production plant draw and checks opaque RGB pixels; it does not require the
+normal direct-grayscale path to allocate an actor RenderTexture.
+Coin pointer verification checks that collection flight starts, advances native
+updates until arrival within a bounded interval, and requires exactly one credit.

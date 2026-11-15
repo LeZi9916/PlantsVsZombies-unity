@@ -43,7 +43,7 @@ namespace PlantsVsZombies.Tests.EditMode
             Assert.That(leader.PresentationNativePhase, Is.EqualTo(17));
             Invoke(game, "AdvanceAdventureBobsled", leader);
             Assert.That(leader.PresentationNativePhase, Is.EqualTo(18));
-            Assert.That(game.AdventurePresentationZombieAnimation(leader), Is.EqualTo("anim_jump"));
+            Assert.That(SimulationFixture.SynchronizeZombieAnimation(game, leader), Is.EqualTo("anim_jump"));
             Assert.That(game.AdventurePresentationZombieRate(leader), Is.EqualTo(20f));
             Assert.That(AdventureZombieGroundData.TryGet("Zombie_bobsled", "anim_jump", out var clip), Is.True);
             Assert.That(clip!.Count, Is.EqualTo(24));
@@ -90,7 +90,7 @@ namespace PlantsVsZombies.Tests.EditMode
                 Assert.That(member.PresentationNativePhase, Is.EqualTo(19));
                 Assert.That(member.BobsledState!.PhaseTicks, Is.EqualTo(150));
                 Assert.That(member.PresentationAltitude, Is.Zero);
-                Assert.That(game.AdventurePresentationZombieAnimation(member), Is.EqualTo("anim_walk"));
+                Assert.That(SimulationFixture.SynchronizeZombieAnimation(game, member), Is.EqualTo("anim_walk"));
                 for (var tick = 0; tick < 149; tick++)
                 {
                     Invoke(game, "AdvanceAdventureBobsled", member);
@@ -138,7 +138,9 @@ namespace PlantsVsZombies.Tests.EditMode
 
             var burning = Team();
             var single = Team();
-            single.Zombies.RemoveRange(1, 3);
+            SimulationFixture.Zombies(single).RemoveAt(3);
+            SimulationFixture.Zombies(single).RemoveAt(2);
+            SimulationFixture.Zombies(single).RemoveAt(1);
             single.Zombies[0].BobsledState = null;
             Invoke(burning, "HitAdventureExplosionZombie", burning.Zombies[0], 1800f, true, 0x12U);
             Invoke(single, "HitAdventureExplosionZombie", single.Zombies[0], 1800f, true, 0x12U);
@@ -175,7 +177,7 @@ namespace PlantsVsZombies.Tests.EditMode
         /// <returns>The production operation's result.</returns>
         private static object? Invoke(GameSimulation game, string name, params object[] arguments)
         {
-            return typeof(GameSimulation).GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(game, arguments);
+            return SimulationInspection.GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(game, arguments);
         }
     }
 }

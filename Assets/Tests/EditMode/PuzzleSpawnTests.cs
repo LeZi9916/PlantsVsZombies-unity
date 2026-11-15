@@ -97,7 +97,7 @@ namespace PlantsVsZombies.Tests.EditMode
         /// <param name="random">The deterministic ticket source.</param>
         private static void SetRandom(GameSimulation game, Random random)
         {
-            typeof(GameSimulation).GetField("_random", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(game, random);
+            SimulationInspection.GetField("_random", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(game, random);
         }
 
         /// <summary>Invokes a production puzzle initializer without widening its runtime visibility.</summary>
@@ -105,7 +105,7 @@ namespace PlantsVsZombies.Tests.EditMode
         /// <param name="method">The original private initializer name.</param>
         private static void Invoke(GameSimulation game, string method)
         {
-            typeof(GameSimulation).GetMethod(method, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(game, Array.Empty<object>());
+            SimulationInspection.GetMethod(method, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(game, Array.Empty<object>());
         }
 
         /// <summary>Supplies boundary tickets for placement and green-vase selection.</summary>

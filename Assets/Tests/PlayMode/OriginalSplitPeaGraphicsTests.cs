@@ -46,11 +46,11 @@ namespace PlantsVsZombies.Tests.PlayMode
                 owner._game = new GameSimulation(new GameRules { AdventureLevel = 41 }, 7529);
                 owner._game.ChooseDefaultAdventureSeeds();
                 var plant = new Plant { Kind = PlantKind.SplitPea, Row = 2, Column = 3, Age = .625f, PresentationRate = 20f };
-                owner._game.Plants.Add(new Plant { Kind = PlantKind.FlowerPot, Row = 2, Column = 3 });
+                SimulationFixture.Plants(owner._game).Add(new Plant { Kind = PlantKind.FlowerPot, Row = 2, Column = 3 });
                 var flags = BindingFlags.Instance | BindingFlags.NonPublic;
-                var fire = typeof(GameSimulation).GetMethod("FireAdventurePea", flags)!;
+                var fire = SimulationInspection.GetMethod("FireAdventurePea", flags)!;
                 var draw = typeof(GamePresenter).GetMethod("DrawAdventureProjectile", flags)!;
-                var move = typeof(GameSimulation).GetMethod("AdvanceAdventureProjectiles", flags)!;
+                var move = SimulationInspection.GetMethod("AdvanceAdventureProjectiles", flags)!;
                 var forward = (Pea)fire.Invoke(owner._game, new object[] { plant, plant.Row, false, 20f })!;
                 var backward = (Pea)fire.Invoke(owner._game, new object[] { plant, plant.Row, true, 20f })!;
                 Assert.That(animations.TryGetNativeTrackPosition("SplitPea", "anim_idle", "anim_idle",

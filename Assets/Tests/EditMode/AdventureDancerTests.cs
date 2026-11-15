@@ -61,7 +61,7 @@ namespace PlantsVsZombies.Tests.EditMode
             var leader = Spawn(game, ZombieKind.Dancing, 2, 7f);
             Assert.That(leader.PresentationNativePhase, Is.EqualTo(40));
             Assert.That(leader.DancerState!.PhaseTicks, Is.InRange(300, 311));
-            Assert.That(game.AdventurePresentationZombieAnimation(leader), Is.EqualTo("anim_moonwalk"));
+            Assert.That(SimulationFixture.SynchronizeZombieAnimation(game, leader), Is.EqualTo("anim_moonwalk"));
             Assert.That(game.AdventurePresentationZombieRate(leader), Is.EqualTo(24f));
             Assert.That(AdventureDancerRules.FacesRight(leader), Is.True);
             Assert.That(AdventureDancerRules.Scale(leader), Is.EqualTo(.8f));
@@ -69,7 +69,7 @@ namespace PlantsVsZombies.Tests.EditMode
             leader.DancerState.PhaseTicks = 1;
             Tick(game);
             Assert.That(leader.PresentationNativePhase, Is.EqualTo(41));
-            Assert.That(game.AdventurePresentationZombieAnimation(leader), Is.EqualTo("anim_point"));
+            Assert.That(SimulationFixture.SynchronizeZombieAnimation(game, leader), Is.EqualTo("anim_point"));
             var pointX = leader.X;
             for (var tick = 0; tick < 37; tick++)
             {
@@ -145,7 +145,7 @@ namespace PlantsVsZombies.Tests.EditMode
             }
 
             Assert.That(AdventureDancerRules.NeedsBackup(leader, game.Zombies, game.Presentation.Corpses, game.Adventure.Level), Is.False);
-            game.Zombies.Remove(unrelated);
+            SimulationFixture.Zombies(game).Remove(unrelated);
             game.Presentation.Corpses.Add(new AdventureZombieCorpse { Zombie = unrelated });
             Assert.That(AdventureDancerRules.NeedsBackup(leader, game.Zombies, game.Presentation.Corpses, game.Adventure.Level), Is.False);
             game.Presentation.Corpses.Clear();
@@ -157,7 +157,7 @@ namespace PlantsVsZombies.Tests.EditMode
             Assert.That(leader.PresentationNativePhase, Is.EqualTo(44));
             AdventureDancerRules.Tick(leader, 240, true, false);
             Assert.That(leader.PresentationNativePhase, Is.EqualTo(42));
-            Assert.That(game.AdventurePresentationZombieAnimation(leader), Is.EqualTo("anim_point"));
+            Assert.That(SimulationFixture.SynchronizeZombieAnimation(game, leader), Is.EqualTo("anim_point"));
         }
 
         /// <summary>Checks the original asymmetric mind-control detach and shared freeze/chill relationship.</summary>
@@ -310,10 +310,10 @@ namespace PlantsVsZombies.Tests.EditMode
             }
 
             leader.Eating = true;
-            game.AdventurePresentationZombieAnimation(leader);
+            SimulationFixture.SynchronizeZombieAnimation(game, leader);
             Assert.That(AdventureDancerRules.AnimationBlendTicks(leader), Is.EqualTo(20));
             leader.Eating = false;
-            game.AdventurePresentationZombieAnimation(leader);
+            SimulationFixture.SynchronizeZombieAnimation(game, leader);
             Assert.That(AdventureDancerRules.AnimationBlendTicks(leader), Is.EqualTo(20));
             AdventureDancerRules.Tick(leader, 240, false, false);
             Assert.That(AdventureDancerRules.AnimationBlendTicks(leader), Is.EqualTo(10));
@@ -337,8 +337,8 @@ namespace PlantsVsZombies.Tests.EditMode
             var game = new GameSimulation(new GameRules { AdventureLevel = 14 }, 4231);
             Assert.That(game.ChooseDefaultAdventureSeeds(), Is.True);
             game.ResetAdventureWaveSchedule(100000, false, false);
-            game.Zombies.Clear();
-            game.Plants.Clear();
+            SimulationFixture.Zombies(game).Clear();
+            SimulationFixture.Plants(game).Clear();
             return game;
         }
 
@@ -367,7 +367,7 @@ namespace PlantsVsZombies.Tests.EditMode
         /// <returns>The hook's optional return value.</returns>
         private static object? Invoke(GameSimulation game, string name, params object[] arguments)
         {
-            return typeof(GameSimulation).GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(game, arguments);
+            return SimulationInspection.GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(game, arguments);
         }
     }
 }

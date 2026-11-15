@@ -220,9 +220,9 @@ namespace PlantsVsZombies.Tests.PlayMode
             _owner._game = new GameSimulation(new GameRules { AdventureLevel = 15 }, 1570935);
             _owner._game.Update(2.03f);
             Assert.That(_owner._game.Presentation.ZombieRiseEffects.Count, Is.GreaterThan(0));
-            _owner._game.Zombies.Clear();
-            _owner._game.Mowers.Clear();
-            _owner._game.Suns.Clear();
+            SimulationFixture.Zombies(_owner._game).Clear();
+            SimulationFixture.Mowers(_owner._game).Clear();
+            SimulationFixture.Suns(_owner._game).Clear();
             _owner._game.Adventure._graves.Clear();
             _owner._choosingSeeds = true;
             foreach (var effect in _owner._game.Presentation.ZombieRiseEffects)
@@ -265,7 +265,7 @@ namespace PlantsVsZombies.Tests.PlayMode
                 Health = 270f,
                 StartingHealth = 270f
             };
-            _owner._game.Zombies.Add(zombie);
+            SimulationFixture.Zombies(_owner._game).Add(zombie);
             Assert.That(_owner._game.HammerAdventureZombie(zombie.Id, 420f, 280f), Is.True);
             Assert.That(_owner._game.Presentation.Explosions.Count, Is.EqualTo(1));
             _owner._game.Presentation.Explosions[0].Ticks = 12;

@@ -53,7 +53,7 @@ namespace PlantsVsZombies.Tests.EditMode
         {
             var game = CreateGame();
             var plant = Place(game);
-            game.Zombies.Add(CreateZombie(364f));
+            SimulationFixture.Zombies(game).Add(CreateZombie(364f));
             game.Update(.01f);
             var state = plant.ScaredyShroomPresentation!;
             Assert.That(state.NativePhase, Is.EqualTo(20));
@@ -70,7 +70,7 @@ namespace PlantsVsZombies.Tests.EditMode
             Assert.That(plant.RequiredTiming.Countdown, Is.EqualTo(149));
             Assert.That(game.Peas.Count, Is.Zero);
 
-            game.Zombies.Clear();
+            SimulationFixture.Zombies(game).Clear();
             Tick(game, 1);
             Assert.That(state.NativePhase, Is.EqualTo(22));
             Assert.That(state.Animation, Is.EqualTo("anim_grow"));
@@ -85,7 +85,7 @@ namespace PlantsVsZombies.Tests.EditMode
             Assert.That(state.Rate, Is.InRange(10f, 15f));
             Assert.That(plant.RequiredTiming.Countdown, Is.EqualTo(148));
 
-            game.Zombies.Add(CreateZombie(600f));
+            SimulationFixture.Zombies(game).Add(CreateZombie(600f));
             Tick(game, 147);
             Assert.That(plant.RequiredTiming.ShootingCountdown, Is.Zero);
             Tick(game, 1);
@@ -100,7 +100,7 @@ namespace PlantsVsZombies.Tests.EditMode
             var plant = Place(game);
             plant.Timing = PlantsVsZombies.Timing.PlantTiming.FromRaw(PlantsVsZombies.Timing.PlantKind.ScaredyShroom, 1, 0);
             var zombie = CreateZombie(600f);
-            game.Zombies.Add(zombie);
+            SimulationFixture.Zombies(game).Add(zombie);
             Tick(game, 1);
             Assert.That(plant.RequiredTiming.ShootingCountdown, Is.EqualTo(25));
             zombie.X = AdventureZombieNativeRules.GridX(364f);
@@ -125,7 +125,7 @@ namespace PlantsVsZombies.Tests.EditMode
             var game = CreateGame();
             var plant = Place(game);
             plant.Asleep = true;
-            game.Zombies.Add(CreateZombie(364f));
+            SimulationFixture.Zombies(game).Add(CreateZombie(364f));
             Tick(game, 1);
             Assert.That(plant.ScaredyShroomPresentation, Is.Null);
         }
@@ -156,7 +156,7 @@ namespace PlantsVsZombies.Tests.EditMode
             var plant = Place(game, 2, 0);
             plant.Timing = PlantsVsZombies.Timing.PlantTiming.FromRaw(PlantsVsZombies.Timing.PlantKind.ScaredyShroom, 10000, 0);
             plant.ActionTimer = 100f;
-            var leader = (Zombie)typeof(GameSimulation).GetMethod("SpawnAdventureZombie", BindingFlags.Instance | BindingFlags.NonPublic)!
+            var leader = (Zombie)SimulationInspection.GetMethod("SpawnAdventureZombie", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(game, new object[] { ZombieKind.Dancing, 2, AdventureZombieNativeRules.GridX(600f, .8f), 0 })!;
             Tick(game, leader.DancerState!.PhaseTicks);
             Assert.That(leader.PresentationNativePhase, Is.EqualTo(41));
@@ -200,7 +200,7 @@ namespace PlantsVsZombies.Tests.EditMode
             plant.ActionTimer = 100f;
             game.Adventure._graves.Clear();
             game.Adventure._graves.Add(new AdventureCellTimer { Row = 2, Column = 4, Remaining = float.MaxValue });
-            typeof(GameSimulation).GetMethod("SpawnScheduledFinalAmbush", BindingFlags.Instance | BindingFlags.NonPublic)!
+            SimulationInspection.GetMethod("SpawnScheduledFinalAmbush", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(game, Array.Empty<object>());
             Assert.That(game.Zombies.Count, Is.EqualTo(1));
             var zombie = game.Zombies[0];
@@ -234,7 +234,7 @@ namespace PlantsVsZombies.Tests.EditMode
         /// <returns>The planted mushroom initialized through the production placement path.</returns>
         private static Plant Place(GameSimulation game, int row = 2, int column = 3)
         {
-            return (Plant)typeof(GameSimulation).GetMethod("PlaceAdventurePlant", BindingFlags.Instance | BindingFlags.NonPublic)!
+            return (Plant)SimulationInspection.GetMethod("PlaceAdventurePlant", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(game, new object[] { PlantKind.ScaredyShroom, row, column })!;
         }
 

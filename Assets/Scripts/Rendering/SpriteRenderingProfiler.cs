@@ -27,6 +27,13 @@ namespace PlantsVsZombies.Rendering
         /// <summary>Measures animation sampling and its nested source submissions.</summary>
         internal static readonly ProfilerMarker Animation = new ProfilerMarker(ProfilerCategory.Scripts, "PvZ.Animation.Sample");
 
+        /// <summary>Measures the complete seed bank including its ordered sprite submission barriers.</summary>
+        internal static readonly ProfilerMarker SeedBank = new ProfilerMarker(ProfilerCategory.Scripts, "PvZ.SeedBank");
+        /// <summary>Measures fixed native thumbnail preparation and replay.</summary>
+        internal static readonly ProfilerMarker Thumbnail = new ProfilerMarker(ProfilerCategory.Scripts, "PvZ.Thumbnail");
+        /// <summary>Measures retained bitmap glyph submission, including any preceding sprite flush.</summary>
+        internal static readonly ProfilerMarker BitmapText = new ProfilerMarker(ProfilerCategory.Scripts, "PvZ.BitmapText");
+
         /// <summary>Forces marker collection for an explicit diagnostic recorder.</summary>
         internal static bool ForceEnabled { get; set; }
         /// <summary>Gets whether marker sampling is enabled for this complete presentation.</summary>

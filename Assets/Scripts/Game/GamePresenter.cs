@@ -34,6 +34,7 @@ namespace PlantsVsZombies.Game
             _owner = owner;
             _drawConveyorPackets = DrawAdventureConveyorPacketContents;
             _drawCardImage = DrawCardImage;
+            _drawCardThumbnail = DrawCardThumbnail;
             _textureLookup = owner.Textures.LoadImage;
             _drawPacketMask = DrawAdventurePacketMask;
             _doomTrackOffset = DoomShroomTrackOffset;
@@ -164,6 +165,22 @@ namespace PlantsVsZombies.Game
         private GUIStyle? _textFieldStyle;
         /// <summary>Reuses the callback used to grayscale an imitated packet image.</summary>
         private readonly Func<bool> _drawCardImage;
+        /// <summary>Reuses the synchronous fixed-pose thumbnail callback inside imitation captures.</summary>
+        private readonly Func<bool> _drawCardThumbnail;
+        /// <summary>The original resource used by the immediately consumed imitation thumbnail.</summary>
+        private string _cardThumbnailName = string.Empty;
+        /// <summary>The logical origin of the immediately consumed thumbnail.</summary>
+        private Vector2 _cardThumbnailOrigin;
+        /// <summary>The native scale of the immediately consumed thumbnail.</summary>
+        private float _cardThumbnailScale;
+
+        /// <summary>Submits the configured fixed-pose thumbnail inside the existing native capture.</summary>
+        /// <returns>Whether the thumbnail submitted visible source tracks.</returns>
+        private bool DrawCardThumbnail()
+        {
+            return _owner.RequiredAnimations.DrawNativeThumbnail(_cardThumbnailName, _cardThumbnailOrigin, _cardThumbnailScale);
+        }
+
         /// <summary>The immediately consumed imitated packet image.</summary>
         private SpriteImage _cardAtlas = null!;
         /// <summary>The immediately consumed packet destination and atlas coordinates.</summary>
@@ -308,6 +325,10 @@ namespace PlantsVsZombies.Game
                 return;
             }
 
+            if (game.IsAdventure && game.Adventure.Boss != null)
+            {
+                hierarchy.MarkAlive("Zombies", -1, "Boss");
+            }
             foreach (var plant in game.Plants)
             {
                 hierarchy.MarkAlive("Plants", plant.Id, AdventurePlantAnimation(plant.Kind));
@@ -1502,8 +1523,8 @@ namespace PlantsVsZombies.Game
                     {
                         // PC 47F48E scales cached image offsets, retaining DrawSeedType's unscaled height +60 argument.
                         SpriteDrawState.Matrix = previous
-                            * Matrix4x4.Translate(new Vector3(40f + plant.Column * 80f,
-                                _owner.Layout.AdventureCellY(row, plant.Column) + height + 60f, 0f))
+                            * Matrix4x4.Translate(new Vector3(40f + plant.Column * 80f + plant.PositionOffsetX,
+                                _owner.Layout.AdventureCellY(row, plant.Column) + plant.PositionOffsetY + height + 60f, 0f))
                             * Matrix4x4.Scale(new Vector3(1f, .25f, 1f));
                         DrawAdventureCursorPlant(plant.Kind, Vector2.zero, 1f,
                             _presentationKeys.Get("squished-plant-", plant.Id));
@@ -2182,10 +2203,6 @@ namespace PlantsVsZombies.Game
                     Fill(new Rect(278, 90, 4, 475), new Color(0.9f, 0.08f, 0.04f));
                 }
 
-                if (level.Mode == AdventureMode.Boss)
-                {
-                    _owner.RequiredAnimations.DrawBossNative(new Vector2(0, 0), 1f, _owner.RequiredGame.Elapsed, _owner.RequiredGame.Adventure.BossHeadVulnerable);
-                }
 
                 for (var row = 0; row < _owner.RequiredGame.RowCount; row++)
                 {
@@ -2215,7 +2232,7 @@ namespace PlantsVsZombies.Game
 
                     foreach (Mower mower in _owner.RequiredGame.Mowers)
                     {
-                        if (mower.Row != row || !mower.Available && !mower.Active)
+                        if (mower.Row != row || !mower.Available && !mower.Active && mower.SquishedTicks <= 0)
                         {
                             continue;
                         }
@@ -2276,6 +2293,7 @@ namespace PlantsVsZombies.Game
                         }
                     }
 
+                    DrawAdventureBossParts(row);
                     DrawAdventureBungees(row, true);
                     DrawAdventureBungeeCorpses(row, 303004);
                     DrawAdventureBungeeCorpses(row, 305000);
@@ -2377,9 +2395,9 @@ namespace PlantsVsZombies.Game
                     for (var ballIndex = 0; ballIndex < _owner.RequiredGame.Adventure.BossBalls.Count; ballIndex++)
                     {
                         var ball = _owner.RequiredGame.Adventure.BossBalls[ballIndex];
-                        if (ball.Row == row)
+                        if (ball.Row == row && ball.Rolling)
                         {
-                            _owner.RequiredAnimations.Draw(ball.IsIce ? "Zombie_boss_iceball" : "Zombie_boss_fireball", new Rect(BoardLayout.AdventureGridX + ball.X * BoardLayout.CellWidth - 40, _owner.Layout.AdventureCellY(row, ball.X) - 2, 80, 80), _owner.RequiredGame.Elapsed, "anim_role");
+                            _owner.RequiredAnimations.DrawBossBallNative(ball, AdventureRenderRemainder);
                         }
                     }
 
@@ -2414,6 +2432,17 @@ namespace PlantsVsZombies.Game
                     }
                 }
                 DrawAdventureBungeeCorpses(-1, 400001);
+                foreach (var ball in _owner.RequiredGame.Adventure.BossBalls)
+                {
+                    if (!ball.Rolling)
+                    {
+                        _owner.RequiredAnimations.DrawBossBallNative(ball, AdventureRenderRemainder);
+                    }
+                }
+                if (_owner.RequiredGame.Adventure.Boss != null)
+                {
+                    _owner.RequiredAnimations.DrawBossEffects(_owner.RequiredGame.Adventure.Boss, RequiredAdventureParticles, AdventureRenderRemainder);
+                }
                 foreach (var effect in _owner.RequiredGame.Presentation.ZomboniParticles)
                 {
                     if (effect.Foreground && _adventureParticles != null)
@@ -2961,6 +2990,41 @@ namespace PlantsVsZombies.Game
             return origin;
         }
 
+        /// <summary>Interleaves PC Board::AddBossRenderItem's four boss groups after native zombies and before row projectiles.</summary>
+        /// <param name="row">The native row layer being submitted.</param>
+        private void DrawAdventureBossParts(int row)
+        {
+            var boss = _owner.RequiredGame.Adventure.Boss;
+            if (boss == null)
+            {
+                return;
+            }
+            using var actor = _owner.RequiredAnimations.Hierarchy.BeginActor("Zombies", -1, "Boss");
+            var backRow = 1;
+            var frontRow = 3;
+            if (boss.Phase == 81 && boss.Time > .25f && boss.Time < .75f)
+            {
+                backRow = boss.TargetRow == 1 ? 2 : 1;
+                frontRow = boss.TargetRow == 3 ? 4 : 3;
+            }
+            if (row == backRow)
+            {
+                _owner.RequiredAnimations.DrawBossPartNative(boss, AdventureBossPart.BackLeg, RequiredAdventureParticles);
+            }
+            if (row == frontRow)
+            {
+                _owner.RequiredAnimations.DrawBossPartNative(boss, AdventureBossPart.FrontLeg, RequiredAdventureParticles);
+            }
+            if (row == 4)
+            {
+                _owner.RequiredAnimations.DrawBossPartNative(boss, AdventureBossPart.Main, RequiredAdventureParticles);
+            }
+            if (row == (boss.Phase == 1 ? 1 : 4))
+            {
+                _owner.RequiredAnimations.DrawBossPartNative(boss, AdventureBossPart.BackArm, RequiredAdventureParticles);
+            }
+        }
+
         /// <summary>Performs draw adventure mower.</summary>
         /// <param name = "mower">The mower.</param>
         private void DrawAdventureMower(Mower mower)
@@ -2971,7 +3035,7 @@ namespace PlantsVsZombies.Game
             var clip = pool ? mower.X > .125f ? "anim_water" : "anim_land" : roof ? null : "anim_normal";
             float age;
             _owner.RequiredGame.Presentation.MowerTimes.TryGetValue(mower, out age);
-            if (mower.Active)
+            if (mower.Active || mower.SquishedTicks > 0 && mower.SquishedWhileActive)
             {
                 age += AdventureRenderRemainder;
             }
@@ -3002,7 +3066,16 @@ namespace PlantsVsZombies.Game
                 }
             }
 
-            _owner.RequiredAnimations.DrawNativePlayback(name, origin, pool ? .8f : .85f, age, clip, true, mower.Active ? pool ? 35f : 70f : 0f);
+            if (mower.SquishedTicks > 0)
+            {
+                origin += new Vector2(-11f, 46f);
+                _owner.RequiredAnimations.DrawNativePlayback(name, origin, .85f, age, clip, true,
+                    mower.SquishedWhileActive ? pool ? 35f : 70f : 0f, verticalScale: .22f);
+            }
+            else
+            {
+                _owner.RequiredAnimations.DrawNativePlayback(name, origin, pool ? .8f : .85f, age, clip, true, mower.Active ? pool ? 35f : 70f : 0f);
+            }
         }
 
         /// <summary>Draws one original crater atlas cell with its native terrain, aging and fade.</summary>
@@ -3233,7 +3306,8 @@ namespace PlantsVsZombies.Game
         private void DrawAdventurePlant(Plant plant)
         {
             using var hierarchyActor = _owner.RequiredAnimations.Hierarchy.BeginActor("Plants", plant.Id, AdventurePlantAnimation(plant.Kind));
-            float x = BoardLayout.AdventureGridX + plant.Column * BoardLayout.CellWidth, y = _owner.Layout.AdventureCellY(plant.Row, plant.Column);
+            float x = BoardLayout.AdventureGridX + plant.Column * BoardLayout.CellWidth + plant.PositionOffsetX,
+                y = _owner.Layout.AdventureCellY(plant.Row, plant.Column) + plant.PositionOffsetY;
             var name = AdventurePlantAnimation(plant.Kind);
             var size = plant.IsSmall ? .5f : 1f;
             var drawHeight = AdventurePlantHeight(plant);
@@ -4163,12 +4237,6 @@ namespace PlantsVsZombies.Game
                 DrawImage(shadowName, AdventureZombieShadowBounds(zombie, x, floor, new Vector2(shadow.Width, shadow.Height), inPool));
             }
             string name = AdventureAnimationCatalog.AdventureZombieAnimation(zombie.Kind), clip = _owner.RequiredGame.AdventurePresentationZombieAnimation(zombie);
-            if (!string.Equals(zombie.PresentationAnimation, clip, StringComparison.Ordinal))
-            {
-                zombie.PresentationAnimation = clip;
-                zombie.PresentationAnimationAge = 0;
-            }
-
             // PC UpdateAnimSpeed leaves flat-ground flying and jump animation clocks unaffected by chill.
             var constantGroundClock = zombie.Kind == ZombieKind.Balloon && zombie.Airborne
                 || zombie.Kind == ZombieKind.DolphinRider
@@ -5028,7 +5096,7 @@ namespace PlantsVsZombies.Game
             if (pea.Lobbed)
             {
                 y = pea.PresentationLaunchY + Mathf.Lerp(pea.PresentationPreviousLobHeight, pea.PresentationLobHeight, AdventureRenderRemainder * 100f);
-                rotation = (pea.PresentationRotation + pea.PresentationSpin * pea.PresentationNativeAge * 100f) * Mathf.Rad2Deg;
+                rotation = -(pea.PresentationRotation + pea.PresentationSpin * pea.PresentationNativeAge * 100f) * Mathf.Rad2Deg;
                 _owner.RequiredAnimations.DrawResourceSprite("IMAGE_PEA_SHADOWS", new Vector2(BoardLayout.AdventureGridX + x * BoardLayout.CellWidth, _owner.Layout.AdventureCellY(pea.Row, x) + 80), 1.6f * 200f / (Mathf.Clamp(-pea.PresentationLobHeight, 0, 200) + 200), 0, _owner.RequiredGame.Adventure.Level.IsNight ? 1 : 0);
             }
 
@@ -5080,6 +5148,13 @@ namespace PlantsVsZombies.Game
             }
 
             var scale = shortPuff ? AdventurePuffShroomRules.ImageScale(pea.PresentationNativeAge + AdventureRenderRemainder) : 1f;
+            if (pea.Lobbed && _owner.RequiredAnimations.TryGetNativeSpriteSize(image, out var imageSize))
+            {
+                // PC Draw 47D950 rotates/scales around mPos + the unscaled source image half-size.
+                center += new Vector2(imageSize.x * .5f, imageSize.y * .5f);
+                scale = pea.Butter ? .8f : pea.SourceKind == PlantKind.KernelPult ? .95f : 1f;
+            }
+
             _owner.RequiredAnimations.DrawResourceSprite(image, center, scale, rotation);
         }
 
@@ -5482,8 +5557,17 @@ namespace PlantsVsZombies.Game
                     CanvasUI.Color = new Color(previous.r * visual.MaskColor / 255f, previous.g * visual.MaskColor / 255f, previous.b * visual.MaskColor / 255f, previous.a);
                     _maskKind = kind;
                     _maskCard = card;
-                    _owner.RequiredAnimations.DrawNativeClipped(_presentationKeys.Get("seed-cooldown-", (int)kind), card, _drawPacketMask,
-                        topCrop: Math.Min(card.height, visual.MaskHeight));
+                    var key = _presentationKeys.Get("seed-cooldown-", (int)kind);
+                    var crop = Math.Min(card.height, visual.MaskHeight);
+                    if (kind == PlantKind.Imitater)
+                    {
+                        // Its nested capture also supplies the earlier base-card composite in this frame.
+                        _owner.RequiredAnimations.DrawNativeClipped(key, card, _drawPacketMask, topCrop: crop);
+                    }
+                    else
+                    {
+                        _owner.RequiredAnimations.DrawNativeCachedClipped(key, card, _drawPacketMask, (int)kind, topCrop: crop);
+                    }
                 }
             }
             finally
@@ -5837,7 +5921,8 @@ namespace PlantsVsZombies.Game
                         _cardAtlas = atlas;
                         _cardDestination = card;
                         _cardSource = source;
-                        _owner.RequiredAnimations.DrawNativeClipped(_presentationKeys.Get("imitater-card-", (int)card.x, (int)card.y), card, _drawCardImage, false, true);
+                        _owner.RequiredAnimations.DrawNativeCachedClipped(_presentationKeys.Get("imitater-card-", (int)card.x, (int)card.y),
+                            card, _drawCardImage, id, grayscale: true);
                     }
                     else
                     {
@@ -5854,12 +5939,15 @@ namespace PlantsVsZombies.Game
                     var iconKind = imitated ? _owner.RequiredGame.Adventure.RequiredImitaterTarget : kind;
                     if (imitated)
                     {
-                        ActorRenderer.DrawCursor(AdventurePlantAnimation(iconKind), origin, scale, null, false, true,
-                            _presentationKeys.Get("imitater-card-", (int)card.x, (int)card.y), card);
+                        _cardThumbnailName = AdventurePlantAnimation(iconKind);
+                        _cardThumbnailOrigin = origin;
+                        _cardThumbnailScale = scale;
+                        _owner.RequiredAnimations.DrawNativeCachedClipped(_presentationKeys.Get("imitater-card-", (int)card.x, (int)card.y),
+                            card, _drawCardThumbnail, id, grayscale: true);
                     }
                     else
                     {
-                        _owner.RequiredAnimations.DrawNative(AdventurePlantAnimation(iconKind), origin, scale, 0f);
+                        _owner.RequiredAnimations.DrawNativeThumbnail(AdventurePlantAnimation(iconKind), origin, scale);
                     }
                 }
             }
@@ -5872,7 +5960,7 @@ namespace PlantsVsZombies.Game
                 float scale;
                 AlmanacPortraitLayout.PlantThumbnailTransform((int)PlantKind.Wallnut, new Rect(0, 0, 50, 70), out origin, out scale);
                 origin = new Vector2(card.x + origin.x * card.width / 50f, card.y + origin.y * card.height / 70f);
-                _owner.RequiredAnimations.DrawNative("Wallnut", origin, scale * card.width / 50f, 0f, "anim_idle");
+                _owner.RequiredAnimations.DrawNativeThumbnail("Wallnut", origin, scale * card.width / 50f, "anim_idle");
                 CanvasUI.Color = previous;
             }
 
@@ -5892,6 +5980,7 @@ namespace PlantsVsZombies.Game
         /// <summary>Draws the complete PC seed bank below lawn actors during play.</summary>
         private void DrawAdventureSeedBankContents()
         {
+            using var profile = SpriteRenderingProfiler.Measure(SpriteRenderingProfiler.SeedBank);
             var board = _owner.RequiredGame.Adventure;
             var packets = board.Level.HasConveyor || board.Level.Mode == AdventureMode.Vasebreaker;
             if (_owner.RequiredGame.UsesNativeAdventureConveyor)

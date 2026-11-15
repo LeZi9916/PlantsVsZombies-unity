@@ -16,7 +16,7 @@ namespace PlantsVsZombies.Rendering
         /// <summary>The numeric region snapshots prepared on the main thread.</summary>
         [ReadOnly]
         internal NativeArray<SpriteRegionInput> Inputs;
-        /// <summary>The nonoverlapping flat vertex output, with twelve slots per region.</summary>
+        /// <summary>The compact nonoverlapping vertex prefix, within the retained worst-case twelve vertices per region.</summary>
         internal NativeArray<SpriteClipVertex> Vertices;
         /// <summary>The polygon metadata for each input region.</summary>
         internal NativeArray<SpriteRegionResult> Results;
@@ -37,6 +37,7 @@ namespace PlantsVsZombies.Rendering
         /// <summary>Processes every region once without accessing managed objects or scheduling asynchronous work.</summary>
         public void Execute()
         {
+            var outputOffset = 0;
             for (var index = 0; index < Count; index++)
             {
                 var input = Inputs[index];
@@ -63,7 +64,8 @@ namespace PlantsVsZombies.Rendering
                 SetClipCorner(3, input.Matrix, left, bottom, input.TextureUv.xMin, input.TextureUv.yMin);
                 var count = input.ClipEnabled ? ClipPolygon(input.Clip) : 4;
                 var area = PolygonArea(count);
-                var offset = index * 12;
+                var offset = outputOffset;
+                outputOffset += count;
                 Results[index] = new SpriteRegionResult { Offset = offset, Count = count, Area = area };
                 for (var vertex = 0; vertex < count; vertex++)
                 {

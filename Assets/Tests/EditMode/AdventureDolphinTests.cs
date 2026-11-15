@@ -20,10 +20,10 @@ namespace PlantsVsZombies.Tests.EditMode
             var zombie = Spawn(game, 51, 720f);
             Assert.That(zombie.PresentationNativeVelocity, Is.InRange(.89f, .91f));
             Assert.That(CountSound(game, 51), Is.EqualTo(1));
-            Assert.That(game.AdventurePresentationZombieAnimation(zombie), Is.EqualTo("anim_walkdolphin"));
+            Assert.That(SimulationFixture.SynchronizeZombieAnimation(game, zombie), Is.EqualTo("anim_walkdolphin"));
             game.Update(.01f);
             Assert.That(zombie.PresentationNativePhase, Is.EqualTo(52));
-            Assert.That(game.AdventurePresentationZombieAnimation(zombie), Is.EqualTo("anim_jumpinpool"));
+            Assert.That(SimulationFixture.SynchronizeZombieAnimation(game, zombie), Is.EqualTo("anim_jumpinpool"));
             Assert.That(game.AdventurePresentationZombieRate(zombie), Is.EqualTo(16f));
             var entryX = zombie.X;
             Tick(game, 157);
@@ -43,7 +43,7 @@ namespace PlantsVsZombies.Tests.EditMode
             game.Update(.01f);
             Assert.That(zombie.PresentationNativePhase, Is.EqualTo(53));
             Assert.That(zombie.PresentationInPool, Is.True);
-            Assert.That(game.AdventurePresentationZombieAnimation(zombie), Is.EqualTo("anim_ride"));
+            Assert.That(SimulationFixture.SynchronizeZombieAnimation(game, zombie), Is.EqualTo("anim_ride"));
             Assert.That(game.AdventurePresentationZombieRate(zombie), Is.EqualTo(12f));
             Assert.That(NativeX(zombie), Is.InRange(649f, 650f));
             Assert.That(zombie.PresentationNativeVelocity, Is.InRange(.89f, .91f), "The PC ride retains its original speed instead of inventing a one-pixel velocity.");
@@ -109,7 +109,7 @@ namespace PlantsVsZombies.Tests.EditMode
             game.Update(.01f);
             Assert.That(zombie.PresentationNativePhase, Is.EqualTo(54));
             Assert.That(zombie.DolphinState!.JumpTicks, Is.EqualTo(120));
-            Assert.That(game.AdventurePresentationZombieAnimation(zombie), Is.EqualTo("anim_dolphinjump"));
+            Assert.That(SimulationFixture.SynchronizeZombieAnimation(game, zombie), Is.EqualTo("anim_dolphinjump"));
             Assert.That(game.AdventurePresentationZombieRate(zombie), Is.EqualTo(10f));
             Assert.That(CountSound(game, 50), Is.EqualTo(1));
             Assert.That(CountSound(game, 52), Is.EqualTo(1));
@@ -139,7 +139,7 @@ namespace PlantsVsZombies.Tests.EditMode
             Assert.That((landingX - zombie.X) * 80f, Is.InRange(94f, 94.5f));
             Assert.That(Math.Abs(zombie.PresentationPreviousX - zombie.X) * 80f, Is.LessThan(1f),
                 "The landing's ninety-four-pixel coordinate rebase must not become render interpolation travel.");
-            Assert.That(game.AdventurePresentationZombieAnimation(zombie), Is.EqualTo("anim_swim"));
+            Assert.That(SimulationFixture.SynchronizeZombieAnimation(game, zombie), Is.EqualTo("anim_swim"));
             Assert.That(AdventureZombieTargetingRules.BodyRectangle(zombie).X, Is.EqualTo((int)NativeX(zombie) + 20));
             Assert.That(AdventureZombieBiteRules.LocalAttackRect(14, 55, false).X, Is.EqualTo(30));
             Assert.That(CountSound(game, 50), Is.EqualTo(1));
@@ -171,7 +171,7 @@ namespace PlantsVsZombies.Tests.EditMode
             Assert.That(zombie.DolphinState.WalkingPoseVersion, Is.EqualTo(previousVersion + 1),
                 "Every native landing must seed a new walking pose even when the renderer never displayed its intermediate swim clip.");
             zombie.Eating = eating;
-            Assert.That(game.AdventurePresentationZombieAnimation(zombie), Is.EqualTo(eating ? "anim_eat" : "anim_swim"));
+            Assert.That(SimulationFixture.SynchronizeZombieAnimation(game, zombie), Is.EqualTo(eating ? "anim_eat" : "anim_swim"));
             Assert.That(zombie.DolphinState.AnimationBlendTicks, Is.EqualTo(eating ? 20 : 0),
                 "Immediate eating keeps the original twenty-tick meal blend; only the landing rebase is instantaneous.");
         }
@@ -217,7 +217,7 @@ namespace PlantsVsZombies.Tests.EditMode
             Assert.That(zombie.PresentationAltitude, Is.EqualTo(-40f));
             Assert.That(zombie.UsedAbility, Is.False);
             Assert.That(CountSound(game, 52), Is.EqualTo(1));
-            Assert.That(game.AdventurePresentationZombieAnimation(zombie), Is.EqualTo("anim_walkdolphin"));
+            Assert.That(SimulationFixture.SynchronizeZombieAnimation(game, zombie), Is.EqualTo("anim_walkdolphin"));
             Tick(game, 40);
             Assert.That(zombie.PresentationInPool, Is.False);
             Assert.That(zombie.PresentationAltitude, Is.Zero);
@@ -244,7 +244,7 @@ namespace PlantsVsZombies.Tests.EditMode
                 Assert.That(zombie.PresentationNativeHeight, Is.EqualTo(2));
                 Assert.That(zombie.PresentationAltitude, Is.EqualTo(-40f));
                 Assert.That(CountSound(game, 52), Is.EqualTo(1));
-                Assert.That(game.AdventurePresentationZombieAnimation(zombie), Is.EqualTo("anim_walk"));
+                Assert.That(SimulationFixture.SynchronizeZombieAnimation(game, zombie), Is.EqualTo("anim_walk"));
                 Assert.That(AdventureZombieBiteRules.LocalAttackRect(14, 56, false).X, Is.EqualTo(30));
             }
         }
@@ -260,12 +260,12 @@ namespace PlantsVsZombies.Tests.EditMode
             Tick(game, 8);
             Assert.That(zombie.Eating, Is.True);
             Assert.That(nut.Health, Is.LessThan(health));
-            Assert.That(game.AdventurePresentationZombieAnimation(zombie), Is.EqualTo("anim_eat"));
+            Assert.That(SimulationFixture.SynchronizeZombieAnimation(game, zombie), Is.EqualTo("anim_eat"));
             Assert.That(game.AdventurePresentationZombieRate(zombie), Is.EqualTo(36f));
-            game.Plants.Clear();
+            SimulationFixture.Plants(game).Clear();
             Tick(game, 8);
             Assert.That(zombie.Eating, Is.False);
-            Assert.That(game.AdventurePresentationZombieAnimation(zombie), Is.EqualTo("anim_swim"));
+            Assert.That(SimulationFixture.SynchronizeZombieAnimation(game, zombie), Is.EqualTo("anim_swim"));
         }
 
         /// <summary>Checks the original has-head gate prevents a new dolphin leap without changing an existing riding phase.</summary>
@@ -309,7 +309,7 @@ namespace PlantsVsZombies.Tests.EditMode
                 var game = Board();
                 var zombie = Spawn(game, phase, 400f);
                 var projectile = LandingProjectile(kind, zombie.X);
-                game.Peas.Add(projectile);
+                SimulationFixture.Peas(game).Add(projectile);
                 Invoke(game, "AdvanceAdventureProjectiles", .01f, true);
                 Assert.That(zombie.Health, Is.EqualTo(500f), kind + " must respect PC EffectedByDamage for an already flying projectile.");
                 Assert.That(game.Peas, Has.Member(projectile));
@@ -328,13 +328,13 @@ namespace PlantsVsZombies.Tests.EditMode
                 var game = Board();
                 var zombie = Spawn(game, phase, 400f);
                 var primary = new Zombie { Id = 9001, Kind = ZombieKind.Normal, Row = 2, X = zombie.X + .1f, Health = 270f, StartingHealth = 270f };
-                game.Zombies.Add(primary);
+                SimulationFixture.Zombies(game).Add(primary);
                 var projectile = LandingProjectile(winter ? PlantKind.WinterMelon : PlantKind.Peashooter, primary.X);
                 projectile.Fire = !winter;
                 projectile.Splash = true;
                 projectile.ChillSplash = winter;
                 projectile.Damage = winter ? 80f : 40f;
-                game.Peas.Add(projectile);
+                SimulationFixture.Peas(game).Add(projectile);
                 Invoke(game, "AdvanceAdventureProjectiles", .01f, true);
                 Assert.That(primary.Health, Is.LessThan(270f), "The real projectile must hit its ordinary primary victim.");
                 Assert.That(zombie.Health, Is.EqualTo(500f), "Secondary splash must use the same original range mask.");
@@ -467,7 +467,7 @@ namespace PlantsVsZombies.Tests.EditMode
             zombie._presentationWalkPhase = 0f;
             zombie._presentationWalkLoops = 0;
             zombie._presentationPreviousWalkCycle = 0d;
-            game.AdventurePresentationZombieAnimation(zombie);
+            SimulationFixture.SynchronizeZombieAnimation(game, zombie);
             return zombie;
         }
 
@@ -547,7 +547,7 @@ namespace PlantsVsZombies.Tests.EditMode
         /// <returns>The production method's result.</returns>
         private static object? Invoke(GameSimulation game, string name, params object[] arguments)
         {
-            return typeof(GameSimulation).GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(game, arguments);
+            return SimulationInspection.GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(game, arguments);
         }
     }
 }

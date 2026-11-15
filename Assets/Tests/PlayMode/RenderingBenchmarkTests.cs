@@ -36,7 +36,9 @@ namespace PlantsVsZombies.Tests.PlayMode
             {
                 root = Application.streamingAssetsPath;
             }
-            var plantKinds = ReadEnvironmentKinds("PVZ_RENDER_BENCHMARK_PLANTS", new[] { PlantKind.Sunflower, PlantKind.Peashooter, PlantKind.Peashooter });
+            var roof = Environment.GetEnvironmentVariable("PVZ_RENDER_BENCHMARK_SCENARIO") == "roof";
+            var plantKinds = ReadEnvironmentKinds("PVZ_RENDER_BENCHMARK_PLANTS", roof ? new[] { PlantKind.Sunflower, PlantKind.Sunflower, PlantKind.CabbagePult }
+                : new[] { PlantKind.Sunflower, PlantKind.Peashooter, PlantKind.Peashooter });
             var zombieKinds = ReadEnvironmentKinds("PVZ_RENDER_BENCHMARK_ZOMBIES", new[] { ZombieKind.Normal });
             var execution = Environment.GetEnvironmentVariable("PVZ_RENDER_GEOMETRY_MODE");
             var executionProperty = typeof(ObjectSpriteRenderer).GetProperty("GeometryExecution", BindingFlags.Static | BindingFlags.NonPublic);
@@ -45,8 +47,8 @@ namespace PlantsVsZombies.Tests.PlayMode
             {
                 executionProperty.SetValue(null, Enum.Parse(executionProperty.PropertyType, execution, true));
             }
-            var plantCount = ReadEnvironmentCount("PVZ_RENDER_BENCHMARK_PLANT_COUNT", 30, 45);
-            var zombieCount = ReadEnvironmentCount("PVZ_RENDER_BENCHMARK_ZOMBIE_COUNT", 50, 250);
+            var plantCount = ReadEnvironmentCount("PVZ_RENDER_BENCHMARK_PLANT_COUNT", roof ? 15 : 30, 45);
+            var zombieCount = ReadEnvironmentCount("PVZ_RENDER_BENCHMARK_ZOMBIE_COUNT", roof ? 0 : 50, 250);
             var advancing = Environment.GetEnvironmentVariable("PVZ_RENDER_BENCHMARK_ADVANCE") == "1";
             yield return null;
             Directory.CreateDirectory(output!);
@@ -68,7 +70,8 @@ namespace PlantsVsZombies.Tests.PlayMode
             var profileNames = new[]
             {
                 "PvZ.Atlas.Regions", "PvZ.Sprite.Submit", "PvZ.Sprite.Upload", "PvZ.Hierarchy.Refresh", "PvZ.Animation.Sample",
-                "PvZ.Sprite.Prepare", "PvZ.Sprite.Geometry", "PvZ.Sprite.Commit", "PvZ.Present", "PvZ.Update", "PvZ.Update.Input", "PvZ.Update.Simulation", "PvZ.Update.Audio"
+                "PvZ.Sprite.Prepare", "PvZ.Sprite.Geometry", "PvZ.Sprite.Commit", "PvZ.Present", "PvZ.Update", "PvZ.Update.Input", "PvZ.Update.Simulation", "PvZ.Update.Audio",
+                "PvZ.SeedBank", "PvZ.Thumbnail", "PvZ.BitmapText"
             };
             var profiles = new ProfilerRecorder[profileNames.Length];
             if (Environment.GetEnvironmentVariable("PVZ_RENDER_PROFILE") == "1")
@@ -92,14 +95,34 @@ namespace PlantsVsZombies.Tests.PlayMode
                 owner._optionsView = options;
                 owner._currentView = PvZGame.ScreenView.Board;
                 owner._smokeMode = true;
-                owner._game = new GameSimulation(new GameRules { AdventureLevel = 9 }, 7529);
-                owner._game.ChooseDefaultAdventureSeeds();
+                owner._game = new GameSimulation(new GameRules { AdventureLevel = roof ? 41 : 9, AdventurePacketSlots = 8 }, 7529);
+                if (roof)
+                {
+                    var deck = new[] { PlantKind.Sunflower, PlantKind.Peashooter, PlantKind.Repeater, PlantKind.SnowPea,
+                        PlantKind.FlowerPot, PlantKind.CoffeeBean, PlantKind.CabbagePult, PlantKind.KernelPult };
+                    owner._game.Adventure.AvailableSeeds = Array.AsReadOnly(deck);
+                    Assert.That(owner._game.ChooseAdventureSeeds(deck), Is.True);
+                }
+                else
+                {
+                    owner._game.ChooseDefaultAdventureSeeds();
+                }
                 owner._game.ResetAdventureWaveSchedule(1000000, false, false);
+                if (roof)
+                {
+                    // Roof initialization places support pots; keep the configured population exact.
+                    SimulationFixture.Plants(owner._game).Clear();
+                }
                 owner._deck.Clear();
+                if (roof)
+                {
+                    owner._deck.AddRange(owner._game.Adventure.AvailableSeeds);
+                    SimulationInspection.GetProperty(nameof(GameSimulation.SunAmount))!.SetValue(owner._game, 9990);
+                }
                 owner.AdventureBoard._adventurePointer = new Vector2(-1000f, -1000f);
                 for (var index = 0; index < plantCount; index++)
                 {
-                    owner._game.Plants.Add(new Plant
+                    SimulationFixture.Plants(owner._game).Add(new Plant
                     {
                         Id = index + 1,
                         Kind = plantKinds[index % plantKinds.Length],
@@ -117,7 +140,7 @@ namespace PlantsVsZombies.Tests.PlayMode
                 {
                     var kind = zombieKinds[index % zombieKinds.Length];
                     var armor = kind == ZombieKind.Buckethead ? 1100f : kind == ZombieKind.Conehead ? 370f : 0f;
-                    owner._game.Zombies.Add(new Zombie
+                    SimulationFixture.Zombies(owner._game).Add(new Zombie
                     {
                         Id = 1000 + index,
                         Kind = kind,
@@ -133,13 +156,32 @@ namespace PlantsVsZombies.Tests.PlayMode
                 }
 
                 camera.targetTexture = target;
-                var stateCount = 3;
-                if (int.TryParse(Environment.GetEnvironmentVariable("PVZ_RENDER_BENCHMARK_STATES"), out var requestedStates) && requestedStates >= 1 && requestedStates <= 3)
+                var stateCount = roof ? 5 : 3;
+                if (int.TryParse(Environment.GetEnvironmentVariable("PVZ_RENDER_BENCHMARK_STATES"), out var requestedStates) && requestedStates >= 1 && requestedStates <= stateCount)
                 {
                     stateCount = requestedStates;
                 }
                 for (var state = 0; state < stateCount; state++)
                 {
+                    if (roof)
+                    {
+                        var cooldowns = (int[])SimulationInspection.GetField("_seedCooldownTicks", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(owner._game)!;
+                        Array.Clear(cooldowns, 0, cooldowns.Length);
+                        owner._selected = state == 2 ? 0 : -1;
+                        owner._deck[1] = state == 3 ? PlantKind.Imitater : PlantKind.Peashooter;
+                        owner._game.Adventure.ImitaterTarget = state == 3 ? PlantKind.Peashooter : (PlantKind?)null;
+                        if (state == 1)
+                        {
+                            foreach (var kind in owner._deck)
+                            {
+                                cooldowns[(int)kind] = 500;
+                            }
+                        }
+                        if (state == 4)
+                        {
+                            owner._game.TogglePause();
+                        }
+                    }
                     foreach (var zombie in owner._game.Zombies)
                     {
                         zombie.PresentationFlash = state == 1 ? .05f : 0f;
@@ -156,7 +198,9 @@ namespace PlantsVsZombies.Tests.PlayMode
                         yield return null;
                     }
 
-                    var result = new Measurement { State = state, Width = target.width, Height = target.height,
+                    var captureRendersBefore = ReadCounter(typeof(ReanimationRenderer), animations, "NativeCaptureRenderCount");
+                    var result = new Measurement { State = state, Scenario = roof ? "roof" : "combat",
+                        DeckKinds = string.Join(",", owner._deck), AdventureLevel = roof ? 41 : 9, RandomSeed = 7529, Width = target.width, Height = target.height,
                         PlantKinds = string.Join(",", plantKinds), ZombieKinds = string.Join(",", zombieKinds),
                         PlantCount = plantCount, ZombieCount = zombieCount, AdvancesSimulation = advancing,
                         ProfileNames = profileNames, UnityVersion = Application.unityVersion,
@@ -255,6 +299,7 @@ namespace PlantsVsZombies.Tests.PlayMode
                     result.FinalPlantCount = owner._game.Plants.Count;
                     result.FinalZombieCount = owner._game.Zombies.Count;
                     result.FinalSimulationSeconds = owner._game.Elapsed;
+                    result.FinalBattleRandomDrawCount = owner._game.BattleRandomDrawCount;
                     result.FinalMatchState = owner._game.State.ToString();
                     result.PresentationSamples = (double[])cpuSamples.Clone();
                     result.UpdateAndPresentationSamples = (double[])totalSamples.Clone();
@@ -287,8 +332,14 @@ namespace PlantsVsZombies.Tests.PlayMode
                     {
                         result.ProfileMilliseconds[index] = profileTotals[index] / (double)result.Frames / 1000000d;
                     }
+                    result.CompletedGeometrySegments = ReadCounter(typeof(ObjectSpriteRenderer), null, "CompletedGeometrySegments");
+                    result.ThumbnailPoseBuilds = ReadCounter(typeof(ReanimationRenderer), animations, "ThumbnailPoseBuildCount");
+                    result.RetainedThumbnailPoses = ReadCounter(typeof(ReanimationRenderer), animations, "ThumbnailPoseCount");
+                    result.RetainedBitmapRuns = ReadCounter(typeof(CanvasUI), null, "PooledBitmapRunCount");
                     result.TextureBytes = Texture.currentTextureMemory;
                     result.CaptureSurfaces = animations.NativeSurfaceCount;
+                    var captureRendersAfter = ReadCounter(typeof(ReanimationRenderer), animations, "NativeCaptureRenderCount");
+                    result.CaptureRendersDuringMeasurement = captureRendersBefore < 0 ? -1 : captureRendersAfter - captureRendersBefore;
                     ReadBatchStatistics(animations, result);
                     SaveTextureMemory(output!, state, animations, result);
                     using (var capture = new RenderingCoverageCapture())
@@ -335,6 +386,17 @@ namespace PlantsVsZombies.Tests.PlayMode
                 UnityEngine.Object.Destroy(pixels);
                 UnityEngine.Object.Destroy(host);
             }
+        }
+
+        /// <summary>Reads optional counters outside timed scopes so the same fixture can measure the prior revision.</summary>
+        /// <param name="type">The renderer or UI type providing the counter.</param>
+        /// <param name="instance">The counter owner, or null for a static property.</param>
+        /// <param name="name">The diagnostic property name.</param>
+        /// <returns>The counter value, or minus one when the older revision has no counter.</returns>
+        private static int ReadCounter(Type type, object? instance, string name)
+        {
+            var property = type.GetProperty(name, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static | BindingFlags.Instance);
+            return property == null ? -1 : (int)property.GetValue(instance)!;
         }
 
         /// <summary>Summarizes a populated CPU sample prefix without including unused buffer capacity.</summary>
@@ -682,6 +744,20 @@ namespace PlantsVsZombies.Tests.PlayMode
             public string ZombieKinds = "";
             /// <summary>The initial plant workload.</summary>
             public int PlantCount;
+            /// <summary>The scenario whose deterministic setup produced these measurements.</summary>
+            public string Scenario = "";
+            /// <summary>The actual nonempty geometry segments in the final measured presentation.</summary>
+            public int CompletedGeometrySegments;
+            /// <summary>The cumulative fixed-pose sampler invocations, or minus one on older revisions.</summary>
+            public int ThumbnailPoseBuilds;
+            /// <summary>The retained fixed-pose cache entries, or minus one on older revisions.</summary>
+            public int RetainedThumbnailPoses;
+            /// <summary>The retained bitmap page-run graphics, or minus one on older revisions.</summary>
+            public int RetainedBitmapRuns;
+            /// <summary>The exact displayed card sequence, including the imitation state.</summary>
+            public string DeckKinds = "";
+            /// <summary>The original adventure level supplying board geometry and rules.</summary>
+            public int AdventureLevel;
             /// <summary>The initial zombie workload.</summary>
             public int ZombieCount;
             /// <summary>Whether each sample includes one deterministic 100 Hz simulation step.</summary>
@@ -692,6 +768,8 @@ namespace PlantsVsZombies.Tests.PlayMode
             public int FinalZombieCount;
             /// <summary>The final simulation clock, allowing equivalent runs to be checked.</summary>
             public float FinalSimulationSeconds;
+            /// <summary>The final deterministic battle random draw counter, compared in advancing workloads.</summary>
+            public ulong FinalBattleRandomDrawCount;
             /// <summary>The terminal match state for the deterministic workload.</summary>
             public string FinalMatchState = "";
             /// <summary>The exact Editor version used by this run.</summary>
@@ -794,6 +872,8 @@ namespace PlantsVsZombies.Tests.PlayMode
             public double GpuP95Milliseconds;
             /// <summary>The retained actor-local capture surfaces.</summary>
             public int CaptureSurfaces;
+            /// <summary>The actual synchronous captures during timed Present calls, or minus one on older revisions.</summary>
+            public int CaptureRendersDuringMeasurement;
             /// <summary>The actual native render requests in an untimed representative presentation.</summary>
             public int CaptureRequests;
             /// <summary>The summed rasterized geometric samples across all offscreen targets.</summary>

@@ -51,11 +51,11 @@ namespace PlantsVsZombies.Tests.PlayMode
                 SpriteSourceTestUtilities.SetImage(owner.Textures, "plantshadow.png", null!);
                 SpriteSourceTestUtilities.SetImage(owner.Textures, "plantshadow2.png", null!);
                 var flags = BindingFlags.Instance | BindingFlags.NonPublic;
-                var plant = (Plant)typeof(GameSimulation).GetMethod("PlaceAdventurePlant", flags)!
+                var plant = (Plant)SimulationInspection.GetMethod("PlaceAdventurePlant", flags)!
                     .Invoke(owner._game, new object[] { PlantKind.MagnetShroom, 2, 3 })!;
-                var zombie = (Zombie)typeof(GameSimulation).GetMethod("SpawnAdventureZombie", flags)!
+                var zombie = (Zombie)SimulationInspection.GetMethod("SpawnAdventureZombie", flags)!
                     .Invoke(owner._game, new object[] { ZombieKind.Buckethead, 2, AdventureZombieNativeRules.GridX(500f), 0 })!;
-                var update = typeof(GameSimulation).GetMethod("AdvanceAdventurePlants", flags)!;
+                var update = SimulationInspection.GetMethod("AdvanceAdventurePlants", flags)!;
                 var draw = typeof(GamePresenter).GetMethod("DrawAdventurePlant", flags)!;
                 update.Invoke(owner._game, new object[] { .01f });
                 var state = plant.MagnetPresentation!;
@@ -194,7 +194,7 @@ namespace PlantsVsZombies.Tests.PlayMode
         /// <param name="game">The active board.</param>
         /// <param name="update">The real production plant update.</param>
         /// <param name="count">The number of native hundred-hertz updates.</param>
-        private static void Tick(GameSimulation game, MethodInfo update, int count)
+        private static void Tick(GameSimulation game, SimulationMember update, int count)
         {
             for (var tick = 0; tick < count; tick++)
             {

@@ -279,8 +279,8 @@ namespace PlantsVsZombies.Diagnostics
                 yield return null;
             }
 
-            typeof(GameSimulation).GetProperty("SunAmount").SetValue(Sim, 500);
-            var cooldowns = (int[])typeof(GameSimulation).GetField("_seedCooldownTicks", Private).GetValue(Sim);
+            SimulationInspection.GetProperty("SunAmount").SetValue(Sim, 500);
+            var cooldowns = (int[])SimulationInspection.GetField("_seedCooldownTicks", Private).GetValue(Sim);
             cooldowns[0] = 751;
             yield return Capture("11-seed-native-full-cooldown");
             cooldowns[0] = 376;
@@ -293,8 +293,8 @@ namespace PlantsVsZombies.Diagnostics
             Check(cooldowns[0] == 0 && Sim.Adventure.SeedFlashes.Exists(x => x.Kind == PlantKind.Peashooter), "Actual cooldown completion never requested original flash");
             yield return new WaitForSecondsRealtime(.08f);
             yield return Capture("13-original-seed-ready-flash");
-            global::PlantsVsZombies.Simulation.Sun sun = (global::PlantsVsZombies.Simulation.Sun)typeof(GameSimulation).GetMethod("CreateAdventurePresentationDroppedSun", Private).Invoke(Sim, new object[] { 1f, 0f, 25 });
-            Sim.Suns.Add(sun);
+            global::PlantsVsZombies.Simulation.Sun sun = (global::PlantsVsZombies.Simulation.Sun)SimulationInspection.GetMethod("CreateAdventurePresentationDroppedSun", Private).Invoke(Sim, new object[] { 1f, 0f, 25 });
+            SimulationFixture.Suns(Sim).Add(sun);
             Check(Sim.CollectSun(sun) && sun.PresentationPickup.Collecting, "Test sunlight did not start real pickup flight");
             yield return Capture("14-sun-above-seed-bank");
             RequiredController._tooltipInspection = new OriginalTooltipRequest
@@ -333,7 +333,7 @@ namespace PlantsVsZombies.Diagnostics
             // Explicit presentation fixture: this verifies the original note artwork without claiming an earned 1-9 victory.
             RequiredController.Campaign.StartAdventureTestLevel(9);
             RequiredController._choosingSeeds = false;
-            typeof(GameSimulation).GetProperty("State").SetValue(Sim, MatchState.Won);
+            SimulationInspection.GetProperty("State").SetValue(Sim, MatchState.Won);
             Sim.Adventure.Phase = AdventurePhase.Finished;
             var note = new AdventureRewardPresentation(15, 400, 250, 50, 70, .5f, 0f, 0);
             Check(note.BeginCollection(), "The original note fixture could not start its normal collection transition");

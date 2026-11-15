@@ -105,10 +105,10 @@ internal static class StarfruitRegressionTests
     {
         var game = new GameSimulation(new GameRules { AdventureLevel = 19 }, 46012);
         var plant = new Plant { Kind = PlantKind.Starfruit, Row = 2, Column = 4, StarfruitLaunchCountdown = 0 };
-        game.Plants.Add(plant);
+        SimulationFixture.Plants(game).Add(plant);
         var target = new Zombie { Kind = ZombieKind.Normal, Row = 2, X = 3f, Health = 270, StartingHealth = 270 };
-        game.Zombies.Add(target);
-        var tick = typeof(GameSimulation).GetMethod("AdvanceAdventurePlants", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        SimulationFixture.Zombies(game).Add(target);
+        var tick = SimulationInspection.GetMethod("AdvanceAdventurePlants", BindingFlags.Instance | BindingFlags.NonPublic)!;
         target.Hypnotized = true;
         tick.Invoke(game, new object[] { .01f });
         Check(plant.StarfruitShootingCountdown == 0 && plant.PresentationShotAge < 0f, "Mind-controlled bodies do not start a Starfruit attack.");
@@ -128,7 +128,7 @@ internal static class StarfruitRegressionTests
         Check(plant.StarfruitShootingCountdown == 40 && plant.PresentationShotAge == 0f && game.Peas.Count == 0,
             "A valid reverse target starts the native body animation without an immediate burst.");
         var launchCounter = plant.StarfruitLaunchCountdown;
-        game.Zombies.Clear();
+        SimulationFixture.Zombies(game).Clear();
         for (var i = 0; i < 38; i++)
         {
             tick.Invoke(game, new object[] { .01f });
@@ -143,14 +143,14 @@ internal static class StarfruitRegressionTests
             "The production burst uses the native launch x and vertical pixel velocity on a 100-pixel row.");
 
         var bitten = new Plant { Kind = PlantKind.Starfruit, Row = 3, Column = 4, StarfruitLaunchCountdown = 0, RecentlyEatenTicks = 50 };
-        game.Plants.Clear();
-        game.Plants.Add(bitten);
+        SimulationFixture.Plants(game).Clear();
+        SimulationFixture.Plants(game).Add(bitten);
         tick.Invoke(game, new object[] { .01f });
         Check(bitten.StarfruitShootingCountdown == 40, "A recently chewed Starfruit may begin an attack without a target.");
 
         var pool = new GameSimulation(new GameRules { AdventureLevel = 39 }, 46012);
         var poolPlant = new Plant { Kind = PlantKind.Starfruit, Row = 2, Column = 4 };
-        var fire = typeof(GameSimulation).GetMethod("FireAdventureStarfruit", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        var fire = SimulationInspection.GetMethod("FireAdventureStarfruit", BindingFlags.Instance | BindingFlags.NonPublic)!;
         fire.Invoke(pool, new object[] { poolPlant });
         Check(Math.Abs(pool.Peas[1].VelocityY * 85f / 100f - 3.33f) < .0001f,
             "Pool rows use their 85-pixel pitch while retaining the original vertical pixel velocity.");

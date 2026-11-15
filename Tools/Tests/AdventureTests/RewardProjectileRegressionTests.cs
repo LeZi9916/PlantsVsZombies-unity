@@ -45,7 +45,7 @@ internal static class RewardProjectileRegressionTests
     /// <param name="game">The isolated simulation whose combat has completed.</param>
     private static void Complete(GameSimulation game)
     {
-        typeof(GameSimulation).GetProperty(nameof(GameSimulation.State))!.SetValue(game, MatchState.Won);
+        SimulationInspection.GetProperty(nameof(GameSimulation.State))!.SetValue(game, MatchState.Won);
         game.Adventure.Phase = AdventurePhase.Reward;
     }
 
@@ -70,10 +70,10 @@ internal static class RewardProjectileRegressionTests
             PresentationLobNativeX = 280f,
             PresentationLobNativeVelocityX = 2.4f
         };
-        game.Peas.Add(pea);
-        game.Peas.Add(reverse);
-        game.Peas.Add(star);
-        game.Peas.Add(lob);
+        SimulationFixture.Peas(game).Add(pea);
+        SimulationFixture.Peas(game).Add(reverse);
+        SimulationFixture.Peas(game).Add(star);
+        SimulationFixture.Peas(game).Add(lob);
         game.Update(.1f);
         Check(Math.Abs(pea.X - 1.45f) < .0001f, "Straight peas continue moving after the reward drops.");
         Check(Math.Abs(reverse.X - 4.55f) < .0001f, "Backward peas retain their velocity after completion.");
@@ -92,10 +92,10 @@ internal static class RewardProjectileRegressionTests
     {
         var game = Fixture();
         var zombie = new Zombie { Id = 91, Kind = ZombieKind.Normal, Row = 2, X = 2f, Health = 20f };
-        game.Zombies.Add(zombie);
-        game.Plants.Add(new Plant { Id = 1, Kind = PlantKind.Peashooter, Row = 2, Column = 0, ActionTimer = 0f });
+        SimulationFixture.Zombies(game).Add(zombie);
+        SimulationFixture.Plants(game).Add(new Plant { Id = 1, Kind = PlantKind.Peashooter, Row = 2, Column = 0, ActionTimer = 0f });
         var pea = new Pea { X = 1.8f, StartX = 1.8f, Row = 2, FlightRow = 2f };
-        game.Peas.Add(pea);
+        SimulationFixture.Peas(game).Add(pea);
         var combatEvents = 0;
         game.EventRaised += item =>
         {
@@ -123,7 +123,7 @@ internal static class RewardProjectileRegressionTests
     {
         var game = Fixture();
         var pea = new Pea { X = 1f, StartX = 1f, Row = 2, FlightRow = 2f };
-        game.Peas.Add(pea);
+        SimulationFixture.Peas(game).Add(pea);
         game.Update(0f);
         game.Update(-1f);
         game.Update(float.NaN);
@@ -138,7 +138,7 @@ internal static class RewardProjectileRegressionTests
         game.Update(5.1f);
         Check(reward.Stage == AdventureAwardStage.Introduction, "Reward presentation reaches the original introduction phase.");
         pea = new Pea { X = 1f, StartX = 1f, Row = 2, FlightRow = 2f };
-        game.Peas.Add(pea);
+        SimulationFixture.Peas(game).Add(pea);
         game.Update(.1f);
         Check(pea.X == 1f, "Hidden-board projectiles stop after the reward introduction replaces the lawn.");
     }
@@ -151,7 +151,7 @@ internal static class RewardProjectileRegressionTests
         Complete(game);
         session.Phase = ModePhase.Won;
         var pea = new Pea { X = 1f, StartX = 1f, Row = 2, FlightRow = 2f };
-        game.Peas.Add(pea);
+        SimulationFixture.Peas(game).Add(pea);
         session.Update(.1f);
         Check(Math.Abs(pea.X - 1.45f) < .0001f, "Independent-mode wins preserve existing projectile movement.");
         Check(session.Phase == ModePhase.Won && game.State == MatchState.Won,
