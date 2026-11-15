@@ -3,6 +3,10 @@ using System;
 using System.Collections;
 using System.IO;
 using System.Reflection;
+using System.Linq;
+using PlantsVsZombies.UI;
+using PlantsVsZombies.Reanimation;
+using PlantsVsZombies.Rendering;
 using NUnit.Framework;
 using PlantsVsZombies.Adventure;
 using PlantsVsZombies.Game;
@@ -107,6 +111,7 @@ namespace PlantsVsZombies.Tests.PlayMode
             owner.IndependentModes.TryHandleModeClick(owner.Opening.AdventureCampaignChooserRect(PlantKind.Imitater).center);
             Assert.That(owner.IndependentModes.HasChooserModal, Is.True);
             var dialog = owner._presenter.RequiredModeChooserDialog;
+            Assert.That(dialog.Bounds, Is.EqualTo(new Rect(147, 11, 506, 578)), "PC 464B40 instruction oracle with the supplied original Chinese font metrics.");
             Assert.That(dialog.CardRect(PlantKind.Peashooter).x, Is.EqualTo(dialog.Bounds.x + (int)dialog.Bounds.width / 2 - 210));
             Assert.That(dialog.CardRect(PlantKind.MelonPult).y, Is.EqualTo(dialog.Bounds.y + 398));
             yield return fixture.Capture("DrawAdventureBoard", () =>
@@ -156,6 +161,80 @@ namespace PlantsVsZombies.Tests.PlayMode
             Assert.That(owner.IndependentModes.RequiredModeSession.Phase, Is.EqualTo(ModePhase.Playing));
             Assert.That(owner.Opening.AdventureIntroAwaitingSeeds, Is.False);
             Assert.That(owner.RequiredGame.Adventure.SelectedSeeds.Count, Is.EqualTo(6));
+        }
+
+        /// <summary>Checks PC 430610/435B40's unscaled stripe and brain positions on each I, Zombie boundary.</summary>
+        /// <returns>Original cardboard plant and grid-item GPU frames.</returns>
+        [UnityTest]
+        public IEnumerator IZombiePreviewUsesNativeCardboardBrainsAndStripe()
+        {
+            foreach (var id in new[] { 62, 66, 69 })
+            {
+                using var fixture = new OriginalStormGraphicsTests.StormFixture(18);
+                Prepare(fixture, id);
+                yield return fixture.Capture("DrawAdventureBoard", () => fixture.DrawPass("DrawModesInterface"), wholeBoard: true);
+                var image = fixture.Owner.Textures.LoadImage("Wallnut_bowlingstripe.png")!;
+                var graphics = Resources.FindObjectsOfTypeAll<CanvasTextureGraphic>().Where(item => item.gameObject.activeInHierarchy
+                    && item.mainTexture == image.SourceTexture).ToArray();
+                Assert.That(graphics.Length, Is.EqualTo(1));
+                var destination = typeof(CanvasTextureGraphic).GetField("_destination", BindingFlags.Instance | BindingFlags.NonPublic)!;
+                var rect = (Rect)destination.GetValue(graphics[0])!;
+                Assert.That(rect.x, Is.EqualTo(id == 62 ? 352 : id == 69 ? 512 : 432).Within(.001f));
+                Assert.That(rect.y, Is.EqualTo(73).Within(.001f));
+                Assert.That(rect.width, Is.EqualTo(22).Within(.001f));
+                var brain = fixture.Owner.Textures.LoadImage("brain.png")!;
+                var brains = Resources.FindObjectsOfTypeAll<CanvasTextureGraphic>().Where(item => item.gameObject.activeInHierarchy
+                    && item.mainTexture == brain.SourceTexture).ToArray();
+                Assert.That(brains.Length, Is.EqualTo(5));
+                foreach (var item in brains)
+                {
+                    var bounds = (Rect)destination.GetValue(item)!;
+                    Assert.That(bounds.x, Is.EqualTo(0).Within(.001f));
+                    Assert.That(bounds.width, Is.EqualTo(32).Within(.001f));
+                    Assert.That(bounds.height, Is.EqualTo(31).Within(.001f));
+                }
+                Save(fixture, "izombie-native-preview-" + id);
+                fixture.Owner.RequiredGame.Plants[0].PresentationEatenFlashTicks = 5;
+                yield return fixture.Capture("DrawAdventureBoard", () => fixture.DrawPass("DrawModesInterface"), wholeBoard: true);
+                Assert.That(SpriteDrawState.Color, Is.EqualTo(Color.white));
+
+            }
+        }
+
+        /// <summary>Checks fixed banks use their native packets instead of borrowing the ordinary six-plant deck.</summary>
+        /// <returns>Actual original slot, match, aquarium and zombie packet-bank GPU frames.</returns>
+        [UnityTest]
+        public IEnumerator FixedIntroBanksUseNativePacketTypesAndGeometry()
+        {
+            foreach (var id in new[] { 18, 20, 23, 24, 62 })
+            {
+                using var fixture = new OriginalStormGraphicsTests.StormFixture(ModeCatalog.Get(id).BoardLevel);
+                Prepare(fixture, id);
+                var owner = fixture.Owner;
+                var clock = owner.Opening.RequiredAdventureIntro;
+                while (clock.NativeTime < clock.Plan.BankOnEnd)
+                {
+                    clock.Tick(emit: owner.Opening.HandleAdventureIntroEvent);
+                }
+                owner.Opening._adventureIntroFrame = clock.Frame;
+                yield return fixture.Capture("DrawAdventureBoard", () => fixture.DrawPass("DrawModesInterface"), wholeBoard: true);
+                Assert.That(owner.RequiredGame.Elapsed, Is.Zero);
+                var pool = (ObjectSpriteRenderer)typeof(ReanimationRenderer).GetField("_objectRenderer", BindingFlags.Instance | BindingFlags.NonPublic)!
+                    .GetValue(fixture.Animations)!;
+                var packets = pool.SubmittedSprites.Take(pool.SubmittedObjectCount)
+                    .Where(sprite => sprite.SourceImage?.SourceIdentity.EndsWith("seeds.png", StringComparison.OrdinalIgnoreCase) == true).ToArray();
+                Assert.That(packets.Length, Is.EqualTo(id == 18 || id == 62 ? 3 : id == 23 ? 2 : 0));
+                foreach (var packet in packets)
+                {
+                    Assert.That(packet.Colors[0].r, Is.EqualTo(128f / 255f).Within(.00001f), "PC 49DDB0 uses the completed intro's bank-darken value.");
+                }
+                if (id == 23)
+                {
+                    Assert.That(packets[0].TextureCoordinates[0].x, Is.EqualTo(7f / 9f).Within(.00001f));
+                    Assert.That(packets[1].TextureCoordinates[0].x, Is.EqualTo(8f / 9f).Within(.00001f));
+                }
+                Save(fixture, "fixed-bank-" + id);
+            }
         }
 
         /// <summary>Creates an isolated production host with the exact native mode metadata.</summary>

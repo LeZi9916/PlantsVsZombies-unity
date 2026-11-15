@@ -4932,6 +4932,26 @@ namespace PlantsVsZombies.Reanimation
             }
         }
 
+        /// <summary>Tracks the original white-filter source pass used by cardboard plant edges.</summary>
+        private bool _nativeSolidColor;
+
+        /// <summary>Replaces source RGB with the inherited tint while preserving original alpha and all attachments.</summary>
+        /// <param name="draw">The synchronous complete plant-body callback.</param>
+        /// <returns>Whether the callback submitted original source artwork.</returns>
+        internal bool DrawNativeSolidColor(Func<bool> draw)
+        {
+            var previous = _nativeSolidColor;
+            try
+            {
+                _nativeSolidColor = true;
+                return draw();
+            }
+            finally
+            {
+                _nativeSolidColor = previous;
+            }
+        }
+
         /// <summary>Performs draw native sprite pass.</summary>
         /// <param name = "texture">The texture.</param>
         /// <param name = "width">The width.</param>
@@ -4942,6 +4962,10 @@ namespace PlantsVsZombies.Reanimation
         /// <param name="combineHit">Whether normal alpha and source-textured hit addition share one draw.</param>
         private void DrawNativeSpritePass(SpriteImage texture, float width, float height, Rect uv, int pass, in Matrix4x4 matrix, bool combineHit = false)
         {
+            if (_nativeSolidColor && pass != 1 && pass != 2)
+            {
+                pass = 4;
+            }
             if (_recordingThumbnail != null)
             {
                 _recordingThumbnail.Add(new NativeThumbnailPart

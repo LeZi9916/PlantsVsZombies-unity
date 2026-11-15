@@ -1172,3 +1172,31 @@ metrics gives the copy dialog rectangle `(147,11,506,578)`.
 The chooser run passes 53 EditMode and eight PlayMode cases. The store and
 almanac widgets retain their PC profile-level gates. The copy dialog previews
 its target without changing the match's selected Imitater template during Draw.
+
+Native challenge preview presentation also uses PC `430610`'s bowling/I, Zombie
+stripe resource and coordinates, `4300E0`'s alpha-100 Starfruit guides, and
+`436AE0`'s three white-filter cardboard edge passes. The solid source-alpha
+sprite mode preserves the existing premultiplied surface and additive modes;
+GPU coverage checks translucent edges and the following ordinary sprite, and
+the original I, Zombie capture also exercises bite feedback without leaking tint.
+Fixed introduction banks follow `49F100/427E20/49D260/49DDB0`: three slot reels
+and their original overlay/attached handle, the initial empty Beghouled bank,
+two aquarium purchase packets, and each I, Zombie board's actual zombie cards.
+They retain the original intro bank-darken value and Pico129 packet-cost baseline.
+
+`OriginalChallengeFlowTests` runs the production loading, directory callback,
+chooser, original warning, re-pick and successful battle handoff with disposable
+profiles. It checks that the unchanged `SOUND_GRAVEBUTTON` recording is loaded
+for native confirmation buttons. The hidden developer page retains the existing
+supported garden/tree callbacks without evaluating unsupported mode unlock rules.
+
+```powershell
+./Tools/Tests/Run-UnityTests.ps1 -Platform PlayMode -TestFilter 'OriginalChallengeOpeningTests;OriginalChallengeDirectoryTests;IndependentPuzzleDialogueTests;ObjectSpriteRendererTests;OriginalSurvivalGraphicsTests;OriginalSurvivalFlowTests;OriginalVasebreakerTests;OriginalBossGraphicsTests'
+./Tools/Tests/Run-UnityTests.ps1 -Platform PlayMode -TestFilter 'OriginalChallengeFlowTests;OriginalChallengeDirectoryTests.HiddenDebugPagePreservesOnlySupportedExternalEntries'
+```
+
+Across the focused runs, 93 distinct EditMode and 93 distinct PlayMode cases
+pass. The presentation change covers the directories and pre-game flows; it is
+not a rewrite or full parity claim for every independent-mode combat mechanic,
+mid-battle HUD or result screen. Original executable pixel equivalence, packaged
+Players and other target devices remain unverified.

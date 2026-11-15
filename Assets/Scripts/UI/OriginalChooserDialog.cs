@@ -35,6 +35,8 @@ namespace PlantsVsZombies.UI
 
         /// <summary>Creates a chooser dialog using the host's existing texture ownership.</summary>
         /// <param name="texture">The original sprite lookup.</param>
+        /// <exception cref="System.IO.IOException">An original bitmap font resource is unavailable.</exception>
+        /// <exception cref="FormatException">An original bitmap font description is invalid.</exception>
         internal OriginalChooserDialog(Func<string, SpriteImage?> texture)
         {
             _texture = texture;

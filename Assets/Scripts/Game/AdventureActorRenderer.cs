@@ -1,4 +1,5 @@
 #nullable enable
+using PlantsVsZombies.Rendering;
 using System;
 using PlantsVsZombies.Adventure;
 using PlantsVsZombies.Reanimation;
@@ -18,6 +19,8 @@ namespace PlantsVsZombies.Game
         private ReanimationRenderer RequiredRenderer => _renderer ?? throw new System.InvalidOperationException("The member '_renderer' is not available.");
         /// <summary>The retained callback for plant bodies and attached heads.</summary>
         private readonly Func<bool> _drawPlant;
+        /// <summary>The retained complete cardboard body callback, including native edge passes.</summary>
+        private readonly Func<bool> _drawCardboardPlant;
         /// <summary>The retained callback for cursor imitation composition.</summary>
         private readonly Func<bool> _drawCursor;
         /// <summary>The retained cursor filter for the kernel catapult's idle pose.</summary>
@@ -83,6 +86,7 @@ namespace PlantsVsZombies.Game
         {
             _renderer = renderer;
             _drawPlant = DrawPlantPose;
+            _drawCardboardPlant = DrawCardboardPlant;
             _drawZombie = DrawZombiePose;
             _drawCursor = DrawCursorPose;
             _plantVisible = IsPlantTrackVisible;
@@ -110,8 +114,9 @@ namespace PlantsVsZombies.Game
         /// <param name="trackOffset">Optional native per-track shake offsets for this plant's body animation.</param>
         /// <param name="pumpkinGroup">The native pumpkin render group, or minus one for an unsplit portrait.</param>
         /// <param name="verticalScale">The native coffee-wake vertical body scale, or minus one for ordinary playback.</param>
+        /// <param name="cardboard">Whether PC 436AE0 draws the I, Zombie white-mask cardboard edges.</param>
         internal void DrawPlant(Plant plant, string name, Vector2 origin, float scale, float seconds, string clip,
-            bool loop, float rate, HeadPlayback[]? heads, string key, Rect viewport, int blendTicks, float remainder, string surfaceKey, bool highlighted = false, Func<string, Vector2>? trackOffset = null, int pumpkinGroup = -1, float verticalScale = -1f)
+            bool loop, float rate, HeadPlayback[]? heads, string key, Rect viewport, int blendTicks, float remainder, string surfaceKey, bool highlighted = false, Func<string, Vector2>? trackOffset = null, int pumpkinGroup = -1, float verticalScale = -1f, bool cardboard = false)
         {
             _pumpkinGroup = pumpkinGroup;
             _plantVerticalScale = verticalScale;
@@ -130,13 +135,41 @@ namespace PlantsVsZombies.Game
             _remainder = remainder;
             _surfaceKey = surfaceKey;
             _highlighted = highlighted;
+            var draw = cardboard ? _drawCardboardPlant : _drawPlant;
             if (highlighted || AdventureProducerGlow.Visual(plant).Enabled || plant.IsImitated || plant.PresentationEatenFlashTicks > 0)
             {
-                RequiredRenderer.DrawNativePlantHitFeedback(key, viewport, _drawPlant, plant, _surfaceKey, _highlighted);
+                RequiredRenderer.DrawNativePlantHitFeedback(key, viewport, draw, plant, _surfaceKey, _highlighted);
             }
             else
             {
-                DrawPlantPose();
+                draw();
+            }
+        }
+
+        /// <summary>Draws PC 436AE0's original solid-color offset passes followed by its warm original body.</summary>
+        /// <returns>Whether the complete original body submitted visible artwork.</returns>
+        private bool DrawCardboardPlant()
+        {
+            var origin = _origin;
+            var color = SpriteDrawState.Color;
+            try
+            {
+                _origin = origin + new Vector2(4, 4);
+                SpriteDrawState.Color = color * new Color(122f / 255f, 86f / 255f, 58f / 255f);
+                RequiredRenderer.DrawNativeSolidColor(_drawPlant);
+                _origin = origin + new Vector2(2, 2);
+                SpriteDrawState.Color = color * new Color(171f / 255f, 135f / 255f, 107f / 255f);
+                RequiredRenderer.DrawNativeSolidColor(_drawPlant);
+                _origin = origin - new Vector2(2, 2);
+                RequiredRenderer.DrawNativeSolidColor(_drawPlant);
+                _origin = origin;
+                SpriteDrawState.Color = color * new Color(1f, 201f / 255f, 160f / 255f);
+                return DrawPlantPose();
+            }
+            finally
+            {
+                _origin = origin;
+                SpriteDrawState.Color = color;
             }
         }
 

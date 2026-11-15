@@ -80,6 +80,13 @@ Shader "PlantsVsZombies/CombatSprite"
                     source.a *= input.color.a;
                     return source;
                 }
+                // Original I, Zombie FILTER_EFFECT_WHITE preserves only the source alpha.
+                if (_RenderMode > 3.5)
+                {
+                    half alpha = source.a * input.color.a;
+                    return half4(input.color.rgb * alpha, alpha);
+                }
+
                 half4 pixel = source * input.color;
                 if (_RenderMode < 0.5)
                 {

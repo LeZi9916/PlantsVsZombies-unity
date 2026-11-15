@@ -459,6 +459,7 @@ namespace PlantsVsZombies.Audio
                 "roll_in.ogg",
                 "paper.ogg",
                 "buttonclick.ogg",
+                "gravebutton.ogg",
                 "shovel.ogg"
             }
 

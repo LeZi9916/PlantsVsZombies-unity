@@ -202,7 +202,7 @@ namespace PlantsVsZombies.UI
             }
             foreach (var mode in VerifiedDataCatalog.ChallengeModes)
             {
-                if (mode.UiCategoryIndex == _category)
+                if (mode.UiCategoryIndex == _category && Playable(mode.Id))
                 {
                     DrawDirectoryCard(mode);
                 }
@@ -216,7 +216,7 @@ namespace PlantsVsZombies.UI
             {
                 foreach (var mode in VerifiedDataCatalog.ChallengeModes)
                 {
-                    if (mode.UiCategoryIndex != _category || CanLaunch == null || CanLaunch(mode.Id) || !CardRect(mode).Contains(CanvasUI.PointerPosition)
+                    if (mode.UiCategoryIndex != _category || !Playable(mode.Id) || CanLaunch == null || CanLaunch(mode.Id) || !CardRect(mode).Contains(CanvasUI.PointerPosition)
                         || (AccomplishmentsNeededLookup?.Invoke(mode.Id) ?? 2) > 1)
                     {
                         continue;

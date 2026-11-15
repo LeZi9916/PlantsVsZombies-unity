@@ -71,6 +71,29 @@ namespace PlantsVsZombies.Tests.PlayMode
             Assert.That(_renderer.PooledObjectCount, Is.EqualTo(1));
         }
 
+        /// <summary>Checks the original white-filter mask retains source alpha and does not leak into the next ordinary sprite.</summary>
+        [Test]
+        public void CardboardMaskUsesSourceAlphaWithoutSourceRgbOrStateLeak()
+        {
+            var source = new Texture2D(1, 1, TextureFormat.RGBA32, false, true);
+            try
+            {
+                source.SetPixel(0, 0, new Color(.8f, .1f, .3f, .5f));
+                source.Apply();
+                _renderer.BeginBatch();
+                Draw(Color.blue, 32, 32, Matrix4x4.identity);
+                _renderer.DrawQuad(source, 16, 32, new Rect(0, 0, 1, 1), Matrix4x4.identity, new Color(.4f, .6f, .2f, 1), 4);
+                _renderer.DrawQuad(source, 16, 32, new Rect(0, 0, 1, 1), Matrix4x4.Translate(new Vector3(16, 0)), Color.white, 0);
+                Capture();
+                AssertColor(_pixels.GetPixel(8, 16), new Color(.2f, .3f, .6f, 1));
+                AssertColor(_pixels.GetPixel(24, 16), new Color(.4f, .05f, .65f, 1));
+            }
+            finally
+            {
+                UnityEngine.Object.Destroy(source);
+            }
+        }
+
         /// <summary>Checks painter order for overlapping scene renderers.</summary>
         [Test]
         public void PreservesSubmissionOrder()

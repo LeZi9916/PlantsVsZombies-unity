@@ -1170,7 +1170,7 @@ namespace PlantsVsZombies.Game
             var highlighted = _owner._shovel && ReferenceEquals(plant, _owner.Layout.AdventureShovelTarget(_owner.AdventureBoard._adventurePointer));
             RegisterPlantSurface(plant, highlighted);
             ActorRenderer.DrawPlant(plant, "CherryBomb", origin, scale, age, AdventureCherryBombState.Animation, false, rate,
-                null, _presentationKeys.Get("plant-", plant.Id), new Rect(origin.x - 80, origin.y - 160, 300, 340), 0, AdventureRenderRemainder, _presentationKeys.Get("producer-plant-", plant.Id), highlighted);
+                null, _presentationKeys.Get("plant-", plant.Id), new Rect(origin.x - 80, origin.y - 160, 300, 340), 0, AdventureRenderRemainder, _presentationKeys.Get("producer-plant-", plant.Id), highlighted, cardboard: IsCardboardPlant);
 
             return true;
         }
@@ -1199,7 +1199,7 @@ namespace PlantsVsZombies.Game
             RegisterPlantSurface(plant, highlighted);
             ActorRenderer.DrawPlant(plant, "Jalapeno", origin, scale, seconds, AdventureJalapenoState.Animation, false, rate,
                 null, _presentationKeys.Get("plant-", plant.Id), new Rect(origin.x - 80f, origin.y - 160f, 300f, 340f), 0,
-                AdventureRenderRemainder, _presentationKeys.Get("producer-plant-", plant.Id), highlighted);
+                AdventureRenderRemainder, _presentationKeys.Get("producer-plant-", plant.Id), highlighted, cardboard: IsCardboardPlant);
             return true;
         }
 
@@ -1970,7 +1970,11 @@ namespace PlantsVsZombies.Game
             {
                 var slots = _owner.Layout.SeedBankCapacity;
                 var origin = _owner.Layout.AdventureSeedBankOrigin;
-                if (_owner.RequiredGame.UsesNativeAdventureConveyor)
+                if (DrawNativeFixedIntroBank())
+                {
+                    // PC fixed packet types never borrow the player's ordinary chooser deck.
+                }
+                else if (_owner.RequiredGame.UsesNativeAdventureConveyor)
                 {
                     // PC 0x425B40/0x49F100 use the same bank origin before and after the introduction.
                     DrawAdventureConveyorBackground();
@@ -2060,6 +2064,104 @@ namespace PlantsVsZombies.Game
 
             return true;
         }
+        /// <summary>Draws PC 49F100's fixed packet banks during introductions without using the ordinary plant deck.</summary>
+        /// <returns>Whether the native fixed-bank mode handled this interface pass.</returns>
+        private bool DrawNativeFixedIntroBank()
+        {
+            var session = _owner.RequiredGame.ModeSession;
+            if (session == null)
+            {
+                return false;
+            }
+            var mechanic = session.Definition.Mechanic;
+            if (mechanic != ModeMechanic.IZombie && mechanic != ModeMechanic.Beghouled && mechanic != ModeMechanic.BeghouledTwist
+                && mechanic != ModeMechanic.Aquarium && mechanic != ModeMechanic.Slots)
+            {
+                return false;
+            }
+            var origin = _owner.Layout.AdventureSeedBankOrigin;
+            var count = mechanic == ModeMechanic.IZombie ? session.ZombieCards.Count : mechanic == ModeMechanic.Aquarium ? 2
+                : mechanic == ModeMechanic.Slots ? 3 : session.Score == 0 ? 0 : _owner.RequiredGame.Adventure.Craters.Count > 0 ? 5 : 4;
+            if (mechanic == ModeMechanic.Slots)
+            {
+                DrawNativeProgressionImage("SunBank.png", origin.x, origin.y);
+            }
+            else
+            {
+                DrawAdventureSeedBankBackground(origin, count);
+            }
+            DrawAdventureSunAmount(origin);
+            var bankColor = CanvasUI.Color;
+            var packetShade = _owner.Opening.RequiredAdventureIntroFrame.SeedBankDarken / 255f;
+            for (var index = 0; index < count; index++)
+            {
+                CanvasUI.Color = new Color(bankColor.r * packetShade, bankColor.g * packetShade, bankColor.b * packetShade, bankColor.a);
+                var rect = new Rect(origin.x + (mechanic == ModeMechanic.Slots ? 247 + 59 * index : AdventureSeedSlotLayout.PositionX(index, count)), origin.y + 8, 50, 70);
+                if (mechanic == ModeMechanic.IZombie)
+                {
+                    DrawNativeModeZombieCard(session.ZombieCards[index], rect);
+                }
+                else if (mechanic == ModeMechanic.Slots)
+                {
+                    var symbol = session.SlotSymbols[index];
+                    if (symbol < 49)
+                    {
+                        DrawAdventureCard((PlantKind)symbol, rect, false);
+                    }
+                    else
+                    {
+                        DrawNativeSpecialPacket(symbol == 56 ? 5 : 6, rect, null);
+                    }
+                }
+                else if (mechanic == ModeMechanic.Aquarium)
+                {
+                    DrawNativeSpecialPacket(index == 0 ? 7 : 8, rect, index == 0 ? 100 : 1000);
+                }
+                else if (index >= 3)
+                {
+                    DrawNativeSpecialPacket(index == 3 ? 4 : 3, rect, index == 3 ? 100 : 200);
+                }
+                else
+                {
+                    var kind = index == 0 ? PlantKind.Repeater : index == 1 ? PlantKind.FumeShroom : PlantKind.TallNut;
+                    var cost = index == 0 ? 1000 : index == 1 ? 500 : 250;
+                    var color = CanvasUI.Color;
+                    if (session.MatchUpgrades[index] || _owner.RequiredGame.SunAmount < cost)
+                    {
+                        CanvasUI.Color = bankColor * new Color(64f / 255f, 64f / 255f, 64f / 255f);
+                    }
+                    DrawAdventureCard(kind, rect, false);
+                    CanvasUI.Color = color;
+                    DrawNativePacketCost(NumberLabel(cost), rect);
+                }
+            }
+            CanvasUI.Color = bankColor;
+            if (mechanic == ModeMechanic.Slots)
+            {
+                DrawNativeProgressionImage("SlotMachine_Overlay.png", origin.x + 189, origin.y - 2);
+                // PC 42AAD0 creates the attached handle at (bankX+473-377,bankY-20), with rate zero and frame zero.
+                _owner.RequiredAnimations.DrawNative("SlotMachine", origin + new Vector2(96, -20), 1f, 0f, null, false);
+            }
+            return true;
+        }
+
+        /// <summary>Draws an original PC special seed-packet cell whose icon is already included in seeds.png.</summary>
+        /// <param name="cell">The original nine-cell seed atlas index.</param>
+        /// <param name="rect">The native packet rectangle.</param>
+        /// <param name="cost">The optional native packet cost; slot reels have no price.</param>
+        private void DrawNativeSpecialPacket(int cell, Rect rect, int? cost)
+        {
+            var image = _owner.Textures.LoadImage("seeds.png");
+            if (image != null)
+            {
+                _owner.RequiredAnimations.DrawNativeImage(image, rect, new Rect(cell / 9f, 0, 1f / 9f, 1));
+            }
+            if (cost.HasValue)
+            {
+                DrawNativePacketCost(NumberLabel(cost.Value), rect);
+            }
+        }
+
         /// <summary>Checks the original settled-bank coffee selection, including an Imitater of coffee.</summary>
         private bool ChooserHasCoffee => _owner._pendingSeeds?.PickedPlantType(PlantKind.CoffeeBean,
             _owner.RequiredGame.Adventure.ImitaterTarget) == true;
@@ -2181,7 +2283,7 @@ namespace PlantsVsZombies.Game
             RegisterPlantSurface(plant, highlighted);
             ActorRenderer.DrawPlant(plant, "PotatoMine", nativeOrigin, nativeScale, age, clip, plant.MinePhase != MinePhase.Rising,
                 rate, null, _presentationKeys.Get("plant-", plant.Id), new Rect(origin.x - 80, origin.y - 160, 300, 340),
-                plant.MinePhase == MinePhase.Rising ? 20 : 0, AdventureRenderRemainder, _presentationKeys.Get("producer-plant-", plant.Id), highlighted);
+                plant.MinePhase == MinePhase.Rising ? 20 : 0, AdventureRenderRemainder, _presentationKeys.Get("producer-plant-", plant.Id), highlighted, cardboard: IsCardboardPlant);
 
             return true;
         }
@@ -2288,7 +2390,12 @@ namespace PlantsVsZombies.Game
                     DrawImage(background, new Rect(-220, 0, 1400, 600));
                 }
 
-                if (level.HasPool)
+                var aquarium = _owner.RequiredGame.ModeSession?.Definition.Mechanic == ModeMechanic.Aquarium;
+                if (aquarium && _owner.Opening.AdventureIntroActive)
+                {
+                    DrawModeAquarium();
+                }
+                if (level.HasPool && !aquarium)
                 {
                     DrawAdventurePool();
                 }
@@ -2306,11 +2413,7 @@ namespace PlantsVsZombies.Game
                     DrawAdventureCrater(crater);
                 }
 
-                if (level.Mode == AdventureMode.Bowling && (!_owner.Opening.AdventureIntroActive || _owner.Opening._bowlingLineVisible))
-                {
-                    Fill(new Rect(278, 90, 4, 475), new Color(0.9f, 0.08f, 0.04f));
-                }
-
+                DrawNativeChallengeBackdrop();
 
                 for (var row = 0; row < _owner.RequiredGame.RowCount; row++)
                 {
@@ -2324,6 +2427,7 @@ namespace PlantsVsZombies.Game
                         }
                     }
 
+                    DrawNativeChallengeBrain(row);
                     DrawAdventureBungeeShadows(row);
                     foreach (var grave in _owner.RequiredGame.Adventure._graves)
                     {
@@ -3684,7 +3788,7 @@ namespace PlantsVsZombies.Game
                 squash != null && squash.NativePhase != 0 ? squash.BlendTicks
                     : coffee != null ? coffee.Crumbling ? 20 : 0 : magnet != null ? magnet.BlendTicks : doom != null || blover != null ? 0 : scaredy != null && scaredy.NativePhase != 1 || plant.Kind == PlantKind.Threepeater || plant.Kind == PlantKind.Cattail ? 10 : 20, AdventureRenderRemainder,
                 _presentationKeys.Get("producer-plant-", plant.Id), highlighted, doom == null ? null : _doomTrackOffset,
-                plant.Kind == PlantKind.Pumpkin ? 0 : -1, size * wakeScale);
+                plant.Kind == PlantKind.Pumpkin ? 0 : -1, size * wakeScale, cardboard: IsCardboardPlant);
 
             // PC Plant::Draw 47420B draws the body before the local retained-metal pass at 4744D3.
             if (magnetItemVisible && !magnetOnTop)
@@ -3809,7 +3913,7 @@ namespace PlantsVsZombies.Game
             ActorRenderer.DrawPlant(shell, "Pumpkin", origin, scale, shell.Age + AdventureRenderRemainder,
                 "anim_idle", true, shell.PresentationRate > 0f ? shell.PresentationRate : 12f, null,
                 _presentationKeys.Get("pumpkin-back-", shell.Id), new Rect(x - 80f, y - 160f, 300f, 340f), 0,
-                AdventureRenderRemainder, surface, highlighted, pumpkinGroup: 1);
+                AdventureRenderRemainder, surface, highlighted, pumpkinGroup: 1, cardboard: IsCardboardPlant);
         }
 
         /// <summary>Draws native airborne magnetic metal above all ordinary plants and zombies, before weather.</summary>
@@ -5727,9 +5831,17 @@ namespace PlantsVsZombies.Game
         /// <param name = "card">The card.</param>
         private void DrawAdventurePacketCost(PlantKind kind, Rect card)
         {
-            _seedCostFont ??= CanvasBitmapFont.LoadFromResources("Pico129");
             var text = kind == PlantKind.Imitater && !_owner.RequiredGame.Adventure.ImitaterTarget.HasValue
                 ? "?" : NumberLabel(_owner.RequiredGame.AdventureSeedCost(kind));
+            DrawNativePacketCost(text, card);
+        }
+
+        /// <summary>Draws the original Pico129 packet cost at PC 49D260's right-aligned baseline.</summary>
+        /// <param name="text">The already resolved native cost.</param>
+        /// <param name="card">The original packet rectangle.</param>
+        private void DrawNativePacketCost(string text, Rect card)
+        {
+            _seedCostFont ??= CanvasBitmapFont.LoadFromResources("Pico129");
             var previous = CanvasUI.Matrix;
             try
             {
@@ -6808,6 +6920,80 @@ namespace PlantsVsZombies.Game
             ModeButton(IndependentModeController.s_modeExitButton, "返回模式选择");
         }
 
+        /// <summary>Draws PC 430610's native challenge markers beneath the lawn actors and CutScene pan.</summary>
+        private void DrawNativeChallengeBackdrop()
+        {
+            var session = _owner.RequiredGame.ModeSession;
+            if (_owner.RequiredGame.Adventure.Level.Mode == AdventureMode.Bowling
+                && (!_owner.Opening.AdventureIntroActive || _owner.Opening._bowlingLineVisible))
+            {
+                DrawNativeProgressionImage("Wallnut_bowlingstripe.png", 268, 77);
+            }
+            if (session == null)
+            {
+                return;
+            }
+            var mode = session.Definition;
+            if (mode.Mechanic == ModeMechanic.IZombie)
+            {
+                DrawNativeProgressionImage("Wallnut_bowlingstripe.png", mode.Id <= 65 ? 352 : mode.Id == 69 ? 512 : 432, 73);
+            }
+            if (mode.Mechanic == ModeMechanic.Stars)
+            {
+                for (var row = 0; row < 5; row++)
+                {
+                    for (var column = 0; column < 9; column++)
+                    {
+                        if (!GameSimulation.IsModeStarCell(row, column))
+                        {
+                            continue;
+                        }
+                        var occupied = false;
+                        foreach (var plant in _owner.RequiredGame.Plants)
+                        {
+                            if (plant.Row == row && plant.Column == column && plant.Kind != PlantKind.LilyPad
+                                && plant.Kind != PlantKind.FlowerPot && plant.Kind != PlantKind.Pumpkin && plant.Kind != PlantKind.CoffeeBean)
+                            {
+                                occupied = true;
+                                break;
+                            }
+                        }
+                        if (!occupied)
+                        {
+                            // PC 4300E0 uses alpha 100 and DrawSeedType at the unrandomized cell origin.
+                            DrawAdventureCursorPlant(PlantKind.Starfruit,
+                                new Vector2(40 + column * 80, _owner.Layout.AdventureCellY(row, column)), 100f / 255f,
+                                _presentationKeys.Get("native-art-star-", row, column));
+                        }
+                    }
+                }
+            }
+            if (mode.Mechanic == ModeMechanic.Portals)
+            {
+                foreach (var portal in session.Portals)
+                {
+                    var age = _owner.Opening.AdventureIntroActive ? _owner.Opening._adventureIntroVisualAge : _owner.RequiredGame.Elapsed;
+                    _owner.RequiredAnimations.DrawNative(portal.Pair == 0 ? "Portal_Circle" : "Portal_Square",
+                        new Vector2(BoardLayout.AdventureGridX + portal.Column * BoardLayout.CellWidth,
+                            _owner.Layout.AdventureCellY(portal.Row, portal.Column)), 1f, age, "anim_pulse");
+                }
+            }
+        }
+
+        /// <summary>Draws the original I, Zombie brain at its grid-item position and unscaled source size.</summary>
+        /// <param name="row">The native plant render row.</param>
+        private void DrawNativeChallengeBrain(int row)
+        {
+            var session = _owner.RequiredGame.ModeSession;
+            if (session?.Definition.Mechanic == ModeMechanic.IZombie && row < session.Brains.Length && !session.Brains[row])
+            {
+                DrawNativeProgressionImage("brain.png", 0, _owner.Layout.AdventureCellY(row, 0) + 40);
+            }
+        }
+
+        /// <summary>Gets whether the native plant body uses I, Zombie's cardboard filter and three edge passes.</summary>
+        private bool IsCardboardPlant => _owner.RequiredGame.ModeSession?.Definition.Mechanic == ModeMechanic.IZombie;
+
         /// <summary>Performs draw mode board overlays.</summary>
         private void DrawModeBoardOverlays()
         {
@@ -6840,55 +7026,11 @@ namespace PlantsVsZombies.Game
                 }
             }
 
-            if (m == ModeMechanic.IZombie)
-            {
-                var boundary = s.Definition.Id <= 65 ? 4 : s.Definition.Id == 69 ? 6 : 5;
-                Fill(new Rect(BoardLayout.AdventureGridX + boundary * BoardLayout.CellWidth - 2, 80, 4, 480), Color.red);
-                for (var r = 0; r < 5; r++)
-                {
-                    if (!s.Brains[r])
-                    {
-                        var rect = new Rect(8, _owner.Layout.AdventureCellY(r, 0) + 27, 38, 35);
-                        var brain = _owner.Textures.LoadImage("brain.png");
-                        if (brain != null)
-                        {
-                            CanvasUI.DrawTexture(rect, brain);
-                        }
-                        else
-                        {
-                            Label(rect, "脑", 23, new Color(1, 0.6f, 0.7f), TextAnchor.MiddleCenter, true);
-                        }
-                    }
-                }
-            }
-
-            if (m == ModeMechanic.Stars)
-            {
-                for (var r = 0; r < 5; r++)
-                {
-                    for (var c = 0; c < 9; c++)
-                    {
-                        if (GameSimulation.IsModeStarCell(r, c))
-                        {
-                            Outline(new Rect(BoardLayout.AdventureGridX + c * BoardLayout.CellWidth + 8, _owner.Layout.AdventureCellY(r, c) + 18, 64, 65), new Color(1, 0.95f, 0.2f, 0.8f), 2);
-                        }
-                    }
-                }
-            }
-
             if (m == ModeMechanic.Beghouled || m == ModeMechanic.BeghouledTwist)
             {
                 if (s.SelectedCell >= 0)
                 {
                     Outline(new Rect(BoardLayout.AdventureGridX + (s.SelectedCell % 9) * BoardLayout.CellWidth, _owner.Layout.AdventureCellY(s.SelectedCell / 9, s.SelectedCell % 9), 80, 90), Color.yellow, 3);
-                }
-            }
-
-            if (m == ModeMechanic.Portals)
-            {
-                foreach (var p in s.Portals)
-                {
-                    _owner.RequiredAnimations.DrawNative(p.Pair == 0 ? "Portal_Circle" : "Portal_Square", new Vector2(BoardLayout.AdventureGridX + p.Column * BoardLayout.CellWidth, _owner.Layout.AdventureCellY(p.Row, p.Column)), 1f, _owner.RequiredGame.Elapsed, "anim_pulse");
                 }
             }
 
@@ -6939,7 +7081,22 @@ namespace PlantsVsZombies.Game
             DrawImage("aquarium1.jpg", new Rect(0, 0, 800, 600));
             foreach (var fish in _owner.IndependentModes.RequiredModeSession.Fish)
             {
-                _owner.RequiredAnimations.Draw("Zombie_snorkle", new Rect(fish.X - 35, fish.Y - 30, 70, 65), _owner.RequiredGame.Elapsed, "anim_aquarium_swim");
+                var matrix = CanvasUI.Matrix;
+                try
+                {
+                    // PC IsWalkingBackwards uses the aquarium heading; DrawReanim retains scale one and overlay (0,-8).
+                    if (fish.Angle < Math.PI * .5 || fish.Angle > Math.PI * 1.5)
+                    {
+                        CanvasUI.Matrix = matrix * Matrix4x4.Translate(new Vector3(2 * fish.X + 90, 0, 0))
+                            * Matrix4x4.Scale(new Vector3(-1, 1, 1));
+                    }
+                    _owner.RequiredAnimations.DrawNative("Zombie_snorkle", new Vector2(fish.X, fish.Y - 8),
+                        1f, _owner.RequiredGame.Elapsed, "anim_aquarium_swim");
+                }
+                finally
+                {
+                    CanvasUI.Matrix = matrix;
+                }
                 if (fish.Hunger <= 15)
                 {
                     Label(new Rect(fish.X - 40, fish.Y - 50, 80, 22), "饿了！", 15, Color.red, TextAnchor.MiddleCenter, true);
@@ -7786,7 +7943,7 @@ namespace PlantsVsZombies.Game
                 _owner.RequiredAnimations.DrawNative(AdventureAnimationCatalog.AdventureZombieAnimation(kind), origin, scale, 0f, kind == ZombieKind.Pogo ? "anim_pogo" : kind == ZombieKind.PoleVaulter ? "anim_walk" : "anim_idle");
             }
 
-            Label(new Rect(rect.x + 2, rect.y + rect.height - 17, rect.width - 7, 15), GameSimulation.ModeZombieCost(kind).ToString(), 13, Color.black, TextAnchor.MiddleRight, true);
+            DrawNativePacketCost(NumberLabel(GameSimulation.ModeZombieCost(kind)), rect);
         }
     }
 }

@@ -83,7 +83,11 @@ namespace PlantsVsZombies.Tests.PlayMode
             {
                 CanLaunch = id => id == 51 || id == 61,
                 AccomplishmentsNeededLookup = id => ModeUnlockRules.DirectoryAccomplishmentsNeeded(id, false, _ => 0),
-                LaunchRequested = id => { launched = id; return true; }
+                LaunchRequested = id =>
+                {
+                    launched = id;
+                    return true;
+                }
             };
             view.Open(3);
             yield return fixture.Capture(null, view.Draw, wholeBoard: true);
@@ -104,6 +108,21 @@ namespace PlantsVsZombies.Tests.PlayMode
             view.HandleClick(new Vector2(90, 125));
             Assert.That(launched, Is.EqualTo(51), "PC normal directories hide debug page tabs.");
             Save(fixture, "puzzles-locked");
+        }
+
+        /// <summary>Preserves the existing external garden/tree entries without querying unsupported debug-mode unlock rules.</summary>
+        /// <returns>One real original-resource directory frame.</returns>
+        [UnityTest]
+        public IEnumerator HiddenDebugPagePreservesOnlySupportedExternalEntries()
+        {
+            using var fixture = new OriginalStormGraphicsTests.StormFixture(8);
+            var view = new ModeSelectionView(fixture.Root, (Func<string, SpriteImage?>)(name => fixture.Owner.Textures.LoadImage(name)), CanvasUI.DefaultFont)
+            {
+                CanLaunch = id => id == 43 || id == 50,
+                AccomplishmentsNeededLookup = id => ModeUnlockRules.DirectoryAccomplishmentsNeeded(id, true, _ => 0)
+            };
+            view.Open(2);
+            yield return fixture.Capture(null, view.Draw, wholeBoard: true);
         }
 
         /// <summary>Saves optional original-artwork captures outside the production assets.</summary>

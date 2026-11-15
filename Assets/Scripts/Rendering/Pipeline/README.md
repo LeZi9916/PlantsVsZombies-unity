@@ -202,3 +202,11 @@ re-enters the almanac and checks previews and frozen thumbnails. Capture reuse t
 cover SRP batching on/off and multiple native portraits in one and successive
 frames. These production-baked tests supplement the existing loose-source fixtures.
 Windows D3D Editor execution requires verification on the affected device.
+
+The sprite effects mode also supports the original I, Zombie white filter:
+mode 4 replaces source RGB with the inherited tint while retaining source alpha
+and normal premultiplied blending. This is separate from the existing normal,
+additive and already-premultiplied surface modes. The cardboard plant renderer
+uses the original three offset/color passes and restores its inherited origin,
+tint and filter state before the next actor. The shader path is checked with
+translucent source pixels and a following ordinary sprite in the same frame.

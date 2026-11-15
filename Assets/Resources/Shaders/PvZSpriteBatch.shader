@@ -68,6 +68,13 @@ Shader "PlantsVsZombies/SpriteBatch"
                     return half4(source.rgb * saturate(input.highlight), source.a * input.color.a);
                 }
 
+                // Original I, Zombie FILTER_EFFECT_WHITE preserves only the source alpha.
+                if (mode > 3.5)
+                {
+                    half alpha = source.a * input.color.a;
+                    return half4(input.color.rgb * alpha, alpha);
+                }
+
                 half4 pixel = source * input.color;
                 if (mode < 0.5)
                 {

@@ -336,7 +336,7 @@ namespace PlantsVsZombies.Rendering
         /// <param name = "uv">The normalized source texture rectangle.</param>
         /// <param name = "matrix">The source-to-destination pixel transform.</param>
         /// <param name = "color">The source color and opacity.</param>
-        /// <param name = "mode">Zero for normal alpha, one for hit addition, two for particle addition, or three for premultiplied surfaces.</param>
+        /// <param name = "mode">Zero for normal alpha, one for hit addition, two for particle addition, three for premultiplied surfaces, or four for a solid source-alpha mask.</param>
         /// <param name = "grayscale">The amount of imitation-plant grayscale.</param>
         /// <param name = "producerAdditive">The source-colored producer brightness.</param>
         /// <param name = "additive">The amount of white hit addition.</param>
@@ -360,7 +360,7 @@ namespace PlantsVsZombies.Rendering
         /// <param name="uv">The original bottom-left source image rectangle.</param>
         /// <param name="matrix">The source-to-destination pixel transform.</param>
         /// <param name="color">The original source tint and opacity.</param>
-        /// <param name="mode">Zero for alpha, one for a standalone hit, two for addition, or three for a premultiplied surface.</param>
+        /// <param name="mode">Zero for alpha, one for a standalone hit, two for addition, three for a premultiplied surface, or four for a solid source-alpha mask.</param>
         /// <param name="grayscale">The amount of source grayscale.</param>
         /// <param name="producerAdditive">The source-colored producer brightness.</param>
         /// <param name="additive">The white source-color hit multiplier.</param>
@@ -374,7 +374,7 @@ namespace PlantsVsZombies.Rendering
             FlushPending();
             using var submission = SpriteRenderingProfiler.Measure(SpriteRenderingProfiler.Submit);
             ThrowIfDisposed();
-            if (mode < 0 || mode > 3 || _used >= short.MaxValue)
+            if (mode < 0 || mode > 4 || _used >= short.MaxValue)
             {
                 throw new ArgumentOutOfRangeException(nameof(mode), "The sprite mode or frame sorting range is invalid.");
             }
@@ -482,7 +482,7 @@ namespace PlantsVsZombies.Rendering
             {
                 FlushPending();
             }
-            if (mode < 0 || mode > 3 || _used >= short.MaxValue)
+            if (mode < 0 || mode > 4 || _used >= short.MaxValue)
             {
                 throw new ArgumentOutOfRangeException(nameof(mode), "The sprite mode or frame sorting range is invalid.");
             }
