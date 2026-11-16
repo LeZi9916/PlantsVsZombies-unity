@@ -88,6 +88,83 @@ namespace PlantsVsZombies.Tests.EditMode
             Assert.That(game.Peas, Is.Empty);
         }
 
+        /// <summary>Checks the reported diagonal cell against the PC bungee phase gate for acquisition and all four pulses.</summary>
+        /// <param name="phase">The original bungee movement phase.</param>
+        /// <param name="admitted">Whether PC 54D810 admits this phase under the mushroom's range mask nine.</param>
+        [TestCase(4, false)]
+        [TestCase(5, false)]
+        [TestCase(6, true)]
+        [TestCase(7, true)]
+        [TestCase(8, false)]
+        [TestCase(10, false)]
+        public void CornerMushroomTargetsAndDamagesBungeesOnlyAtBottom(int phase, bool admitted)
+        {
+            var game = Board();
+            var plant = Place(game);
+            plant.Row = 0;
+            plant.Column = 0;
+            var zombie = BungeeTarget(game, phase);
+            // PC 4765B0/53DD90: the mushroom spans [-40,200], the diagonal bungee body spans [100,210].
+            var body = AdventureZombieTargetingRules.BodyRectangle(zombie);
+            Assert.That(body.X, Is.EqualTo(100));
+            Assert.That(body.Width, Is.EqualTo(110));
+            plant.ActionTimer = 0f;
+            Invoke(game, "AdvanceAdventureUpgradePlant", plant, .01f);
+            Assert.That(plant.UpgradeBurstTicks, Is.EqualTo(admitted ? 200 : 0));
+            plant.ActionTimer = 10f;
+            foreach (var remaining in new[] { 127, 99, 71, 43 })
+            {
+                plant.UpgradeBurstTicks = remaining;
+                Invoke(game, "AdvanceAdventureUpgradePlant", plant, .01f);
+            }
+
+            Assert.That(zombie.Health, Is.EqualTo(admitted ? 370f : 450f));
+            Assert.That(plant.ActionCount, Is.EqualTo(4));
+            Assert.That(game.Peas, Is.Empty);
+        }
+
+        /// <summary>Checks a started burst rechecks the native phase instead of damaging a departing or descending bungee.</summary>
+        [Test]
+        public void BungeePhaseIsRecheckedForEachScheduledPulse()
+        {
+            var game = Board();
+            var plant = Place(game);
+            plant.Row = 0;
+            plant.Column = 0;
+            var zombie = BungeeTarget(game, 6);
+            plant.ActionTimer = 0f;
+            Invoke(game, "AdvanceAdventureUpgradePlant", plant, .01f);
+            Assert.That(plant.UpgradeBurstTicks, Is.EqualTo(200));
+            plant.ActionTimer = 10f;
+            var phases = new[] { 6, 7, 8, 4 };
+            var remaining = new[] { 127, 99, 71, 43 };
+            var health = new[] { 430f, 410f, 410f, 410f };
+            for (var index = 0; index < phases.Length; index++)
+            {
+                zombie.BungeeState!.Enter(phases[index]);
+                zombie.PresentationNativePhase = phases[index];
+                plant.UpgradeBurstTicks = remaining[index];
+                Invoke(game, "AdvanceAdventureUpgradePlant", plant, .01f);
+                Assert.That(zombie.Health, Is.EqualTo(health[index]), $"Pulse in native phase {phases[index]}.");
+            }
+        }
+
+        /// <summary>Initializes a production bungee at row two, column two in an explicit native phase.</summary>
+        /// <param name="game">The simulation receiving the live target.</param>
+        /// <param name="phase">The original movement phase to inspect.</param>
+        /// <returns>The initialized diagonal target with the original 450 body health.</returns>
+        private static Zombie BungeeTarget(GameSimulation game, int phase)
+        {
+            var zombie = (Zombie)Invoke(game, "SpawnAdventureBoardZombie", ZombieKind.Bungee, 1, 9.5f, 0)!;
+            zombie.Row = 1;
+            zombie.TargetColumn = 1;
+            zombie.X = AdventureZombieNativeRules.GridX(120f);
+            zombie.BungeeState!.Enter(phase, 300);
+            zombie.PresentationNativePhase = phase;
+            zombie.PresentationAltitude = 0f;
+            return zombie;
+        }
+
         /// <summary>Creates an awake night board without imminent automatic waves.</summary>
         /// <returns>The isolated production simulation.</returns>
         private static GameSimulation Board()
@@ -135,9 +212,10 @@ namespace PlantsVsZombies.Tests.EditMode
         /// <param name="game">The production simulation.</param>
         /// <param name="method">The production method name.</param>
         /// <param name="arguments">The method's arguments.</param>
-        private static void Invoke(GameSimulation game, string method, params object[] arguments)
+        /// <returns>The boundary return value, or null for a void method.</returns>
+        private static object? Invoke(GameSimulation game, string method, params object[] arguments)
         {
-            SimulationInspection.GetMethod(method, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(game, arguments);
+            return SimulationInspection.GetMethod(method, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(game, arguments);
         }
     }
 }

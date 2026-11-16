@@ -425,8 +425,9 @@ namespace PlantsVsZombies.Simulation
         /// <returns>Whether the candidate passes the target gates and the requested native overlap boundary.</returns>
         internal static bool IsUpgradeAreaTarget(Zombie z, Plant p, bool requirePositiveOverlap = false)
         {
+            // PC 54D810 admits bungee phases 6/7; the shared target gate retains that restriction.
             if (z.Hypnotized || !AdventureZombieTargetingRules.CanBeAutoTargeted(z, p.Kind) || z.Airborne || z.Submerged
-                || z.DropRemaining > 0 || z.Kind == ZombieKind.Bungee || z.Kind != ZombieKind.Boss && Math.Abs(z.Row - p.Row) > 1)
+                || z.DropRemaining > 0 || z.Kind != ZombieKind.Boss && Math.Abs(z.Row - p.Row) > 1)
             {
                 return false;
             }
