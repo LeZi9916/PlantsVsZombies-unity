@@ -250,7 +250,7 @@ namespace PlantsVsZombies.Simulation
                     {
                         foreach (Zombie z in new PooledSnapshot<Zombie>(_world.Zombies))
                         {
-                            if (IsUpgradeAreaTarget(z, p))
+                            if (IsUpgradeAreaTarget(z, p, true))
                             {
                                 _combatSystem.HitAdventureZombie(z, 20f, true);
                                 _zombieFeedbackSystem.RequestAdventureZombieFoley(1);
@@ -418,13 +418,25 @@ namespace PlantsVsZombies.Simulation
             return x * x + y * y;
         }
 
-        /// <summary>Performs is upgrade area target.</summary>
-        /// <param name = "z">The z.</param>
-        /// <param name = "p">The p.</param>
-        /// <returns>The resulting is upgrade area target.</returns>
-        internal static bool IsUpgradeAreaTarget(Zombie z, Plant p)
+        /// <summary>Checks the PC Gloom-shroom's adjacent rows and horizontal body-rectangle overlap.</summary>
+        /// <param name="z">The candidate zombie whose original logical body is tested.</param>
+        /// <param name="p">The mushroom whose native position defines its 240-pixel attack rectangle.</param>
+        /// <param name="requirePositiveOverlap">Whether a damage pulse requires positive overlap instead of acquisition's edge contact.</param>
+        /// <returns>Whether the candidate passes the target gates and the requested native overlap boundary.</returns>
+        internal static bool IsUpgradeAreaTarget(Zombie z, Plant p, bool requirePositiveOverlap = false)
         {
-            return !z.Hypnotized && AdventureZombieTargetingRules.CanBeAutoTargeted(z, p.Kind) && !z.Airborne && !z.Submerged && z.DropRemaining <= 0 && z.Kind != ZombieKind.Bungee && Math.Abs(z.Row - p.Row) <= 1 && Math.Abs(z.X - (p.Column + 0.5f)) <= 1.5f;
+            if (z.Hypnotized || !AdventureZombieTargetingRules.CanBeAutoTargeted(z, p.Kind) || z.Airborne || z.Submerged
+                || z.DropRemaining > 0 || z.Kind == ZombieKind.Bungee || z.Kind != ZombieKind.Boss && Math.Abs(z.Row - p.Row) > 1)
+            {
+                return false;
+            }
+
+            // PC 4765B0: (mX-80,mY-80,240,240). Both callers select rows, then compare horizontal bodies only.
+            var left = 40 + p.Column * 80 + p.PositionOffsetX - 80;
+            var body = AdventureZombieTargetingRules.BodyRectangle(z);
+            var overlap = Math.Min(left + 240, body.X + body.Width) - Math.Max(left, body.X);
+            // PC 475AA0 admits touching bodies; DoRowAreaDamage 46D030 requires strictly positive overlap.
+            return requirePositiveOverlap ? overlap > 0 : overlap >= 0;
         }
 
         /// <summary>Performs find adventure cattail target.</summary>

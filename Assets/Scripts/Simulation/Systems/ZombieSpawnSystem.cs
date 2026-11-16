@@ -99,8 +99,8 @@ namespace PlantsVsZombies.Simulation
                 wave += (_independentModeRunner.RequiredModeSession.Stage - 1) * _independentModeRunner.RequiredModeSession.Definition.WaveCount;
             }
 
+            // PC 419838 rejects vehicles on PlantRowType.HighGround, not on the normal rows used by roof boards.
             if (!AdventureZombiePoolRules.CanSpawnInRow(kind, level.IsWaterRow(row), wave)
-                || level.HasRoof && (kind == ZombieKind.Zomboni || kind == ZombieKind.Bobsled)
                 || kind == ZombieKind.Bobsled && !_adventureModeRunner.Adventure._ice.Exists(ice => ice.Row == row && ice.RemainingTicks > 0))
             {
                 return false;
@@ -257,6 +257,15 @@ namespace PlantsVsZombies.Simulation
 
             z.PresentationMaxArmor = z.ArmorHealth;
             z.PresentationMaxShield = z.ShieldHealth;
+            var nativeKind = (int)kind;
+            if (nativeKind == 32)
+            {
+                // PC 53DD90 shares the giant weapon draw with Redeye. Bind its capability before that state is assigned.
+                z.ModeHead = 32;
+                z.Kind = ZombieKind.Gargantuar;
+                z.Health = z.StartingHealth = 6000;
+            }
+
             _zombieFeedbackSystem.InitializeAdventureZombieNative(z, x >= 9.5f && kind != ZombieKind.Bungee);
             if (kind == ZombieKind.Bungee)
             {
@@ -293,7 +302,6 @@ namespace PlantsVsZombies.Simulation
                 z.PresentationNativeHeight = 0;
             }
 
-            var nativeKind = (int)kind;
             if (nativeKind >= 26 && nativeKind <= 31)
             {
                 z.ModeHead = nativeKind;
@@ -314,12 +322,6 @@ namespace PlantsVsZombies.Simulation
                     z.PresentationNativePhase = 92;
                     z._presentationSpeedPhase = 92;
                 }
-            }
-            else if (nativeKind == 32)
-            {
-                z.ModeHead = 32;
-                z.Kind = ZombieKind.Gargantuar;
-                z.Health = z.StartingHealth = 6000;
             }
 
             // A new actor has no preceding movement sample. Seed interpolation after edge placement
