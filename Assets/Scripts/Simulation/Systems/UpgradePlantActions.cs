@@ -648,7 +648,12 @@ namespace PlantsVsZombies.Simulation
             }
 
             p.CannonTargetX = targetX;
-            p.CannonTargetRow = Math.Max(0f, Math.Min(_world.RowCount - 1, (float)Math.Floor(targetRow)));
+            // PC 475230 stores mouse X - 47 before 4752E0 selects the target row at that shifted roof column.
+            var rowColumn = Math.Max(0, Math.Min(8, (int)Math.Floor(targetX - 47f / 80f)));
+            // PC PixelToGridY 428160 uses (4-column)*20; GridToPixelY's drawing offset is a separate formula.
+            var rowFloor = board.Level.HasRoof ? Math.Max(0, 4 - rowColumn) * 20f : 0f;
+            p.CannonTargetRow = Math.Max(0f, Math.Min(_world.RowCount - 1,
+                (float)Math.Floor((nativeY - 80f - rowFloor) / (board.Level.HasPool || board.Level.HasRoof ? 85f : 100f))));
             p.CannonPhase = CobCannonPhase.Firing;
             p.PhaseAge = 0f;
             p.CannonReloadRemaining = SimulationWorld.AdventureCobFiringSeconds;
@@ -709,7 +714,7 @@ namespace PlantsVsZombies.Simulation
                     LaunchNativeY = 80f + p.Row * pitch - 145f
                         + (level.HasRoof ? Math.Max(0, 5 - p.Column) * 20f - 10f : 0f)
                         - (_boardQueries.HasPlantKindAt(PlantKind.FlowerPot, p.Row, p.Column) ? 5f : 0f),
-                    FlightRemaining = SimulationWorld.AdventureCobFlightSeconds
+                    FlightRemaining = SimulationWorld.AdventureCobFlightSeconds + (level.IsWaterRow((int)p.CannonTargetRow) ? .02f : 0f)
                 });
                 _zombieFeedbackSystem.RequestAdventureZombieFoley(3);
                 _world.Presentation._nativeShootSuppressions++;

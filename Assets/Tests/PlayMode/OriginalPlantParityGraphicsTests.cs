@@ -193,6 +193,65 @@ namespace PlantsVsZombies.Tests.PlayMode
             }
         }
 
+        /// <summary>Checks native cannon aim anchors, exact target pixels, roof row selection and out-of-grid clicks on every endless terrain.</summary>
+        /// <returns>One initialized production host per original endless mode.</returns>
+        [UnityTest]
+        public IEnumerator EndlessCannonClicksRetainNativeAimAndImpactCoordinates()
+        {
+            foreach (var mode in new[] { 11, 12, 13, 14, 15 })
+            {
+                using var fixture = new OriginalStormGraphicsTests.StormFixture(ModeCatalog.Get(mode).BoardLevel);
+                var owner = fixture.Owner;
+                var session = new ModeSession(mode, AdventureSeedAccess.DevelopmentAll());
+                owner.IndependentModes._modeSession = session;
+                owner._game = session.Game;
+                owner._currentView = PvZGame.ScreenView.Board;
+                owner._selected = -1;
+                owner._choosingSeeds = false;
+                var game = session.Game;
+                Assert.That(game.ChooseDefaultAdventureSeeds(), Is.True);
+                session.Phase = ModePhase.Playing;
+                game.ResetAdventureWaveSchedule(100000, false, false);
+                SimulationFixture.Plants(game).Clear();
+                var cannon = new Plant { Id = 73, Kind = PlantKind.CobCannon, Row = 1, Column = 3,
+                    ColumnSpan = 2, Layer = PlantLayer.Main, Health = 300f, CannonPhase = CobCannonPhase.Ready };
+                SimulationFixture.Plants(game).Add(cannon);
+                var click = new Vector2(295f, 80f + owner.Layout.AdventurePitch + owner.Layout.AdventureSlope(3) + 20f);
+                Assert.That(owner.IndependentModes.TryHandleModeClick(click), Is.True);
+                Assert.That(game.Adventure.SelectedCobCannonId, Is.EqualTo(cannon.Id));
+                Assert.That(game.Adventure.CobCannonAimX, Is.EqualTo(click.x));
+                Assert.That(game.Adventure.CobCannonAimY, Is.EqualTo(click.y));
+                owner.IndependentModes.TryHandleModeClick(click);
+                Assert.That(cannon.CannonPhase, Is.EqualTo(CobCannonPhase.Aiming));
+                // PC selects the row using click X-47. At this roof boundary it is row one, although the cursor is over row two.
+                var target = mode == 15 ? new Vector2(293f, 285f) : new Vector2(493f, 327f);
+                owner.IndependentModes.TryHandleModeClick(target);
+                Assert.That(cannon.CannonPhase, Is.EqualTo(CobCannonPhase.Firing), "Mode " + mode);
+                Assert.That(cannon.CannonTargetX, Is.EqualTo((target.x - 40f) / 80f).Within(.00001f));
+                Assert.That(cannon.CannonTargetRow, Is.EqualTo(mode == 15 ? 1f : 2f));
+                var advance = SimulationInspection.GetMethod("AdvanceAdventureCannon", BindingFlags.Instance | BindingFlags.NonPublic)!;
+                for (var tick = 0; tick < 204; tick++)
+                {
+                    advance.Invoke(game, new object[] { cannon, .01f });
+                }
+                Assert.That(game.Adventure.CobShells, Is.Empty);
+                advance.Invoke(game, new object[] { cannon, .01f });
+                var shell = game.Adventure.CobShells[0];
+                Assert.That(40f + shell.TargetX * 80f, Is.EqualTo(target.x - 7f).Within(.0001f));
+                Assert.That(shell.TargetNativeY + 40f, Is.EqualTo(mode == 15 ? 255f : mode <= 12 ? 320f : 290f));
+                cannon.CannonPhase = CobCannonPhase.Ready;
+                owner.IndependentModes.TryHandleModeClick(click);
+                owner.IndependentModes.TryHandleModeClick(new Vector2(600f, 75f));
+                Assert.That(game.Adventure.SelectedCobCannonId, Is.Null);
+                Assert.That(cannon.CannonPhase, Is.EqualTo(CobCannonPhase.Ready));
+                owner.IndependentModes.TryHandleModeClick(click);
+                owner.IndependentModes.TryHandleModeClick(new Vector2(493f, 590f));
+                Assert.That(cannon.CannonPhase, Is.EqualTo(CobCannonPhase.Firing));
+                Assert.That(cannon.CannonTargetRow, Is.EqualTo(game.RowCount - 1));
+                yield return null;
+            }
+        }
+
         /// <summary>Checks purple packet pixels and base-price-plus versus live bank-price labels.</summary>
         /// <returns>Original-resource card readback frames.</returns>
         [UnityTest]

@@ -79,6 +79,73 @@ namespace PlantsVsZombies.Tests.EditMode
             Assert.That(cannon.CannonTargetRow, Is.EqualTo(4f));
         }
 
+        /// <summary>Checks PC 428160's shifted roof column and logical row boundary independently of drawing offsets.</summary>
+        /// <param name="nativeY">The actual mouse height at native X293.</param>
+        /// <param name="row">The original selected row at shifted X246, column two.</param>
+        [TestCase(285f, 1f)]
+        [TestCase(289f, 1f)]
+        [TestCase(290f, 2f)]
+        [TestCase(295f, 2f)]
+        public void RoofCannonUsesTheNativeLogicalRowBoundary(float nativeY, float row)
+        {
+            var game = new PlantsVsZombies.Modes.ModeSession(15).Game;
+            game.ChooseDefaultAdventureSeeds();
+            var cannon = Cannon(game, CobCannonPhase.Ready, 0f);
+            Assert.That(game.TryAimAdventureCobCannon(cannon.Id), Is.True);
+            game.Adventure.CobCannonAimDelayTicks = 0;
+            Assert.That(game.TryFireAdventureCobCannon((293f - 40f) / 80f, (nativeY - 80f - 30f) / 85f), Is.True);
+            Assert.That(cannon.CannonTargetRow, Is.EqualTo(row));
+            Step(game, cannon, 205);
+            var shell = game.Adventure.CobShells[0];
+            Assert.That(40f + shell.TargetX * 80f, Is.EqualTo(286f).Within(.0001f));
+            // Descending mX206 also selects column two. GridToPixelY adds sixty, then subtracts ten.
+            Assert.That(shell.TargetNativeY + 40f, Is.EqualTo(170f + row * 85f));
+        }
+
+        /// <summary>Checks PC 47C880's dry ground, water floor and inclusive 230-pixel cob body-contact interval.</summary>
+        /// <param name="mode">The original endless terrain identifier.</param>
+        /// <param name="row">The target row, including water.</param>
+        /// <param name="bodyLeft">The target body edge, or minus one for an empty landing area.</param>
+        /// <param name="impactTick">The native flight update on which contact must occur.</param>
+        [TestCase(11, 1, -1, 172)]
+        [TestCase(13, 2, -1, 174)]
+        [TestCase(15, 1, -1, 172)]
+        [TestCase(11, 1, 444, 169)]
+        [TestCase(11, 1, 443, 172)]
+        [TestCase(11, 1, 716, 169)]
+        [TestCase(11, 1, 717, 172)]
+        [TestCase(13, 2, 600, 174)]
+        public void NativeFlightContactUsesOriginalFloorAndBodyBoundaries(int mode, int row, int bodyLeft, int impactTick)
+        {
+            var game = new PlantsVsZombies.Modes.ModeSession(mode).Game;
+            game.ChooseDefaultAdventureSeeds();
+            SimulationFixture.Zombies(game).Clear();
+            if (bodyLeft >= 0)
+            {
+                SimulationFixture.Zombies(game).Add(new Zombie
+                {
+                    Id = 1, Kind = ZombieKind.Normal, Row = row,
+                    X = AdventureZombieNativeRules.GridX(bodyLeft - 36 + .25f), Health = 3000f, StartingHealth = 3000f
+                });
+            }
+            // PC cob image is 162x78: impact X600 corresponds to mX520 and GetProjectileRect [486,716].
+            game.Adventure._cobShells.Add(new AdventureCobShell
+            {
+                TargetX = 7f, TargetRow = row, TargetNativeY = 80f + row * (mode == 11 ? 100f : 85f),
+                FlightRemaining = mode == 13 ? 1.74f : 1.72f
+            });
+            for (var tick = 1; tick < impactTick; tick++)
+            {
+                Invoke(game, "AdvanceAdventureUpgradeWorld", .01f);
+                Assert.That(game.Adventure.CobShells, Has.Count.EqualTo(1), "Native flight update " + tick);
+            }
+            Invoke(game, "AdvanceAdventureUpgradeWorld", .01f);
+            Assert.That(game.Adventure.CobShells, Is.Empty);
+            var impact = game.Presentation.Impacts[game.Presentation.Impacts.Count - 1];
+            Assert.That(impact.NativeParticleX, Is.EqualTo(600f));
+            Assert.That(impact.NativeParticleY, Is.EqualTo(120f + row * (mode == 11 ? 100f : 85f)));
+        }
+
         /// <summary>Checks the original integer triangle-wave track color.</summary>
         /// <param name="tick">The native main counter.</param>
         /// <param name="brightness">The expected grayscale track component.</param>

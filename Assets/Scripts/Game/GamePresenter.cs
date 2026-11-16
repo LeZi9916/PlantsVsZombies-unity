@@ -2779,8 +2779,9 @@ namespace PlantsVsZombies.Game
                 for (var shellIndex = 0; shellIndex < _owner.RequiredGame.Adventure.CobShells.Count; shellIndex++)
                 {
                     var shell = _owner.RequiredGame.Adventure.CobShells[shellIndex];
-                    var ticks = Math.Max(0, GameSimulation.AdventureCobFlightSeconds - shell.FlightRemaining + AdventureRenderRemainder) * 100f;
-                    var rising = ticks < 88f;
+                    var flightSeconds = GameSimulation.AdventureCobFlightSeconds + (level.IsWaterRow((int)shell.TargetRow) ? .02f : 0f);
+                    var ticks = Math.Max(0, flightSeconds - shell.FlightRemaining + AdventureRenderRemainder) * 100f;
+                    var rising = ticks < 89f;
                     var x = rising ? shell.LaunchX : shell.TargetX;
                     var z = rising ? -8f * ticks : -704f + 8f * (ticks - 88f);
                     var y = rising ? shell.LaunchNativeY : shell.TargetNativeY + 39f;

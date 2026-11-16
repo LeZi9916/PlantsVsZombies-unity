@@ -913,6 +913,20 @@ namespace PlantsVsZombies.Modes
             }
 
             var col = Mathf.FloorToInt((point.x - BoardLayout.AdventureGridX) / BoardLayout.CellWidth);
+            if (_owner.RequiredGame.Adventure.SelectedCobCannonId.HasValue)
+            {
+                if (point.y < BoardLayout.AdventureGridY)
+                {
+                    _owner.RequiredGame.CancelAdventureCobCannonAim();
+                }
+                else
+                {
+                    _owner.RequiredGame.TryFireAdventureCobCannon((point.x - BoardLayout.AdventureGridX) / BoardLayout.CellWidth,
+                        (point.y - BoardLayout.AdventureGridY - _owner.Layout.AdventureSlope(col)) / _owner.Layout.AdventurePitch);
+                }
+                return true;
+            }
+
             var row = Mathf.FloorToInt((point.y - BoardLayout.AdventureGridY - _owner.Layout.AdventureSlope(col)) / _owner.Layout.AdventurePitch);
             if (col < 0 || col > 8 || row < 0 || row >= _owner.RequiredGame.RowCount)
             {
@@ -936,12 +950,6 @@ namespace PlantsVsZombies.Modes
             if (m == ModeMechanic.Beghouled || m == ModeMechanic.BeghouledTwist)
             {
                 s.ClickMatchCell(row, col);
-                return true;
-            }
-
-            if (_owner.RequiredGame.Adventure.SelectedCobCannonId.HasValue)
-            {
-                _owner.RequiredGame.TryFireAdventureCobCannonAtCell(row, col);
                 return true;
             }
 
@@ -1000,6 +1008,8 @@ namespace PlantsVsZombies.Modes
 
             if (_owner.RequiredGame.TryAimAdventureCobCannon(row, col))
             {
+                _owner.RequiredGame.Adventure.CobCannonAimX = point.x;
+                _owner.RequiredGame.Adventure.CobCannonAimY = point.y;
                 return true;
             }
 

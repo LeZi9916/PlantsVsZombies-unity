@@ -234,13 +234,33 @@ namespace PlantsVsZombies.Simulation
             for (var i = _adventureModeRunner.Adventure._cobShells.Count - 1; i >= 0; i--)
             {
                 var shell = _adventureModeRunner.Adventure._cobShells[i];
-                shell.FlightRemaining -= dt;
-                if (shell.FlightRemaining > 0.000001f)
+                shell.FlightRemaining = Math.Max(0, (int)Math.Round(shell.FlightRemaining * 100f) - (int)Math.Round(dt * 100f)) * .01f;
+                var row = (int)Math.Round(shell.TargetRow);
+                var contact = false;
+                // PC 47C880 admits dry-row body contacts at z > -60 (tick 169), then ground at z > -40 (172).
+                // Water adds forty to the first threshold, so both gates open at tick 174 there.
+                if (shell.FlightRemaining <= .030001f && !_adventureModeRunner.Adventure.Level.IsWaterRow(row))
+                {
+                    // PC 47BB30 gives the cob its 162-pixel image width; 47DFF0 expands around mX + 81.
+                    var left = (int)(40f + shell.TargetX * 80f) - 114;
+                    foreach (var zombie in _world.Zombies)
+                    {
+                        if ((zombie.Row == row || zombie.Kind == ZombieKind.Boss) && _combatSystem.CanTakeAdventureAshDamage(zombie, 0x7F))
+                        {
+                            var body = AdventureZombieTargetingRules.BodyRectangle(zombie);
+                            if (Math.Min(left + 230, body.X + body.Width) >= Math.Max(left, body.X))
+                            {
+                                contact = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+                if (shell.FlightRemaining > 0.000001f && !contact)
                 {
                     continue;
                 }
 
-                var row = (int)Math.Round(shell.TargetRow);
                 _combatSystem.BlastAdventureRadius((int)(40f + shell.TargetX * 80f), (int)(shell.TargetNativeY + 40f), row, 115, 1, 0x7F);
                 _battlePresentationSystem.AdventurePresentationCobImpact(shell.TargetX, shell.TargetRow);
                 var impact = _world.Presentation.Impacts[_world.Presentation.Impacts.Count - 1];
