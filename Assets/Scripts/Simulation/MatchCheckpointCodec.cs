@@ -348,7 +348,7 @@ namespace PlantsVsZombies.Simulation
         /// <summary>Selects model fields while excluding host callbacks and disposable derived storage.</summary>
         /// <param name="type">The model type.</param>
         /// <returns>Deterministically ordered instance fields.</returns>
-        private static List<FieldInfo> Fields(Type type)
+        internal static IReadOnlyList<FieldInfo> Fields(Type type)
         {
             lock (s_fields)
             {

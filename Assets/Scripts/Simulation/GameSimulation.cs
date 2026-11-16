@@ -315,6 +315,9 @@ namespace PlantsVsZombies.Simulation
             return MatchCheckpointCodec.Capture(_world);
         }
 
+        /// <summary>Gets the authoritative model inspected by the offline checkpoint editor.</summary>
+        internal SimulationWorld CheckpointState => _world;
+
         /// <summary>Completes the original end-level coin cleanup when leaving during the award sequence.</summary>
         /// <returns>Whether pending coin and unused-mower account writes succeeded.</returns>
         internal bool FinishAdventureForSaving()

@@ -89,7 +89,7 @@ Unity 测试脚本使用指定版本 Editor，在忽略的临时副本中编译�
 
 ## 存档编辑器
 
-在 Unity 菜单 **PlantsVsZombies > Save Editor** 打开存档编辑窗口。默认读取当前项目的 `Application.persistentDataPath`，也可以浏览其他游戏存档目录；目录内需已有 `replica-profiles.dat` 和至少一个游戏用户。
+在 Unity 菜单 **PlantsVsZombies > Save Editor** 打开存档编辑窗口。默认读取当前项目的 `Application.persistentDataPath`，也可以浏览其他游戏存档目录；目录内需已有 `profiles.dat` 和至少一个游戏用户。
 
 选择用户后，可编辑金币、模式解锁、智慧树、商店物品、模式记录、禅境花园植物和照料时间、冒险关卡与选卡，以及高级奖励标记和既有回执。金币使用存档单位（1 单位等于 10 游戏金币），时间字段使用 UTC Unix 秒并显示本地时间。窗口中的用户选择不会改变游戏当前用户。
 
@@ -101,4 +101,32 @@ Unity 测试脚本使用指定版本 Editor，在忽略的临时副本中编译�
 
 ```powershell
 ./Tools/Tests/Run-UnityTests.ps1 -Platform EditMode -AssemblyNames PlantsVsZombies.Tests.EditorRendering
+```
+
+
+## 对局存档编辑器
+
+在 Unity 菜单 **PlantsVsZombies > Match Checkpoint Editor** 打开对局存档窗口。默认使用
+`Application.persistentDataPath`，也可浏览其他存档目录；需要 `profiles.dat` 及已有的
+`replica-game-<用户标识>-<模式>.dat`。先在游戏中退出正在进行的关卡即可生成对局存档。
+窗口按用户列出已有对局，不改变游戏的当前用户选择，不要求账号或冒险进度 sidecar 可读。
+
+可编辑阳光、波次与倒计时、植物生命值与行列、僵尸状态、种子冷却、投射物、拾取物、
+小推车及已有动画/场景状态。“全部字段”显示实际存档模型，可展开嵌套能力、数组和字典；
+较大集合分页显示，循环引用有显示限制。对象类型、ID、引用关系、关卡定义、随机流和集合
+结构保持只读。冷却单位为原版 tick（0.01 秒），行列和波次字段从 0 开始。
+
+修改先留在独立草稿中，不推进对局。点击 **保存当前对局** 后仅写入该对局文件，保留
+原金币/掉落回执、关联实体和随机状态，并将上一版保存在同名 `.backup` 文件中。
+账号金币、解锁和冒险通关进度仍在 **Save Editor** 中单独编辑。外部文件变化或占用时
+拒绝覆盖；游戏与编辑器的保存、删除共享同一对局锁。
+
+切换、重载和关闭窗口会处理未保存草稿；草稿及原始文件基线随窗口序列化，可在脚本
+重新编译后恢复。进入 Play Mode 后暂停编辑，退出后须重载。损坏或格式不兼容的文件
+只显示读取错误，不会被空白对局覆盖。
+
+```powershell
+./Tools/Tests/Run-UnityTests.ps1 -Platform EditMode -TestFilter MatchCheckpointEditorTests
+dotnet run --project Tools/Tests/CheckpointTests/CheckpointTests.csproj -c Release
+dotnet run --project Tools/Tests/ArchitectureTests/ArchitectureTests.csproj -c Release
 ```

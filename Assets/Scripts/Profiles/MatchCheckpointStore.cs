@@ -11,7 +11,7 @@ namespace PlantsVsZombies.Profiles
     internal sealed class MatchCheckpointStore
     {
         /// <summary>Bounds reads before allocating a damaged file's payload.</summary>
-        private const int MaxBytes = 32 * 1024 * 1024;
+        internal const int MaxBytes = 32 * 1024 * 1024;
         /// <summary>Identifies the replica checkpoint envelope and its version.</summary>
         private const string Magic = "PVZRMATCH1";
         /// <summary>The directory containing per-user, per-mode checkpoints.</summary>
@@ -57,6 +57,35 @@ namespace PlantsVsZombies.Profiles
         /// <exception cref="UnauthorizedAccessException">The storage directory cannot be written.</exception>
         internal void Save(Guid profile, int mode, string receipt, GameSimulation game)
         {
+            SaveCore(profile, mode, receipt, game, null);
+        }
+
+        /// <summary>Saves an editor draft only when its original file still matches, retaining the previous file as a backup.</summary>
+        /// <param name="profile">The owning profile.</param>
+        /// <param name="mode">The original PC mode identifier.</param>
+        /// <param name="receipt">The unchanged coin and loot receipt identity.</param>
+        /// <param name="game">The detached edited board.</param>
+        /// <param name="expectedBytes">The exact file accepted when the editor loaded the board.</param>
+        /// <exception cref="IOException">The file changed externally, is locked or cannot be committed.</exception>
+        /// <exception cref="InvalidDataException">The edited model cannot be serialized.</exception>
+        /// <exception cref="ArgumentNullException">The accepted file snapshot is null.</exception>
+        /// <exception cref="ArgumentException">The mode does not match the board.</exception>
+        /// <exception cref="InvalidOperationException">The board cannot have a native continuation.</exception>
+        /// <exception cref="UnauthorizedAccessException">The save or backup location is not writable.</exception>
+        internal void SaveEditorSnapshot(Guid profile, int mode, string receipt, GameSimulation game, byte[] expectedBytes)
+        {
+            SaveCore(profile, mode, receipt, game, expectedBytes ?? throw new ArgumentNullException(nameof(expectedBytes)));
+        }
+
+        /// <summary>Serializes a board and commits it under the same lease used by editor writes and runtime deletion.</summary>
+        /// <param name="profile">The owning profile.</param>
+        /// <param name="mode">The original mode identifier.</param>
+        /// <param name="receipt">The stable receipt identity.</param>
+        /// <param name="game">The board model.</param>
+        /// <param name="expectedBytes">The editor baseline, or null for a runtime save without a backup.</param>
+        /// <exception cref="IOException">A file operation fails or an editor baseline is stale.</exception>
+        private void SaveCore(Guid profile, int mode, string receipt, GameSimulation game, byte[]? expectedBytes)
+        {
             if (!SupportsMode(mode) || !game.IsAdventure || game.IsExperimentalLevelOne)
             {
                 throw new InvalidOperationException("This board does not support native continuation.");
@@ -87,6 +116,11 @@ namespace PlantsVsZombies.Profiles
             }
             Directory.CreateDirectory(_directory);
             var path = SavePath(profile, mode);
+            using var lease = new FileStream(path + ".lock", FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+            if (expectedBytes != null && !MatchesFile(path, expectedBytes))
+            {
+                throw new IOException("对局存档已被游戏或其他窗口修改，请重新读取后再保存。");
+            }
             var temporary = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
             try
             {
@@ -103,7 +137,7 @@ namespace PlantsVsZombies.Profiles
                 _saveHook?.Invoke(ProfileSaveStage.BeforeCommit);
                 if (File.Exists(path))
                 {
-                    File.Replace(temporary, path, null);
+                    File.Replace(temporary, path, expectedBytes == null ? null : path + ".backup");
                 }
                 else
                 {
@@ -177,7 +211,50 @@ namespace PlantsVsZombies.Profiles
         /// <exception cref="UnauthorizedAccessException">The storage location is not writable.</exception>
         internal void Delete(Guid profile, int mode)
         {
-            File.Delete(SavePath(profile, mode));
+            if (!Directory.Exists(_directory))
+            {
+                return;
+            }
+            var path = SavePath(profile, mode);
+            using var lease = new FileStream(path + ".lock", FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+            File.Delete(path);
+        }
+
+        /// <summary>Compares a bounded accepted snapshot with one consistently opened file.</summary>
+        /// <param name="path">The file to compare.</param>
+        /// <param name="expected">The accepted bytes.</param>
+        /// <returns>Whether the file still contains exactly the accepted snapshot.</returns>
+        /// <exception cref="IOException">The file cannot be read.</exception>
+        internal static bool MatchesFile(string path, byte[] expected)
+        {
+            if (!File.Exists(path))
+            {
+                return false;
+            }
+            using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+            if (stream.Length != expected.Length)
+            {
+                return false;
+            }
+            var buffer = new byte[8192];
+            var position = 0;
+            int count;
+            while ((count = stream.Read(buffer, 0, buffer.Length)) > 0)
+            {
+                if (position > expected.Length - count)
+                {
+                    return false;
+                }
+                for (var index = 0; index < count; index++)
+                {
+                    if (buffer[index] != expected[position + index])
+                    {
+                        return false;
+                    }
+                }
+                position += count;
+            }
+            return position == expected.Length;
         }
 
         /// <summary>Derives a filename without accepting path components from a save file.</summary>

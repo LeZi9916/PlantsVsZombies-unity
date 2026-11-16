@@ -1431,3 +1431,38 @@ violations. All integration saves belong to disposable test profiles.
 Windows packaged Players, Mono/IL2CPP builds and Linux/macOS/mobile devices remain
 unverified. `link.xml` retains snapshot reflection metadata in stripped Players;
 Editor and standalone model tests do not establish AOT/device compatibility.
+
+
+## Match checkpoint editor
+
+Open **PlantsVsZombies > Match Checkpoint Editor** in Unity. The window discovers
+existing per-profile/per-mode board files from a selected `profiles.dat` directory;
+it does not select the game user or read/write account and campaign sidecars.
+Only detached saved models are edited. Model fields use the checkpoint codec's
+own schema; private capability state, boxed mutable/readonly structs, logical
+collection entries and multidimensional arrays retain their actual owners.
+Entity type tags/IDs, reference topology, immutable definitions and RNG streams
+are read-only. Collection pages and branch cycle/depth guards bound UI work.
+
+```powershell
+./Tools/Tests/Run-UnityTests.ps1 -Platform EditMode -TestFilter MatchCheckpointEditorTests
+dotnet run --project Tools/Tests/CheckpointTests/CheckpointTests.csproj -c Release
+dotnet run --project Tools/Tests/ArchitectureTests/ArchitectureTests.csproj -c Release
+git diff --check
+```
+
+The ten focused EditMode cases pass on **Unity 7000.0.0a16 / Windows**. They cover
+passive discovery, editor-only user selection, every implemented challenge mode's
+complete unedited payload, nested and readonly value writes, indexed lane changes,
+bungee cargo and mower dictionary reference identity, unchanged RNG and receipts,
+previous-revision backups, invalid/corrupt files, held leases and external writes.
+Native window serialization retains full drafts and original stale baselines
+across repeated reloads. All seven native GUI categories repaint without writing
+files; the real window Save command is also checked after a temporary file lock.
+Play Mode invalidation prevents writes while preserving pending edits.
+
+Editor commits share the runtime checkpoint lease, compare original catalog and
+board baselines, and atomically retain the previous revision as `.backup`.
+The existing standalone checkpoint regressions and architecture checks pass.
+All editing tests use disposable profiles and board files. Packaged Players and
+other operating systems' Editor/file-lock behavior were not tested for this tool.
