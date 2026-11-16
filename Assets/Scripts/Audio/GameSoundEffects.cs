@@ -613,7 +613,7 @@ namespace PlantsVsZombies.Audio
             return evt == GameEvent.ZombieHit;
         }
 
-        /// <summary>Owns the single original looping box tune shared by all headed running box zombies.</summary>
+        /// <summary>Owns the single original looping box tune shared by headed running box zombies that are not immobilized.</summary>
         private AudioSource? _jackInTheBoxMusic;
         /// <summary>Tracks whether the box tune is suspended by the board pause.</summary>
         private bool _jackInTheBoxMusicPaused;
@@ -627,8 +627,11 @@ namespace PlantsVsZombies.Audio
             {
                 foreach (var zombie in game.Zombies)
                 {
+                    // PC ApplyIceTrap 54E150 and ApplyButter 54E470 release StartZombieSound's shared Foley 14.
+                    // Magnet removal changes the running phase to zero, so thawing cannot restart a removed box.
                     if (zombie.Kind == ZombieKind.JackInTheBox && zombie.PresentationNativePhase == 15
-                        && !zombie.Headless && zombie.Health > 0f)
+                        && !zombie.Headless && zombie.Health > 0f
+                        && zombie.FrozenRemaining <= 0f && zombie.PresentationButter <= 0f)
                     {
                         active = true;
                         break;
