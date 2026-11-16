@@ -61,15 +61,19 @@ namespace PlantsVsZombies.Tests.EditMode
         }
 
         /// <summary>Checks the actual projectile loop uses the vehicle's rear body instead of its old narrow center gate.</summary>
-        [Test]
-        public void ProductionProjectileHitsOriginalWideVehicleBody()
+        /// <param name="kind">The original vehicle species sharing the same body and attack rectangles.</param>
+        [TestCase(ZombieKind.Zomboni)]
+        [TestCase(ZombieKind.Catapult)]
+        public void ProductionProjectileHitsOriginalWideVehicleBody(ZombieKind kind)
         {
             var game = Board();
-            var zombie = Spawn(game);
+            var zombie = (Zombie)SimulationInspection.GetMethod("SpawnAdventureZombie", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .Invoke(game, new object[] { kind, 1, 4f, 5 })!;
+            var health = zombie.Health;
             var projectile = new Pea { Row = 1, FlightRow = 1f, X = 5.35f, VelocityX = -4.5f, Damage = 20f };
             SimulationFixture.Peas(game).Add(projectile);
             Invoke(game, "AdvanceAdventureProjectiles", .01f, true);
-            Assert.That(zombie.Health, Is.EqualTo(1330f), "The original 153-pixel body includes the visible rear, far beyond grid-center +/- 0.25.");
+            Assert.That(zombie.Health, Is.EqualTo(health - 20f), "The original 153-pixel body includes the visible rear, far beyond grid-center +/- 0.25.");
             Assert.That(game.Peas, Has.No.Member(projectile));
             var body = AdventureZombieTargetingRules.BodyRectangle(zombie, 150);
             Assert.That(body.X, Is.EqualTo(288));
@@ -79,6 +83,86 @@ namespace PlantsVsZombies.Tests.EditMode
             var attack = game.AdventureZombieAttackRectangle(zombie);
             Assert.That(attack.Width, Is.EqualTo(133));
             Assert.That(attack.Height, Is.EqualTo(140));
+        }
+
+        /// <summary>Checks PC 47DFF0/47C130's inclusive vehicle contacts and one-pixel misses for each straight projectile rectangle.</summary>
+        /// <param name="kind">The vehicle receiving the projectile.</param>
+        /// <param name="source">The source that selects the original projectile type.</param>
+        /// <param name="fire">Whether Torchwood has converted the pea without moving its native origin.</param>
+        /// <param name="halfWidth">The sprite center offset retained by the simulation.</param>
+        /// <param name="leftExtension">The native projectile rectangle's extension to the left.</param>
+        /// <param name="rightExtent">The native projectile rectangle's extent to the right of its origin.</param>
+        [TestCase(ZombieKind.Zomboni, PlantKind.Peashooter, false, 14, 15, 40)]
+        [TestCase(ZombieKind.Catapult, PlantKind.Peashooter, false, 14, 15, 40)]
+        [TestCase(ZombieKind.Zomboni, PlantKind.Peashooter, true, 14, 0, 30)]
+        [TestCase(ZombieKind.Catapult, PlantKind.Peashooter, true, 14, 0, 30)]
+        [TestCase(ZombieKind.Zomboni, PlantKind.Cactus, false, 15, 25, 40)]
+        [TestCase(ZombieKind.Catapult, PlantKind.Cactus, false, 15, 25, 40)]
+        [TestCase(ZombieKind.Zomboni, PlantKind.PuffShroom, false, 16, 0, 40)]
+        [TestCase(ZombieKind.Catapult, PlantKind.PuffShroom, false, 16, 0, 40)]
+        [TestCase(ZombieKind.Zomboni, PlantKind.ScaredyShroom, false, 16, 0, 40)]
+        [TestCase(ZombieKind.Catapult, PlantKind.ScaredyShroom, false, 16, 0, 40)]
+        public void StraightProjectilesUseOriginalVehiclePixelBoundaries(ZombieKind kind, PlantKind source,
+            bool fire, int halfWidth, int leftExtension, int rightExtent)
+        {
+            // PC 53DD90 initializes both vehicles with body (0,-13,153,140); origin here is (288,150).
+            for (var side = 0; side < 2; side++)
+            {
+                for (var gap = -1; gap <= 1; gap++)
+                {
+                    var game = Board();
+                    var zombie = (Zombie)SimulationInspection.GetMethod("SpawnAdventureZombie", BindingFlags.Instance | BindingFlags.NonPublic)!
+                        .Invoke(game, new object[] { kind, 1, 4f, 5 })!;
+                    var health = zombie.Health;
+                    var nativeX = side == 0 ? 288 - rightExtent - gap : 441 + leftExtension + gap;
+                    var projectile = new Pea
+                    {
+                        Row = 1,
+                        FlightRow = 1f,
+                        X = (nativeX + .25f + halfWidth - 40f) / 80f,
+                        SourceKind = source,
+                        Fire = fire,
+                        Damage = 20f
+                    };
+                    SimulationFixture.Peas(game).Add(projectile);
+                    Invoke(game, "AdvanceAdventureProjectiles", .01f, true);
+                    Assert.That(zombie.Health, Is.EqualTo(health - (gap <= 0 ? 20f : 0f)),
+                        $"{kind}/{source}/fire={fire}, side={side}, gap={gap}: PC horizontal overlap admits touching edges.");
+                    Assert.That(game.Peas.Contains(projectile), Is.EqualTo(gap > 0));
+                }
+            }
+        }
+
+        /// <summary>Checks PC 47CCB0 checks collision before storing the newly integrated integer projectile position.</summary>
+        /// <param name="kind">The vehicle receiving the projectile.</param>
+        /// <param name="backwards">Whether the pea approaches the vehicle's rear from the right.</param>
+        [TestCase(ZombieKind.Zomboni, false)]
+        [TestCase(ZombieKind.Catapult, false)]
+        [TestCase(ZombieKind.Zomboni, true)]
+        [TestCase(ZombieKind.Catapult, true)]
+        public void VehicleContactUsesPreviousIntegerProjectilePosition(ZombieKind kind, bool backwards)
+        {
+            var game = Board();
+            var zombie = (Zombie)SimulationInspection.GetMethod("SpawnAdventureZombie", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .Invoke(game, new object[] { kind, 1, 4f, 5 })!;
+            var health = zombie.Health;
+            var nativeX = backwards ? 457 : 247;
+            var projectile = new Pea
+            {
+                Row = 1,
+                FlightRow = 1f,
+                X = (nativeX + .25f + 14f - 40f) / 80f,
+                VelocityX = (backwards ? -1f : 1f) * 3.33f * 100f / 80f,
+                SourceKind = PlantKind.Peashooter,
+                Damage = 20f
+            };
+            SimulationFixture.Peas(game).Add(projectile);
+            Invoke(game, "AdvanceAdventureProjectiles", .01f, true);
+            Assert.That(zombie.Health, Is.EqualTo(health));
+            Assert.That(game.Peas, Has.Member(projectile));
+            Invoke(game, "AdvanceAdventureProjectiles", .01f, true);
+            Assert.That(zombie.Health, Is.EqualTo(health - 20f));
+            Assert.That(game.Peas, Has.No.Member(projectile));
         }
 
         /// <summary>Checks logical body collision does not shrink with the original small-vehicle artwork.</summary>

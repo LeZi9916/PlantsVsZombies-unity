@@ -593,8 +593,8 @@ namespace PlantsVsZombies.Simulation
                         && (p.SourceKind != PlantKind.Cactus || z.Airborne == p.HitsAir && AdventureZombieTargetingRules.CanBeAutoTargeted(z, PlantKind.Cactus))
                         && (!z.Submerged || p.Lobbed) && (!p.Lobbed || z.PresentationNativePhase != 59
                             || p.PresentationLobContactHeight > 45f)
-                        && (p.Homing ? AdventureCattailCollides(p, z) : p.Lobbed ? AdventureLobberCollides(p, beforeNativeX, z) : z.Kind == ZombieKind.Zomboni
-                        ? AdventureZomboniRules.ProjectileCollides(p, z)
+                        && (p.Homing ? AdventureCattailCollides(p, z) : p.Lobbed ? AdventureLobberCollides(p, beforeNativeX, z) : z.Kind == ZombieKind.Zomboni || z.Kind == ZombieKind.Catapult
+                        ? AdventureZomboniRules.ProjectileCollides(p, z, before)
                         : AdventurePuffShroomRules.IsShortRange(p.SourceKind) ? AdventurePuffShroomRules.Collides(p, z)
                         : z.X >= Math.Min(before, p.X) - 0.25f && z.X <= Math.Max(before, p.X) + 0.25f))
                     {

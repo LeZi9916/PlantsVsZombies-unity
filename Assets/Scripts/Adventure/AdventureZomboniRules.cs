@@ -4,7 +4,7 @@ using PlantsVsZombies.Simulation;
 
 namespace PlantsVsZombies.Adventure
 {
-    /// <summary>Shares the original PC ice vehicle damage artwork and projectile collision intervals.</summary>
+    /// <summary>Shares the original PC ice vehicle damage artwork and both vehicles' projectile collision intervals.</summary>
     public static class AdventureZomboniRules
     {
         /// <summary>Checks the original living vehicle threshold shared by body shaking and automatic health loss.</summary>
@@ -44,40 +44,36 @@ namespace PlantsVsZombies.Adventure
         }
 
         /// <summary>Checks the PC projectile interval against the original full-sized 153-pixel vehicle body.</summary>
-        /// <param name="projectile">The projectile at the end of this native update.</param>
-        /// <param name="zombie">The ice vehicle with its unchanged native logical body rectangle.</param>
+        /// <param name="projectile">The straight projectile whose original type selects its logical width.</param>
+        /// <param name="zombie">The ice vehicle or catapult with its unchanged native logical body rectangle.</param>
+        /// <param name="previousX">The projectile center in logical columns before this native motion update.</param>
         /// <returns>Whether the original horizontal projectile and vehicle rectangles touch or overlap.</returns>
-        public static bool ProjectileCollides(Pea projectile, Zombie zombie)
+        public static bool ProjectileCollides(Pea projectile, Zombie zombie, float previousX)
         {
             // PC EffectedByDamage rejects ZombieDying/Burned/Mowed before collision selection.
-            if (zombie.ZomboniState?.FlatTires == true
+            if (zombie.ZomboniState?.FlatTires == true || zombie.CatapultState?.FlatTires == true
                 || zombie.PresentationNativePhase >= 1 && zombie.PresentationNativePhase <= 3)
             {
                 return false;
             }
 
-            // PC Projectile::GetProjectileRect 0x47DFF0: image size never replaces the 40-pixel logical width.
-            var x = (int)(40f + projectile.X * 80f - 16f);
-            var left = x;
+            // PC 47CCB0 calls CheckForCollision before UpdateMotion stores mX; 47DFF0 reads that previous integer.
+            // Convert the retained sprite center back to mX; Torchwood preserves the original pea origin.
+            var puff = AdventurePuffShroomRules.IsShortRange(projectile.SourceKind) || projectile.SourceKind == PlantKind.ScaredyShroom;
+            var halfWidth = projectile.SourceKind == PlantKind.Cactus ? 15f : puff ? 16f : 14f;
+            var left = (int)(40f + previousX * 80f - halfWidth);
+            // PC GetProjectileRect 47DFF0 starts with the 40-pixel logical width, independent of image size.
             var width = 40;
             if (projectile.Fire)
             {
                 width = 30;
             }
-            else if (projectile.SourceKind == PlantKind.Cactus || projectile.SourceKind == PlantKind.Cattail)
+            else if (projectile.SourceKind == PlantKind.Cactus)
             {
                 left -= 25;
                 width += 25;
             }
-            else if (projectile.Lobbed && projectile.Splash)
-            {
-                left += 20;
-                width = 60;
-            }
-            else if (!projectile.Lobbed && (projectile.SourceKind == PlantKind.Peashooter
-                || projectile.SourceKind == PlantKind.SnowPea || projectile.SourceKind == PlantKind.Repeater
-                || projectile.SourceKind == PlantKind.Threepeater || projectile.SourceKind == PlantKind.SplitPea
-                || projectile.SourceKind == PlantKind.GatlingPea))
+            else if (AdventureTorchwoodRules.IsPea(projectile.SourceKind))
             {
                 left -= 15;
                 width += 15;
