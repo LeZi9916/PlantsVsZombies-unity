@@ -400,6 +400,86 @@ namespace PlantsVsZombies.Simulation
                 && AdventureLobberCollides(shot, previousX, zombie);
         }
 
+        /// <summary>Checks PC 47C5E0's vehicle and held-door/ladder exceptions to fireball splash.</summary>
+        /// <param name="zombie">The original direct or secondary target.</param>
+        /// <returns>Whether this target blocks the original fireball area damage path.</returns>
+        private static bool BlocksAdventureFireSplash(Zombie zombie)
+        {
+            return zombie.Kind == ZombieKind.Zomboni || zombie.Kind == ZombieKind.Catapult
+                || zombie.ShieldHealth > 0f && (zombie.Kind == ZombieKind.ScreenDoor || zombie.Kind == ZombieKind.Ladder);
+        }
+
+        /// <summary>Checks PC 47C6A0's original target admission for both passes of splash damage.</summary>
+        /// <param name="shot">The fireball or melon being resolved.</param>
+        /// <param name="nativeX">The preceding integer projectile origin.</param>
+        /// <param name="zombie">The potential splash target.</param>
+        /// <returns>Whether the original projectile rectangle and damage mask admit the target.</returns>
+        private bool AdventureSplashCollides(Pea shot, int nativeX, Zombie zombie)
+        {
+            if (!shot.Fire)
+            {
+                return AdventureMelonSplashCollides(shot, nativeX, zombie);
+            }
+            if (BlocksAdventureFireSplash(zombie) || zombie.Kind != ZombieKind.Boss && zombie.Row != shot.Row
+                || !_combatSystem.CanTakeAdventureAshDamage(zombie, 1U))
+            {
+                return false;
+            }
+            var body = AdventureZombieTargetingRules.BodyRectangle(zombie);
+            return Math.Min(nativeX + 100, body.X + body.Width) >= Math.Max(nativeX, body.X);
+        }
+
+        /// <summary>Runs PC 47C780's count-before-damage pass, integer crowd reduction and native per-target damage flags.</summary>
+        /// <param name="shot">The original fireball, melon or winter melon.</param>
+        /// <param name="primary">The direct victim, excluded from the secondary count.</param>
+        /// <param name="nativeX">The preceding integer projectile origin used by both native passes.</param>
+        private void ApplyAdventureSplashDamage(Pea shot, Zombie primary, int nativeX)
+        {
+            var count = 0;
+            foreach (var zombie in _world.Zombies)
+            {
+                if (zombie != primary && AdventureSplashCollides(shot, nativeX, zombie))
+                {
+                    count++;
+                }
+            }
+            var boss = _adventureModeRunner.Adventure.Boss;
+            var bossHit = boss != null && AdventureSplashCollides(shot, nativeX, boss.Target);
+            if (bossHit && boss!.Target != primary)
+            {
+                count++;
+            }
+            var damage = shot.Fire ? 40 : 80;
+            var secondary = damage / 3;
+            var limit = shot.Fire ? damage : 7 * damage;
+            var total = count * secondary;
+            if (total > limit)
+            {
+                secondary = Math.Max(1, damage * limit / (3 * total));
+            }
+            var flags = shot.IsSnow ? 6U : 2U;
+            if (bossHit)
+            {
+                _bossSystem.ApplyAdventureBossProjectileCold(shot);
+                _bossSystem.DamageAdventureBossWithFlags(boss!.Target == primary ? damage : secondary, flags);
+            }
+            foreach (var zombie in new PooledSnapshot<Zombie>(_world.Zombies))
+            {
+                if (AdventureSplashCollides(shot, nativeX, zombie))
+                {
+                    if (shot.IsSnow)
+                    {
+                        _coldSystem.ApplyAdventureChill(zombie);
+                    }
+                    else
+                    {
+                        _coldSystem.ApplyAdventureProjectileCold(shot, zombie);
+                    }
+                    _combatSystem.HitAdventureZombie(zombie, zombie == primary ? damage : secondary, true, flags);
+                }
+            }
+        }
+
         /// <summary>Performs can shoot adventure boss.</summary>
         /// <param name = "p">The p.</param>
         /// <returns>The resulting can shoot adventure boss.</returns>
@@ -628,21 +708,28 @@ namespace PlantsVsZombies.Simulation
                     hit = null;
                 }
                 var remove = false;
+                var nativeSplash = p.Fire || p.Lobbed && (p.SourceKind == PlantKind.MelonPult || p.SourceKind == PlantKind.WinterMelon);
+                var splashX = p.Lobbed ? beforeNativeX : (int)(40f + before * 80f - 14f);
                 if (hit != null)
                 {
                     _battlePresentationSystem.AdventurePresentationImpact(p, hit);
                     p.HitIds.Add(hit.Id);
-                    _coldSystem.ApplyAdventureProjectileCold(p, hit);
-                    _combatSystem.HitAdventureZombie(hit, p.Damage, p.PiercesShield);
-                    if (p.Splash)
+                    if (nativeSplash && (!p.Fire || !BlocksAdventureFireSplash(hit)))
                     {
-                        var melonSplash = p.Lobbed && (p.SourceKind == PlantKind.MelonPult || p.SourceKind == PlantKind.WinterMelon);
+                        ApplyAdventureSplashDamage(p, hit, splashX);
+                    }
+                    else
+                    {
+                        _coldSystem.ApplyAdventureProjectileCold(p, hit);
+                        _combatSystem.HitAdventureZombie(hit, p.Damage, p.PiercesShield);
+                    }
+                    if (p.Splash && !nativeSplash)
+                    {
                         foreach (Zombie other in new PooledSnapshot<Zombie>(_world.Zombies))
                         {
-                            if (other != hit && (melonSplash ? AdventureMelonSplashCollides(p, beforeNativeX, other)
-                                : !other.Hypnotized && !other.Airborne
+                            if (other != hit && !other.Hypnotized && !other.Airborne
                                 && !(other.Kind == ZombieKind.DolphinRider && (other.PresentationNativePhase == 52 || other.PresentationNativePhase == 54))
-                                && Math.Abs(other.Row - hit.Row) <= (p.Fire ? 0 : 1) && Math.Abs(other.X - hit.X) <= (p.Fire ? 0.5f : 1f)))
+                                && Math.Abs(other.Row - hit.Row) <= (p.Fire ? 0 : 1) && Math.Abs(other.X - hit.X) <= (p.Fire ? 0.5f : 1f))
                             {
                                 if (p.ChillSplash)
                                 {
@@ -660,8 +747,15 @@ namespace PlantsVsZombies.Simulation
                 if (bossHit && !remove)
                 {
                     _battlePresentationSystem.AdventurePresentationImpact(p, boss!.Target);
-                    _bossSystem.ApplyAdventureBossProjectileCold(p);
-                    _bossSystem.DamageAdventureBoss(p.Damage);
+                    if (nativeSplash)
+                    {
+                        ApplyAdventureSplashDamage(p, boss.Target, splashX);
+                    }
+                    else
+                    {
+                        _bossSystem.ApplyAdventureBossProjectileCold(p);
+                        _bossSystem.DamageAdventureBoss(p.Damage);
+                    }
                     remove = true;
                 }
 
