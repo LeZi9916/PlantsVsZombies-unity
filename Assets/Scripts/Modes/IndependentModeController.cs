@@ -758,21 +758,24 @@ namespace PlantsVsZombies.Modes
                 return true;
             }
 
-            for (var i = _owner.RequiredGame.Adventure.Coins.Count - 1; i >= 0; i--)
+            if (_owner.Router.CanCollectBoardPickups)
             {
-                if (_owner.Layout.AdventureCoinRect(_owner.RequiredGame.Adventure.Coins[i]).Contains(point))
+                for (var i = _owner.RequiredGame.Adventure.Coins.Count - 1; i >= 0; i--)
                 {
-                    _owner.RequiredGame.CollectAdventureCoin(_owner.RequiredGame.Adventure.Coins[i]);
-                    return true;
+                    if (_owner.Layout.AdventureCoinRect(_owner.RequiredGame.Adventure.Coins[i]).Contains(point))
+                    {
+                        _owner.RequiredGame.CollectAdventureCoin(_owner.RequiredGame.Adventure.Coins[i]);
+                        return true;
+                    }
                 }
-            }
 
-            for (var i = _owner.RequiredGame.Suns.Count - 1; i >= 0; i--)
-            {
-                if (ModeSunRect(_owner.RequiredGame.Suns[i]).Contains(point))
+                for (var i = _owner.RequiredGame.Suns.Count - 1; i >= 0; i--)
                 {
-                    _owner.RequiredGame.CollectSun(_owner.RequiredGame.Suns[i]);
-                    return true;
+                    if (ModeSunRect(_owner.RequiredGame.Suns[i]).Contains(point))
+                    {
+                        _owner.RequiredGame.CollectSun(_owner.RequiredGame.Suns[i]);
+                        return true;
+                    }
                 }
             }
 

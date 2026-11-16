@@ -3,6 +3,7 @@ using System.Reflection;
 using NUnit.Framework;
 using PlantsVsZombies.Adventure;
 using PlantsVsZombies.Game;
+using PlantsVsZombies.Modes;
 using PlantsVsZombies.Simulation;
 using UnityEngine;
 using PlantsVsZombies.BoardUI;
@@ -149,6 +150,158 @@ namespace PlantsVsZombies.Tests.PlayMode
                 zombie.PresentationNativePhase = phase;
                 Assert.That(GamePresenter.HasAdventureZombieShadow(zombie, false), Is.False);
             }
+        }
+
+        /// <summary>Checks held bank cards plant through overlapping drops, retaining selection after a rejected placement.</summary>
+        /// <param name="independentMode">Whether the click uses the survival controller instead of adventure.</param>
+        /// <param name="occupied">Whether an existing plant rejects the placement.</param>
+        [TestCase(false, false)]
+        [TestCase(false, true)]
+        [TestCase(true, false)]
+        [TestCase(true, true)]
+        public void HeldSeedClicksDoNotCollectDrops(bool independentMode, bool occupied)
+        {
+            ConfigurePickupBoard(independentMode);
+            if (occupied)
+            {
+                SimulationFixture.Plants(_owner.RequiredGame).Add(new Plant
+                {
+                    Id = 95, Kind = PlantKind.Wallnut, Row = 2, Column = 3, Layer = PlantLayer.Main, Health = 4000f
+                });
+            }
+
+            ClickBoard(independentMode ? _owner.IndependentModes.ModeSeedRect(0).center : _owner.Layout.AdventureSeedRect(0).center);
+            Assert.That(_owner._selected, Is.EqualTo(0));
+            var point = AddOverlappingDrops();
+            ClickBoard(point);
+            AssertDropsRemain();
+            Assert.That(_owner._selected, Is.EqualTo(occupied ? 0 : -1));
+            Assert.That(_owner.RequiredGame.Plants[0].Kind, Is.EqualTo(occupied ? PlantKind.Wallnut : PlantKind.Peashooter));
+            _owner.Router.CancelBoardSelection();
+            AssertDropsCanBeCollected(point);
+        }
+
+        /// <summary>Checks a real cannon selection fires through overlapping drops and restores ordinary pickup input afterward.</summary>
+        /// <param name="independentMode">Whether the click uses the survival controller instead of adventure.</param>
+        [TestCase(false)]
+        [TestCase(true)]
+        public void CannonAimClicksFireInsteadOfCollectingDrops(bool independentMode)
+        {
+            ConfigurePickupBoard(independentMode);
+            var cannon = new Plant
+            {
+                Id = 73, Kind = PlantKind.CobCannon, Row = 1, Column = 1, ColumnSpan = 2,
+                Layer = PlantLayer.Main, Health = 300f, CannonPhase = CobCannonPhase.Ready
+            };
+            SimulationFixture.Plants(_owner.RequiredGame).Add(cannon);
+            ClickBoard(new Vector2(160f, 200f));
+            Assert.That(_owner.RequiredGame.Adventure.SelectedCobCannonId, Is.EqualTo(cannon.Id));
+            var point = AddOverlappingDrops();
+            ClickBoard(point);
+            AssertDropsRemain();
+            Assert.That(cannon.CannonPhase, Is.EqualTo(CobCannonPhase.Firing));
+            Assert.That(_owner.RequiredGame.Adventure.SelectedCobCannonId, Is.Null);
+            AssertDropsCanBeCollected(point);
+        }
+
+        /// <summary>Checks carried conveyor packets obey the same pickup restriction as bank cards.</summary>
+        [Test]
+        public void HeldPacketClicksPlantInsteadOfCollectingDrops()
+        {
+            ConfigurePickupBoard(false);
+            var packet = new AdventurePacket { Id = 7, Kind = PlantKind.Peashooter };
+            _owner.RequiredGame.Adventure._packets.Add(packet);
+            _owner.AdventureBoard.SelectAdventurePacket(packet);
+            var point = AddOverlappingDrops();
+            ClickBoard(point);
+            AssertDropsRemain();
+            Assert.That(_owner.RequiredGame.Plants[0].Kind, Is.EqualTo(PlantKind.Peashooter));
+            Assert.That(_owner.AdventureBoard._selectedAdventurePacket, Is.EqualTo(-1));
+            AssertDropsCanBeCollected(point);
+        }
+
+        /// <summary>Checks the legacy board also preserves sun beneath a held seed.</summary>
+        [Test]
+        public void LegacyHeldSeedDoesNotCollectSun()
+        {
+            _owner._game = new GameSimulation(new GameRules(), 9151);
+            _owner._currentView = PvZGame.ScreenView.Board;
+            _owner._deck.Clear();
+            _owner._deck.Add(PlantKind.Peashooter);
+            _owner._selected = 0;
+            var sun = new global::PlantsVsZombies.Simulation.Sun { X = 3.5f, Y = 2.4f };
+            SimulationFixture.Suns(_owner.RequiredGame).Add(sun);
+            ClickBoard(BoardLayout.SunRect(sun).center);
+            Assert.That(_owner.RequiredGame.Suns.Contains(sun), Is.True);
+            Assert.That(_owner.RequiredGame.Plants, Has.Count.EqualTo(1));
+        }
+
+        /// <summary>Prepares an unlocked bank and playing board without persistence or scene dependencies.</summary>
+        /// <param name="independentMode">Whether to create a daytime endless session.</param>
+        private void ConfigurePickupBoard(bool independentMode)
+        {
+            if (independentMode)
+            {
+                var session = new ModeSession(11, AdventureSeedAccess.DevelopmentAll());
+                _owner.IndependentModes._modeSession = session;
+                _owner._game = session.Game;
+                Assert.That(session.Game.ChooseDefaultAdventureSeeds(), Is.True);
+                session.Phase = ModePhase.Playing;
+            }
+
+            _owner._currentView = PvZGame.ScreenView.Board;
+            _owner._choosingSeeds = false;
+            _owner._selected = -1;
+            _owner._deck.Clear();
+            _owner._deck.Add(PlantKind.Peashooter);
+            _owner.RequiredGame.Adventure.SelectedSeeds = new[] { PlantKind.Peashooter };
+            typeof(GameSimulation).GetProperty(nameof(GameSimulation.SunAmount))!.SetValue(_owner.RequiredGame, 1000);
+            _owner.RequiredGame.ResetAdventureWaveSchedule(100000, false, false);
+            SimulationFixture.Plants(_owner.RequiredGame).Clear();
+            var cooldowns = (int[])SimulationInspection.GetField("_seedCooldownTicks", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(_owner.RequiredGame)!;
+            cooldowns[(int)PlantKind.Peashooter] = 0;
+        }
+
+        /// <summary>Overlaps a sun and a gold coin at a legal planting and cannon target cell.</summary>
+        /// <returns>The logical click point inside both pickups.</returns>
+        private Vector2 AddOverlappingDrops()
+        {
+            var sun = new global::PlantsVsZombies.Simulation.Sun { X = 3.5f, Y = 2.4f };
+            SimulationFixture.Suns(_owner.RequiredGame).Add(sun);
+            var point = _owner.Layout.AdventureSunRect(sun).center;
+            var coin = _owner.RequiredGame.RequiredSpawnAdventureCoin(AdventureCoinKind.Gold, 3.5f, 2f);
+            coin.PresentationX = point.x - 20f;
+            coin.PresentationY = point.y - 20f;
+            return point;
+        }
+
+        /// <summary>Checks both pickups stayed on the board without entering collection.</summary>
+        private void AssertDropsRemain()
+        {
+            Assert.That(_owner.RequiredGame.Suns, Has.Count.EqualTo(1));
+            Assert.That(_owner.RequiredGame.Suns[0].PresentationPickup.Collecting, Is.False);
+            Assert.That(_owner.RequiredGame.Adventure.Coins, Has.Count.EqualTo(1));
+            Assert.That(_owner.RequiredGame.Adventure.Coins[0].IsBeingCollected, Is.False);
+        }
+
+        /// <summary>Checks ordinary clicks collect the preserved coin and then the sun in existing priority order.</summary>
+        /// <param name="point">The shared pickup point after the cursor returns to normal.</param>
+        private void AssertDropsCanBeCollected(Vector2 point)
+        {
+            ClickBoard(point);
+            Assert.That(_owner.RequiredGame.Adventure.Coins[0].IsBeingCollected, Is.True);
+            Assert.That(_owner.RequiredGame.Suns, Has.Count.EqualTo(1));
+            Assert.That(_owner.RequiredGame.Suns[0].PresentationPickup.Collecting, Is.False);
+            ClickBoard(point);
+            Assert.That(_owner.RequiredGame.Suns[0].PresentationPickup.Collecting, Is.True);
+        }
+
+        /// <summary>Routes a click through the production board dispatcher for the current game type.</summary>
+        /// <param name="point">The logical eight-hundred-by-six-hundred pointer coordinate.</param>
+        private void ClickBoard(Vector2 point)
+        {
+            typeof(GameInputRouter).GetMethod("HandleClick", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .Invoke(_owner.Router, new object[] { point });
         }
 
         /// <summary>Routes one logical click directly through the production adventure input handler.</summary>

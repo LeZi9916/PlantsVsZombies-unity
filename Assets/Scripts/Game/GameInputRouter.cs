@@ -31,6 +31,12 @@ namespace PlantsVsZombies.Game
             _owner = owner;
         }
 
+        /// <summary>Gets whether manual pickup clicks can run without interrupting a carried seed or cannon aiming.</summary>
+        internal bool CanCollectBoardPickups => _owner._selected < 0
+            && _owner.AdventureBoard._selectedAdventurePacket < 0
+            && (!_owner.RequiredGame.IsAdventure || !_owner.RequiredGame.Adventure.SelectedCobCannonId.HasValue)
+            && (!_owner.RequiredGame.IsExperimentalLevelOne || !_owner.RequiredGame.LevelOneSelectedSeed.HasValue);
+
         /// <summary>Stores smoke pointer.</summary>
         private Vector2? _smokePointer = null; // Explicit Player scenarios only; normal input uses the frame snapshot.
         /// <summary>Prevents the same Escape press from reaching the screen behind a dismissed continuation.</summary>
@@ -327,25 +333,28 @@ namespace PlantsVsZombies.Game
                 return;
             }
 
-            if (_owner.RequiredGame.LevelOneUsesNativeSkySunRules)
+            if (CanCollectBoardPickups)
             {
-                int x = Mathf.FloorToInt(point.x), y = Mathf.FloorToInt(point.y);
-                for (var i = _owner.RequiredGame.LevelOneNativeSkySuns.Count - 1; i >= 0; i--)
+                if (_owner.RequiredGame.LevelOneUsesNativeSkySunRules)
                 {
-                    var sun = _owner.RequiredGame.LevelOneNativeSkySuns[i];
-                    if (_owner.RequiredGame.TryClickLevelOneNativeSkySun(sun, x, y))
+                    int x = Mathf.FloorToInt(point.x), y = Mathf.FloorToInt(point.y);
+                    for (var i = _owner.RequiredGame.LevelOneNativeSkySuns.Count - 1; i >= 0; i--)
                     {
-                        return;
+                        var sun = _owner.RequiredGame.LevelOneNativeSkySuns[i];
+                        if (_owner.RequiredGame.TryClickLevelOneNativeSkySun(sun, x, y))
+                        {
+                            return;
+                        }
                     }
                 }
-            }
 
-            for (var i = _owner.RequiredGame.Suns.Count - 1; i >= 0; i--)
-            {
-                if (BoardLayout.SunRect(_owner.RequiredGame.Suns[i]).Contains(point))
+                for (var i = _owner.RequiredGame.Suns.Count - 1; i >= 0; i--)
                 {
-                    _owner.RequiredGame.CollectSun(_owner.RequiredGame.Suns[i]);
-                    return;
+                    if (BoardLayout.SunRect(_owner.RequiredGame.Suns[i]).Contains(point))
+                    {
+                        _owner.RequiredGame.CollectSun(_owner.RequiredGame.Suns[i]);
+                        return;
+                    }
                 }
             }
 

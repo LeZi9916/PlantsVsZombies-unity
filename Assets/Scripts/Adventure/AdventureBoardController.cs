@@ -404,25 +404,28 @@ namespace PlantsVsZombies.Adventure
                 return;
             }
 
-            for (var i = board.Coins.Count - 1; i >= 0; i--)
+            if (_owner.Router.CanCollectBoardPickups)
             {
-                if (_owner.Layout.AdventureCoinRect(board.Coins[i]).Contains(point))
+                for (var i = board.Coins.Count - 1; i >= 0; i--)
                 {
-                    if (!_owner.RequiredGame.CollectAdventureCoin(board.Coins[i]) && _owner.Campaign._adventureCampaign != null && _owner.Campaign._adventureCampaign.LastPersistenceError != null)
+                    if (_owner.Layout.AdventureCoinRect(board.Coins[i]).Contains(point))
                     {
-                        AdventureFeedback("金币尚未保存：" + _owner.Campaign._adventureCampaign.LastPersistenceError, 5f);
+                        if (!_owner.RequiredGame.CollectAdventureCoin(board.Coins[i]) && _owner.Campaign._adventureCampaign != null && _owner.Campaign._adventureCampaign.LastPersistenceError != null)
+                        {
+                            AdventureFeedback("金币尚未保存：" + _owner.Campaign._adventureCampaign.LastPersistenceError, 5f);
+                        }
+
+                        return;
                     }
-
-                    return;
                 }
-            }
 
-            for (var i = _owner.RequiredGame.Suns.Count - 1; i >= 0; i--)
-            {
-                if (_owner.Layout.AdventureSunRect(_owner.RequiredGame.Suns[i]).Contains(point))
+                for (var i = _owner.RequiredGame.Suns.Count - 1; i >= 0; i--)
                 {
-                    _owner.RequiredGame.CollectSun(_owner.RequiredGame.Suns[i]);
-                    return;
+                    if (_owner.Layout.AdventureSunRect(_owner.RequiredGame.Suns[i]).Contains(point))
+                    {
+                        _owner.RequiredGame.CollectSun(_owner.RequiredGame.Suns[i]);
+                        return;
+                    }
                 }
             }
 
