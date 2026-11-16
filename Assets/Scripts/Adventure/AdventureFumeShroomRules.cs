@@ -42,8 +42,10 @@ namespace PlantsVsZombies.Adventure
         /// <returns>Whether the zombie passes the native state and rectangle checks.</returns>
         private static bool CanTarget(Plant plant, Zombie zombie, bool requirePositiveOverlap)
         {
-            if (zombie == null || zombie.Hypnotized || zombie.Row != plant.Row || zombie.Airborne || zombie.Submerged
-                || zombie.DropRemaining > 0f || zombie.Kind == ZombieKind.Bungee
+            // PC 475AA0/46D030 ignore the boss row; 54D810 admits bungee phases 6/7 and rejects vault phase 12.
+            // Production callers also apply the complete native range mask nine through CombatSystem.
+            if (zombie == null || zombie.Hypnotized || zombie.Kind != ZombieKind.Boss && zombie.Row != plant.Row || zombie.Airborne || zombie.Submerged
+                || zombie.DropRemaining > 0f || zombie.PresentationNativePhase == 12
                 || !AdventureZombieTargetingRules.CanBeAutoTargeted(zombie, plant.Kind))
             {
                 return false;

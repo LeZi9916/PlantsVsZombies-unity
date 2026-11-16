@@ -121,9 +121,16 @@ namespace PlantsVsZombies.Simulation
         internal Zombie? FindAdventureFumeTarget(Plant plant)
         {
             Zombie? target = null;
+            // PC allocates the boss before summoned zombies, retaining its priority on equal body-left coordinates.
+            var boss = _world._adventure?.Boss;
+            if (boss?.HeadVulnerable == true && _combatSystem.CanTakeAdventureAshDamage(boss.Target, 9U)
+                && AdventureFumeShroomRules.CanTarget(plant, boss.Target))
+            {
+                target = boss.Target;
+            }
             foreach (var zombie in _world.Zombies.InRow(plant.Row))
             {
-                if (AdventureFumeShroomRules.CanTarget(plant, zombie)
+                if (_combatSystem.CanTakeAdventureAshDamage(zombie, 9U) && AdventureFumeShroomRules.CanTarget(plant, zombie)
                     && (target == null || AdventureZombieTargetingRules.BodyRectangle(zombie).X < AdventureZombieTargetingRules.BodyRectangle(target).X))
                 {
                     target = zombie;

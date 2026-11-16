@@ -259,9 +259,17 @@ namespace PlantsVsZombies.Simulation
         /// <param name="plant">The Fume-shroom whose attack has reached its firing tick.</param>
         internal void FireAdventureFume(Plant plant)
         {
+            // PC DoRowAreaDamage uses range mask nine and damage flags two, with the first-allocated boss first.
+            var boss = _adventureModeRunner.Adventure.Boss;
+            if (boss?.HeadVulnerable == true && _combatSystem.CanTakeAdventureAshDamage(boss.Target, 9U)
+                && AdventureFumeShroomRules.CanDamage(plant, boss.Target))
+            {
+                _bossSystem.DamageAdventureBossWithFlags(20f, 2U);
+                _zombieFeedbackSystem.RequestAdventureZombieFoley(1);
+            }
             foreach (var zombie in new PooledSnapshot<Zombie>(_world.Zombies))
             {
-                if (AdventureFumeShroomRules.CanDamage(plant, zombie))
+                if (_combatSystem.CanTakeAdventureAshDamage(zombie, 9U) && AdventureFumeShroomRules.CanDamage(plant, zombie))
                 {
                     _combatSystem.HitAdventureZombie(zombie, 20f, true, 2U);
                     _zombieFeedbackSystem.RequestAdventureZombieFoley(1);
