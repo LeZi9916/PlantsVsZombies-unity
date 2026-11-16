@@ -839,6 +839,7 @@ namespace PlantsVsZombies.Game
         {
             if (DrawModesInterface())
             {
+                DrawAdventureCobCannonTarget();
                 return;
             }
 

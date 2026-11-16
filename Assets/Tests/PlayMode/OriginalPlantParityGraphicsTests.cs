@@ -148,6 +148,51 @@ namespace PlantsVsZombies.Tests.PlayMode
             Save(fixture, "cob-original-crosshair.png");
         }
 
+        /// <summary>Checks real cannon clicks reach the shared native cursor through survival and independent-mode interface dispatch.</summary>
+        /// <returns>Actual interface frames compared with the original centered seventy-by-sixty-three cursor at alpha 127.</returns>
+        [UnityTest]
+        public IEnumerator ModeCannonClickDisplaysTheOriginalCrosshairAndCancelRemovesIt()
+        {
+            foreach (var mode in new[] { 1, 13, 15, 31 })
+            {
+                using var fixture = new OriginalStormGraphicsTests.StormFixture(ModeCatalog.Get(mode).BoardLevel);
+                var owner = fixture.Owner;
+                var session = new ModeSession(mode, AdventureSeedAccess.DevelopmentAll());
+                owner.IndependentModes._modeSession = session;
+                owner._game = session.Game;
+                owner._currentView = PvZGame.ScreenView.Board;
+                owner._selected = -1;
+                owner._choosingSeeds = false;
+                Assert.That(session.Game.ChooseDefaultAdventureSeeds(), Is.True);
+                session.Phase = ModePhase.Playing;
+                session.Game.ResetAdventureWaveSchedule(100000, false, false);
+                SimulationFixture.Plants(session.Game).Clear();
+                var cannon = new Plant { Id = 73, Kind = PlantKind.CobCannon, Row = 2, Column = 3,
+                    ColumnSpan = 2, Layer = PlantLayer.Main, Health = 300f, CannonPhase = CobCannonPhase.Ready };
+                SimulationFixture.Plants(session.Game).Add(cannon);
+                var click = new Vector2(320f, 80f + 2f * owner.Layout.AdventurePitch + owner.Layout.AdventureSlope(3) + 40f);
+                owner.AdventureBoard._adventurePointer = click;
+                Assert.That(owner.IndependentModes.TryHandleModeClick(click), Is.True);
+                Assert.That(session.Game.Adventure.SelectedCobCannonId, Is.EqualTo(cannon.Id));
+                Assert.That(cannon.CannonPhase, Is.EqualTo(CobCannonPhase.Aiming));
+                owner.AdventureBoard._adventurePointer = new Vector2(493f, 327f);
+                yield return fixture.Capture("DrawInterface");
+                var actual = fixture.Pixels.GetPixels32();
+                Assert.That(session.Game.CancelAdventureCobCannonAim(), Is.True);
+                yield return fixture.Capture("DrawInterface", () =>
+                {
+                    var previous = CanvasUI.Color;
+                    CanvasUI.Color = new Color(1f, 1f, 1f, 127f / 255f);
+                    Assert.That(fixture.Animations.DrawNativeImage(owner.Textures.RequiredLoadImage("CobCannon_target.png"),
+                        new Rect(458f, 295.5f, 70f, 63f), new Rect(0f, 0f, 1f, 1f)), Is.True);
+                    CanvasUI.Color = previous;
+                });
+                Assert.That(fixture.Pixels.GetPixels32(), Is.EqualTo(actual), "Mode " + mode + " must draw the native cursor after an actual cannon click.");
+                yield return fixture.Capture("DrawInterface");
+                Assert.That(fixture.Pixels.GetPixels32(), Is.Not.EqualTo(actual), "Cancelling aim must remove the cursor.");
+            }
+        }
+
         /// <summary>Checks purple packet pixels and base-price-plus versus live bank-price labels.</summary>
         /// <returns>Original-resource card readback frames.</returns>
         [UnityTest]
