@@ -768,6 +768,8 @@ namespace PlantsVsZombies.Audio
         private GameSimulation? _zombiePartAudioGame;
         /// <summary>Stores zombie part audio serial, rise sound serial, and zombie sound read index.</summary>
         private int _zombiePartAudioSerial, _zombieRiseSoundSerial, _zombieSoundReadIndex;
+        /// <summary>Amortizes releasing consumed one-shot events while retaining a small diagnostic history.</summary>
+        private const int ConsumedSoundHistoryThreshold = 4096;
         /// <summary>Stores zombie part audio loading,  zombie foley ready.</summary>
         private bool _zombiePartAudioLoading, _zombieFoleyReady;
         /// <summary>Stores zombie foley random.</summary>
@@ -828,6 +830,11 @@ namespace PlantsVsZombies.Audio
                 }
 
                 PlayAdventureZombieFoley(evt);
+            }
+            if (_zombieSoundReadIndex >= ConsumedSoundHistoryThreshold)
+            {
+                _owner._game.Presentation.ZombieSounds.Clear();
+                _zombieSoundReadIndex = 0;
             }
         }
 

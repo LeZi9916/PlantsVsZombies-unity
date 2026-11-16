@@ -6,6 +6,7 @@ using NUnit.Framework;
 using PlantsVsZombies.Adventure;
 using PlantsVsZombies.Audio;
 using PlantsVsZombies.Game;
+using PlantsVsZombies.Simulation;
 using UnityEngine;
 using UnityEngine.TestTools;
 using PlantsVsZombies.Tests.Shared;
@@ -370,6 +371,46 @@ namespace PlantsVsZombies.Tests.PlayMode
         private static void PlayFoley(PvZGame game, int foley, int tick)
         {
             GameMemberReflection.Invoke(game, "PlayAdventureZombieFoley", new object[] { new AdventureZombieSoundEvent { Foley = foley, Tick = tick } });
+        }
+
+        /// <summary>Checks unread audio survives loading, consumed history is bounded, and subsequent requests are processed once.</summary>
+        /// <param name="restored">Whether an old checkpoint's retained requests were already heard before continuation.</param>
+        [TestCase(false)]
+        [TestCase(true)]
+        public void ConsumedSoundHistoryIsPrunedWithoutLosingNewRequests(bool restored)
+        {
+            var owner = CreateFoleyFixture(_pool, out var host);
+            try
+            {
+                owner._game = new GameSimulation(new GameRules { AdventureLevel = 11 }, 7529);
+                var effects = owner.Sounds;
+                effects._audioSource = _template;
+                GameMemberReflection.SetField(owner, "_zombiePartAudioLoading", true);
+                var history = owner._game.Presentation.ZombieSounds;
+                for (var index = 0; index < 4096; index++)
+                {
+                    history.Add(new AdventureZombieSoundEvent { Foley = 25, Resolved = true, SampleIndex = -1 });
+                }
+                if (restored)
+                {
+                    effects.AttachRestoredBoard();
+                }
+                effects.UpdateAdventureZombiePartAudio();
+                Assert.That(history, Has.Count.EqualTo(4096), "Loading must retain unread requests.");
+                GameMemberReflection.SetField(owner, "_zombieFoleyReady", true);
+                effects.UpdateAdventureZombiePartAudio();
+                Assert.That(history, Is.Empty);
+                var consumed = restored ? 0 : 4096;
+                Assert.That(GameMemberReflection.GetField(owner, "_zombiePartAudioSerial"), Is.EqualTo(consumed));
+                history.Add(new AdventureZombieSoundEvent { Foley = 25, Resolved = true, SampleIndex = -1 });
+                effects.UpdateAdventureZombiePartAudio();
+                effects.UpdateAdventureZombiePartAudio();
+                Assert.That(GameMemberReflection.GetField(owner, "_zombiePartAudioSerial"), Is.EqualTo(consumed + 1));
+            }
+            finally
+            {
+                UnityEngine.Object.Destroy(host);
+            }
         }
 
         /// <summary>Destroys only leased components and tolerates repeated disposal.</summary>

@@ -85,6 +85,7 @@ namespace PlantsVsZombies.Tests.Checkpoints
                 StoreChecks(battle.Game);
                 CampaignChecks();
                 EndLevelSaveChecks();
+                LongSessionSoundHistory();
                 Console.WriteLine("Checkpoint regressions passed.");
                 return 0;
             }
@@ -93,6 +94,27 @@ namespace PlantsVsZombies.Tests.Checkpoints
                 Console.Error.WriteLine(error);
                 return 1;
             }
+        }
+
+        /// <summary>Checks a long endless session cannot exhaust the graph limit through historical one-shot audio.</summary>
+        private static void LongSessionSoundHistory()
+        {
+            var game = new ModeSession(13).Game;
+            game.Presentation._plantSoundCues.Add(new AdventurePlantSoundCue { Ticks = 25, Foley = 3 });
+            var before = game.CaptureCheckpoint();
+            for (var index = 0; index < 130000; index++)
+            {
+                game.Presentation.ZombieSounds.Add(new AdventureZombieSoundEvent { Id = index, Foley = 3, Tick = index, Resolved = true });
+            }
+            var bytes = game.CaptureCheckpoint();
+            Require(before.SequenceEqual(bytes), "one-shot history does not grow checkpoint payload");
+            Require(game.Presentation.ZombieSounds.Count == 130000, "capture preserves live audio consumer state");
+            var restored = GameSimulation.RestoreCheckpoint(bytes);
+            Require(restored.Presentation.ZombieSounds.Count == 0, "restored history cannot replay old one-shots");
+            Require(restored.Presentation._plantSoundCues.Count == 1 && restored.Presentation._plantSoundCues[0].Ticks == 25,
+                "pending sound milestones remain authoritative");
+            RoundTrip(game, "long endless sound history");
+            StoreChecks(game);
         }
 
         /// <summary>Compares complete saved state and the subsequent deterministic simulation.</summary>

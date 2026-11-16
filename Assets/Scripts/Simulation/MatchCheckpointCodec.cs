@@ -8,6 +8,7 @@ using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.Serialization;
 using PlantsVsZombies.Randomness;
+using PlantsVsZombies.Adventure;
 
 namespace PlantsVsZombies.Simulation
 {
@@ -23,6 +24,8 @@ namespace PlantsVsZombies.Simulation
         private const int MaxEntries = 250000;
         /// <summary>Bounds recursive model nesting.</summary>
         private const int MaxDepth = 128;
+        /// <summary>Preserves the version-one sound-list field while omitting historical one-shot playback requests.</summary>
+        private static readonly List<AdventureZombieSoundEvent> s_emptySoundHistory = new List<AdventureZombieSoundEvent>();
         /// <summary>Indexes only types in the simulation's own assembly.</summary>
         private static readonly Dictionary<string, Type> s_types = CreateTypes();
         /// <summary>Caches the immutable schema selected for each model type.</summary>
@@ -171,7 +174,12 @@ namespace PlantsVsZombies.Simulation
                 }
                 foreach (var field in fields)
                 {
-                    Write(writer, field.GetValue(value), depth + 1);
+                    // Playback history is not continuation state. Foley RNG/voice state and pending sound milestones
+                    // retain their normal fields. Keep the live consumer's list and the existing file schema intact.
+                    var fieldValue = field.DeclaringType == typeof(AdventurePresentationState)
+                        && field.Name == nameof(AdventurePresentationState.ZombieSounds)
+                        ? s_emptySoundHistory : field.GetValue(value);
+                    Write(writer, fieldValue, depth + 1);
                 }
             }
         }
