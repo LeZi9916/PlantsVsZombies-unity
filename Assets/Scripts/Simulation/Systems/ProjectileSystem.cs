@@ -388,6 +388,18 @@ namespace PlantsVsZombies.Simulation
             return Math.Min(left + width, body.X + body.Width) >= Math.Max(left, body.X);
         }
 
+        /// <summary>Checks PC 47C6A0's melon splash rows, native damage mask and inclusive projectile/body overlap.</summary>
+        /// <param name="shot">The ordinary or winter melon retaining its original collision row.</param>
+        /// <param name="previousX">The preceding integer projectile position read by PC GetProjectileRect.</param>
+        /// <param name="zombie">The potential secondary splash target.</param>
+        /// <returns>Whether the target is admitted and touches the original sixty-pixel horizontal rectangle.</returns>
+        private bool AdventureMelonSplashCollides(Pea shot, int previousX, Zombie zombie)
+        {
+            return (zombie.Kind == ZombieKind.Boss || Math.Abs(zombie.Row - shot.Row) <= 1)
+                && _combatSystem.CanTakeAdventureAshDamage(zombie, 13U)
+                && AdventureLobberCollides(shot, previousX, zombie);
+        }
+
         /// <summary>Performs can shoot adventure boss.</summary>
         /// <param name = "p">The p.</param>
         /// <returns>The resulting can shoot adventure boss.</returns>
@@ -624,11 +636,13 @@ namespace PlantsVsZombies.Simulation
                     _combatSystem.HitAdventureZombie(hit, p.Damage, p.PiercesShield);
                     if (p.Splash)
                     {
+                        var melonSplash = p.Lobbed && (p.SourceKind == PlantKind.MelonPult || p.SourceKind == PlantKind.WinterMelon);
                         foreach (Zombie other in new PooledSnapshot<Zombie>(_world.Zombies))
                         {
-                            if (other != hit && !other.Hypnotized && !other.Airborne
+                            if (other != hit && (melonSplash ? AdventureMelonSplashCollides(p, beforeNativeX, other)
+                                : !other.Hypnotized && !other.Airborne
                                 && !(other.Kind == ZombieKind.DolphinRider && (other.PresentationNativePhase == 52 || other.PresentationNativePhase == 54))
-                                && Math.Abs(other.Row - hit.Row) <= (p.Fire ? 0 : 1) && Math.Abs(other.X - hit.X) <= (p.Fire ? 0.5f : 1f))
+                                && Math.Abs(other.Row - hit.Row) <= (p.Fire ? 0 : 1) && Math.Abs(other.X - hit.X) <= (p.Fire ? 0.5f : 1f)))
                             {
                                 if (p.ChillSplash)
                                 {
