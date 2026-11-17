@@ -24,6 +24,8 @@ namespace PlantsVsZombies.Reanimation
         private List<NativeThumbnailPart>? _recordingThumbnail;
         /// <summary>Gets how often a fixed thumbnail needed its original animation sampler.</summary>
         internal int ThumbnailPoseBuildCount { get; private set; }
+        /// <summary>Gets how many actor playback containers were constructed before reuse was available.</summary>
+        internal int NativePlaybackCreationCount { get; private set; }
         /// <summary>Gets the bounded number of retained fixed thumbnail poses.</summary>
         internal int ThumbnailPoseCount => _thumbnailPoses.Count;
 
@@ -58,6 +60,8 @@ namespace PlantsVsZombies.Reanimation
             public string Name = string.Empty;
             /// <summary>The renderer-local identity shared by exactly equal track names across source assets.</summary>
             public int PoseId;
+            /// <summary>The dense index within this immutable source asset, used by actor-local sample buffers.</summary>
+            public int LocalIndex;
             /// <summary>Caches immutable default visibility for every variant and equipment state.</summary>
             public int VariantVisibility;
             /// <summary>Identifies tracks whose default visibility follows the ground-zombie variant rules.</summary>
@@ -70,6 +74,8 @@ namespace PlantsVsZombies.Reanimation
             public Vector4 Basis;
             /// <summary>Whether the local affine basis has been computed at least once.</summary>
             public bool HasBasis;
+            /// <summary>The latest unblended exact local pose shared only when all sample inputs match.</summary>
+            public LocalPoseSample LocalSample;
         }
 
         /// <summary>Defines clip.</summary>
@@ -83,6 +89,25 @@ namespace PlantsVsZombies.Reanimation
             public Rect Bounds;
             /// <summary>Stores variant bounds.</summary>
             public readonly Dictionary<int, Rect> VariantBounds = new Dictionary<int, Rect>();
+        }
+
+        /// <summary>Retains one exact local sample, independently of destination transform and rendering feedback.</summary>
+        private struct LocalPoseSample
+        {
+            /// <summary>The exact source frame interpolation request.</summary>
+            internal FrameSample Time;
+            /// <summary>The exact source track owning this dense slot.</summary>
+            internal Track? Source;
+            /// <summary>The version of the actor-specific source blend.</summary>
+            internal uint BlendVersion;
+            /// <summary>The exact blend fraction used for this result.</summary>
+            internal float BlendFraction;
+            /// <summary>The sampled source frame and transform.</summary>
+            internal Frame Pose;
+            /// <summary>The local affine transform before any placement or source-track correction.</summary>
+            internal Matrix4x4 Matrix;
+            /// <summary>Whether this entry contains a completed sample.</summary>
+            internal bool Valid;
         }
 
         /// <summary>Defines native pose blend.</summary>
@@ -102,6 +127,166 @@ namespace PlantsVsZombies.Reanimation
             public Dictionary<int, Frame> From = new Dictionary<int, Frame>();
             /// <summary>Stores current.</summary>
             public readonly Dictionary<int, Frame> Current = new Dictionary<int, Frame>();
+            /// <summary>Invalidates exact local samples after the source blend changes.</summary>
+            internal uint BlendVersion;
+            /// <summary>Retains exact samples per track for this playback identity.</summary>
+            internal LocalPoseSample[] Samples = Array.Empty<LocalPoseSample>();
+        }
+
+        /// <summary>Associates inspection preparation with the simulation whose first frame will consume it.</summary>
+        /// <param name="session">The owning simulation or standalone presenter.</param>
+        internal void PreparePresentationSession(object session)
+        {
+            Hierarchy.PrepareSession(session);
+            PresentationPreparationGeneration++;
+            ReleasePreparedPages();
+            _stagePageLease = Assets.CreatePageLease();
+        }
+
+        /// <summary>Releases stage-only residency and preparation progress without changing animation or model state.</summary>
+        internal void ReleasePreparedPages()
+        {
+            _stagePageLease?.Dispose();
+            _stagePageLease = null;
+            _preparedPresentationImages.Clear();
+            foreach (var asset in _animations.Values)
+            {
+                asset.PreparedTrack = 0;
+                asset.PreparedFrame = 0;
+            }
+        }
+
+        /// <summary>Reserves at most a caller-selected number of objects without consuming simulation randomness.</summary>
+        /// <param name="actorCount">The anticipated actor count.</param>
+        /// <param name="spriteCount">The anticipated inspected source-node count.</param>
+        /// <param name="identityCount">The anticipated concurrent playback identities.</param>
+        /// <param name="maxObjects">The maximum additional resource objects to prepare in this call.</param>
+        /// <returns>Whether the bounded requested playback and inspection capacities are ready.</returns>
+        internal bool PreparePresentationCapacityStep(int actorCount, int spriteCount, int identityCount, int maxObjects = 1)
+        {
+            var target = Math.Min(Math.Max(0, identityCount - _nativePoseBlends.Count), MaximumRetainedPoseBlends);
+            foreach (var blend in _inactiveNativePoseBlends)
+            {
+                if (blend.Samples.Length < _maximumPreparedTracks)
+                {
+                    blend.Samples = new LocalPoseSample[_maximumPreparedTracks];
+                    blend.Current.EnsureCapacity(_maximumPreparedTracks * 2);
+                    blend.From.EnsureCapacity(_maximumPreparedTracks * 2);
+                    return false;
+                }
+            }
+            var remaining = Math.Max(1, maxObjects);
+            if (_inactiveNativePoseBlends.Count < target)
+            {
+                PreparePresentationCapacity(identityCount, 128);
+                remaining--;
+            }
+            var hierarchyReady = remaining > 0 && Hierarchy.PrepareCapacityStep(actorCount, spriteCount, remaining);
+            var sourcesReady = hierarchyReady && GetObjectRenderer().PrepareSourceCapacityStep(spriteCount, 128);
+            return _inactiveNativePoseBlends.Count >= target && hierarchyReady && sourcesReady;
+        }
+
+        /// <summary>Parses one known animation dependency before its first gameplay draw.</summary>
+        /// <param name="name">The immutable native animation asset name.</param>
+        /// <returns>Whether the source and its default clip are available.</returns>
+        internal bool PreparePresentationAsset(string name)
+        {
+            if (!TryGetClip(name, null, out var asset, out _))
+            {
+                return false;
+            }
+            _maximumPreparedTracks = Math.Max(_maximumPreparedTracks, asset.Tracks.Count);
+            return true;
+        }
+
+        /// <summary>Prepares a bounded number of distinct source images and their atlas pages for one animation.</summary>
+        /// <param name="name">The immutable source animation.</param>
+        /// <param name="maxImages">The maximum distinct images to prepare in this call.</param>
+        /// <returns>Whether all frame images for the asset have been prepared.</returns>
+        internal bool PreparePresentationAssetRegionsStep(string name, int maxImages = 1)
+        {
+            if (!TryGetClip(name, null, out var asset, out _))
+            {
+                return true;
+            }
+            var remaining = Math.Max(1, maxImages);
+            while (asset.PreparedTrack < asset.Tracks.Count)
+            {
+                var track = asset.Tracks[asset.PreparedTrack];
+                while (asset.PreparedFrame < track.Frames.Length)
+                {
+                    var image = track.Frames[asset.PreparedFrame++].Texture;
+                    if (image == null || !_preparedPresentationImages.Add(image))
+                    {
+                        continue;
+                    }
+                    image.GetRegionCount(new Rect(0f, 0f, 1f, 1f), true);
+                    image.GetRegionCount(new Rect(0f, 0f, 1f, 1f), false);
+                    if (_stagePageLease != null)
+                    {
+                        image.RetainPreparedPages(_stagePageLease);
+                    }
+                    remaining--;
+                    if (remaining == 0)
+                    {
+                        return false;
+                    }
+                }
+                asset.PreparedTrack++;
+                asset.PreparedFrame = 0;
+            }
+            return true;
+        }
+
+        /// <summary>Prepares a known optional particle image and retains its pages for the current stage.</summary>
+        /// <param name="resource">The original immutable image identifier.</param>
+        /// <returns>Whether existing source artwork was successfully prepared.</returns>
+        internal bool PreparePresentationImage(string resource)
+        {
+            if (!TryLoadTexture(resource, out var image))
+            {
+                return false;
+            }
+            image.GetRegionCount(new Rect(0f, 0f, 1f, 1f), true);
+            image.GetRegionCount(new Rect(0f, 0f, 1f, 1f), false);
+            if (_stagePageLease != null)
+            {
+                image.RetainPreparedPages(_stagePageLease);
+            }
+            return true;
+        }
+
+        /// <summary>Deduplicates immutable source images across caller-budgeted animation preparation steps.</summary>
+        private readonly HashSet<SpriteImage> _preparedPresentationImages = new HashSet<SpriteImage>();
+        /// <summary>The largest dense source-track table encountered before capacity preparation.</summary>
+        private int _maximumPreparedTracks;
+
+        /// <summary>Reserves playback and inspection capacity during a caller-budgeted loading step.</summary>
+        /// <param name="playbackCount">The required concurrent playback identities.</param>
+        /// <param name="trackCount">The expected tracks in each prepared playback.</param>
+        /// <param name="spriteNodes">The additional Editor inspection nodes to create in this step.</param>
+        internal void PreparePresentationCapacity(int playbackCount, int trackCount, int spriteNodes = 0)
+        {
+            _nativePoseBlends.EnsureCapacity(playbackCount);
+            if (_expiredNativePoseBlends.Capacity < playbackCount)
+            {
+                _expiredNativePoseBlends.Capacity = playbackCount;
+            }
+            _headInstanceKeys.EnsureCapacity(playbackCount);
+            if (_expiredHeadInstanceKeys.Capacity < playbackCount)
+            {
+                _expiredHeadInstanceKeys.Capacity = playbackCount;
+            }
+            if (_inactiveNativePoseBlends.Count < playbackCount && _inactiveNativePoseBlends.Count < MaximumRetainedPoseBlends)
+            {
+                var blend = new NativePoseBlend();
+                NativePlaybackCreationCount++;
+                blend.Current.EnsureCapacity(trackCount);
+                blend.From.EnsureCapacity(trackCount);
+                blend.Samples = new LocalPoseSample[Math.Max(trackCount, _maximumPreparedTracks)];
+                _inactiveNativePoseBlends.Push(blend);
+            }
+            Hierarchy.PrepareSpriteNodes(spriteNodes);
         }
 
         /// <summary>Performs blend native pose.</summary>
@@ -153,6 +338,10 @@ namespace PlantsVsZombies.Reanimation
             public readonly Dictionary<string, Clip> RequestedClips = new Dictionary<string, Clip>(StringComparer.OrdinalIgnoreCase);
             /// <summary>Stores attached bounds.</summary>
             public readonly Dictionary<(Clip Body, Clip? Head, Track Anchor), Rect> AttachedBounds = new Dictionary<(Clip Body, Clip? Head, Track Anchor), Rect>();
+            /// <summary>The next source track visited by incremental atlas preparation.</summary>
+            internal int PreparedTrack;
+            /// <summary>The next source frame visited by incremental atlas preparation.</summary>
+            internal int PreparedFrame;
         }
 
         /// <summary>Stores root.</summary>
@@ -161,6 +350,10 @@ namespace PlantsVsZombies.Reanimation
         private readonly Dictionary<string, string> _animationPaths = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         /// <summary>Shares logical images and generated resource text with the session.</summary>
         private SpriteAssetProvider? _assets;
+        /// <summary>The current stage's independent atlas residency ownership.</summary>
+        private SpritePageLease? _stagePageLease;
+        /// <summary>Identifies the latest independently prepared stage resource set.</summary>
+        internal int PresentationPreparationGeneration { get; private set; }
         /// <summary>Gets the lazily acquired resource provider.</summary>
         private SpriteAssetProvider Assets => _assets ??= SpriteAssetProvider.ForRoot(_root);
         /// <summary>Resolves repeated original image identifiers without allocating prefix substrings.</summary>
@@ -204,7 +397,7 @@ namespace PlantsVsZombies.Reanimation
         }
 
         /// <summary>Stores native surfaces.</summary>
-        private readonly Dictionary<string, NativeSurface> _nativeSurfaces = new Dictionary<string, NativeSurface>();
+        private readonly Dictionary<PresentationIdentity, NativeSurface> _nativeSurfaces = new Dictionary<PresentationIdentity, NativeSurface>();
         /// <summary>Gets the number of local capture surfaces retained by this animation renderer.</summary>
         internal int NativeSurfaceCount => _nativeSurfaces.Count;
         /// <summary>Reuses capture textures after their logical actors expire.</summary>
@@ -224,9 +417,9 @@ namespace PlantsVsZombies.Reanimation
         /// <summary>Gets the number of capture cameras and mesh pools retained independently of actor count.</summary>
         internal int NativeCaptureRendererCount => _nativeCaptureRenderers.Count;
         /// <summary>Caches stable blend identities for attached heads between presentation frames.</summary>
-        private readonly Dictionary<(string Instance, int Head), string> _headInstanceKeys = new Dictionary<(string Instance, int Head), string>();
+        private readonly Dictionary<(PresentationIdentity Instance, int Head), PresentationIdentity> _headInstanceKeys = new Dictionary<(PresentationIdentity Instance, int Head), PresentationIdentity>();
         /// <summary>Collects expired head identities without mutating their dictionary during traversal.</summary>
-        private readonly List<(string Instance, int Head)> _expiredHeadInstanceKeys = new List<(string Instance, int Head)>();
+        private readonly List<(PresentationIdentity Instance, int Head)> _expiredHeadInstanceKeys = new List<(PresentationIdentity Instance, int Head)>();
         /// <summary>Caches child asset names resolved from the immutable native definitions.</summary>
         private readonly Dictionary<int, string> _attachmentNames = new Dictionary<int, string>();
         /// <summary>Reuses each supported expanded potato-mine glow clip.</summary>
@@ -723,9 +916,8 @@ namespace PlantsVsZombies.Reanimation
                             if (trackAttachment != null && TrackIs(track.Name, hiddenAttachmentTrack))
                             {
                                 _nativeSpriteClip = NativePoolTrackClip(asset, isCombatBody, track.Name, originalMatrix, previousSpriteClip);
-                                var attachedPose = BlendNativePose(blend, track.PoseId,
-                                    Interpolate(GetFrame(track, current), GetFrame(track, next), fraction));
-                                trackAttachment(track.Name, layout * PartMatrix(attachedPose, track), originalMatrix, attachedPose.Alpha);
+                                var attachedPose = SampleLocalPose(track, new FrameSample { Current = current, Next = next, Fraction = fraction }, blend, out var attachedPart);
+                                trackAttachment(track.Name, layout * attachedPart, originalMatrix, attachedPose.Alpha);
                             }
                             continue;
                         }
@@ -745,7 +937,7 @@ namespace PlantsVsZombies.Reanimation
                             continue;
                         }
 
-                        var frame = BlendNativePose(blend, track.PoseId, Interpolate(from, GetFrame(track, next), fraction));
+                        var frame = SampleLocalPose(track, new FrameSample { Current = current, Next = next, Fraction = fraction }, blend, out var sampledPart);
                         if (frame.Alpha <= 0f)
                         {
                             continue;
@@ -753,7 +945,7 @@ namespace PlantsVsZombies.Reanimation
 
                         using var hierarchySprite = Hierarchy.BeginSprite(asset, trackIndex, track.Name);
 
-                        var part = PartMatrix(frame, track);
+                        var part = sampledPart;
                         if (trackOffset != null)
                         {
                             var offset = trackOffset(track.Name);
@@ -1050,7 +1242,7 @@ namespace PlantsVsZombies.Reanimation
         /// <param name="topCrop">The visible capture height, or a negative value for the complete surface.</param>
         /// <param name="producerAdditive">The source-colored brightness applied only while drawing the captured tracks.</param>
         /// <returns>Whether the capture callback submitted visible artwork.</returns>
-        public bool DrawNativeClipped(string key, Rect viewport, Func<bool> draw, bool freeze = false, bool grayscale = false, float additive = 0f, float topCrop = -1f, float producerAdditive = 0f)
+        internal bool DrawNativeClippedIdentity(PresentationIdentity key, Rect viewport, Func<bool> draw, bool freeze = false, bool grayscale = false, float additive = 0f, float topCrop = -1f, float producerAdditive = 0f)
         {
             return DrawNativeClippedCore(key, viewport, draw, freeze, grayscale, additive, topCrop, producerAdditive, true);
         }
@@ -1065,20 +1257,20 @@ namespace PlantsVsZombies.Reanimation
         /// <returns>Whether valid source pixels were submitted.</returns>
         /// <remarks>The callback must not have required per-draw side effects on other submitted surfaces.
         /// Actor contexts use the uncached path so inspection switches and live feedback remain immediate.</remarks>
-        internal bool DrawNativeCachedClipped(string key, Rect viewport, Func<bool> draw, long contentVersion,
+        internal bool DrawNativeCachedClipped(PresentationIdentity key, Rect viewport, Func<bool> draw, long contentVersion,
             float topCrop = -1f, bool grayscale = false)
         {
             if (_disposed)
             {
                 return Fail("The renderer has been disposed.");
             }
-            if (!IsValidDestination(viewport) || draw == null || string.IsNullOrEmpty(key))
+            if (!IsValidDestination(viewport) || draw == null || key.IsEmpty)
             {
                 return Fail("A valid native viewport, cache key and draw callback are required.");
             }
             if (SpriteHierarchy.CurrentSpriteObject != null || _nativeCombatZombie != null || _nativeSpriteAdditive)
             {
-                return DrawNativeClipped(key, viewport, draw, grayscale: grayscale, topCrop: topCrop);
+                return DrawNativeClippedIdentity(key, viewport, draw, grayscale: grayscale, topCrop: topCrop);
             }
             var color = SpriteDrawState.Color;
             var layoutVersion = _assets?.LayoutVersion ?? -1;
@@ -1092,7 +1284,7 @@ namespace PlantsVsZombies.Reanimation
                     {
                         return Fail("A native surface cache key was reused with a different viewport size in the same frame.");
                     }
-                    ReleaseNativeSurface(key);
+                    ReleaseNativeSurfaceIdentity(key);
                 }
                 else if (!surface.HasStaticContent || surface.ContentVersion != contentVersion
                     || !surface.ContentViewport.Equals(viewport) || !surface.ContentColor.Equals(color)
@@ -1130,7 +1322,7 @@ namespace PlantsVsZombies.Reanimation
         /// <param name="producerAdditive">The source brightness.</param>
         /// <param name="observeHierarchy">Whether actor visibility must be refreshed and invalidate frozen actor pixels.</param>
         /// <returns>Whether a complete source capture is ready for composition.</returns>
-        private bool DrawNativeClippedCore(string key, Rect viewport, Func<bool> draw, bool freeze, bool grayscale,
+        private bool DrawNativeClippedCore(PresentationIdentity key, Rect viewport, Func<bool> draw, bool freeze, bool grayscale,
             float additive, float topCrop, float producerAdditive, bool observeHierarchy)
         {
             using var objectScope = BeginObjectScope();
@@ -1139,7 +1331,7 @@ namespace PlantsVsZombies.Reanimation
                 return Fail("The renderer has been disposed.");
             }
 
-            if (!IsValidDestination(viewport) || draw == null || string.IsNullOrEmpty(key))
+            if (!IsValidDestination(viewport) || draw == null || key.IsEmpty)
             {
                 return Fail("A valid native viewport, cache key and draw callback are required.");
             }
@@ -2183,6 +2375,7 @@ namespace PlantsVsZombies.Reanimation
                 return;
             }
 
+            ReleasePreparedPages();
             _assets?.Dispose();
             _assets = null;
 
@@ -2222,6 +2415,7 @@ namespace PlantsVsZombies.Reanimation
             _thumbnailPoses.Clear();
             _recordingThumbnail = null;
             _texturesById.Clear();
+            _preparedPresentationImages.Clear();
             _animations.Clear();
             _poseTrackIds.Clear();
             _nativePoseBlends.Clear();
@@ -2527,7 +2721,7 @@ namespace PlantsVsZombies.Reanimation
                         continue;
                     }
 
-                    var frame = BlendNativePose(blend, track.PoseId, Interpolate(from, GetFrame(track, time.Next), time.Fraction));
+                    var frame = SampleLocalPose(track, time, blend, out var localMatrix);
                     if (frame.Alpha <= 0f)
                     {
                         continue;
@@ -2535,7 +2729,7 @@ namespace PlantsVsZombies.Reanimation
 
                     using var hierarchySprite = Hierarchy.BeginSprite(asset, trackIndex, track.Name);
 
-                    var sprite = NativeZombieTrackMatrix(parent * PartMatrix(frame, track), group);
+                    var sprite = NativeZombieTrackMatrix(parent * localMatrix, group);
                     if (!HasDrawableArea(sprite))
                     {
                         continue;
@@ -2554,6 +2748,60 @@ namespace PlantsVsZombies.Reanimation
             }
 
             return drawn;
+        }
+
+        /// <summary>Gets how many exact local samples were reused without interpolation or local transform reconstruction.</summary>
+        internal int LocalPoseCacheHitCount { get; private set; }
+
+        /// <summary>Reuses an exact local sample while keeping placement, visibility, image overrides and colors live.</summary>
+        /// <param name="track">The immutable parsed source track.</param>
+        /// <param name="time">The complete frame interpolation request.</param>
+        /// <param name="blend">The actor-owned playback blend, or null for unblended artwork.</param>
+        /// <param name="matrix">The exact sampled local transform.</param>
+        /// <returns>The same local frame as the original interpolation and blend path.</returns>
+        private Frame SampleLocalPose(Track track, FrameSample time, NativePoseBlend? blend, out Matrix4x4 matrix)
+        {
+            var cached = track.LocalSample;
+            if (blend != null)
+            {
+                if (track.LocalIndex >= blend.Samples.Length)
+                {
+                    Array.Resize(ref blend.Samples, Math.Max(track.LocalIndex + 1, Math.Max(16, blend.Samples.Length * 2)));
+                }
+                cached = blend.Samples[track.LocalIndex];
+            }
+            var version = blend?.BlendVersion ?? 0;
+            var fraction = blend?.Fraction ?? 1f;
+            if (cached.Valid && ReferenceEquals(cached.Source, track) && cached.Time.Current == time.Current && cached.Time.Next == time.Next
+                && cached.Time.Fraction == time.Fraction && cached.BlendVersion == version
+                && cached.BlendFraction == fraction)
+            {
+                if (blend != null)
+                {
+                    // Attachment probes and later transitions consume the latest displayed source pose.
+                    blend.Current[track.PoseId] = cached.Pose;
+                }
+                LocalPoseCacheHitCount++;
+                matrix = cached.Matrix;
+                return cached.Pose;
+            }
+            var pose = BlendNativePose(blend, track.PoseId,
+                Interpolate(GetFrame(track, time.Current), GetFrame(track, time.Next), time.Fraction));
+            matrix = PartMatrix(pose, track);
+            cached = new LocalPoseSample
+            {
+                Time = time, Source = track, BlendVersion = version, BlendFraction = fraction,
+                Pose = pose, Matrix = matrix, Valid = true
+            };
+            if (blend == null)
+            {
+                track.LocalSample = cached;
+            }
+            else
+            {
+                blend.Samples[track.LocalIndex] = cached;
+            }
+            return pose;
         }
 
         /// <summary>Performs has drawable area.</summary>
@@ -2722,7 +2970,7 @@ namespace PlantsVsZombies.Reanimation
                     poseId = _poseTrackIds.Count;
                     _poseTrackIds.Add(poseName, poseId);
                 }
-                var track = new Track { Name = poseName, PoseId = poseId, Frames = frames.ToArray() };
+                var track = new Track { Name = poseName, PoseId = poseId, LocalIndex = asset.Tracks.Count, Frames = frames.ToArray() };
                 asset.Tracks.Add(track);
                 if (!asset.TracksByName.ContainsKey(track.Name))
                 {
@@ -2802,6 +3050,25 @@ namespace PlantsVsZombies.Reanimation
             }
 
             return image;
+        }
+
+        /// <summary>Resolves optional artwork without throwing for ordinary missing resources.</summary>
+        /// <param name="imageId">The immutable source image identity.</param>
+        /// <param name="image">The cached logical source image when present.</param>
+        /// <returns>Whether an existing source image was resolved.</returns>
+        /// <exception cref="IOException">An existing source cannot be read or decoded.</exception>
+        private bool TryLoadTexture(string imageId, [NotNullWhen(true)] out SpriteImage? image)
+        {
+            if (_texturesById.TryGetValue(imageId, out image))
+            {
+                return true;
+            }
+            if (!Assets.TryLoadImage(imageId, out image))
+            {
+                return false;
+            }
+            _texturesById.Add(imageId, image);
+            return true;
         }
 
         /// <summary>Performs parse number.</summary>
@@ -3038,9 +3305,9 @@ namespace PlantsVsZombies.Reanimation
         private readonly Dictionary<string, int> _poseTrackIds = new Dictionary<string, int>(StringComparer.Ordinal);
 
         /// <summary>Stores native pose blends.</summary>
-        private readonly Dictionary<string, NativePoseBlend> _nativePoseBlends = new Dictionary<string, NativePoseBlend>();
+        private readonly Dictionary<PresentationIdentity, NativePoseBlend> _nativePoseBlends = new Dictionary<PresentationIdentity, NativePoseBlend>();
         /// <summary>Collects unseen blend identities before retiring them from the live dictionary.</summary>
-        private readonly List<string> _expiredNativePoseBlends = new List<string>();
+        private readonly List<PresentationIdentity> _expiredNativePoseBlends = new List<PresentationIdentity>();
         /// <summary>Reuses a bounded number of cleared per-track blend dictionaries for newly visible actors.</summary>
         private readonly Stack<NativePoseBlend> _inactiveNativePoseBlends = new Stack<NativePoseBlend>();
 
@@ -3085,7 +3352,9 @@ namespace PlantsVsZombies.Reanimation
         private void ReturnNativePoseBlend(NativePoseBlend blend)
         {
             blend.From.Clear();
+            blend.BlendVersion++;
             blend.Current.Clear();
+            Array.Clear(blend.Samples, 0, blend.Samples.Length);
             blend.SourcePoseVersion = 0;
             if (_inactiveNativePoseBlends.Count < MaximumRetainedPoseBlends)
             {
@@ -3097,17 +3366,17 @@ namespace PlantsVsZombies.Reanimation
         /// <param name="instance">The owning actor's stable presentation identity.</param>
         /// <param name="head">The head's index in the actor's attachment list.</param>
         /// <returns>The cached head identity, or null when blending has no actor identity.</returns>
-        private string? GetHeadInstanceKey(string? instance, int head)
+        private PresentationIdentity GetHeadInstanceKey(PresentationIdentity instance, int head)
         {
-            if (instance == null)
+            if (instance.IsEmpty)
             {
-                return null;
+                return default;
             }
 
             var identity = (instance, head);
             if (!_headInstanceKeys.TryGetValue(identity, out var key))
             {
-                key = instance + "-head-" + head;
+                key = instance.WithAttachment(head);
                 _headInstanceKeys.Add(identity, key);
             }
 
@@ -3120,9 +3389,9 @@ namespace PlantsVsZombies.Reanimation
         /// <param name = "seconds">The seconds.</param>
         /// <param name = "ticks">The ticks.</param>
         /// <returns>The resulting prepare native blend.</returns>
-        private NativePoseBlend? PrepareNativeBlend(string? key, string? animation, float seconds, int ticks)
+        private NativePoseBlend? PrepareNativeBlend(PresentationIdentity key, string? animation, float seconds, int ticks)
         {
-            if (string.IsNullOrEmpty(key))
+            if (key.IsEmpty)
             {
                 return null;
             }
@@ -3130,7 +3399,15 @@ namespace PlantsVsZombies.Reanimation
             NativePoseBlend blend;
             if (!_nativePoseBlends.TryGetValue(key, out blend))
             {
-                blend = _inactiveNativePoseBlends.Count > 0 ? _inactiveNativePoseBlends.Pop() : new NativePoseBlend();
+                if (_inactiveNativePoseBlends.Count > 0)
+                {
+                    blend = _inactiveNativePoseBlends.Pop();
+                }
+                else
+                {
+                    blend = new NativePoseBlend();
+                    NativePlaybackCreationCount++;
+                }
                 blend.Animation = animation;
                 blend.StartedAt = seconds;
                 blend.Fraction = 1f;
@@ -3141,6 +3418,7 @@ namespace PlantsVsZombies.Reanimation
                 // PC PlayReanim 0x4830B0 starts a fresh blend even when the named clip is unchanged.
                 // Normal loops wrap only in NativeSeconds, after this unwrapped playback clock is inspected.
                 blend.From.Clear();
+                blend.BlendVersion++;
                 foreach (var pose in blend.Current)
                 {
                     blend.From.Add(pose.Key, pose.Value);
@@ -3162,9 +3440,9 @@ namespace PlantsVsZombies.Reanimation
         /// <param name="version">The simulation-owned reset version, changed once for each source-pose transition.</param>
         /// <param name="lastFrame">Whether the completed final frame is required instead of the first frame.</param>
         /// <returns>Whether this renderer already retained or successfully sampled the requested source pose.</returns>
-        internal bool EnsureNativePlaybackPose(string? name, string? instanceKey, string animation, int version, bool lastFrame = false)
+        internal bool EnsureNativePlaybackPose(string? name, PresentationIdentity instanceKey, string animation, int version, bool lastFrame = false)
         {
-            if (string.IsNullOrEmpty(instanceKey) || version <= 0)
+            if (instanceKey.IsEmpty || version <= 0)
             {
                 return false;
             }
@@ -3183,6 +3461,7 @@ namespace PlantsVsZombies.Reanimation
             var frame = lastFrame ? clip.Start + clip.Count - 1 : clip.Start;
             var blend = PrepareNativeBlend(instanceKey, animation, seconds, 0)!;
             blend.From.Clear();
+            blend.BlendVersion++;
             blend.Current.Clear();
             blend.Animation = animation;
             blend.StartedAt = seconds;
@@ -3208,9 +3487,9 @@ namespace PlantsVsZombies.Reanimation
         /// <param name="blendTicks">The native blend length in hundred-Hz updates.</param>
         /// <param name="version">The simulation-owned transition version, consumed once for this actor.</param>
         /// <returns>Whether the requested transition is already retained or was initialized successfully.</returns>
-        internal bool EnsureNativePlaybackTransition(string? name, string? instanceKey, string sourceAnimation, string animation, int blendTicks, int version)
+        internal bool EnsureNativePlaybackTransition(string? name, PresentationIdentity instanceKey, string sourceAnimation, string animation, int blendTicks, int version)
         {
-            if (string.IsNullOrEmpty(instanceKey) || version <= 0)
+            if (instanceKey.IsEmpty || version <= 0)
             {
                 return false;
             }
@@ -3238,7 +3517,7 @@ namespace PlantsVsZombies.Reanimation
         public bool DrawNative(string name, Vector2 origin, float scale, float seconds, string animation, bool loop)
         {
             using var objectScope = BeginObjectScope();
-            return DrawNativePlayback(name, origin, scale, seconds, animation, loop);
+            return DrawNativePlaybackIdentity(name, origin, scale, seconds, animation, loop);
         }
 
         /// <summary>Performs combat placement.</summary>
@@ -3330,7 +3609,7 @@ namespace PlantsVsZombies.Reanimation
         /// <param name="hiddenAttachmentTrack">The original hidden placeholder whose attachment must retain its painter position and blended pose.</param>
         /// <param name="colorTrack">The single original track receiving an optional independent color.</param>
         /// <param name="trackColor">The original multiplier for that track, or null to preserve its body color.</param>
-        public bool DrawNativePlayback(string? name, Vector2 origin, float scale, float seconds, string? animation, bool loop, float framesPerSecond = -1f, Func<string, bool>? visible = null, string? overrideTrack = null, string? overrideImage = null, bool facingLeft = false, string? instanceKey = null, int blendTicks = 20, float verticalScale = -1f, float mirrorWidth = 80f, string? crazyDaveHeldItem = null, float crazyDaveHeldItemAge = 0f, Func<string, Vector2>? trackOffset = null, Action<string, Matrix4x4, Matrix4x4, float>? trackAttachment = null, bool fullLastFrame = false, Action<string>? trackDrawn = null, string? hiddenAttachmentTrack = null, string? colorTrack = null, Color? trackColor = null)
+        internal bool DrawNativePlaybackIdentity(string? name, Vector2 origin, float scale, float seconds, string? animation, bool loop, float framesPerSecond = -1f, Func<string, bool>? visible = null, string? overrideTrack = null, string? overrideImage = null, bool facingLeft = false, PresentationIdentity instanceKey = default, int blendTicks = 20, float verticalScale = -1f, float mirrorWidth = 80f, string? crazyDaveHeldItem = null, float crazyDaveHeldItemAge = 0f, Func<string, Vector2>? trackOffset = null, Action<string, Matrix4x4, Matrix4x4, float>? trackAttachment = null, bool fullLastFrame = false, Action<string>? trackDrawn = null, string? hiddenAttachmentTrack = null, string? colorTrack = null, Color? trackColor = null)
         {
             using var objectScope = BeginObjectScope();
             Reanimation? asset;
@@ -3519,7 +3798,7 @@ namespace PlantsVsZombies.Reanimation
         /// <param name = "instanceKey">The instance key.</param>
         /// <param name = "blendTicks">The blend ticks.</param>
         /// <returns>The resulting draw zombie playback.</returns>
-        public bool DrawZombiePlayback(Vector2 origin, float scale, float seconds, ZombieVariant variant, string? animation, bool loop, float rate, bool equipmentIntact = true, Func<string, bool>? visible = null, string? instanceKey = null, int blendTicks = 20)
+        internal bool DrawZombiePlaybackIdentity(Vector2 origin, float scale, float seconds, ZombieVariant variant, string? animation, bool loop, float rate, bool equipmentIntact = true, Func<string, bool>? visible = null, PresentationIdentity instanceKey = default, int blendTicks = 20)
         {
             using var objectScope = BeginObjectScope();
             Reanimation? asset;
@@ -3546,7 +3825,7 @@ namespace PlantsVsZombies.Reanimation
         /// <param name="headTrackDrawn">The synchronous attachment notification for one selected head's original tracks.</param>
         /// <param name="attachmentHead">The selected head receiving the attachment notification, or minus one.</param>
         /// <returns>The resulting draw native attached heads.</returns>
-        public bool DrawNativeAttachedHeads(string? name, Vector2 origin, float scale, float bodySeconds, float bodyRate, HeadPlayback[] heads, Func<string, bool>? visible = null, bool facingLeft = false, string? instanceKey = null, int blendTicks = 20,
+        internal bool DrawNativeAttachedHeadsIdentity(string? name, Vector2 origin, float scale, float bodySeconds, float bodyRate, HeadPlayback[] heads, Func<string, bool>? visible = null, bool facingLeft = false, PresentationIdentity instanceKey = default, int blendTicks = 20,
             Action<string>? headTrackDrawn = null, int attachmentHead = -1)
         {
             using var objectScope = BeginObjectScope();
@@ -3707,7 +3986,7 @@ namespace PlantsVsZombies.Reanimation
         /// <param name="boardTransform">The inherited board transform accompanying the sampled track.</param>
         /// <param name="state">The simulation-owned original child clip, rate and age, or null for a native idle portrait.</param>
         /// <param name="instanceKey">The stable child identity used for original twenty-update clip blending.</param>
-        public bool DrawNativePlantHeadAttachment(Vector2 origin, float scale, string? parentClip, float parentSeconds, float parentRate, int nativeKind, float headSeconds, bool facingLeft, Matrix4x4? sampledTrack = null, Matrix4x4? boardTransform = null, AdventurePlantZombieState? state = null, string? instanceKey = null)
+        internal bool DrawNativePlantHeadAttachmentIdentity(Vector2 origin, float scale, string? parentClip, float parentSeconds, float parentRate, int nativeKind, float headSeconds, bool facingLeft, Matrix4x4? sampledTrack = null, Matrix4x4? boardTransform = null, AdventurePlantZombieState? state = null, PresentationIdentity instanceKey = default)
         {
             using var objectScope = BeginObjectScope();
             int childId;
@@ -3908,7 +4187,7 @@ namespace PlantsVsZombies.Reanimation
         /// <param name="loop">Whether the retained native body loops rather than holding its final frame.</param>
         /// <param name="instanceKey">The optional actor identity whose already-drawn blended pose supplies the attachment anchor.</param>
         /// <returns>Whether the retained source track is available.</returns>
-        public bool TryGetNativeTrackCenter(string name, string animation, string trackName, float seconds, float rate, out Vector2 position, bool loop = true, string? instanceKey = null)
+        internal bool TryGetNativeTrackCenterIdentity(string name, string animation, string trackName, float seconds, float rate, out Vector2 position, bool loop = true, PresentationIdentity instanceKey = default)
         {
             position = default;
             if (!TryGetClip(name, animation, out var asset, out var clip))
@@ -3924,7 +4203,7 @@ namespace PlantsVsZombies.Reanimation
 
             var time = SampleFrame(clip, NativeSeconds(clip, seconds, rate, asset.Fps, loop), asset.Fps, false);
             var pose = Interpolate(GetFrame(track, time.Current), GetFrame(track, time.Next), time.Fraction);
-            if (pose.Texture != null && pose.Visibility >= 0f && instanceKey != null
+            if (pose.Texture != null && pose.Visibility >= 0f && !instanceKey.IsEmpty
                 && _nativePoseBlends.TryGetValue(instanceKey, out var blend) && blend.LastSeenFrame == _nativeBlendFrame
                 && string.Equals(blend.Animation, animation, StringComparison.OrdinalIgnoreCase)
                 && blend.Current.TryGetValue(track.PoseId, out var displayed))
@@ -3948,22 +4227,13 @@ namespace PlantsVsZombies.Reanimation
             EnsureIndex();
             EnsureNativeAtlas();
             size = default;
-            try
-            {
-                var image = LoadTexture(resource);
-                if (image == null)
-                {
-                    return false;
-                }
-
-                var cells = _nativeAtlas.TryGetValue(resource, out var atlas) ? atlas : Vector2Int.one;
-                size = new Vector2Int(image.Width / Math.Max(1, cells.x), image.Height / Math.Max(1, cells.y));
-                return true;
-            }
-            catch (FileNotFoundException)
+            if (!TryLoadTexture(resource, out var image))
             {
                 return false;
             }
+            var cells = _nativeAtlas.TryGetValue(resource, out var atlas) ? atlas : new Vector2Int(1, 1);
+            size = new Vector2Int(image.Width / Math.Max(1, cells.x), image.Height / Math.Max(1, cells.y));
+            return true;
         }
 
         /// <summary>Performs draw resource sprite.</summary>
@@ -4027,14 +4297,11 @@ namespace PlantsVsZombies.Reanimation
                 rows = atlas.y;
             }
 
-            try
-            {
-                texture = LoadTexture(resource);
-            }
-            catch (FileNotFoundException)
+            if (!TryLoadTexture(resource, out var optionalTexture))
             {
                 return false;
             }
+            texture = optionalTexture;
 
             if (texture == null || columns <= 0 || rows <= 0)
             {
@@ -4159,7 +4426,7 @@ namespace PlantsVsZombies.Reanimation
 
         /// <summary>Retires a logical capture identity and returns its resources to the bounded inactive pool.</summary>
         /// <param name="key">The capture identity no longer used by the presentation.</param>
-        public void ReleaseNativeSurface(string key)
+        internal void ReleaseNativeSurfaceIdentity(PresentationIdentity key)
         {
             NativeSurface surface;
             if (!_nativeSurfaces.TryGetValue(key, out surface))
@@ -4293,7 +4560,7 @@ namespace PlantsVsZombies.Reanimation
         /// <param name="surfaceKey">The cached full surface identity, or null to derive it from the playback key.</param>
         /// <param name="highlighted">Whether the original shovel target highlight is active.</param>
         /// <returns>The resulting draw native plant hit feedback.</returns>
-        public bool DrawNativePlantHitFeedback(string key, Rect viewport, Func<bool> draw, Plant plant, string? surfaceKey = null, bool highlighted = false)
+        internal bool DrawNativePlantHitFeedbackIdentity(PresentationIdentity key, Rect viewport, Func<bool> draw, Plant plant, PresentationIdentity surfaceKey = default, bool highlighted = false)
         {
             using var objectScope = BeginObjectScope();
             var visual = AdventurePlantHitRules.Combined(plant);
@@ -4304,7 +4571,7 @@ namespace PlantsVsZombies.Reanimation
                 visual = new AdventureProducerGlowVisual(true, visual.FlashTicks, (byte)brightness);
             }
 
-            return DrawProducerGlow(key, viewport, draw, visual, plant.IsImitated, surfaceKey);
+            return DrawProducerGlowIdentity(key, viewport, draw, visual, plant.IsImitated, surfaceKey);
         }
 
         /// <summary>Performs draw native potato mine light.</summary>
@@ -4374,7 +4641,7 @@ namespace PlantsVsZombies.Reanimation
         /// <param name="imitated">Whether the source tracks use imitation grayscale.</param>
         /// <param name="surfaceKey">The cached full surface identity, or null to derive it from the playback key.</param>
         /// <returns>Whether the source callback submitted visible artwork.</returns>
-        public bool DrawProducerGlow(string instanceKey, Rect viewport, Func<bool> draw, AdventureProducerGlowVisual visual, bool imitated = false, string? surfaceKey = null)
+        internal bool DrawProducerGlowIdentity(PresentationIdentity instanceKey, Rect viewport, Func<bool> draw, AdventureProducerGlowVisual visual, bool imitated = false, PresentationIdentity surfaceKey = default)
         {
             using var objectScope = BeginObjectScope();
             if (draw == null)
@@ -4424,7 +4691,7 @@ namespace PlantsVsZombies.Reanimation
                 }
             }
 
-            return DrawNativeClipped(surfaceKey ?? "producer-" + instanceKey, viewport, draw, grayscale: imitated, producerAdditive: visual.Enabled ? visual.SourceAdditive : 0f);
+            return DrawNativeClippedIdentity(surfaceKey.IsEmpty ? instanceKey.WithRole("producer-") : surfaceKey, viewport, draw, grayscale: imitated, producerAdditive: visual.Enabled ? visual.SourceAdditive : 0f);
         }
 
         /// <summary>Stores native combat zombie.</summary>
@@ -4469,7 +4736,7 @@ namespace PlantsVsZombies.Reanimation
         /// <param name="bodyClipBottom">Optional native pool waterline; the original ignored-clip tracks retain their full bounds.</param>
         /// <param name="bodyClipBounds">Optional original body rectangle whose horizontal and top edges also apply to ordinary tracks.</param>
         /// <returns>The resulting draw native zombie combat.</returns>
-        public bool DrawNativeZombieCombat(Zombie zombie, Rect viewport, Func<bool> draw, string? surfaceKey = null, float? bodyClipBottom = null, Rect? bodyClipBounds = null)
+        internal bool DrawNativeZombieCombatIdentity(Zombie zombie, Rect viewport, Func<bool> draw, PresentationIdentity surfaceKey = default, float? bodyClipBottom = null, Rect? bodyClipBounds = null)
         {
             using var objectScope = BeginObjectScope();
             if (zombie == null || draw == null)
@@ -4503,7 +4770,7 @@ namespace PlantsVsZombies.Reanimation
                     return DrawDirectClipped(viewport, draw);
                 }
 
-                return DrawNativeClipped(surfaceKey ?? "native-zombie-combat-" + zombie.Id, viewport, draw);
+                return DrawNativeClippedIdentity(surfaceKey.IsEmpty ? PresentationIdentity.Create("native-zombie-combat-", zombie.Id, -1, 0) : surfaceKey, viewport, draw);
             }
             finally
             {
@@ -4591,7 +4858,7 @@ namespace PlantsVsZombies.Reanimation
         /// <param name="alpha">The sampled track's attachment opacity.</param>
         /// <param name="particleName">The unchanged original particle definition, defaulting to pool-emergence seaweed.</param>
         /// <returns>Whether the original attached particle system submitted artwork.</returns>
-        internal bool DrawNativePoolParticleAttachment(OriginalParticleRenderer particles, string key, float age, Vector2 origin,
+        internal bool DrawNativePoolParticleAttachment(OriginalParticleRenderer particles, PresentationIdentity key, float age, Vector2 origin,
             int seed, float scale, Matrix4x4 boardTransform, float alpha, string particleName = "Zombie_seaweed")
         {
             var previousMatrix = SpriteMatrix;
@@ -4883,7 +5150,7 @@ namespace PlantsVsZombies.Reanimation
         /// <param name="prefix">The existing native particle identity prefix.</param>
         /// <param name="id">The live detached part's simulation identity.</param>
         /// <returns>A stable identity retained only for the current and preceding presentation frames.</returns>
-        private string ParticleKey(string prefix, int id)
+        private PresentationIdentity ParticleKey(string prefix, int id)
         {
             if (_particleKeyFrame != SpriteDrawState.FrameVersion)
             {
@@ -5088,6 +5355,170 @@ namespace PlantsVsZombies.Reanimation
                 hideFlags = HideFlags.HideAndDontSave
             };
             return true;
+        }
+
+        /// <summary>Preserves the legacy string identity entry point.</summary>
+        /// <param name="key">The original key argument.</param>
+        /// <param name="viewport">The original viewport argument.</param>
+        /// <param name="draw">The original draw argument.</param>
+        /// <param name="freeze">The original freeze argument.</param>
+        /// <param name="grayscale">The original grayscale argument.</param>
+        /// <param name="additive">The original additive argument.</param>
+        /// <param name="topCrop">The original topCrop argument.</param>
+        /// <param name="producerAdditive">The original producerAdditive argument.</param>
+        /// <returns>The result of the equivalent typed presentation operation.</returns>
+        public bool DrawNativeClipped(string key, Rect viewport, Func<bool> draw, bool freeze = false, bool grayscale = false, float additive = 0f, float topCrop = -1f, float producerAdditive = 0f)
+        {
+            return DrawNativeClippedIdentity(PresentationIdentity.FromExternal(key), viewport, draw, freeze, grayscale, additive, topCrop, producerAdditive);
+        }
+
+        /// <summary>Preserves the legacy string identity entry point.</summary>
+        /// <param name="name">The original name argument.</param>
+        /// <param name="origin">The original origin argument.</param>
+        /// <param name="scale">The original scale argument.</param>
+        /// <param name="seconds">The original seconds argument.</param>
+        /// <param name="animation">The original animation argument.</param>
+        /// <param name="loop">The original loop argument.</param>
+        /// <param name="framesPerSecond">The original framesPerSecond argument.</param>
+        /// <param name="visible">The original visible argument.</param>
+        /// <param name="overrideTrack">The original overrideTrack argument.</param>
+        /// <param name="overrideImage">The original overrideImage argument.</param>
+        /// <param name="facingLeft">The original facingLeft argument.</param>
+        /// <param name="instanceKey">The original instanceKey argument.</param>
+        /// <param name="blendTicks">The original blendTicks argument.</param>
+        /// <param name="verticalScale">The original verticalScale argument.</param>
+        /// <param name="mirrorWidth">The original mirrorWidth argument.</param>
+        /// <param name="crazyDaveHeldItem">The original crazyDaveHeldItem argument.</param>
+        /// <param name="crazyDaveHeldItemAge">The original crazyDaveHeldItemAge argument.</param>
+        /// <param name="trackOffset">The original trackOffset argument.</param>
+        /// <param name="trackAttachment">The original trackAttachment argument.</param>
+        /// <param name="fullLastFrame">The original fullLastFrame argument.</param>
+        /// <param name="trackDrawn">The original trackDrawn argument.</param>
+        /// <param name="hiddenAttachmentTrack">The original hiddenAttachmentTrack argument.</param>
+        /// <param name="colorTrack">The original colorTrack argument.</param>
+        /// <param name="trackColor">The original trackColor argument.</param>
+        /// <returns>The result of the equivalent typed presentation operation.</returns>
+        public bool DrawNativePlayback(string? name, Vector2 origin, float scale, float seconds, string? animation, bool loop, float framesPerSecond = -1f, Func<string, bool>? visible = null, string? overrideTrack = null, string? overrideImage = null, bool facingLeft = false, string? instanceKey = null, int blendTicks = 20, float verticalScale = -1f, float mirrorWidth = 80f, string? crazyDaveHeldItem = null, float crazyDaveHeldItemAge = 0f, Func<string, Vector2>? trackOffset = null, Action<string, Matrix4x4, Matrix4x4, float>? trackAttachment = null, bool fullLastFrame = false, Action<string>? trackDrawn = null, string? hiddenAttachmentTrack = null, string? colorTrack = null, Color? trackColor = null)
+        {
+            return DrawNativePlaybackIdentity(name, origin, scale, seconds, animation, loop, framesPerSecond, visible, overrideTrack, overrideImage, facingLeft, PresentationIdentity.FromExternal(instanceKey), blendTicks, verticalScale, mirrorWidth, crazyDaveHeldItem, crazyDaveHeldItemAge, trackOffset, trackAttachment, fullLastFrame, trackDrawn, hiddenAttachmentTrack, colorTrack, trackColor);
+        }
+
+        /// <summary>Preserves the legacy string identity entry point.</summary>
+        /// <param name="origin">The original origin argument.</param>
+        /// <param name="scale">The original scale argument.</param>
+        /// <param name="seconds">The original seconds argument.</param>
+        /// <param name="variant">The original variant argument.</param>
+        /// <param name="animation">The original animation argument.</param>
+        /// <param name="loop">The original loop argument.</param>
+        /// <param name="rate">The original rate argument.</param>
+        /// <param name="equipmentIntact">The original equipmentIntact argument.</param>
+        /// <param name="visible">The original visible argument.</param>
+        /// <param name="instanceKey">The original instanceKey argument.</param>
+        /// <param name="blendTicks">The original blendTicks argument.</param>
+        /// <returns>The result of the equivalent typed presentation operation.</returns>
+        public bool DrawZombiePlayback(Vector2 origin, float scale, float seconds, ZombieVariant variant, string? animation, bool loop, float rate, bool equipmentIntact = true, Func<string, bool>? visible = null, string? instanceKey = null, int blendTicks = 20)
+        {
+            return DrawZombiePlaybackIdentity(origin, scale, seconds, variant, animation, loop, rate, equipmentIntact, visible, PresentationIdentity.FromExternal(instanceKey), blendTicks);
+        }
+
+        /// <summary>Preserves the legacy string identity entry point.</summary>
+        /// <param name="name">The original name argument.</param>
+        /// <param name="origin">The original origin argument.</param>
+        /// <param name="scale">The original scale argument.</param>
+        /// <param name="bodySeconds">The original bodySeconds argument.</param>
+        /// <param name="bodyRate">The original bodyRate argument.</param>
+        /// <param name="heads">The original heads argument.</param>
+        /// <param name="visible">The original visible argument.</param>
+        /// <param name="facingLeft">The original facingLeft argument.</param>
+        /// <param name="instanceKey">The original instanceKey argument.</param>
+        /// <param name="blendTicks">The original blendTicks argument.</param>
+        /// <param name="headTrackDrawn">The original headTrackDrawn argument.</param>
+        /// <param name="attachmentHead">The original attachmentHead argument.</param>
+        /// <returns>The result of the equivalent typed presentation operation.</returns>
+        public bool DrawNativeAttachedHeads(string? name, Vector2 origin, float scale, float bodySeconds, float bodyRate, HeadPlayback[] heads, Func<string, bool>? visible = null, bool facingLeft = false, string? instanceKey = null, int blendTicks = 20,
+            Action<string>? headTrackDrawn = null, int attachmentHead = -1)
+        {
+            return DrawNativeAttachedHeadsIdentity(name, origin, scale, bodySeconds, bodyRate, heads, visible, facingLeft, PresentationIdentity.FromExternal(instanceKey), blendTicks, headTrackDrawn, attachmentHead);
+        }
+
+        /// <summary>Preserves the legacy string identity entry point.</summary>
+        /// <param name="origin">The original origin argument.</param>
+        /// <param name="scale">The original scale argument.</param>
+        /// <param name="parentClip">The original parentClip argument.</param>
+        /// <param name="parentSeconds">The original parentSeconds argument.</param>
+        /// <param name="parentRate">The original parentRate argument.</param>
+        /// <param name="nativeKind">The original nativeKind argument.</param>
+        /// <param name="headSeconds">The original headSeconds argument.</param>
+        /// <param name="facingLeft">The original facingLeft argument.</param>
+        /// <param name="sampledTrack">The original sampledTrack argument.</param>
+        /// <param name="boardTransform">The original boardTransform argument.</param>
+        /// <param name="state">The original state argument.</param>
+        /// <param name="instanceKey">The original instanceKey argument.</param>
+        /// <returns>The result of the equivalent typed presentation operation.</returns>
+        public bool DrawNativePlantHeadAttachment(Vector2 origin, float scale, string? parentClip, float parentSeconds, float parentRate, int nativeKind, float headSeconds, bool facingLeft, Matrix4x4? sampledTrack = null, Matrix4x4? boardTransform = null, AdventurePlantZombieState? state = null, string? instanceKey = null)
+        {
+            return DrawNativePlantHeadAttachmentIdentity(origin, scale, parentClip, parentSeconds, parentRate, nativeKind, headSeconds, facingLeft, sampledTrack, boardTransform, state, PresentationIdentity.FromExternal(instanceKey));
+        }
+
+        /// <summary>Preserves the legacy string identity entry point.</summary>
+        /// <param name="name">The original name argument.</param>
+        /// <param name="animation">The original animation argument.</param>
+        /// <param name="trackName">The original trackName argument.</param>
+        /// <param name="seconds">The original seconds argument.</param>
+        /// <param name="rate">The original rate argument.</param>
+        /// <param name="position">The original position argument.</param>
+        /// <param name="loop">The original loop argument.</param>
+        /// <param name="instanceKey">The original instanceKey argument.</param>
+        /// <returns>The result of the equivalent typed presentation operation.</returns>
+        public bool TryGetNativeTrackCenter(string name, string animation, string trackName, float seconds, float rate, out Vector2 position, bool loop = true, string? instanceKey = null)
+        {
+            return TryGetNativeTrackCenterIdentity(name, animation, trackName, seconds, rate, out position, loop, PresentationIdentity.FromExternal(instanceKey));
+        }
+
+        /// <summary>Preserves the legacy string identity entry point.</summary>
+        /// <param name="key">The original key argument.</param>
+        public void ReleaseNativeSurface(string key)
+        {
+            ReleaseNativeSurfaceIdentity(PresentationIdentity.FromExternal(key));
+        }
+
+        /// <summary>Preserves the legacy string identity entry point.</summary>
+        /// <param name="key">The original key argument.</param>
+        /// <param name="viewport">The original viewport argument.</param>
+        /// <param name="draw">The original draw argument.</param>
+        /// <param name="plant">The original plant argument.</param>
+        /// <param name="surfaceKey">The original surfaceKey argument.</param>
+        /// <param name="highlighted">The original highlighted argument.</param>
+        /// <returns>The result of the equivalent typed presentation operation.</returns>
+        public bool DrawNativePlantHitFeedback(string key, Rect viewport, Func<bool> draw, Plant plant, string? surfaceKey = null, bool highlighted = false)
+        {
+            return DrawNativePlantHitFeedbackIdentity(PresentationIdentity.FromExternal(key), viewport, draw, plant, PresentationIdentity.FromExternal(surfaceKey), highlighted);
+        }
+
+        /// <summary>Preserves the legacy string identity entry point.</summary>
+        /// <param name="instanceKey">The original instanceKey argument.</param>
+        /// <param name="viewport">The original viewport argument.</param>
+        /// <param name="draw">The original draw argument.</param>
+        /// <param name="visual">The original visual argument.</param>
+        /// <param name="imitated">The original imitated argument.</param>
+        /// <param name="surfaceKey">The original surfaceKey argument.</param>
+        /// <returns>The result of the equivalent typed presentation operation.</returns>
+        public bool DrawProducerGlow(string instanceKey, Rect viewport, Func<bool> draw, AdventureProducerGlowVisual visual, bool imitated = false, string? surfaceKey = null)
+        {
+            return DrawProducerGlowIdentity(PresentationIdentity.FromExternal(instanceKey), viewport, draw, visual, imitated, PresentationIdentity.FromExternal(surfaceKey));
+        }
+
+        /// <summary>Preserves the legacy string identity entry point.</summary>
+        /// <param name="zombie">The original zombie argument.</param>
+        /// <param name="viewport">The original viewport argument.</param>
+        /// <param name="draw">The original draw argument.</param>
+        /// <param name="surfaceKey">The original surfaceKey argument.</param>
+        /// <param name="bodyClipBottom">The original bodyClipBottom argument.</param>
+        /// <param name="bodyClipBounds">The original bodyClipBounds argument.</param>
+        /// <returns>The result of the equivalent typed presentation operation.</returns>
+        public bool DrawNativeZombieCombat(Zombie zombie, Rect viewport, Func<bool> draw, string? surfaceKey = null, float? bodyClipBottom = null, Rect? bodyClipBounds = null)
+        {
+            return DrawNativeZombieCombatIdentity(zombie, viewport, draw, PresentationIdentity.FromExternal(surfaceKey ?? "native-zombie-combat-" + zombie.Id), bodyClipBottom, bodyClipBounds);
         }
     }
 }

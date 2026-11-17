@@ -284,6 +284,7 @@ namespace PlantsVsZombies.Tests.PlayMode.Smoke
             }), "Could not prepare native unlocked seed selection");
             Call("AttachAdventureGame", Sim);
             Set("_choosingSeeds", false);
+            yield return WaitForBattlePreparation();
             SimulationInspection.GetProperty("SunAmount").SetValue(Sim, 500);
             Sim.ResetAdventureWaveSchedule(100000, false, false);
             var card = (Rect)Call("AdventureSeedRect", 0, false);
@@ -631,6 +632,7 @@ namespace PlantsVsZombies.Tests.PlayMode.Smoke
             RequiredController.Campaign.StartAdventureTestLevel(5);
             Sim.Adventure.Tutorial = AdventureTutorial.Complete;
             Set("_choosingSeeds", false);
+            yield return WaitForBattlePreparation();
             Sim.ResetAdventureWaveSchedule(100000, false, false);
             SimCall("AddAdventurePacket", PlantKind.Wallnut, null, null);
             var redPacket = (AdventurePacket)SimCall("AddAdventurePacket", PlantKind.ExplodeONut, null, null);
@@ -680,6 +682,7 @@ namespace PlantsVsZombies.Tests.PlayMode.Smoke
             Require(Sim.ChooseDefaultAdventureSeeds(), "Could not prepare the isolated bite scene");
             Call("AttachAdventureGame", Sim);
             Set("_choosingSeeds", false);
+            yield return WaitForBattlePreparation();
             Sim.ResetAdventureWaveSchedule(100000, false, false);
             var bitten = (Plant)SimCall("PlaceAdventurePlant", PlantKind.Wallnut, 2, 3);
             var chewing = (Zombie)SimCall("SpawnAdventureZombie", ZombieKind.Normal, 2, AdventureZombieNativeRules.GridX(330f), 0);
@@ -712,6 +715,7 @@ namespace PlantsVsZombies.Tests.PlayMode.Smoke
             Require(Sim.ChooseDefaultAdventureSeeds(), "Could not prepare the isolated ice scene");
             Call("AttachAdventureGame", Sim);
             Set("_choosingSeeds", false);
+            yield return WaitForBattlePreparation();
             Sim.ResetAdventureWaveSchedule(100000, false, false);
             var snowShooter = (Plant)SimCall("PlaceAdventurePlant", PlantKind.SnowPea, 2, 1);
             var snowTarget = (Zombie)SimCall("SpawnAdventureZombie", ZombieKind.Normal, 2, 6.5f, 0);

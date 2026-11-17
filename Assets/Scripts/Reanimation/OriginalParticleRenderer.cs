@@ -16,6 +16,8 @@ namespace PlantsVsZombies.Reanimation
     {
         /// <summary>Limits retained particles per immutable emitter definition after bursts have ended.</summary>
         private const int MaximumRetainedParticles = 256;
+        /// <summary>Bounds complete inactive systems retained for each immutable effect definition.</summary>
+        private const int MaximumRetainedSystems = 32;
         /// <summary>Defines node.</summary>
         private sealed class Node
         {
@@ -199,6 +201,8 @@ namespace PlantsVsZombies.Reanimation
             public readonly List<Field> SystemFields = new List<Field>();
             /// <summary>Reuses particles and their random buffers after expiry or system retirement.</summary>
             public readonly Stack<Particle> InactiveParticles = new Stack<Particle>();
+            /// <summary>The stage generation whose optional source image has already been prepared.</summary>
+            internal int PreparedImageGeneration = -1;
             /// <summary>Performs track.</summary>
             /// <param name = "name">The name.</param>
             /// <param name = "fallback">The fallback.</param>
@@ -283,6 +287,8 @@ namespace PlantsVsZombies.Reanimation
             public OriginalRandomAdapter RequiredRandom => Random ?? throw new System.InvalidOperationException("The member 'Random' is not available.");
             /// <summary>Stores emitters.</summary>
             public readonly List<Emitter> Emitters = new List<Emitter>();
+            /// <summary>The immutable template list identifying this reusable system layout.</summary>
+            internal List<EmitterDefinition>? Template;
         }
 
         /// <summary>Stores root.</summary>
@@ -296,9 +302,13 @@ namespace PlantsVsZombies.Reanimation
         /// <summary>Stores definitions.</summary>
         private readonly Dictionary<string, List<EmitterDefinition>?> _definitions = new Dictionary<string, List<EmitterDefinition>?>(StringComparer.OrdinalIgnoreCase);
         /// <summary>Stores systems.</summary>
-        private readonly Dictionary<string, SystemInstance> _systems = new Dictionary<string, SystemInstance>();
+        private readonly Dictionary<PresentationIdentity, SystemInstance> _systems = new Dictionary<PresentationIdentity, SystemInstance>();
         /// <summary>Reuses the keys collected while retiring systems after a presentation frame.</summary>
-        private readonly List<string> _expiredSystems = new List<string>();
+        private readonly List<PresentationIdentity> _expiredSystems = new List<PresentationIdentity>();
+        /// <summary>Reuses complete emitter and decorative-random state across effect identities.</summary>
+        private readonly Dictionary<List<EmitterDefinition>, Stack<SystemInstance>> _inactiveSystems = new Dictionary<List<EmitterDefinition>, Stack<SystemInstance>>();
+        /// <summary>Counts complete system construction misses during playback.</summary>
+        internal int CreatedSystemCount { get; private set; }
         /// <summary>Stores frame.</summary>
         private int _frame;
         /// <summary>Gets or sets last error.</summary>
@@ -369,7 +379,7 @@ namespace PlantsVsZombies.Reanimation
 
             foreach (var key in _expiredSystems)
             {
-                ReleaseSystemParticles(_systems[key]);
+                ReturnSystem(_systems[key]);
                 _systems.Remove(key);
             }
 
@@ -381,7 +391,7 @@ namespace PlantsVsZombies.Reanimation
         {
             foreach (var system in _systems.Values)
             {
-                ReleaseSystemParticles(system);
+                ReturnSystem(system);
             }
 
             _systems.Clear();
@@ -397,7 +407,7 @@ namespace PlantsVsZombies.Reanimation
         /// <param name = "stopAge">The stop age.</param>
         /// <param name="fullScreenMatrix">The unshifted viewport transform for original fullscreen particle fills.</param>
         /// <returns>The resulting draw.</returns>
-        public bool Draw(string key, string name, float age, Vector2 origin, int seed, float scale = 1f, float stopAge = -1f, Matrix4x4? fullScreenMatrix = null)
+        internal bool Draw(PresentationIdentity key, string name, float age, Vector2 origin, int seed, float scale = 1f, float stopAge = -1f, Matrix4x4? fullScreenMatrix = null)
         {
             SystemInstance system;
             if (!_systems.TryGetValue(key, out system))
@@ -408,28 +418,7 @@ namespace PlantsVsZombies.Reanimation
                     return false;
                 }
 
-                system = new SystemInstance
-                {
-                    Random = new OriginalRandomAdapter(unchecked((uint)seed)),
-                    Origin = origin
-                };
-                foreach (var definition in list)
-                {
-                    if (string.IsNullOrEmpty(definition.Image))
-                    {
-                        if (definition.Name == "FadeOut")
-                        {
-                            system.FadeOut = definition;
-                            system.FadeDuration = Math.Max(1, (int)definition.Track("CrossFadeDuration", 1).Value(0, .5f));
-                        }
-
-                        continue;
-                    }
-
-                    var emitter = new Emitter(definition);
-                    emitter.Duration = Math.Max(1, (int)definition.Track("SystemDuration", definition.Track("ParticleDuration", 100).Value(0, 1)).Value(0, Random01(system)));
-                    system.Emitters.Add(emitter);
-                }
+                system = RentSystem(list, seed, origin);
 
                 _systems.Add(key, system);
                 if (stopAge >= 0f)
@@ -683,13 +672,7 @@ namespace PlantsVsZombies.Reanimation
             }
             else
             {
-                particle = new Particle
-                {
-                    Random = new float[8],
-                    FieldRandom = new float[definition.Fields.Count, 2],
-                    PreviousShake = new Vector2[definition.Fields.Count]
-                };
-                CreatedParticleCount++;
+                particle = CreateParticle(definition);
             }
 
             particle.Age = 0f;
@@ -916,6 +899,209 @@ namespace PlantsVsZombies.Reanimation
             }
         }
 
+        /// <summary>Creates the fixed random and shake buffers required by one immutable emitter layout.</summary>
+        /// <param name="definition">The owning source definition.</param>
+        /// <returns>The uninitialized reusable particle.</returns>
+        private Particle CreateParticle(EmitterDefinition definition)
+        {
+            CreatedParticleCount++;
+            return new Particle
+            {
+                Random = new float[8], FieldRandom = new float[definition.Fields.Count, 2],
+                PreviousShake = new Vector2[definition.Fields.Count]
+            };
+        }
+
+        /// <summary>Reads the authored node extrema without introducing previously absent conditional tracks.</summary>
+        /// <param name="definition">The immutable emitter definition.</param>
+        /// <param name="name">The optional source track.</param>
+        /// <param name="fallback">The existing caller default.</param>
+        /// <returns>The maximum authored endpoint or the unchanged default.</returns>
+        private static float MaximumTrackValue(EmitterDefinition definition, string name, float fallback)
+        {
+            if (!definition.Tracks.TryGetValue(name, out var curve))
+            {
+                return fallback;
+            }
+            var maximum = 0f;
+            foreach (var node in curve.Nodes)
+            {
+                maximum = Math.Max(maximum, Math.Max(node.Minimum, node.Maximum));
+            }
+            return maximum;
+        }
+
+        /// <summary>Derives a bounded particle capacity from the source rate, lifetime and explicit concurrency limits.</summary>
+        /// <param name="definition">The immutable source emitter.</param>
+        /// <returns>The retained per-system concurrency estimate, bounded to the existing particle pool limit.</returns>
+        private static int EstimatedActiveParticles(EmitterDefinition definition)
+        {
+            var duration = Math.Max(1f, MaximumTrackValue(definition, "ParticleDuration", 100f));
+            var rate = Math.Max(0f, MaximumTrackValue(definition, "SpawnRate", 0f));
+            var minimum = Math.Max(0f, MaximumTrackValue(definition, "SpawnMinActive", -1f));
+            var estimate = Math.Ceiling(rate * duration * .01d + minimum + 1d);
+            estimate = Math.Min(estimate, MaximumTrackValue(definition, "SpawnMaxActive", MaximumRetainedParticles));
+            estimate = Math.Min(estimate, MaximumTrackValue(definition, "SpawnMaxLaunched", MaximumRetainedParticles));
+            return (int)Math.Max(1d, Math.Min(MaximumRetainedParticles, estimate));
+        }
+
+        /// <summary>Creates unconditional draw fallbacks before the first visible particle submission.</summary>
+        /// <param name="definition">The source emitter retaining the same fallback curves used by normal drawing.</param>
+        private static void PrepareRenderTracks(EmitterDefinition definition)
+        {
+            definition.Track("ParticleAlpha", 1f);
+            definition.Track("ParticleScale", 1f);
+            definition.Track("ParticleStretch", 1f);
+            definition.Track("ParticleBrightness", 1f);
+            definition.Track("ParticleRed", 1f);
+            definition.Track("ParticleGreen", 1f);
+            definition.Track("ParticleBlue", 1f);
+            definition.Track("ClipTop");
+            definition.Track("ClipBottom");
+        }
+
+        /// <summary>Prepares one complete effect layout without consuming the battle random stream.</summary>
+        /// <param name="name">The immutable effect resource name.</param>
+        /// <param name="systemCount">The desired bounded inactive system count for that resource.</param>
+        /// <returns>Whether the requested reusable layout capacity is ready.</returns>
+        internal bool PrepareSystemCapacityStep(string name, int systemCount)
+        {
+            var template = Load(name);
+            if (template == null)
+            {
+                return true;
+            }
+            var concurrent = Math.Min(16384, Math.Max(1, systemCount) * Math.Max(1, _definitions.Count));
+            _systems.EnsureCapacity(concurrent);
+            if (_expiredSystems.Capacity < concurrent)
+            {
+                _expiredSystems.Capacity = concurrent;
+            }
+            if (!_inactiveSystems.TryGetValue(template, out var pool))
+            {
+                pool = new Stack<SystemInstance>();
+                _inactiveSystems.Add(template, pool);
+            }
+            var target = Math.Min(Math.Max(0, systemCount), MaximumRetainedSystems);
+            foreach (var definition in template)
+            {
+                if (string.IsNullOrEmpty(definition.Image))
+                {
+                    continue;
+                }
+                if (_renderer != null && definition.PreparedImageGeneration != _renderer.PresentationPreparationGeneration)
+                {
+                    _renderer.PreparePresentationImage(definition.Image);
+                    definition.PreparedImageGeneration = _renderer.PresentationPreparationGeneration;
+                    return false;
+                }
+                var particles = Math.Min(MaximumRetainedParticles, EstimatedActiveParticles(definition) * target);
+                if (definition.InactiveParticles.Count < particles)
+                {
+                    definition.InactiveParticles.Push(CreateParticle(definition));
+                    return false;
+                }
+            }
+            if (pool.Count >= target)
+            {
+                return true;
+            }
+            var system = CreateSystem(template);
+            ResetSystem(system, 1, Vector2.zero);
+            Step(system);
+            ReturnSystem(system);
+            return pool.Count >= target;
+        }
+
+        /// <summary>Acquires a matching emitter layout and resets its decorative random stream.</summary>
+        /// <param name="template">The parsed immutable emitter template.</param>
+        /// <param name="seed">The original caller-owned decorative seed.</param>
+        /// <param name="origin">The initial emitter origin.</param>
+        /// <returns>The initialized reusable system.</returns>
+        private SystemInstance RentSystem(List<EmitterDefinition> template, int seed, Vector2 origin)
+        {
+            var system = _inactiveSystems.TryGetValue(template, out var pool) && pool.Count > 0
+                ? pool.Pop() : CreateSystem(template);
+            ResetSystem(system, seed, origin);
+            return system;
+        }
+
+        /// <summary>Builds a reusable effect layout only when its prepared capacity is exhausted.</summary>
+        /// <param name="template">The immutable source emitter list.</param>
+        /// <returns>The new system layout with independent replayable random state.</returns>
+        private SystemInstance CreateSystem(List<EmitterDefinition> template)
+        {
+            var system = new SystemInstance
+            {
+                Random = new OriginalRandomAdapter(1), Template = template
+            };
+            foreach (var definition in template)
+            {
+                if (!string.IsNullOrEmpty(definition.Image))
+                {
+                    var emitter = new Emitter(definition);
+                    emitter.Particles.Capacity = EstimatedActiveParticles(definition);
+                    emitter.Random.EnsureCapacity(definition.Tracks.Count + 16);
+                    PrepareRenderTracks(definition);
+                    system.Emitters.Add(emitter);
+                }
+            }
+            CreatedSystemCount++;
+            return system;
+        }
+
+        /// <summary>Restores every mutable system and emitter field before publishing a new effect identity.</summary>
+        /// <param name="system">The reused system.</param>
+        /// <param name="seed">The source decorative seed.</param>
+        /// <param name="origin">The initial emitter origin.</param>
+        private static void ResetSystem(SystemInstance system, int seed, Vector2 origin)
+        {
+            system.RequiredRandom.Generator.Reseed(unchecked((uint)seed));
+            system.Tick = 0;
+            system.Seen = 0;
+            system.StopTick = -1;
+            system.FadeDuration = 0;
+            system.FadeOut = null;
+            system.Origin = origin;
+            foreach (var definition in system.Template!)
+            {
+                if (string.IsNullOrEmpty(definition.Image) && definition.Name == "FadeOut")
+                {
+                    system.FadeOut = definition;
+                    system.FadeDuration = Math.Max(1, (int)definition.Track("CrossFadeDuration", 1).Value(0, .5f));
+                }
+            }
+            foreach (var emitter in system.Emitters)
+            {
+                emitter.Random.Clear();
+                emitter.Age = 0;
+                emitter.Launched = 0;
+                emitter.Accumulated = 0;
+                var definition = emitter.Definition;
+                emitter.Duration = Math.Max(1, (int)definition.Track("SystemDuration", definition.Track("ParticleDuration", 100).Value(0, 1)).Value(0, Random01(system)));
+            }
+        }
+
+        /// <summary>Releases particles before returning the complete source-specific system to a bounded pool.</summary>
+        /// <param name="system">The retired effect.</param>
+        private void ReturnSystem(SystemInstance system)
+        {
+            ReleaseSystemParticles(system);
+            if (system.Template == null)
+            {
+                return;
+            }
+            if (!_inactiveSystems.TryGetValue(system.Template, out var pool))
+            {
+                pool = new Stack<SystemInstance>();
+                _inactiveSystems.Add(system.Template, pool);
+            }
+            if (pool.Count < MaximumRetainedSystems)
+            {
+                pool.Push(system);
+            }
+        }
+
         /// <summary>Returns the particles owned by every emitter of a retired effect system.</summary>
         /// <param name="system">The system omitted by presentation or explicitly cleared.</param>
         private static void ReleaseSystemParticles(SystemInstance system)
@@ -947,6 +1133,20 @@ namespace PlantsVsZombies.Reanimation
             {
                 definition.InactiveParticles.Push(particle);
             }
+        }
+        /// <summary>Draws particles through the source-compatible external string identity API.</summary>
+        /// <param name="key">The external particle-system identity.</param>
+        /// <param name="name">The immutable particle resource name.</param>
+        /// <param name="age">The system playback age.</param>
+        /// <param name="origin">The destination origin.</param>
+        /// <param name="seed">The original deterministic particle seed.</param>
+        /// <param name="scale">The destination scale.</param>
+        /// <param name="stopAge">The emission stop time, or minus one.</param>
+        /// <param name="fullScreenMatrix">The optional inherited full-screen transform.</param>
+        /// <returns>Whether the system submitted visible artwork.</returns>
+        public bool Draw(string key, string name, float age, Vector2 origin, int seed, float scale = 1f, float stopAge = -1f, Matrix4x4? fullScreenMatrix = null)
+        {
+            return Draw(PresentationIdentity.FromExternal(key), name, age, origin, seed, scale, stopAge, fullScreenMatrix);
         }
     }
 }

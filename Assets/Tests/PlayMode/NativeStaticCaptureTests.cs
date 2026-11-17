@@ -98,7 +98,7 @@ namespace PlantsVsZombies.Tests.PlayMode
         {
             Present(_red, 1);
             var surfaces = (IDictionary)typeof(ReanimationRenderer).GetField("_nativeSurfaces", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(_renderer)!;
-            var surface = surfaces["static"]!;
+            var surface = surfaces[PlantsVsZombies.Rendering.PresentationIdentity.FromExternal("static")]!;
             var texture = (RenderTexture)surface.GetType().GetField("Texture")!.GetValue(surface)!;
             texture.Release();
             Assert.That(texture.IsCreated(), Is.False);

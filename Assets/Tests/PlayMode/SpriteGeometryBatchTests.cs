@@ -15,6 +15,9 @@ namespace PlantsVsZombies.Tests.PlayMode
     /// <summary>Compares deferred geometry with the immediate oracle and checks explicit ordering and lifetime barriers.</summary>
     public sealed class SpriteGeometryBatchTests
     {
+        /// <summary>The backend restored after validating the independent mesh oracle.</summary>
+        private SpriteRenderingBackend _previousBackend;
+
         /// <summary>The original executor restored after each test.</summary>
         private SpriteGeometryExecution _previousExecution;
         /// <summary>The patterned source exercising UV interpolation and translucent edges.</summary>
@@ -34,6 +37,8 @@ namespace PlantsVsZombies.Tests.PlayMode
         public IEnumerator SetUp()
         {
             yield return null;
+            _previousBackend = ObjectSpriteRenderer.Backend;
+            ObjectSpriteRenderer.Backend = SpriteRenderingBackend.Mesh;
             Assert.That(SystemInfo.graphicsDeviceType, Is.Not.EqualTo(GraphicsDeviceType.Null));
             _previousExecution = ObjectSpriteRenderer.GeometryExecution;
             _texture = new Texture2D(8, 8, TextureFormat.RGBA32, false, true)
@@ -61,6 +66,7 @@ namespace PlantsVsZombies.Tests.PlayMode
         [UnityTearDown]
         public IEnumerator TearDown()
         {
+            ObjectSpriteRenderer.Backend = _previousBackend;
             ObjectSpriteRenderer.FlushPending();
             ObjectSpriteRenderer.GeometryExecution = _previousExecution;
             ObjectSpriteRenderer.CaptureObserved = null;
@@ -328,7 +334,7 @@ namespace PlantsVsZombies.Tests.PlayMode
                 captures++;
                 Assert.That(destination, Is.SameAs(_target));
                 Assert.That(_renderer.SubmittedObjectCount, Is.EqualTo(1));
-                Assert.That(Batches(_renderer)[0].Mesh.vertexCount, Is.EqualTo(4));
+                Assert.That(Batches(_renderer)[0].Mesh.GetSubMesh(0).vertexCount, Is.EqualTo(4));
             };
             try
             {
@@ -684,13 +690,15 @@ namespace PlantsVsZombies.Tests.PlayMode
             }
             var batch = Batches(_renderer)[0];
             batch.Publish();
-            Assert.That(batch.Mesh.vertexCount, Is.EqualTo(640));
+            Assert.That(batch.VertexCount, Is.EqualTo(640));
+            Assert.That(batch.Mesh.GetSubMesh(0).vertexCount, Is.EqualTo(640));
             _renderer.BeginBatch();
             var tint = new Color(1.25f, -.125f, .1234567f, .8123456f);
             _renderer.DrawQuad(_image, 3f, 2f, new Rect(0f, 0f, 1f, 1f),
                 Matrix4x4.Translate(new Vector3(3f, 4f)), tint, 0);
             batch.Publish();
-            Assert.That(batch.Mesh.vertexCount, Is.EqualTo(4));
+            Assert.That(batch.VertexCount, Is.EqualTo(4));
+            Assert.That(batch.Mesh.GetSubMesh(0).vertexCount, Is.EqualTo(4));
             Assert.That(batch.Mesh.triangles.Length, Is.EqualTo(6));
             Assert.That(batch.Mesh.colors[0], Is.EqualTo(tint));
             Assert.That(batch.Mesh.bounds.min.x, Is.EqualTo(3f).Within(.00001f));
@@ -877,16 +885,34 @@ namespace PlantsVsZombies.Tests.PlayMode
             var snapshot = new Snapshot { Statistics = _renderer.LastFrameStatistics };
             for (var index = 0; index < _renderer.BatchCount; index++)
             {
-                var mesh = Batches(_renderer)[index].Mesh;
-                snapshot.Positions.AddRange(mesh.vertices);
-                snapshot.Coordinates.AddRange(mesh.uv);
-                snapshot.Indices.AddRange(mesh.triangles);
-                snapshot.Colors.AddRange(mesh.colors);
-                var channels = new List<Vector4>();
-                mesh.GetUVs(1, channels);
-                snapshot.Effects.AddRange(channels);
-                mesh.GetUVs(2, channels);
-                snapshot.Highlights.AddRange(channels);
+                var batch = Batches(_renderer)[index];
+                var mesh = batch.Mesh;
+                var activeCount = batch.VertexCount;
+                Assert.That(mesh.GetSubMesh(0).vertexCount, Is.EqualTo(activeCount));
+                Assert.That(mesh.GetSubMesh(0).indexCount, Is.EqualTo(batch.IndexCount));
+                var positions = mesh.vertices;
+                var coordinates = mesh.uv;
+                var colors = mesh.colors;
+                var effects = new List<Vector4>();
+                var highlights = new List<Vector4>();
+                mesh.GetUVs(1, effects);
+                mesh.GetUVs(2, highlights);
+                for (var vertex = 0; vertex < activeCount; vertex++)
+                {
+                    snapshot.Positions.Add(positions[vertex]);
+                    snapshot.Coordinates.Add(coordinates[vertex]);
+                    snapshot.Colors.Add(colors[vertex]);
+                    snapshot.Effects.Add(effects[vertex]);
+                    snapshot.Highlights.Add(highlights[vertex]);
+                }
+                var indices = mesh.triangles;
+                Assert.That(indices.Length, Is.EqualTo(batch.IndexCount));
+                foreach (var vertexIndex in indices)
+                {
+                    Assert.That(vertexIndex, Is.GreaterThanOrEqualTo(0).And.LessThan(activeCount),
+                        "The live submesh must never reference retained capacity or stale trailing vertices.");
+                }
+                snapshot.Indices.AddRange(indices);
             }
             var previous = RenderTexture.active;
             try

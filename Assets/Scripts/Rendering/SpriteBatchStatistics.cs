@@ -23,6 +23,13 @@ namespace PlantsVsZombies.Rendering
         /// <summary>Gets splits required by the portable 16-bit vertex-index limit.</summary>
         internal int CapacitySplitCount { get; }
 
+        /// <summary>Gets the ordered GPU instance draws belonging to this pool.</summary>
+        internal int InstancedDrawCount { get; }
+        /// <summary>Gets the scene's uploaded instance and vertex bytes.</summary>
+        internal long InstanceUploadBytes { get; }
+        /// <summary>Gets cumulative actual native renderer visibility transitions.</summary>
+        internal int RendererVisibilityChangeCount { get; }
+
         /// <summary>Creates a per-pool snapshot without allocating a diagnostic object.</summary>
         /// <param name="submittedSpriteCount">The visible logical source commands.</param>
         /// <param name="batchCount">The combined GPU mesh draws.</param>
@@ -33,8 +40,12 @@ namespace PlantsVsZombies.Rendering
         /// <param name="materialSplitCount">Splits involving a texture or blend binding change.</param>
         /// <param name="painterOrderSplitCount">Splits preserving an intervening renderer.</param>
         /// <param name="capacitySplitCount">Splits preventing index overflow.</param>
+        /// <param name="instancedDrawCount">The active ordered instance draws.</param>
+        /// <param name="instanceUploadBytes">The complete scene's uploaded instance bytes.</param>
+        /// <param name="rendererVisibilityChangeCount">The actual native visibility transitions.</param>
         internal SpriteBatchStatistics(int submittedSpriteCount, int batchCount, int vertexCount, int triangleCount,
-            int culledSpriteCount, double coveredPixelArea, int materialSplitCount, int painterOrderSplitCount, int capacitySplitCount)
+            int culledSpriteCount, double coveredPixelArea, int materialSplitCount, int painterOrderSplitCount, int capacitySplitCount,
+            int instancedDrawCount = 0, long instanceUploadBytes = 0, int rendererVisibilityChangeCount = 0)
         {
             SubmittedSpriteCount = submittedSpriteCount;
             BatchCount = batchCount;
@@ -45,6 +56,9 @@ namespace PlantsVsZombies.Rendering
             MaterialSplitCount = materialSplitCount;
             PainterOrderSplitCount = painterOrderSplitCount;
             CapacitySplitCount = capacitySplitCount;
+            InstancedDrawCount = instancedDrawCount;
+            InstanceUploadBytes = instanceUploadBytes;
+            RendererVisibilityChangeCount = rendererVisibilityChangeCount;
         }
     }
 }

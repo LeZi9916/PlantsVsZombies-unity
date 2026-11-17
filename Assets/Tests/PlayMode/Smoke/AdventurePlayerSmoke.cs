@@ -265,7 +265,7 @@ namespace PlantsVsZombies.Tests.PlayMode.Smoke
                 return true;
             }), "The transformed Imitater could not be captured for pixel verification.");
             var surfaces = (System.Collections.IDictionary)typeof(global::PlantsVsZombies.Reanimation.ReanimationRenderer).GetField("_nativeSurfaces", Private)!.GetValue(renderer)!;
-            var surface = surfaces[captureKey]!;
+            var surface = surfaces[PlantsVsZombies.Rendering.PresentationIdentity.FromExternal(captureKey)]!;
             var target = (RenderTexture)surface.GetType().GetField("Texture").GetValue(surface);
             var previous = RenderTexture.active;
             var pixels = new Texture2D(target.width, target.height, TextureFormat.RGBA32, false);

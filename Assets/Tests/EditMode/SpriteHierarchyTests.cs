@@ -134,7 +134,8 @@ namespace PlantsVsZombies.Tests.EditMode
             hierarchy.BeginFrame(this);
             hierarchy.EndFrame();
             Assert.That(hierarchy.ActorCount, Is.Zero);
-            Assert.That(root == null, Is.True);
+            Assert.That(root.activeInHierarchy, Is.False);
+            Assert.That(hierarchy.InactiveSpriteCount, Is.EqualTo(1));
         }
 
         /// <summary>Preserves skewed animation axes and restores the correct metadata destination after attachment scopes.</summary>
@@ -175,6 +176,55 @@ namespace PlantsVsZombies.Tests.EditMode
             Assert.That(bodyInfo.LogicalSize, Is.EqualTo(new Vector2(20f, 30f)));
             Assert.That(bodyInfo.Tint, Is.EqualTo(Color.green));
             Assert.That(bodyInfo.RenderMode, Is.EqualTo(2));
+        }
+
+        /// <summary>Checks retired source components are reused without carrying hidden state or metadata to a new model.</summary>
+        [Test]
+        public void RetiredNodesReuseComponentsAndResetTheirModelBinding()
+        {
+            using var hierarchy = new SpriteHierarchy();
+            var session = new object();
+            var asset = new object();
+            hierarchy.BeginFrame(session);
+            GameObject first;
+            using (hierarchy.BeginActor("Plants", 1, "Peashooter"))
+            {
+                using (hierarchy.BeginSprite(asset, 0, "Body"))
+                {
+                    first = SpriteHierarchy.CurrentSpriteObject!;
+                    SpriteHierarchy.RecordCurrentSprite(SpriteImage.FromTexture(Texture2D.whiteTexture),
+                        12f, 8f, new Rect(0, 0, 1, 1), Matrix4x4.identity, Color.red, 0);
+                }
+            }
+            first.SetActive(false);
+            hierarchy.EndFrame();
+            hierarchy.BeginFrame(session);
+            hierarchy.EndFrame();
+            var created = hierarchy.SpriteNodeCreationCount;
+            hierarchy.BeginFrame(session);
+            using (hierarchy.BeginActor("Plants", 2, "Peashooter"))
+            {
+                using (hierarchy.BeginSprite(asset, 0, "Body"))
+                {
+                    Assert.That(SpriteHierarchy.CurrentSpriteObject, Is.SameAs(first));
+                    Assert.That(first.activeSelf, Is.True);
+                    Assert.That(first.GetComponent<SpriteHierarchySprite>().HasPose, Is.False);
+                }
+            }
+            Assert.That(hierarchy.SpriteNodeCreationCount, Is.EqualTo(created));
+        }
+
+        /// <summary>Checks a hierarchy toggle changes the capture revision before another draw in the same frame.</summary>
+        [Test]
+        public void VisibilityNotificationIsSynchronousWithoutRefreshTraversal()
+        {
+            using var hierarchy = new SpriteHierarchy();
+            hierarchy.BeginFrame(this);
+            using var actor = hierarchy.BeginActor("Zombies", 9, "Normal");
+            using var sprite = hierarchy.BeginNamedSprite("Shadow");
+            var revision = hierarchy.VisibilityRevision;
+            SpriteHierarchy.CurrentSpriteObject!.SetActive(false);
+            Assert.That(hierarchy.VisibilityRevision, Is.GreaterThan(revision));
         }
 
         /// <summary>Prevents hierarchy bookkeeping from allocating during warmed actor and sprite presentation.</summary>

@@ -53,7 +53,7 @@ namespace PlantsVsZombies.Tests.EditMode
                 Assert.That(particles.Draw("skew", "Skew", 0f, Vector2.zero, 1), Is.True);
                 particles.EndFrame();
                 var systems = (IDictionary)typeof(OriginalParticleRenderer).GetField("_systems", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(particles)!;
-                var system = systems["skew"]!;
+                var system = systems[PlantsVsZombies.Rendering.PresentationIdentity.FromExternal("skew")]!;
                 var emitters = (IList)system.GetType().GetField("Emitters")!.GetValue(system)!;
                 var emitter = emitters[0]!;
                 var active = (IList)emitter.GetType().GetField("Particles")!.GetValue(emitter)!;

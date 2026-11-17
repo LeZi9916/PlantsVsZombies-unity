@@ -49,7 +49,7 @@ namespace PlantsVsZombies.Tests.EditMode
                 Assert.That(particles.Draw("plantern", "RandomStart", 0f, Vector2.zero, 7529), Is.True);
                 particles.EndFrame();
                 var systems = (IDictionary)typeof(OriginalParticleRenderer).GetField("_systems", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(particles)!;
-                var system = systems["plantern"]!;
+                var system = systems[PlantsVsZombies.Rendering.PresentationIdentity.FromExternal("plantern")]!;
                 var emitters = (IList)system.GetType().GetField("Emitters")!.GetValue(system)!;
                 var active = (IList)emitters[0]!.GetType().GetField("Particles")!.GetValue(emitters[0])!;
                 Assert.That(active.Count, Is.EqualTo(20));

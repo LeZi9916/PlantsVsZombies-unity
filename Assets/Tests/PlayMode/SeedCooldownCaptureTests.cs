@@ -35,12 +35,14 @@ namespace PlantsVsZombies.Tests.PlayMode
         private Action<PlantKind, Rect> _drawPacket = null!;
         /// <summary>The original card-art method shared by the independent uncached reference.</summary>
         private Action<PlantKind, Rect, bool> _drawCard = null!;
+        /// <summary>The exact production card signature, including its optional dialog template parameter.</summary>
+        private Action<PlantKind, Rect, bool, PlantKind?> _drawCardWithTemplate = null!;
         /// <summary>Resolves original resource names without using the changed card composition implementation.</summary>
         private Func<PlantKind, string> _animationName = null!;
         /// <summary>The old uncached imitation callback retained for every reference frame.</summary>
         private Func<bool> _drawReferenceImitater = null!;
         /// <summary>The retained original imitation capture key names used without per-frame formatting.</summary>
-        private readonly PresentationKeyCache _referenceKeys = new PresentationKeyCache();
+        private PresentationKeyCache _referenceKeys = null!;
         /// <summary>The immediately consumed static atlas for a reference imitation, or null for native artwork.</summary>
         private SpriteImage? _referenceImitaterAtlas;
         /// <summary>The atlas crop immediately consumed by the old imitation callback.</summary>
@@ -53,6 +55,8 @@ namespace PlantsVsZombies.Tests.PlayMode
         private float _referenceImitaterScale;
         /// <summary>The production price method, outside the cached artwork itself.</summary>
         private Action<PlantKind, Rect> _drawCost = null!;
+        /// <summary>The complete production price signature, including its settled-bank default.</summary>
+        private Action<PlantKind, Rect, bool> _drawCostWithMode = null!;
         /// <summary>The uncaptured reference mask callback retained across every frame.</summary>
         private Func<bool> _drawReferenceMask = null!;
         /// <summary>The direct source-image callback used to isolate capture caching from simulation queries.</summary>
@@ -116,6 +120,10 @@ namespace PlantsVsZombies.Tests.PlayMode
             _owner = _host.AddComponent<PvZGame>();
             _owner._root = _root;
             _owner._game = new GameSimulation(new GameRules { AdventureLevel = 8, AdventurePacketSlots = 8 }, 7529);
+            // NUnit reuses the fixture instance, while each case creates a new production presenter.
+            // Match its fresh identity generation so the independent oracle overwrites the same logical surface.
+            _referenceKeys = new PresentationKeyCache();
+            _referenceKeys.SetSession(_owner._game);
             var seeds = new[] { PlantKind.Peashooter, PlantKind.Sunflower, PlantKind.CabbagePult, PlantKind.Imitater };
             _owner.RequiredGame.Adventure.AvailableSeeds = Array.AsReadOnly(seeds);
             _owner.RequiredGame.Adventure.ImitaterTarget = PlantKind.Peashooter;
@@ -133,8 +141,10 @@ namespace PlantsVsZombies.Tests.PlayMode
             SpriteSourceTestUtilities.SetImage(_owner.Textures, "packet_plants.png", Texture(650, 70, new Color(.6f, .3f, .8f, .45f)));
             var flags = BindingFlags.Instance | BindingFlags.NonPublic;
             _drawPacket = (Action<PlantKind, Rect>)typeof(GamePresenter).GetMethod("DrawAdventurePacket", flags)!.CreateDelegate(typeof(Action<PlantKind, Rect>), _presenter);
-            _drawCard = (Action<PlantKind, Rect, bool>)typeof(GamePresenter).GetMethod("DrawAdventureCard", flags)!.CreateDelegate(typeof(Action<PlantKind, Rect, bool>), _presenter);
-            _drawCost = (Action<PlantKind, Rect>)typeof(GamePresenter).GetMethod("DrawAdventurePacketCost", flags)!.CreateDelegate(typeof(Action<PlantKind, Rect>), _presenter);
+            _drawCardWithTemplate = (Action<PlantKind, Rect, bool, PlantKind?>)typeof(GamePresenter).GetMethod("DrawAdventureCard", flags)!.CreateDelegate(typeof(Action<PlantKind, Rect, bool, PlantKind?>), _presenter);
+            _drawCard = DrawCardWithoutTemplate;
+            _drawCostWithMode = (Action<PlantKind, Rect, bool>)typeof(GamePresenter).GetMethod("DrawAdventurePacketCost", flags)!.CreateDelegate(typeof(Action<PlantKind, Rect, bool>), _presenter);
+            _drawCost = DrawCurrentPacketCost;
             _animationName = (Func<PlantKind, string>)typeof(GamePresenter).GetMethod("AdventurePlantAnimation", BindingFlags.Static | BindingFlags.NonPublic)!.CreateDelegate(typeof(Func<PlantKind, string>));
             _drawReferenceImitater = DrawReferenceImitater;
             _drawReferenceMask = DrawReferenceMask;
@@ -235,7 +245,7 @@ namespace PlantsVsZombies.Tests.PlayMode
             _kind = PlantKind.Peashooter;
             _cooldowns[(int)_kind] = 500;
             yield return AssertMatchesReference();
-            _renderer.ReleaseNativeSurface("seed-cooldown-0");
+            _renderer.ReleaseNativeSurfaceIdentity("seed-cooldown-0");
             _tint = new Color(.55f, .8f, 1f, .65f);
             yield return AssertMatchesReference();
             _renderer.ResetNativePlayback();
@@ -285,6 +295,38 @@ namespace PlantsVsZombies.Tests.PlayMode
                 "Caching must add no allocation events to the original production packet-context path.");
             TestContext.WriteLine("Warm packet allocation events: uncached reference = " + referenceEvents
                 + ", cached production = " + cachedEvents + " (64 identical traversals each).");
+        }
+
+        /// <summary>Checks moving imitation cards retain original pixels while old coordinate captures stop accumulating.</summary>
+        /// <returns>Frame boundaries for independent pixel captures and delayed surface retirement.</returns>
+        [UnityTest]
+        public IEnumerator MovingImitaterCardsKeepPixelsAndBoundSurfacePopulation()
+        {
+            _kind = PlantKind.Imitater;
+            _owner.RequiredGame.Adventure.ImitaterTarget = PlantKind.Peashooter;
+            _cooldowns[(int)_kind] = 0;
+            var original = _card;
+            for (var direction = 0; direction < 2; direction++)
+            {
+                for (var step = 0; step < 8; step++)
+                {
+                    var offset = direction == 0 ? step : 7 - step;
+                    _card = new Rect(original.x + offset * 7f, original.y + offset * 3f, original.width, original.height);
+                    yield return AssertMatchesReference();
+                    Assert.That(_renderer.NativeSurfaceCount, Is.LessThanOrEqualTo(5),
+                        "Only current/recent coordinate captures and the independent reference may remain live.");
+                }
+            }
+            for (var frame = 0; frame < 4; frame++)
+            {
+                ObjectSpriteRenderer.BeginSceneFrame();
+                _presenter.BeginImitaterCaptureFrame();
+                _presenter.EndImitaterCaptureFrame();
+                yield return null;
+            }
+            _renderer.ReleaseNativeSurfaceIdentity("reference-cooldown");
+            Assert.That(_renderer.NativeSurfaceCount, Is.Zero, "An imitation surface omitted by every screen must retire after its complete-frame grace period.");
+            _card = original;
         }
 
         /// <summary>Retains the no-mask imitation image without adding capture renders or context allocation events.</summary>
@@ -383,7 +425,7 @@ namespace PlantsVsZombies.Tests.PlayMode
                 yield return null;
                 yield return null;
                 actual = Capture();
-                _renderer.ReleaseNativeSurface("reference-cooldown");
+                _renderer.ReleaseNativeSurfaceIdentity("reference-cooldown");
                 Draw(true);
                 yield return null;
                 yield return null;
@@ -391,7 +433,7 @@ namespace PlantsVsZombies.Tests.PlayMode
             }
             else
             {
-                _renderer.ReleaseNativeSurface("reference-cooldown");
+                _renderer.ReleaseNativeSurfaceIdentity("reference-cooldown");
                 Draw(true);
                 yield return null;
                 yield return null;
@@ -409,7 +451,50 @@ namespace PlantsVsZombies.Tests.PlayMode
                 maximum = Math.Max(maximum, Math.Abs(expected[index].b - actual[index].b));
                 maximum = Math.Max(maximum, Math.Abs(expected[index].a - actual[index].a));
             }
+            if (maximum > 1)
+            {
+                var output = Path.GetFullPath(Path.Combine(Application.dataPath, "..", "..", "seed-cooldown-differences"));
+                Directory.CreateDirectory(output);
+                var prefix = TestContext.CurrentContext.Test.MethodName + "-" + _kind + "-" + (int)_card.x + "-" + (int)_card.y;
+                WriteDifferenceImage(Path.Combine(output, prefix + "-actual.png"), actual);
+                WriteDifferenceImage(Path.Combine(output, prefix + "-expected.png"), expected);
+                var changed = 0;
+                var first = -1;
+                for (var index = 0; index < expected.Length; index++)
+                {
+                    if (!expected[index].Equals(actual[index]))
+                    {
+                        changed++;
+                        if (first < 0)
+                        {
+                            first = index;
+                        }
+                    }
+                }
+                TestContext.WriteLine("Cooldown difference: card=" + _card + ", target=" + _owner.RequiredGame.Adventure.ImitaterTarget
+                    + ", ticks=" + _cooldowns[(int)_kind] + ", changed=" + changed + ", first=" + first
+                    + ", actual=" + (first < 0 ? "none" : actual[first].ToString())
+                    + ", expected=" + (first < 0 ? "none" : expected[first].ToString()) + ", output=" + output);
+            }
             Assert.That(maximum, Is.LessThanOrEqualTo(1), "Retained masks must match uncached native composition for " + _kind);
+        }
+
+        /// <summary>Writes only failing pixel evidence outside the test project's imported Assets directory.</summary>
+        /// <param name="path">The ignored evidence path.</param>
+        /// <param name="pixels">The already captured comparison pixels.</param>
+        private void WriteDifferenceImage(string path, Color32[] pixels)
+        {
+            var image = new Texture2D(_target.width, _target.height, TextureFormat.RGBA32, false);
+            try
+            {
+                image.SetPixels32(pixels);
+                image.Apply();
+                File.WriteAllBytes(path, image.EncodeToPNG());
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(image);
+            }
         }
 
         /// <summary>Submits one packet with a real Canvas price and production viewport transform.</summary>
@@ -417,6 +502,7 @@ namespace PlantsVsZombies.Tests.PlayMode
         private void Draw(bool reference)
         {
             ObjectSpriteRenderer.BeginSceneFrame();
+            _presenter.BeginImitaterCaptureFrame();
             CanvasUI.BeginFrame();
             _referenceKeys.BeginFrame();
             var scale = Mathf.Min(Screen.width / 800f, Screen.height / 600f);
@@ -442,6 +528,7 @@ namespace PlantsVsZombies.Tests.PlayMode
             {
                 _renderer.EndObjectFrame();
                 CanvasUI.EndFrame();
+                _presenter.EndImitaterCaptureFrame();
             }
         }
 
@@ -461,7 +548,7 @@ namespace PlantsVsZombies.Tests.PlayMode
                 {
                     CanvasUI.Color = new Color(previous.r * visual.MaskColor / 255f, previous.g * visual.MaskColor / 255f,
                         previous.b * visual.MaskColor / 255f, previous.a);
-                    _renderer.DrawNativeClipped("reference-cooldown", _card, _drawReferenceMask,
+                    _renderer.DrawNativeClippedIdentity("reference-cooldown", _card, _drawReferenceMask,
                         topCrop: Math.Min(_card.height, visual.MaskHeight));
                 }
             }
@@ -481,6 +568,23 @@ namespace PlantsVsZombies.Tests.PlayMode
         {
             DrawReferenceCard(_kind, _card);
             return true;
+        }
+
+        /// <summary>Calls the exact production signature while keeping the independent reference's settled-template default.</summary>
+        /// <param name="kind">The original packet kind.</param>
+        /// <param name="card">The original packet rectangle.</param>
+        /// <param name="price">Whether the price is drawn.</param>
+        private void DrawCardWithoutTemplate(PlantKind kind, Rect card, bool price)
+        {
+            _drawCardWithTemplate(kind, card, price, null);
+        }
+
+        /// <summary>Preserves the production packet-cost default without binding a delegate to an omitted optional parameter.</summary>
+        /// <param name="kind">The original packet kind.</param>
+        /// <param name="card">The original packet rectangle.</param>
+        private void DrawCurrentPacketCost(PlantKind kind, Rect card)
+        {
+            _drawCostWithMode(kind, card, true);
         }
 
         /// <summary>Rejects missing native resources or failed inner captures before comparing imitation pixels.</summary>
@@ -510,7 +614,9 @@ namespace PlantsVsZombies.Tests.PlayMode
             var bank = _owner.Textures.LoadImage("seeds.png");
             if (bank != null)
             {
-                _renderer.DrawNativeImage(bank, card, new Rect(2f / 9f, 0f, 1f / 9f, 1f));
+                // Imitater uses native seed-frame zero; ordinary plants use frame two.
+                // The synthetic sheet has a transparent outer border, so the wrong frame differs at the left edge.
+                _renderer.DrawNativeImage(bank, card, new Rect(0f, 0f, 1f / 9f, 1f));
             }
             var target = _owner.RequiredGame.Adventure.RequiredImitaterTarget;
             var id = (int)target;
@@ -527,7 +633,7 @@ namespace PlantsVsZombies.Tests.PlayMode
                 _referenceImitaterScale = scale * card.width / 50f;
                 _referenceImitaterName = _animationName(target);
             }
-            _renderer.DrawNativeClipped(_referenceKeys.Get("imitater-card-", (int)card.x, (int)card.y),
+            _renderer.DrawNativeClippedIdentity(_referenceKeys.Get("imitater-card-", (int)card.x, (int)card.y),
                 card, _drawReferenceImitater, grayscale: true);
         }
 

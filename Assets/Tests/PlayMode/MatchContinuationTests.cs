@@ -61,8 +61,12 @@ namespace PlantsVsZombies.Tests.PlayMode
             Assert.That(Controller.RequiredGame.SunAmount, Is.EqualTo(777));
             Assert.That(Controller.RequiredGame.Zombies.Single(item => item.Id == 88002).Health, Is.EqualTo(137f));
             Assert.That(Controller.RequiredGame.Adventure.CurrentWave, Is.EqualTo(3));
+            yield return WaitForBattlePreparation();
+            var preparedElapsed = Controller.RequiredGame.Elapsed;
             yield return null;
             Assert.That(Controller.RequiredGame.Elapsed, Is.GreaterThan(elapsed));
+            Assert.That(Controller.RequiredGame.Elapsed, Is.GreaterThan(preparedElapsed),
+                "Accepted continuation must advance on the first measured frame after preparation completes.");
         }
 
         /// <summary>Checks native survival update-one autosave remains available throughout the next chooser.</summary>
@@ -185,6 +189,7 @@ namespace PlantsVsZombies.Tests.PlayMode
             Assert.That(Controller.RequiredModeView.LaunchRequested!(mode), Is.True);
             Assert.That(Controller.IndependentModes.RequiredModeSession.ChooseSeeds(new[] { PlantKind.Peashooter, PlantKind.Sunflower, PlantKind.Wallnut, PlantKind.PotatoMine, PlantKind.SnowPea, PlantKind.Chomper }), Is.True);
             Controller._choosingSeeds = false;
+            yield return WaitForBattlePreparation();
         }
 
         /// <summary>Invokes the actual options pointer handling and close-result persistence route.</summary>

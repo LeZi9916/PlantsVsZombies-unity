@@ -78,10 +78,20 @@ namespace PlantsVsZombies.Rendering
         private readonly Dictionary<string, SpriteAtlasImage> _metadata = new Dictionary<string, SpriteAtlasImage>(StringComparer.OrdinalIgnoreCase);
         /// <summary>The stable logical handles retained across whole-layout fallback.</summary>
         private readonly Dictionary<string, SpriteImage> _images = new Dictionary<string, SpriteImage>(StringComparer.OrdinalIgnoreCase);
+        /// <summary>Caches positive and negative lookups in the immutable source index for this provider lifetime.</summary>
+        private readonly Dictionary<string, bool> _availability = new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
         /// <summary>The imported pages loaded for the currently selected complete layout.</summary>
         private readonly Dictionary<int, Texture2D> _pages = new Dictionary<int, Texture2D>();
         /// <summary>The last complete scene frame referencing each current-layout page.</summary>
         private readonly Dictionary<int, int> _pageLastSeen = new Dictionary<int, int>();
+        /// <summary>The independent stage owners currently retaining current-layout pages.</summary>
+        private readonly List<SpritePageLease> _pageLeases = new List<SpritePageLease>();
+        /// <summary>The shared pin count for each page in the current complete layout.</summary>
+        private readonly Dictionary<int, int> _pagePins = new Dictionary<int, int>();
+        /// <summary>Whether complete-layout fallback requires the active leases to load and pin replacement pages.</summary>
+        private bool _leasePinsNeedRefresh;
+        /// <summary>Prevents recursive lease refresh while replacement images are being resolved.</summary>
+        private bool _refreshingLeasePins;
         /// <summary>The reusable list of inactive page IDs awaiting safe eviction.</summary>
         private readonly List<int> _unusedPageIds = new List<int>();
         /// <summary>The bounded cross-image geometry cache, populated only by actually sampled source requests.</summary>
@@ -349,8 +359,14 @@ namespace PlantsVsZombies.Rendering
         {
             ThrowIfDisposed();
             var key = Normalize(imageId);
-            return _catalog != null ? _metadata.ContainsKey(key) || _metadata.ContainsKey("images/" + key)
+            if (_availability.TryGetValue(key, out var available))
+            {
+                return available;
+            }
+            available = _catalog != null ? _metadata.ContainsKey(key) || _metadata.ContainsKey("images/" + key)
                 : _loosePaths.ContainsKey(key) || _loosePaths.ContainsKey("images/" + key);
+            _availability.Add(key, available);
+            return available;
         }
 
         /// <summary>Loads an optional logical image without using exceptions for ordinary missing artwork.</summary>
@@ -687,6 +703,106 @@ namespace PlantsVsZombies.Rendering
             return new Rect(positive.x * image.Width, positive.y * image.Height, positive.width * image.Width, positive.height * image.Height);
         }
 
+        /// <summary>Gets the number of current-layout pages retained by one or more explicit stage owners.</summary>
+        internal int PinnedPageCount => _pagePins.Count;
+
+        /// <summary>Gets the current stage-pinned RGBA page storage without counting the same shared page twice.</summary>
+        internal long PinnedPageBytes
+        {
+            get
+            {
+                var bytes = 0L;
+                foreach (var page in _pagePins.Keys)
+                {
+                    if (_pages.TryGetValue(page, out var texture))
+                    {
+                        bytes += (long)texture.width * texture.height * 4;
+                    }
+                }
+                return bytes;
+            }
+        }
+
+        /// <summary>Retains an independent provider acquisition for one stage's explicitly prepared images.</summary>
+        /// <returns>A lease that must be disposed when the stage or renderer ends.</returns>
+        /// <exception cref="ObjectDisposedException">The provider has already been released.</exception>
+        internal SpritePageLease CreatePageLease()
+        {
+            ThrowIfDisposed();
+            var lease = new SpritePageLease(this);
+            _pageLeases.Add(lease);
+            _references++;
+            return lease;
+        }
+
+        /// <summary>Loads and pins a logical source against the current complete layout.</summary>
+        /// <param name="lease">The independent stage owner.</param>
+        /// <param name="binding">The stable logical source identity.</param>
+        internal void PinLeaseImage(SpritePageLease lease, SpriteImageBinding binding)
+        {
+            var image = PrepareImage(binding);
+            foreach (var tile in image.Tiles)
+            {
+                if (lease.Pages.Add((LayoutVersion, tile.Page)))
+                {
+                    _pagePins.TryGetValue(tile.Page, out var references);
+                    _pagePins[tile.Page] = references + 1;
+                }
+            }
+        }
+
+        /// <summary>Rebinds every active stage's source set after a whole-layout fallback.</summary>
+        private void RefreshPageLeasePins()
+        {
+            _refreshingLeasePins = true;
+            try
+            {
+                var version = -1;
+                while (version != LayoutVersion)
+                {
+                    version = LayoutVersion;
+                    _leasePinsNeedRefresh = false;
+                    foreach (var lease in _pageLeases)
+                    {
+                        foreach (var binding in lease.Bindings)
+                        {
+                            PinLeaseImage(lease, binding);
+                        }
+                    }
+                }
+            }
+            finally
+            {
+                _refreshingLeasePins = false;
+            }
+        }
+
+        /// <summary>Releases only the pages owned by one stage, preserving references from other renderers.</summary>
+        /// <param name="lease">The completed independent stage.</param>
+        internal void ReleasePageLease(SpritePageLease lease)
+        {
+            if (!_pageLeases.Remove(lease))
+            {
+                return;
+            }
+            foreach (var page in lease.Pages)
+            {
+                if (page.Layout != LayoutVersion || !_pagePins.TryGetValue(page.Page, out var references))
+                {
+                    continue;
+                }
+                if (references > 1)
+                {
+                    _pagePins[page.Page] = references - 1;
+                }
+                else
+                {
+                    _pagePins.Remove(page.Page);
+                }
+            }
+            Dispose();
+        }
+
         /// <summary>Loads every page for an image and retries recoverable failures with a smaller complete layout.</summary>
         /// <param name="binding">The stable handle rebound when a complete layout changes.</param>
         /// <returns>Metadata from the successfully prepared complete layout.</returns>
@@ -710,6 +826,15 @@ namespace PlantsVsZombies.Rendering
                     {
                         LoadPage(tile);
                     }
+                    if (_leasePinsNeedRefresh && !_refreshingLeasePins)
+                    {
+                        var version = LayoutVersion;
+                        RefreshPageLeasePins();
+                        if (version != LayoutVersion)
+                        {
+                            continue;
+                        }
+                    }
                     return image;
                 }
                 catch (Exception error) when (error is InvalidOperationException || error is UnityException || error is IOException)
@@ -726,6 +851,8 @@ namespace PlantsVsZombies.Rendering
                     }
                     _pages.Clear();
                     _pageLastSeen.Clear();
+                    _pagePins.Clear();
+                    _leasePinsNeedRefresh = _pageLeases.Count > 0;
                     _pageStorageVersion++;
                     _layoutIndex = next;
                     SelectMetadata();
@@ -780,7 +907,7 @@ namespace PlantsVsZombies.Rendering
             _unusedPageIds.Clear();
             foreach (var entry in _pageLastSeen)
             {
-                if (SpriteDrawState.FrameVersion - entry.Value > 2)
+                if (SpriteDrawState.FrameVersion - entry.Value > 2 && !_pagePins.ContainsKey(entry.Key))
                 {
                     _unusedPageIds.Add(entry.Key);
                 }
@@ -1018,9 +1145,12 @@ namespace PlantsVsZombies.Rendering
             }
             _pages.Clear();
             _pageLastSeen.Clear();
+            _pagePins.Clear();
+            _pageLeases.Clear();
             _retiredPages.Clear();
             _looseTextures.Clear();
             _images.Clear();
+            _availability.Clear();
             _texts.Clear();
             foreach (var entry in _regionCache.Values)
             {

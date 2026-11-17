@@ -98,6 +98,20 @@ namespace PlantsVsZombies.Tests.PlayMode.Smoke
             yield return null;
         }
 
+        /// <summary>Waits for the real Update-driven two-millisecond preparation phase before a scenario measures gameplay.</summary>
+        /// <returns>Actual frame boundaries until the currently attached battle is ready.</returns>
+        protected IEnumerator WaitForBattlePreparation()
+        {
+            // The first real frame lets Update bind a newly attached world before observing its ready flag.
+            yield return null;
+            for (var frame = 0; frame < 3600 && !Controller.Preparation.IsReady; frame++)
+            {
+                yield return null;
+            }
+            Assert.That(Controller.Preparation.IsReady, Is.True,
+                "The real frame-budgeted battle preparation must converge before gameplay timing or input assertions.");
+        }
+
         /// <summary>Disposes the session after assertions and restores the previous application state.</summary>
         /// <returns>A frame for Unity to destroy the test's rendering and audio objects.</returns>
         [UnityTearDown]

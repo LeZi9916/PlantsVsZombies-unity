@@ -21,6 +21,8 @@ namespace PlantsVsZombies.Rendering
 
         /// <summary>Retains explicit alpha-grid combinations without per-frame key concatenation.</summary>
         private readonly Dictionary<(string Color, string Mask), SpriteImage?> _alphaImages = new Dictionary<(string, string), SpriteImage?>();
+        /// <summary>Formats each native alpha-grid ownership key only once, including missing source combinations.</summary>
+        private readonly Dictionary<(string Color, string Mask), string> _alphaTextureKeys = new Dictionary<(string, string), string>();
 
         /// <summary>Creates this component for one game session.</summary>
         /// <param name="owner">The game session that supplies the original resource root.</param>
@@ -36,6 +38,7 @@ namespace PlantsVsZombies.Rendering
             _images = null;
             _imageCache.Clear();
             _alphaImages.Clear();
+            _alphaTextureKeys.Clear();
             foreach (var texture in _textures.Values)
             {
                 if (texture != null)
@@ -174,7 +177,12 @@ namespace PlantsVsZombies.Rendering
         /// <returns>The cached RGBA texture, or null when either source is missing.</returns>
         internal Texture2D? LoadAlphaGrid(string colorName, string maskName)
         {
-            var key = colorName + "|" + maskName;
+            var pair = (colorName, maskName);
+            if (!_alphaTextureKeys.TryGetValue(pair, out var key))
+            {
+                key = colorName + "|" + maskName;
+                _alphaTextureKeys.Add(pair, key);
+            }
             if (_textures.TryGetValue(key, out var texture))
             {
                 return texture;

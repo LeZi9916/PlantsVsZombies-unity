@@ -149,18 +149,20 @@ namespace PlantsVsZombies.Tests.EditMode
         public void EffectKeysReuseExactTextAndRetireInactiveEntries()
         {
             var cache = new PresentationKeyCache();
+            cache.SetSession(this);
             cache.BeginFrame();
             var explosion = cache.Get("native-explosion-", 123);
             var trail = cache.Get("snow-trail-", 123);
-            Assert.That(explosion, Is.EqualTo("native-explosion-123"));
-            Assert.That(trail, Is.EqualTo("snow-trail-123"));
+            Assert.That(explosion, Is.Not.EqualTo(trail));
             cache.BeginFrame();
-            Assert.That(cache.Get("native-explosion-", 123), Is.SameAs(explosion));
-            Assert.That(cache.Get("snow-trail-", 123), Is.SameAs(trail));
+            Assert.That(cache.Get("native-explosion-", 123), Is.EqualTo(explosion));
+            Assert.That(cache.Get("snow-trail-", 123), Is.EqualTo(trail));
             cache.BeginFrame();
             cache.BeginFrame();
-            Assert.That(cache.Get("native-explosion-", 123), Is.Not.SameAs(explosion));
-            Assert.That(cache.Get("snow-trail-", 123), Is.Not.SameAs(trail));
+            Assert.That(cache.Get("native-explosion-", 123), Is.EqualTo(explosion));
+            Assert.That(cache.Get("snow-trail-", 123), Is.EqualTo(trail));
+            cache.SetSession(new object());
+            Assert.That(cache.Get("native-explosion-", 123), Is.Not.EqualTo(explosion));
         }
 
         /// <summary>Checks explicit disposal clears both current and preceding frame identities.</summary>
@@ -174,8 +176,8 @@ namespace PlantsVsZombies.Tests.EditMode
             cache.Clear();
             cache.Clear();
 
-            Assert.That(cache.Get("arm-", 1), Is.Not.SameAs(previous));
-            Assert.That(cache.Get("arm-", 2), Is.Not.SameAs(current));
+            Assert.That(cache.Get("arm-", 1), Is.Not.EqualTo(previous));
+            Assert.That(cache.Get("arm-", 2), Is.Not.EqualTo(current));
         }
 
         /// <summary>Checks frozen silhouette head and equipment rules across consecutive callback contexts.</summary>

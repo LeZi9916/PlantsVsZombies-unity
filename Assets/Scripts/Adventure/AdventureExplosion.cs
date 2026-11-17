@@ -46,6 +46,8 @@ namespace PlantsVsZombies.Adventure
                         return nameof(AdventureExplosionEffect.GraveBusterDie);
                     case AdventureExplosionEffect.IceTrap:
                         return nameof(AdventureExplosionEffect.IceTrap);
+                    case AdventureExplosionEffect.JackExplode:
+                        return nameof(AdventureExplosionEffect.JackExplode);
                     default:
                         return Effect.ToString();
                 }

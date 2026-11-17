@@ -111,22 +111,30 @@ namespace PlantsVsZombies.Rendering.Pipeline
         /// <param name="camera">The camera to render into its current target.</param>
         private void RenderCamera(ScriptableRenderContext context, Camera camera)
         {
+            ObjectSpriteRenderer.PublishSceneFrameBeforeRendering(camera);
             BeginCameraRendering(context, camera);
             EmitEditorGeometry(camera);
-            if (camera.TryGetCullingParameters(out var cullingParameters))
+            ObjectSpriteRenderer.PrepareSceneQueuesForCamera(camera);
+            try
             {
-                cullingParameters.cullingOptions &= ~UnusedCullingFeatures;
-                // Render requests use cameras that stay disabled between captures.
-                cullingParameters.cullingOptions |= CullingOptions.ForceEvenIfCameraIsNotActive;
-                var cullingResults = context.Cull(ref cullingParameters);
-                context.SetupCameraProperties(camera);
-                AppendClear(camera);
-                AppendRenderers(context, cullingResults, camera, SortingCriteria.CommonOpaque, RenderQueueRange.opaque);
-                AppendRenderers(context, cullingResults, camera, SortingCriteria.CommonTransparent, RenderQueueRange.transparent);
-                AppendGizmos(context, camera);
-                context.ExecuteCommandBuffer(_commands);
+                if (camera.TryGetCullingParameters(out var cullingParameters))
+                {
+                    cullingParameters.cullingOptions &= ~UnusedCullingFeatures;
+                    // Render requests use cameras that stay disabled between captures.
+                    cullingParameters.cullingOptions |= CullingOptions.ForceEvenIfCameraIsNotActive;
+                    var cullingResults = context.Cull(ref cullingParameters);
+                    context.SetupCameraProperties(camera);
+                    AppendClear(camera);
+                    AppendRenderers(context, cullingResults, camera, SortingCriteria.CommonOpaque, RenderQueueRange.opaque);
+                    AppendTransparentRenderers(context, cullingResults, camera);
+                    AppendGizmos(context, camera);
+                    context.ExecuteCommandBuffer(_commands);
+                    context.Submit();
+                }
+            }
+            finally
+            {
                 _commands.Clear();
-                context.Submit();
             }
 
             EndCameraRendering(context, camera);
@@ -153,13 +161,47 @@ namespace PlantsVsZombies.Rendering.Pipeline
             _commands.ClearRenderTarget(true, clearColor, color);
         }
 
+        /// <summary>Records game transparency with queues first while preserving native Canvas input and sibling priorities.</summary>
+        /// <param name="context">The context that creates the renderer lists.</param>
+        /// <param name="cullingResults">The renderers visible to this camera.</param>
+        /// <param name="camera">The scene, capture, or editor camera being rendered.</param>
+        private void AppendTransparentRenderers(ScriptableRenderContext context, CullingResults cullingResults, Camera camera)
+        {
+            const int gameLayerMask = 1 << 31;
+            if (!ObjectSpriteRenderer.UsesSceneQueuesForCamera(camera))
+            {
+                AppendRenderers(context, cullingResults, camera, SortingCriteria.CommonTransparent, RenderQueueRange.transparent);
+                return;
+            }
+            if ((camera.cullingMask & ~gameLayerMask) != 0)
+            {
+                AppendRenderers(context, cullingResults, camera, SortingCriteria.CommonTransparent, RenderQueueRange.transparent, ~gameLayerMask);
+            }
+            if ((camera.cullingMask & gameLayerMask) != 0)
+            {
+                AppendRenderers(context, cullingResults, camera, GetTransparentSortingCriteria(31, true), RenderQueueRange.transparent, gameLayerMask);
+            }
+        }
+
+        /// <summary>Selects queue-first ordering only for the reserved game layer while retaining native Canvas sibling order.</summary>
+        /// <param name="layer">The Unity layer whose transparent draw list is being recorded.</param>
+        /// <param name="usesSceneQueues">Whether this camera and complete scene use compressed painter queues.</param>
+        /// <returns>The standard transparent criteria with only the game layer's native sorting key omitted when bridged.</returns>
+        internal static SortingCriteria GetTransparentSortingCriteria(int layer, bool usesSceneQueues)
+        {
+            return layer == 31 && usesSceneQueues
+                ? (SortingCriteria.CommonTransparent & ~SortingCriteria.SortingLayer) | SortingCriteria.CanvasOrder
+                : SortingCriteria.CommonTransparent;
+        }
+
         /// <summary>Records the visible renderers of one render queue range.</summary>
         /// <param name="context">The context that creates the renderer list.</param>
         /// <param name="cullingResults">The renderers visible to the camera.</param>
         /// <param name="camera">The camera providing the sorting origin.</param>
         /// <param name="criteria">The sorting applied to the renderers, which includes sorting layer and order.</param>
         /// <param name="queues">The render queue range to draw.</param>
-        private void AppendRenderers(ScriptableRenderContext context, CullingResults cullingResults, Camera camera, SortingCriteria criteria, RenderQueueRange queues)
+        /// <param name="layerMask">The Unity layers included in this independently sorted draw list.</param>
+        private void AppendRenderers(ScriptableRenderContext context, CullingResults cullingResults, Camera camera, SortingCriteria criteria, RenderQueueRange queues, int layerMask = -1)
         {
             var sorting = new SortingSettings(camera)
             {
@@ -167,9 +209,10 @@ namespace PlantsVsZombies.Rendering.Pipeline
             };
             var drawing = new DrawingSettings(s_unlitPass, sorting)
             {
-                perObjectData = PerObjectData.None
+                perObjectData = PerObjectData.None,
+                enableInstancing = true
             };
-            var filtering = new FilteringSettings(queues);
+            var filtering = new FilteringSettings(queues, layerMask);
             var parameters = new RendererListParams(cullingResults, drawing, filtering);
             _commands.DrawRendererList(context.CreateRendererList(ref parameters));
         }

@@ -1,52 +1,47 @@
 #nullable enable
-using System.Collections.Generic;
+using PlantsVsZombies.Rendering;
 
 namespace PlantsVsZombies.Game
 {
-    /// <summary>Reuses actor keys while retaining only the current and preceding presentation frames.</summary>
+    /// <summary>Produces value identities without retaining or formatting entity keys.</summary>
     internal sealed class PresentationKeyCache
     {
-        /// <summary>The keys requested during the current frame.</summary>
-        private Dictionary<(string Prefix, int Id, int Part), string> _current = new Dictionary<(string, int, int), string>();
-        /// <summary>The preceding frame's keys available for reuse.</summary>
-        private Dictionary<(string Prefix, int Id, int Part), string> _previous = new Dictionary<(string, int, int), string>();
+        /// <summary>The match whose numeric identities are currently active.</summary>
+        private object? _session;
+        /// <summary>The generation distinguishing identifiers reused by another match.</summary>
+        private uint _generation;
 
-        /// <summary>Retires older keys and starts collecting the next frame's live identities.</summary>
+        /// <summary>Begins a presentation without allocating key collection storage.</summary>
         internal void BeginFrame()
         {
-            var reusable = _previous;
-            _previous = _current;
-            _current = reusable;
-            _current.Clear();
         }
 
-        /// <summary>Releases all retained identities when their presentation lifetime ends.</summary>
+        /// <summary>Changes the generation only when the owning simulation changes.</summary>
+        /// <param name="session">The current simulation or standalone presenter owner.</param>
+        internal void SetSession(object session)
+        {
+            if (!ReferenceEquals(_session, session))
+            {
+                _session = session;
+                _generation++;
+            }
+        }
+
+        /// <summary>Retires all identities when the presentation session ends.</summary>
         internal void Clear()
         {
-            _current.Clear();
-            _previous.Clear();
+            _session = null;
+            _generation++;
         }
 
-        /// <summary>Gets a stable string for a live actor or effect without formatting it again.</summary>
-        /// <param name="prefix">The renderer's existing identity prefix.</param>
-        /// <param name="id">The simulation identity.</param>
-        /// <param name="part">An optional attachment or effect index.</param>
-        /// <returns>The existing key, or a newly formatted key for a newly visible identity.</returns>
-        internal string Get(string prefix, int id, int part = -1)
+        /// <summary>Gets an allocation-free role, entity, and part identity.</summary>
+        /// <param name="prefix">The existing immutable role identifier.</param>
+        /// <param name="id">The model identifier.</param>
+        /// <param name="part">The optional model part.</param>
+        /// <returns>The session-scoped value identity.</returns>
+        internal PresentationIdentity Get(string prefix, int id, int part = -1)
         {
-            var identity = (prefix, id, part);
-            if (_current.TryGetValue(identity, out var key))
-            {
-                return key;
-            }
-
-            if (!_previous.TryGetValue(identity, out key))
-            {
-                key = part < 0 ? prefix + id : prefix + id + "-" + part;
-            }
-
-            _current.Add(identity, key);
-            return key;
+            return PresentationIdentity.Create(prefix, id, part, _generation);
         }
     }
 }

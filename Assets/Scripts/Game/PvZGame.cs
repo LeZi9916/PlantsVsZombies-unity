@@ -133,6 +133,10 @@ namespace PlantsVsZombies.Game
         private MatchContinuationController? _continuation;
         /// <summary>Gets the original board save and continuation lifecycle.</summary>
         internal MatchContinuationController Continuation => _continuation ??= new MatchContinuationController(this);
+        /// <summary>Retains cooperative preparation for the current board and native stage.</summary>
+        private GamePreparationController? _preparation;
+        /// <summary>Gets the coordinator that prepares battle storage before the first admitted gameplay tick.</summary>
+        internal GamePreparationController Preparation => _preparation ??= new GamePreparationController(this);
 
         /// <summary>Stores the lazily created adventure opening controller.</summary>
         private AdventureOpeningController? _opening;
@@ -400,6 +404,7 @@ namespace PlantsVsZombies.Game
         private void Update()
         {
             using var update = s_updateMarker.Auto();
+            Preparation.Advance();
             using (s_updateInputMarker.Auto())
             {
                 GameInput.Capture();
@@ -407,7 +412,10 @@ namespace PlantsVsZombies.Game
                 _pendingUiAction = null;
                 pendingAction?.Invoke();
                 AdventureBoard.AdvanceHammerAnimation(Time.unscaledDeltaTime);
-                Router.HandleInput();
+                if (!Preparation.BlocksGameplay)
+                {
+                    Router.HandleInput();
+                }
             }
             AdventureBoard.PreserveAdventureFeedbackDuringPause(Time.unscaledDeltaTime);
             if (Loading.UpdateOriginalLoading(Time.unscaledDeltaTime))
@@ -429,7 +437,7 @@ namespace PlantsVsZombies.Game
                 _pendingSeeds.Advance(Time.deltaTime);
             }
 
-            var openingBlocksSimulation = Continuation.DialogOpen || Opening.UpdateAdventureOpening(Time.deltaTime);
+            var openingBlocksSimulation = Continuation.DialogOpen || Opening.UpdateAdventureOpening(Time.deltaTime) || !Preparation.IsReady;
             if (!Continuation.DialogOpen)
             {
                 Opening.UpdateVaseInterlude(Time.deltaTime);

@@ -200,7 +200,7 @@ namespace PlantsVsZombies.Tests.PlayMode
         {
             var systems = (IDictionary)typeof(OriginalParticleRenderer)
                 .GetField("_systems", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(particles)!;
-            var system = systems["doom-stem-base"]!;
+            var system = systems[PlantsVsZombies.Rendering.PresentationIdentity.FromExternal("doom-stem-base")]!;
             var emitters = (IList)system.GetType().GetField("Emitters")!.GetValue(system)!;
             foreach (var emitter in emitters)
             {

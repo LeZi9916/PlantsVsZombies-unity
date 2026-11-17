@@ -107,6 +107,16 @@ namespace PlantsVsZombies.Rendering
             return _provider.GetRegionCount(_binding!, sourceUv, useTightGeometry);
         }
 
+        /// <summary>Retains this baked image's prepared pages until an owning stage lease ends.</summary>
+        /// <param name="lease">The lease created by this image's shared provider.</param>
+        internal void RetainPreparedPages(SpritePageLease lease)
+        {
+            if (_provider != null && _binding != null)
+            {
+                lease.Pin(_provider, _binding);
+            }
+        }
+
         /// <summary>Reads a cropped visible region without allocating an iterator or temporary collection.</summary>
         /// <param name="sourceUv">The requested normalized original source rectangle.</param>
         /// <param name="index">The zero-based visible-region index.</param>

@@ -132,6 +132,7 @@ namespace PlantsVsZombies.Tests.PlayMode.Smoke
             RequiredController.Campaign.StartAdventureTestLevel(8);
             Check(Sim.ChooseDefaultAdventureSeeds(), "Could not choose test seeds");
             GameMemberReflection.SetField(RequiredController, "_choosingSeeds", false);
+            yield return WaitForBattlePreparation();
             var sunflower = (Plant)SimCall("PlaceAdventurePlant", PlantKind.Sunflower, 1, 1);
             sunflower.Timing = global::PlantsVsZombies.Timing.PlantTiming.FromRaw(global::PlantsVsZombies.Timing.PlantKind.Sunflower, 150, 0);
             sunflower.ActionTimer = 1.5f;

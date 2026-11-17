@@ -8,6 +8,7 @@ using System.Collections.Generic;
 using System.IO;
 using UnityEngine;
 using UnityEngine.Networking;
+using UnityEngine.SceneManagement;
 using PlantsVsZombies.Game;
 using PlantsVsZombies.Inputs;
 using PlantsVsZombies.Rendering;
@@ -119,6 +120,16 @@ namespace PlantsVsZombies.Audio
         private AudioListener? _ownedMusicListener;
         /// <summary>Stores next audio listener check.</summary>
         private float _nextAudioListenerCheck;
+        /// <summary>Reuses loaded-scene roots instead of allocating the global object-finder result array.</summary>
+        private readonly List<GameObject> _audioListenerRoots = new List<GameObject>(64);
+        /// <summary>Reuses per-root listener results, including disabled listeners inspected for future activation.</summary>
+        private readonly List<AudioListener> _audioListenerCandidates = new List<AudioListener>(16);
+        /// <summary>Retains only the hidden persistent-scene lookup anchor, never a cached listener-selection result.</summary>
+        private GameObject? _audioListenerSceneAnchor;
+        /// <summary>Tracks the persistent scene omitted by SceneManager's ordinary loaded-scene enumeration.</summary>
+        private Scene _audioListenerPersistentScene;
+        /// <summary>Counts scene-root or component-list capacity growth outside initial preparation.</summary>
+        internal int AudioListenerScanCapacityGrowthCount { get; private set; }
         /// <summary>Stores dynamic audio failures.</summary>
         private int _dynamicAudioFailures;
         /// <summary>Stores music output probe running.</summary>
@@ -657,34 +668,124 @@ namespace PlantsVsZombies.Audio
             }
         }
 
-        /// <summary>Performs ensure original audio listener.</summary>
-        private void EnsureOriginalAudioListener()
+        /// <summary>Checks external listener activity without allocating arrays or caching stale selection results.</summary>
+        internal void EnsureOriginalAudioListener()
         {
-            var listeners = UnityEngine.Object.FindObjectsByType<AudioListener>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
-            foreach (var listener in listeners)
+            try
             {
-                if (listener != _ownedMusicListener && listener.isActiveAndEnabled)
+                EnsureAudioListenerPersistentScene();
+                var external = false;
+                for (var index = 0; index < SceneManager.sceneCount && !external; index++)
+                {
+                    external = SceneHasExternalAudioListener(SceneManager.GetSceneAt(index));
+                }
+                if (!external && _audioListenerPersistentScene.IsValid() && _audioListenerPersistentScene.isLoaded)
+                {
+                    external = SceneHasExternalAudioListener(_audioListenerPersistentScene);
+                }
+                if (external)
                 {
                     if (_ownedMusicListener != null)
                     {
                         _ownedMusicListener.enabled = false;
                     }
-
                     return;
                 }
+                if (_ownedMusicListener == null)
+                {
+                    // The fallback remains disabled while scene preparation discovers existing external listeners.
+                    var listenerObject = new GameObject("PvZ Audio Listener");
+                    listenerObject.transform.SetParent(_owner.transform, false);
+                    _ownedMusicListener = listenerObject.AddComponent<AudioListener>();
+                    Debug.Log("Original audio installed the missing listener for the presentation scene.");
+                }
+                _ownedMusicListener.enabled = true;
             }
-
-            if (_ownedMusicListener == null)
+            finally
             {
-                // Lawn stores the game bootstrap; the presentation camera does not own an audio listener.
-                // A 2D source still needs one listener to reach Unity's output mixer.
-                var listenerObject = new GameObject("PvZ Audio Listener");
-                listenerObject.transform.SetParent(_owner.transform, false);
-                _ownedMusicListener = listenerObject.AddComponent<AudioListener>();
-                Debug.Log("Original audio installed the missing listener for the presentation scene.");
+                // Scratch lists must not retain destroyed external Unity objects until the next periodic check.
+                _audioListenerRoots.Clear();
+                _audioListenerCandidates.Clear();
             }
+        }
 
-            _ownedMusicListener.enabled = true;
+        /// <summary>Releases scene-scan ownership when the music coordinator or game host ends.</summary>
+        internal void ReleaseAudioListenerScan()
+        {
+            if (_audioListenerSceneAnchor != null)
+            {
+                if (Application.isPlaying)
+                {
+                    UnityEngine.Object.Destroy(_audioListenerSceneAnchor);
+                }
+                else
+                {
+                    UnityEngine.Object.DestroyImmediate(_audioListenerSceneAnchor);
+                }
+                _audioListenerSceneAnchor = null;
+            }
+            _audioListenerPersistentScene = default;
+            _audioListenerRoots.Clear();
+            _audioListenerCandidates.Clear();
+        }
+
+        /// <summary>Finds the hidden persistent scene once while leaving external listener selection dynamic.</summary>
+        private void EnsureAudioListenerPersistentScene()
+        {
+            if (!Application.isPlaying || _audioListenerSceneAnchor != null)
+            {
+                return;
+            }
+            _audioListenerSceneAnchor = new GameObject("PvZ Audio Listener Scan")
+            {
+                hideFlags = HideFlags.HideAndDontSave
+            };
+            _audioListenerSceneAnchor.SetActive(false);
+            UnityEngine.Object.DontDestroyOnLoad(_audioListenerSceneAnchor);
+            _audioListenerPersistentScene = _audioListenerSceneAnchor.scene;
+        }
+
+        /// <summary>Searches the current hierarchy of one loaded scene while preserving external-listener priority.</summary>
+        /// <param name="scene">The current ordinary or persistent Unity scene.</param>
+        /// <returns>Whether an enabled active external listener is present.</returns>
+        private bool SceneHasExternalAudioListener(Scene scene)
+        {
+            if (!scene.IsValid() || !scene.isLoaded)
+            {
+                return false;
+            }
+            _audioListenerRoots.Clear();
+            var required = scene.rootCount + 1;
+            if (_audioListenerRoots.Capacity < required)
+            {
+                _audioListenerRoots.Capacity = Math.Max(required, _audioListenerRoots.Capacity * 2);
+                AudioListenerScanCapacityGrowthCount++;
+            }
+            scene.GetRootGameObjects(_audioListenerRoots);
+            for (var index = 0; index < _audioListenerRoots.Count; index++)
+            {
+                var root = _audioListenerRoots[index];
+                if (root == null || !root.activeInHierarchy)
+                {
+                    continue;
+                }
+                _audioListenerCandidates.Clear();
+                var capacity = _audioListenerCandidates.Capacity;
+                root.GetComponentsInChildren(true, _audioListenerCandidates);
+                if (_audioListenerCandidates.Capacity != capacity)
+                {
+                    AudioListenerScanCapacityGrowthCount++;
+                }
+                for (var candidate = 0; candidate < _audioListenerCandidates.Count; candidate++)
+                {
+                    var listener = _audioListenerCandidates[candidate];
+                    if (listener != null && listener != _ownedMusicListener && listener.isActiveAndEnabled)
+                    {
+                        return true;
+                    }
+                }
+            }
+            return false;
         }
 
         /// <summary>Performs get music output report.</summary>
@@ -909,6 +1010,7 @@ namespace PlantsVsZombies.Audio
                 UnityEngine.Object.Destroy(_ownedMusicListener.gameObject);
                 _ownedMusicListener = null;
             }
+            ReleaseAudioListenerScan();
         }
 
         /// <summary>Performs update progression music context.</summary>

@@ -14,6 +14,9 @@ namespace PlantsVsZombies.Tests.PlayMode
     /// <summary>Verifies rendered pixels and resource ownership through the actual render pipeline camera path.</summary>
     public sealed class ObjectSpriteRendererTests
     {
+        /// <summary>The backend restored after validating the independent mesh oracle.</summary>
+        private SpriteRenderingBackend _previousBackend;
+
         /// <summary>The texture used for solid-color geometry.</summary>
         private Texture2D _white = null!;
 
@@ -32,6 +35,8 @@ namespace PlantsVsZombies.Tests.PlayMode
         public IEnumerator SetUp()
         {
             yield return null;
+            _previousBackend = ObjectSpriteRenderer.Backend;
+            ObjectSpriteRenderer.Backend = SpriteRenderingBackend.Mesh;
             Assert.That(SystemInfo.graphicsDeviceType, Is.Not.EqualTo(GraphicsDeviceType.Null), "GPU tests require a graphics device.");
             Assert.That(GraphicsSettings.currentRenderPipeline, Is.InstanceOf<PvZRenderPipelineAsset>());
             _white = new Texture2D(1, 1, TextureFormat.RGBA32, false, true);
@@ -48,6 +53,7 @@ namespace PlantsVsZombies.Tests.PlayMode
         [UnityTearDown]
         public IEnumerator TearDown()
         {
+            ObjectSpriteRenderer.Backend = _previousBackend;
             _renderer?.Dispose();
             if (_target != null)
             {

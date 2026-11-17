@@ -364,6 +364,150 @@ namespace PlantsVsZombies.Tests.EditMode
             Assert.That(SpriteAssetProvider.NormalizeRoot(local), Is.EqualTo(Path.GetFullPath(local).Replace('\\', '/')));
         }
 
+        /// <summary>Checks returning to a stage creates independent pins after idempotent release of the preceding lease.</summary>
+        [Test]
+        public void ReleasedStageLeaseCanBeReacquiredAndRetiresAfterItsNewOwnerEnds()
+        {
+            var first = CreateTexture(4, 4);
+            var second = CreateTexture(4, 4);
+            var layout = Layout(256, "small", false);
+            layout.Pages = new[] { "small0", "small1" };
+            layout.Images = new[] { layout.Images[0], new SpriteAtlasImage
+            {
+                SourceIdentity = "images/other.png", Width = 4, Height = 4,
+                VisiblePixels = new[] { new Rect(0, 0, 4, 4) },
+                Tiles = new[] { new SpriteAtlasTile { Page = 1, PageWidth = 4, PageHeight = 4,
+                    SourcePixels = new Rect(0, 0, 4, 4), TextureUv = new Rect(0, 0, 1, 1) } }
+            } };
+            var released = new List<Texture2D>();
+            using var provider = new SpriteAssetProvider(Catalog(layout), 256,
+                path => path == "small0" ? first : second, released.Add);
+            var image = provider.LoadImage("IMAGE_FIXTURE");
+            var alternate = provider.LoadImage("images/other.png");
+            var oldLease = provider.CreatePageLease();
+            image.RetainPreparedPages(oldLease);
+            Assert.That(provider.PinnedPageCount, Is.EqualTo(1));
+            oldLease.Dispose();
+            oldLease.Dispose();
+            Assert.That(provider.PinnedPageCount, Is.Zero);
+            using var newLease = provider.CreatePageLease();
+            image.RetainPreparedPages(newLease);
+            Assert.That(provider.PinnedPageCount, Is.EqualTo(1));
+            var source = new Rect(0, 0, 1, 1);
+            for (var frame = 0; frame < 3; frame++)
+            {
+                SpriteDrawState.BeginFrame();
+            }
+            alternate.GetRegionCount(source);
+            Assert.That(released.Contains(first), Is.False);
+            newLease.Dispose();
+            Assert.That(provider.PinnedPageCount, Is.Zero);
+            for (var frame = 0; frame < 3; frame++)
+            {
+                SpriteDrawState.BeginFrame();
+            }
+            alternate.GetRegionCount(source);
+            Assert.That(released.Contains(first), Is.True);
+        }
+
+        /// <summary>Checks one stage cannot release a page still retained independently by another renderer.</summary>
+        [Test]
+        public void StagePageLeasesRetainSharedPagesUntilEveryOwnerReleasesThem()
+        {
+            var first = CreateTexture(4, 4);
+            var second = CreateTexture(4, 4);
+            var layout = Layout(256, "small", false);
+            layout.Pages = new[] { "small0", "small1" };
+            var other = new SpriteAtlasImage
+            {
+                SourceIdentity = "images/other.png", Width = 4, Height = 4,
+                VisiblePixels = new[] { new Rect(0, 0, 4, 4) },
+                Tiles = new[] { new SpriteAtlasTile { Page = 1, PageWidth = 4, PageHeight = 4,
+                    SourcePixels = new Rect(0, 0, 4, 4), TextureUv = new Rect(0, 0, 1, 1) } }
+            };
+            layout.Images = new[] { layout.Images[0], other };
+            var released = new List<Texture2D>();
+            using var provider = new SpriteAssetProvider(Catalog(layout), 256,
+                path => path == "small0" ? first : second, released.Add);
+            var image = provider.LoadImage("IMAGE_FIXTURE");
+            var alternate = provider.LoadImage("images/other.png");
+            using var firstLease = provider.CreatePageLease();
+            using var secondLease = provider.CreatePageLease();
+            image.RetainPreparedPages(firstLease);
+            image.RetainPreparedPages(secondLease);
+            var source = new Rect(0, 0, 1, 1);
+            for (var frame = 0; frame < 3; frame++)
+            {
+                SpriteDrawState.BeginFrame();
+            }
+            alternate.GetRegionCount(source);
+            Assert.That(released.Contains(first), Is.False);
+            firstLease.Dispose();
+            for (var frame = 0; frame < 3; frame++)
+            {
+                SpriteDrawState.BeginFrame();
+            }
+            alternate.GetRegionCount(source);
+            Assert.That(released.Contains(first), Is.False);
+            secondLease.Dispose();
+            for (var frame = 0; frame < 3; frame++)
+            {
+                SpriteDrawState.BeginFrame();
+            }
+            alternate.GetRegionCount(source);
+            Assert.That(released.Contains(first), Is.True);
+            Assert.That(provider.LoadedPageCount, Is.EqualTo(1));
+        }
+
+        /// <summary>Checks a stage lease rebinds logical sources to the replacement layout without retaining old page coordinates.</summary>
+        [Test]
+        public void StagePageLeaseRebindsPinnedImagesAfterCompleteLayoutFallback()
+        {
+            var large = CreateTexture(4, 4);
+            var smallFirst = CreateTexture(4, 4);
+            var smallSecond = CreateTexture(4, 4);
+            var largeLayout = Layout(512, "large", false);
+            var smallLayout = Layout(256, "small", false);
+            foreach (var layout in new[] { largeLayout, smallLayout })
+            {
+                var prefix = layout.MaximumPageSize == 512 ? "large" : "small";
+                layout.Pages = new[] { prefix + "0", prefix + "1" };
+                layout.Images = new[] { layout.Images[0], new SpriteAtlasImage
+                {
+                    SourceIdentity = "images/other.png", Width = 4, Height = 4,
+                    VisiblePixels = new[] { new Rect(0, 0, 4, 4) },
+                    Tiles = new[] { new SpriteAtlasTile { Page = 1, PageWidth = 4, PageHeight = 4,
+                        SourcePixels = new Rect(0, 0, 4, 4), TextureUv = new Rect(0, 0, 1, 1) } }
+                } };
+            }
+            var released = new List<Texture2D>();
+            using var provider = new SpriteAssetProvider(Catalog(largeLayout, smallLayout), 512,
+                path => path == "large0" ? large : path == "large1" ? null : path == "small0" ? smallFirst : smallSecond,
+                released.Add);
+            var image = provider.LoadImage("IMAGE_FIXTURE");
+            var alternate = provider.LoadImage("images/other.png");
+            using var lease = provider.CreatePageLease();
+            image.RetainPreparedPages(lease);
+            var source = new Rect(0, 0, 1, 1);
+            alternate.GetRegionCount(source);
+            Assert.That(provider.MaxPageSize, Is.EqualTo(256));
+            Assert.That(image.GetRegions(source)[0].Texture, Is.SameAs(smallFirst));
+            for (var frame = 0; frame < 3; frame++)
+            {
+                SpriteDrawState.BeginFrame();
+            }
+            alternate.GetRegionCount(source);
+            Assert.That(released.Contains(large), Is.True);
+            Assert.That(released.Contains(smallFirst), Is.False);
+            lease.Dispose();
+            for (var frame = 0; frame < 3; frame++)
+            {
+                SpriteDrawState.BeginFrame();
+            }
+            alternate.GetRegionCount(source);
+            Assert.That(released.Contains(smallFirst), Is.True);
+        }
+
         /// <summary>Checks unused page storage is evicted after published frames retire and reloaded when sampled again.</summary>
         [Test]
         public void InactivePagesAreEvictedAndLogicalImagesRemainReloadable()

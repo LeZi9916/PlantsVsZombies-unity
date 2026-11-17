@@ -17,6 +17,88 @@ namespace PlantsVsZombies.Rendering
         private static readonly List<ObjectSpriteRenderer> s_scenePools = new List<ObjectSpriteRenderer>();
         /// <summary>The shared camera that renders scene sprites and Canvas graphics directly to the display.</summary>
         private static Camera? s_sceneCamera;
+        /// <summary>The bounded ordered scene-instancing resources shared across source pools.</summary>
+        private static SpriteInstancingRenderer? s_instancing;
+        /// <summary>Whether capability selection has run for this rendering session.</summary>
+        private static bool s_instancingChecked;
+        /// <summary>Whether a complete scene presentation is currently being assembled.</summary>
+        private static bool s_sceneFrameOpen;
+        /// <summary>Whether the presenter owns an explicit scene completion scope.</summary>
+        private static bool s_managedSceneFrame;
+        /// <summary>The latest logical scene generation, also invalidating repeated same-frame GPU submissions.</summary>
+        private static int s_sceneGeneration;
+        /// <summary>Whether a bounded complete-scene ordering fallback has already been logged.</summary>
+        private static bool s_loggedQueueFallback;
+        /// <summary>Gets or sets the backend override used by paired rendering and allocation regressions.</summary>
+        internal static SpriteRenderingBackend Backend { get; set; } = SpriteRenderingBackend.Auto;
+        /// <summary>Gets whether the current graphics device can execute the supported instancing shader.</summary>
+        internal static bool InstancingAvailable => s_instancing != null;
+        /// <summary>Gets the current ordered instance draw count.</summary>
+        internal static int InstancedDrawCount => s_instancing?.RunCount ?? 0;
+        /// <summary>Gets the current number of GPU prefix uploads.</summary>
+        internal static int InstanceUploadCount => s_instancing?.UploadCount ?? 0;
+        /// <summary>Gets the actual structured-buffer bytes uploaded for the latest scene presentation.</summary>
+        internal static long InstanceUploadBytes => s_instancing?.UploadBytes ?? 0;
+        /// <summary>Gets cumulative actual structured-buffer upload bytes for this rendering session.</summary>
+        internal static long InstanceTotalUploadBytes => s_instancing?.TotalUploadBytes ?? 0;
+        /// <summary>Gets cumulative successful structured-buffer allocations for this rendering session.</summary>
+        internal static long InstanceBufferCreationCount => s_instancing?.BufferCreationCount ?? 0;
+        /// <summary>Gets cumulative ordered eight-texture bank boundaries; simultaneous reasons count independently.</summary>
+        internal static long InstanceTextureBankSplitCount => s_instancing?.TextureBankSplitCount ?? 0;
+        /// <summary>Gets cumulative hardware blend boundaries; simultaneous reasons count independently.</summary>
+        internal static long InstanceBlendSplitCount => s_instancing?.BlendSplitCount ?? 0;
+        /// <summary>Gets cumulative source-pool or painter barriers; simultaneous reasons count independently.</summary>
+        internal static long InstancePainterOrderSplitCount => s_instancing?.PainterOrderSplitCount ?? 0;
+        /// <summary>Gets cumulative fixed-capacity chunk boundaries; simultaneous reasons count independently.</summary>
+        internal static long InstanceCapacitySplitCount => s_instancing?.CapacitySplitCount ?? 0;
+        /// <summary>Gets cumulative actual mesh vertex and index buffer reconfigurations for this process.</summary>
+        internal static long MeshBufferReconfigurationCount => SpriteMeshBatch.TotalBufferReconfigurationCount;
+        /// <summary>Gets actual structured-buffer allocations plus mesh vertex/index reconfigurations, without estimating driver-internal objects.</summary>
+        internal static long GpuBufferCreationCount => InstanceBufferCreationCount + MeshBufferReconfigurationCount;
+        /// <summary>Gets cumulative actual combined mesh creations for this process.</summary>
+        internal static long MeshCreationCount => SpriteMeshBatch.TotalMeshCreationCount;
+        /// <summary>Gets cumulative actual mesh vertex and index upload bytes for this process.</summary>
+        internal static long MeshUploadBytes => SpriteMeshBatch.TotalUploadBytes;
+        /// <summary>Gets the GPU bytes retained for the instancing chunks.</summary>
+        internal static long InstancingGpuBytes => s_instancing?.RetainedGpuBytes ?? 0;
+        /// <summary>Gets the scene polygons routed through capacity or capability fallback.</summary>
+        internal static int InstancingFallbackCount => s_instancing?.FallbackCount ?? 0;
+        /// <summary>Gets cumulative polygons rejected by the instance path during this rendering session.</summary>
+        internal static long InstancingTotalFallbackCount => s_instancing?.TotalFallbackCount ?? 0;
+        /// <summary>Gets complete instance generations retired when a source pool was disposed.</summary>
+        internal static long InstanceOwnerRetirementCount => s_instancing?.OwnerRetirementCount ?? 0;
+        /// <summary>Gets complete instance generations retired when a sampled texture was destroyed.</summary>
+        internal static long InstanceMissingTextureRetirementCount => s_instancing?.MissingTextureRetirementCount ?? 0;
+        /// <summary>Gets all instance draw spans cleared by source or texture retirement.</summary>
+        internal static long InstanceRetiredRunCount => s_instancing?.RetiredRunCount ?? 0;
+        /// <summary>Gets actual retained property-block and material pairs created for immutable per-frame native submissions.</summary>
+        internal static long InstanceSubmissionBindingCreationCount => s_instancing?.SubmissionBindingCreationCount ?? 0;
+        /// <summary>Gets complete scene generations routed to meshes to preserve buffers already submitted within the same Unity frame.</summary>
+        internal static long InstanceSameFrameBufferFallbackCount => s_instancing?.SameFrameBufferFallbackCount ?? 0;
+        /// <summary>Gets complete retired instance sessions whose native draw frame has not yet expired.</summary>
+        internal static int PendingRetiredInstanceSessionCount => SpriteInstancingRenderer.PendingRetiredSessionCount;
+        /// <summary>Gets sessions that selected meshes because the fixed deferred-resource retirement budget was full.</summary>
+        internal static long InstanceRetirementCapacityFallbackCount => SpriteInstancingRenderer.RetirementCapacityFallbackCount;
+        /// <summary>Gets the number of prepared scene-polygon slots without recording a draw.</summary>
+        internal static int PreparedInstanceCapacity => s_instancing?.PreparedInstanceCapacity ?? 0;
+
+        /// <summary>Prepares at most one GPU instance chunk without registering rendering commands.</summary>
+        /// <param name="expectedInstances">The estimated simultaneously visible clipped polygon count.</param>
+        /// <param name="maxChunks">The maximum chunk allocations allowed in this bounded step.</param>
+        /// <returns>Whether bounded capacity is ready or the supported mesh fallback has been selected.</returns>
+        internal static bool PrepareSceneCapacityStep(int expectedInstances, int maxChunks = 1)
+        {
+            if (!s_instancingChecked && Backend != SpriteRenderingBackend.Mesh)
+            {
+                s_instancingChecked = true;
+                var shader = Resources.Load<Shader>("Shaders/PvZSpriteInstanced");
+                if (shader != null && shader.isSupported && SpriteInstancingRenderer.IsSupported())
+                {
+                    s_instancing = new SpriteInstancingRenderer(shader);
+                }
+            }
+            return s_instancing == null || s_instancing.PrepareCapacityStep(expectedInstances, maxChunks);
+        }
         /// <summary>The logical source commands retained independently of their combined GPU geometry.</summary>
         private readonly List<ObjectSprite> _sprites = new List<ObjectSprite>();
         /// <summary>The explicitly combined geometry retained independently of source-level diagnostics.</summary>
@@ -67,6 +149,40 @@ namespace PlantsVsZombies.Rendering
         private bool _hasCachedRasterClip;
         /// <summary>The number of combined GPU batches used by the current frame.</summary>
         private int _batchUsed;
+        /// <summary>The enabled mesh prefix, retained while stable scene batches are rebuilt.</summary>
+        private int _visibleBatchCount;
+        /// <summary>The scene generation that last touched this source pool.</summary>
+        private int _sceneGeneration;
+        /// <summary>Whether scene instances must be replayed for an explicit capture.</summary>
+        private bool _hasInstancedGeometry;
+        /// <summary>Whether this generation has already materialized capture meshes.</summary>
+        private bool _captureReplayReady;
+        /// <summary>Gets cumulative actual native renderer visibility changes.</summary>
+        internal int RendererVisibilityChangeCount { get; private set; }
+        /// <summary>Gets the number of already constructed source diagnostic slots without flushing geometry.</summary>
+        internal int PreparedSourceCapacity => _sprites.Count;
+        /// <summary>Gets the cumulative source-slot creations requested outside explicit preparation.</summary>
+        internal int SourceCapacityMissCount { get; private set; }
+
+        /// <summary>Prepares a bounded number of retained source diagnostic slots without submitting geometry.</summary>
+        /// <param name="expectedSourceCommands">The anticipated logical source count, capped by the portable painter limit.</param>
+        /// <param name="maxSlots">The maximum slots constructed during this preparation step.</param>
+        /// <returns>Whether the bounded requested source capacity is ready.</returns>
+        internal bool PrepareSourceCapacityStep(int expectedSourceCommands, int maxSlots = 128)
+        {
+            ThrowIfDisposed();
+            var target = Math.Min(short.MaxValue, Math.Max(0, expectedSourceCommands));
+            if (_sprites.Capacity < target)
+            {
+                _sprites.Capacity = target;
+            }
+            var end = Math.Min(target, _sprites.Count + Math.Max(0, Math.Min(maxSlots, short.MaxValue)));
+            while (_sprites.Count < end)
+            {
+                _sprites.Add(new ObjectSprite());
+            }
+            return _sprites.Count >= target;
+        }
         /// <summary>Whether source geometry uses disjoint transparent-cell pieces rather than stable native-composition tile quads.</summary>
         private readonly bool _useTightGeometry;
         /// <summary>The source opacity classifications shared with related animation surface pools.</summary>
@@ -118,7 +234,7 @@ namespace PlantsVsZombies.Rendering
             get
             {
                 FlushPending();
-                return _batchUsed;
+                return _batchUsed + (s_instancing?.CountRuns(this) ?? 0);
             }
         }
         /// <summary>Gets the completed logical workload and batch fragmentation counters.</summary>
@@ -127,8 +243,9 @@ namespace PlantsVsZombies.Rendering
             get
             {
                 FlushPending();
-                return new SpriteBatchStatistics(_used, _batchUsed, _vertexCount, _triangleCount,
-                    _culledCount, _coveredPixelArea, _materialSplits, _painterSplits, _capacitySplits);
+                return new SpriteBatchStatistics(_used, BatchCount, _vertexCount, _triangleCount,
+                    _culledCount, _coveredPixelArea, _materialSplits, _painterSplits, _capacitySplits,
+                    s_instancing?.CountRuns(this) ?? 0, s_instancing?.UploadBytes ?? 0, RendererVisibilityChangeCount);
             }
         }
         /// <summary>Gets the number of live texture and blend bindings after completing submissions.</summary>
@@ -195,16 +312,108 @@ namespace PlantsVsZombies.Rendering
         /// <summary>Retires the previous presentation and resets painter order before submitting the next complete frame.</summary>
         public static void BeginSceneFrame()
         {
+            FlushPending();
             SpriteDrawState.BeginFrame();
             CompletedGeometrySegments = 0;
-            foreach (var pool in s_scenePools)
-            {
-                pool.SetRenderersEnabled(false);
-            }
-
+            s_sceneGeneration = unchecked(s_sceneGeneration + 1);
+            s_sceneFrameOpen = true;
+            s_managedSceneFrame = false;
+            SpriteSceneRenderQueues.BeginFrame();
+            PrepareSceneCapacityStep(0, 0);
+            s_instancing?.BeginFrame(s_sceneGeneration);
             if (s_sceneCamera != null)
             {
                 ConfigureSceneCamera(s_sceneCamera);
+            }
+        }
+
+        /// <summary>Starts one explicitly completed scene frame without allocating a disposable object.</summary>
+        /// <returns>The scope publishing instances and retiring untouched pools on exit.</returns>
+        internal static SceneSpriteFrameScope BeginSceneFrameScope()
+        {
+            BeginSceneFrame();
+            s_managedSceneFrame = true;
+            return new SceneSpriteFrameScope();
+        }
+
+        /// <summary>Completes all staged GPU prefixes and removes pools omitted by this presentation.</summary>
+        internal static void EndSceneFrame()
+        {
+            if (!s_sceneFrameOpen)
+            {
+                return;
+            }
+            FlushPending();
+            SpriteSceneRenderQueues.CompleteFrame(s_instancing != null && s_instancing.RunCount > 0);
+            ApplyCompleteSceneQueueFallback();
+            s_instancing?.Publish();
+            ApplyCompleteSceneQueueFallback();
+            foreach (var pool in s_scenePools)
+            {
+                if (pool._sceneGeneration != s_sceneGeneration)
+                {
+                    pool.SetVisibleBatchCount(0);
+                }
+            }
+            s_sceneFrameOpen = false;
+            s_managedSceneFrame = false;
+        }
+
+        /// <summary>Closes legacy unscoped frames before camera culling without interrupting nested native captures.</summary>
+        /// <param name="camera">The camera about to render; independent local captures cannot seal the scene being assembled.</param>
+        internal static void PublishSceneFrameBeforeRendering(Camera camera)
+        {
+            if (!s_managedSceneFrame && (camera == s_sceneCamera || camera.cameraType == CameraType.SceneView))
+            {
+                EndSceneFrame();
+                // Native MeshRenderers and Canvas retain their last complete presentation.
+                // Explicit instance draws expire each Unity frame, so renew the same immutable
+                // spans before culling even when an inactive host did not call Present again.
+                s_instancing?.Publish();
+                ApplyCompleteSceneQueueFallback();
+            }
+        }
+
+        /// <summary>Refreshes native UI queue copies after font and mask rebuilds and preserves bounded complete fallback.</summary>
+        /// <param name="camera">The camera about to cull native Canvas and scene geometry.</param>
+        internal static void PrepareSceneQueuesForCamera(Camera camera)
+        {
+            SpriteSceneRenderQueues.PrepareCanvasForCamera(camera);
+            ApplyCompleteSceneQueueFallback();
+        }
+
+        /// <summary>Checks whether this camera renders the reserved scene layer with compressed painter queues.</summary>
+        /// <param name="camera">The scene, local capture, or editor camera about to render.</param>
+        /// <returns>Whether queue-first ordering applies to this camera's reserved game layer.</returns>
+        internal static bool UsesSceneQueuesForCamera(Camera camera)
+        {
+            return SpriteSceneRenderQueues.UsesQueueOrdering
+                && (camera == s_sceneCamera || camera.cameraType == CameraType.SceneView);
+        }
+
+        /// <summary>Converts all scene instances together when queue or material limits require original native sorting.</summary>
+        private static void ApplyCompleteSceneQueueFallback()
+        {
+            if (!SpriteSceneRenderQueues.RequiresMeshFallback || s_instancing == null)
+            {
+                return;
+            }
+            foreach (var pool in s_scenePools)
+            {
+                if (pool._hasInstancedGeometry && !pool._captureReplayReady)
+                {
+                    s_instancing.ReplayForCapture(pool);
+                    pool._captureReplayReady = true;
+                    pool.PublishBatches();
+                    pool.SetRenderersEnabled(true);
+                }
+            }
+            s_instancing.SuppressForFrame();
+            SpriteSceneRenderQueues.RestoreWorldMaterials();
+            if (!s_loggedQueueFallback)
+            {
+                s_loggedQueueFallback = true;
+                Debug.LogWarning($"{nameof(ObjectSpriteRenderer)}: Using complete-scene mesh ordering. {SpriteSceneRenderQueues.FallbackReason}");
             }
         }
 
@@ -267,6 +476,7 @@ namespace PlantsVsZombies.Rendering
                 }
 
                 _root.transform.position = Vector3.zero;
+                _sceneGeneration = s_sceneGeneration;
                 BeginBatch();
                 var target = s_sceneCamera == null ? null : s_sceneCamera.targetTexture;
                 if (target != null)
@@ -311,7 +521,8 @@ namespace PlantsVsZombies.Rendering
         {
             ThrowIfDisposed();
             FlushPending();
-            SetRenderersEnabled(false);
+            _hasInstancedGeometry = false;
+            _captureReplayReady = false;
             _used = 0;
             _batchUsed = 0;
             _pixelStepX = 1d;
@@ -603,11 +814,16 @@ namespace PlantsVsZombies.Rendering
                         command.AddColor, command.Clip, command.ClipEnabled, order, command.Node);
                 }
                 var opaque = arena.Opaque[index];
-                var material = GetMaterial(arena.Textures[index]!, opaque ? 2 : command.Mode == 1 || command.Mode == 2 ? 1 : 0);
-                var batch = GetBatch(material, order, result.Count, opaque);
-                var depth = -order / 32768f;
-                batch.AppendClippedPolygon(arena.CompletedVertices, result.Offset, result.Count, depth,
-                    command.Color, effects, highlight, order);
+                var blend = opaque ? 2 : command.Mode == 1 || command.Mode == 2 ? 1 : 0;
+                if (!TryAppendInstance(arena.Textures[index]!, blend, order, arena.CompletedVertices, result.Offset,
+                    result.Count, command.Color, effects, highlight))
+                {
+                    var material = GetMaterial(arena.Textures[index]!, blend);
+                    var batch = GetBatch(material, order, result.Count, opaque);
+                    var depth = -order / 32768f;
+                    batch.AppendClippedPolygon(arena.CompletedVertices, result.Offset, result.Count, depth,
+                        command.Color, effects, highlight, order);
+                }
                 _vertexCount += result.Count;
                 _triangleCount += result.Count - 2;
                 _coveredPixelArea += result.Area;
@@ -674,20 +890,23 @@ namespace PlantsVsZombies.Rendering
                 }
 
                 var opaque = !_scenePool && mode == 0 && color.a >= 1f && _textureOpacity.IsOpaque(region.Texture);
-                var material = GetMaterial(region.Texture, opaque ? 2 : mode == 1 || mode == 2 ? 1 : 0);
-                var batch = GetBatch(material, order, vertexCount, opaque);
-                var firstVertex = batch.VertexCount;
                 var effects = new Vector4(grayscale, producerAdditive, mode, combineHit ? 1f : 0f);
                 var highlight = new Vector4(addColor.r + additive, addColor.g + additive, addColor.b + additive, 0f);
-                var depth = -order / 32768f;
-                for (var vertexIndex = 0; vertexIndex < vertexCount; vertexIndex++)
+                var blend = opaque ? 2 : mode == 1 || mode == 2 ? 1 : 0;
+                if (!TryAppendInstance(region.Texture, blend, order, _clipInput, 0, vertexCount, color, effects, highlight))
                 {
-                    var vertex = _clipInput[vertexIndex];
-                    batch.AddVertex(new Vector3(vertex.Position.x, -vertex.Position.y, depth), vertex.Coordinates,
-                        color, effects, highlight);
+                    var material = GetMaterial(region.Texture, blend);
+                    var batch = GetBatch(material, order, vertexCount, opaque);
+                    var firstVertex = batch.VertexCount;
+                    var depth = -order / 32768f;
+                    for (var vertexIndex = 0; vertexIndex < vertexCount; vertexIndex++)
+                    {
+                        var vertex = _clipInput[vertexIndex];
+                        batch.AddVertex(new Vector3(vertex.Position.x, -vertex.Position.y, depth), vertex.Coordinates,
+                            color, effects, highlight);
+                    }
+                    batch.CompletePolygon(firstVertex, vertexCount, order);
                 }
-
-                batch.CompletePolygon(firstVertex, vertexCount, order);
                 _vertexCount += vertexCount;
                 _triangleCount += vertexCount - 2;
                 _coveredPixelArea += area;
@@ -707,8 +926,13 @@ namespace PlantsVsZombies.Rendering
         {
             ThrowIfDisposed();
             FlushPending();
+            if (_hasInstancedGeometry && !_captureReplayReady)
+            {
+                s_instancing?.ReplayForCapture(this);
+                _captureReplayReady = true;
+            }
             var previousPosition = _root.transform.position;
-            var previousVisibility = _batchUsed > 0 && _batches[0].Renderer.enabled;
+            var previousVisibility = _visibleBatchCount;
             _camera.transform.localPosition = new Vector3(destination.width * 0.5f, -destination.height * 0.5f, -10f);
             _camera.orthographicSize = destination.height * 0.5f;
             _camera.aspect = destination.width / (float)destination.height;
@@ -730,7 +954,7 @@ namespace PlantsVsZombies.Rendering
             finally
             {
                 RenderTexture.active = previousActive;
-                SetRenderersEnabled(previousVisibility);
+                SetVisibleBatchCount(previousVisibility);
                 _root.transform.position = previousPosition;
             }
         }
@@ -744,6 +968,7 @@ namespace PlantsVsZombies.Rendering
             }
 
             FlushPending();
+            s_instancing?.RetireOwner(this);
             SetRenderersEnabled(false);
             foreach (var batch in _batches)
             {
@@ -781,6 +1006,13 @@ namespace PlantsVsZombies.Rendering
             {
                 s_geometry?.Dispose();
                 s_geometry = null;
+                s_instancing?.Dispose();
+                s_instancing = null;
+                s_instancingChecked = false;
+                s_sceneFrameOpen = false;
+                s_managedSceneFrame = false;
+                s_loggedQueueFallback = false;
+                SpriteSceneRenderQueues.Release();
             }
         }
 
@@ -806,6 +1038,7 @@ namespace PlantsVsZombies.Rendering
             if (_used == _sprites.Count)
             {
                 _sprites.Add(new ObjectSprite());
+                SourceCapacityMissCount++;
             }
 
             var sprite = _sprites[_used++];
@@ -829,7 +1062,7 @@ namespace PlantsVsZombies.Rendering
             {
                 if (entry.Key == null)
                 {
-                    _retiredTextures.Add(entry.Key);
+                    _retiredTextures.Add(entry.Key!);
                 }
             }
 
@@ -940,6 +1173,10 @@ namespace PlantsVsZombies.Rendering
 
             var batch = _batches[_batchUsed++];
             batch.Reset(material, order, opaque);
+            if (_scenePool && IsFrameActive)
+            {
+                SpriteSceneRenderQueues.RegisterRenderer(batch.Renderer, material, order);
+            }
             return batch;
         }
 
@@ -1129,10 +1366,67 @@ namespace PlantsVsZombies.Rendering
         /// <param name="enabled">Whether the current batch should be visible to a camera.</param>
         private void SetRenderersEnabled(bool enabled)
         {
-            for (var index = 0; index < _batchUsed; index++)
+            SetVisibleBatchCount(enabled ? _batchUsed : 0);
+        }
+
+        /// <summary>Changes only the mesh prefix that actually enters or leaves camera visibility.</summary>
+        /// <param name="count">The retained mesh prefix that should remain visible.</param>
+        private void SetVisibleBatchCount(int count)
+        {
+            for (var index = count; index < _visibleBatchCount; index++)
             {
-                _batches[index].Renderer.enabled = enabled;
+                _batches[index].Renderer.enabled = false;
+                RendererVisibilityChangeCount++;
             }
+            for (var index = _visibleBatchCount; index < count; index++)
+            {
+                _batches[index].Renderer.enabled = true;
+                RendererVisibilityChangeCount++;
+            }
+            _visibleBatchCount = count;
+        }
+
+        /// <summary>Appends supported scene geometry without changing capture or source diagnostic behavior.</summary>
+        /// <param name="texture">The existing sampled texture.</param>
+        /// <param name="blend">The original hardware blend binding.</param>
+        /// <param name="order">The original logical painter order.</param>
+        /// <param name="vertices">The exact completed clipping output.</param>
+        /// <param name="offset">The first live vertex.</param>
+        /// <param name="count">The live polygon size.</param>
+        /// <param name="color">The source tint.</param>
+        /// <param name="effects">The existing effect values.</param>
+        /// <param name="highlight">The source-colored highlight.</param>
+        /// <returns>Whether this polygon was retained as a GPU instance.</returns>
+        private bool TryAppendInstance(Texture texture, int blend, int order, SpriteClipVertex[] vertices, int offset,
+            int count, Color color, Vector4 effects, Vector4 highlight)
+        {
+            if (!_scenePool || !IsFrameActive || blend == 2 || Backend == SpriteRenderingBackend.Mesh || s_instancing == null)
+            {
+                return false;
+            }
+            var appended = s_instancing.TryAppend(this, texture, blend, order, vertices, offset, count, color, effects, highlight);
+            _hasInstancedGeometry |= appended;
+            return appended;
+        }
+
+        /// <summary>Materializes a scene polygon in the independent mesh path for an explicit local capture.</summary>
+        /// <param name="vertices">The retained compact GPU staging vertices.</param>
+        /// <param name="data">The original polygon instance record.</param>
+        /// <param name="texture">The unchanged source texture.</param>
+        internal void AppendCaptureInstance(Vector4[] vertices, SpriteInstanceData data, Texture texture)
+        {
+            var order = (int)(-data.Depth * 32768f);
+            var mode = (int)data.Effects.z;
+            var material = GetMaterial(texture, mode == 1 || mode == 2 ? 1 : 0);
+            var batch = GetBatch(material, order, (int)data.VertexCount, false);
+            var first = batch.VertexCount;
+            for (var index = 0; index < data.VertexCount; index++)
+            {
+                var vertex = vertices[(int)data.VertexOffset + index];
+                batch.AddVertex(new Vector3(vertex.x, -vertex.y, data.Depth), new Vector2(vertex.z, vertex.w),
+                    data.Color, data.Effects, data.Highlight);
+            }
+            batch.CompletePolygon(first, (int)data.VertexCount, order);
         }
 
         /// <summary>Creates a camera with the unlit settings shared by scene and cropped-surface rendering.</summary>

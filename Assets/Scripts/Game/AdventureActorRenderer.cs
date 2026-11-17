@@ -38,7 +38,7 @@ namespace PlantsVsZombies.Game
         /// <summary>Retains the inherited complete-body color while a track submits its attached plant head.</summary>
         private Color _zombieInheritedColor;
         /// <summary>Retains the child identity derived once from a changed parent identity.</summary>
-        private string _plantHeadKey = string.Empty;
+        private PresentationIdentity _plantHeadKey = string.Empty;
         /// <summary>The retained notification inserting an original blink immediately after its attachment track.</summary>
         private readonly Action<string> _plantBlinkTrackDrawn;
         /// <summary>The original selected face or idle track at which the blink is attached.</summary>
@@ -50,7 +50,7 @@ namespace PlantsVsZombies.Game
         /// <summary>The original particle systems supplying the current zombie's attached seaweed.</summary>
         private OriginalParticleRenderer? _poolParticles;
         /// <summary>The cached head, upper-arm, and tube particle identities for the current zombie.</summary>
-        private string? _poolHeadKey, _poolInnerKey, _poolOuterKey;
+        private PresentationIdentity _poolHeadKey, _poolInnerKey, _poolOuterKey;
         /// <summary>Selects both pumpkin tracks (-1), the front group (0), or the separate back group (1).</summary>
         private int _pumpkinGroup = -1;
         /// <summary>Selects an unsplit zombie (-1), bungee body (0), or foreground cargo arms (2).</summary>
@@ -60,9 +60,11 @@ namespace PlantsVsZombies.Game
         /// <summary>The zombie whose pose is being drawn synchronously.</summary>
         private Zombie _zombie = null!;
         /// <summary>The current asset, clip, and playback identity.</summary>
-        private string? _name = "", _clip = "", _key = "";
+        private string? _name = "", _clip = "";
+        /// <summary>The current allocation-free actor playback identity.</summary>
+        private PresentationIdentity _key;
         /// <summary>The stable optional composition surface identity.</summary>
-        private string _surfaceKey = "";
+        private PresentationIdentity _surfaceKey = "";
         /// <summary>The current native origin.</summary>
         private Vector2 _origin;
         /// <summary>The current native scale, playback time, frame rate, and interpolation remainder.</summary>
@@ -123,7 +125,7 @@ namespace PlantsVsZombies.Game
         /// <param name="boardTicks">The original board counter for the ready cannon track.</param>
         /// <param name="cardboard">Whether PC 436AE0 draws the I, Zombie white-mask cardboard edges.</param>
         internal void DrawPlant(Plant plant, string name, Vector2 origin, float scale, float seconds, string clip,
-            bool loop, float rate, HeadPlayback[]? heads, string key, Rect viewport, int blendTicks, float remainder, string surfaceKey, bool highlighted = false, Func<string, Vector2>? trackOffset = null, int pumpkinGroup = -1, float verticalScale = -1f, bool cardboard = false, int boardTicks = 0)
+            bool loop, float rate, HeadPlayback[]? heads, PresentationIdentity key, Rect viewport, int blendTicks, float remainder, PresentationIdentity surfaceKey, bool highlighted = false, Func<string, Vector2>? trackOffset = null, int pumpkinGroup = -1, float verticalScale = -1f, bool cardboard = false, int boardTicks = 0)
         {
             _boardTicks = boardTicks;
             _pumpkinGroup = pumpkinGroup;
@@ -146,7 +148,7 @@ namespace PlantsVsZombies.Game
             var draw = cardboard ? _drawCardboardPlant : _drawPlant;
             if (highlighted || AdventureProducerGlow.Visual(plant).Enabled || plant.IsImitated || plant.PresentationEatenFlashTicks > 0)
             {
-                RequiredRenderer.DrawNativePlantHitFeedback(key, viewport, draw, plant, _surfaceKey, _highlighted);
+                RequiredRenderer.DrawNativePlantHitFeedbackIdentity(key, viewport, draw, plant, _surfaceKey, _highlighted);
             }
             else
             {
@@ -190,7 +192,7 @@ namespace PlantsVsZombies.Game
         /// <param name="imitated">Whether to compose the grayscale imitation artwork.</param>
         /// <param name="key">The cursor's persistent surface key.</param>
         /// <param name="viewport">The local composition viewport.</param>
-        internal void DrawCursor(string name, Vector2 origin, float scale, string? clip, bool kernel, bool imitated, string key, Rect viewport)
+        internal void DrawCursor(string name, Vector2 origin, float scale, string? clip, bool kernel, bool imitated, PresentationIdentity key, Rect viewport)
         {
             _name = name;
             _origin = origin;
@@ -199,7 +201,7 @@ namespace PlantsVsZombies.Game
             _cursorKernel = kernel;
             if (imitated)
             {
-                RequiredRenderer.DrawNativeClipped(key, viewport, _drawCursor, false, true);
+                RequiredRenderer.DrawNativeClippedIdentity(key, viewport, _drawCursor, false, true);
             }
             else
             {
@@ -232,8 +234,8 @@ namespace PlantsVsZombies.Game
         /// <param name="remainder">The nonnegative render remainder added to attachment ages.</param>
         /// <param name="bungeeGroup">The native bungee render group, or minus one for an ordinary body.</param>
         internal void DrawZombie(Zombie zombie, string name, string? clip, Vector2 origin, float scale, float seconds,
-            float rate, bool loop, string key, string surfaceKey, OriginalParticleRenderer? poolParticles = null,
-            string? poolHeadKey = null, string? poolInnerKey = null, string? poolOuterKey = null, float remainder = 0f, int bungeeGroup = -1)
+            float rate, bool loop, PresentationIdentity key, PresentationIdentity surfaceKey, OriginalParticleRenderer? poolParticles = null,
+            PresentationIdentity poolHeadKey = default, PresentationIdentity poolInnerKey = default, PresentationIdentity poolOuterKey = default, float remainder = 0f, int bungeeGroup = -1)
         {
             _bungeeGroup = bungeeGroup;
             _zombie = zombie;
@@ -257,7 +259,7 @@ namespace PlantsVsZombies.Game
             _plantHead = zombie.ModeHead >= 26 && zombie.ModeHead <= 31;
             if (_plantHead)
             {
-                _plantHeadKey = zombie.PresentationPlantHeadKey ??= key + "-plant-head";
+                _plantHeadKey = key.WithRole("plant-head-");
             }
             _backwards = zombie.PresentationWalkingBackwards ?? (zombie.Hypnotized || zombie.Kind == ZombieKind.Digger && AdventureDiggerState.WalksBackwards(zombie));
             if (AdventureDancerRules.IsDancer(zombie))
@@ -323,7 +325,7 @@ namespace PlantsVsZombies.Game
                 }
             }
 
-            RequiredRenderer.DrawNativeZombieCombat(zombie, viewport, _drawZombie, surfaceKey, bodyClipBottom, bodyClipBounds);
+            RequiredRenderer.DrawNativeZombieCombatIdentity(zombie, viewport, _drawZombie, surfaceKey, bodyClipBottom, bodyClipBounds);
         }
 
         /// <summary>Submits the configured plant without allocating callback captures.</summary>
@@ -346,9 +348,9 @@ namespace PlantsVsZombies.Game
             var readyCob = _plant.Kind == PlantKind.CobCannon && (_plant.CannonPhase == CobCannonPhase.Ready || _plant.CannonPhase == CobCannonPhase.Aiming);
             var cobBrightness = readyCob ? AdventureCobCannonRules.ReadyBrightness(_boardTicks) / 255f : 1f;
             var drawn = _heads != null
-                ? RequiredRenderer.DrawNativeAttachedHeads(_name, _origin, _scale, _seconds, _rate, _heads, visible, _plant.ModeFacesLeft, _key, _blendTicks,
+                ? RequiredRenderer.DrawNativeAttachedHeadsIdentity(_name, _origin, _scale, _seconds, _rate, _heads, visible, _plant.ModeFacesLeft, _key, _blendTicks,
                     blinking ? _plantBlinkTrackDrawn : null, _plant.BlinkHead)
-                : RequiredRenderer.DrawNativePlayback(_name, _origin, _scale, _seconds, _clip, _loop, _rate, visible,
+                : RequiredRenderer.DrawNativePlaybackIdentity(_name, _origin, _scale, _seconds, _clip, _loop, _rate, visible,
                     AdventureDefensivePlantRules.DamageTrack(_plant.Kind), AdventureDefensivePlantRules.DamageImage(_plant.Kind, _plant.Health),
                     _plant.ModeFacesLeft, _key, _blendTicks, verticalScale: _plantVerticalScale, trackOffset: _plantTrackOffset,
                     trackDrawn: blinking ? _plantBlinkTrackDrawn : null,
@@ -474,8 +476,8 @@ namespace PlantsVsZombies.Game
             var painted = string.Equals(_name, "Zombie", StringComparison.OrdinalIgnoreCase) && !_zombie.Headless && !_plantHead
                 && !AdventureGarlicRules.ShowsFace(_zombie) && !_backwards && _zombie.Kind != ZombieKind.Flag && _zombie.Kind != ZombieKind.DuckyTube
                 && _zombie.PoolState == null && _zombie.PresentationInPool != true && !_zombie.PresentationPoolRow
-                ? RequiredRenderer.DrawZombiePlayback(_origin, _scale, _seconds, _variant, _clip, _loop, _rate, true, null, _key)
-                : RequiredRenderer.DrawNativePlayback(_name, _origin, _scale, _seconds, _clip, _loop, _rate, _zombieVisible, AdventureGarlicRules.ShowsFace(_zombie) ? "anim_head1" : null,
+                ? RequiredRenderer.DrawZombiePlaybackIdentity(_origin, _scale, _seconds, _variant, _clip, _loop, _rate, true, null, _key)
+                : RequiredRenderer.DrawNativePlaybackIdentity(_name, _origin, _scale, _seconds, _clip, _loop, _rate, _zombieVisible, AdventureGarlicRules.ShowsFace(_zombie) ? "anim_head1" : null,
                     AdventureGarlicRules.ShowsFace(_zombie) ? "IMAGE_REANIM_ZOMBIE_HEAD_GROSSOUT" : null,
                     _backwards, _key, _zombie.PresentationBodyBlendTicks >= 0 ? _zombie.PresentationBodyBlendTicks
                         : _zombie.Kind == ZombieKind.Balloon ? _zombie.PresentationBalloonBlendTicks
@@ -513,7 +515,7 @@ namespace PlantsVsZombies.Game
                 try
                 {
                     SpriteDrawState.Color = _zombieInheritedColor;
-                    RequiredRenderer.DrawNativePlantHeadAttachment(_origin, _scale, _clip, _seconds, _rate,
+                    RequiredRenderer.DrawNativePlantHeadAttachmentIdentity(_origin, _scale, _clip, _seconds, _rate,
                         _zombie.ModeHead, _zombie.PresentationPlantHeadAge, _backwards, placement, boardTransform,
                         _zombie.PlantZombieState, _plantHeadKey);
                 }
@@ -537,7 +539,7 @@ namespace PlantsVsZombies.Game
         {
             var particles = _poolParticles;
             if (particles != null && _zombie.ZomboniState?.FlatTires == true && !_zombie.ZomboniState.Wheelie2
-                && _poolHeadKey != null && string.Equals(track, "Zombie_zamboni_1", StringComparison.OrdinalIgnoreCase))
+                && !_poolHeadKey.IsEmpty && string.Equals(track, "Zombie_zamboni_1", StringComparison.OrdinalIgnoreCase))
             {
                 // PC 0x54A899 attaches the original smoke 35,85 pixels into the animated hood track.
                 var smokePoint = placement.MultiplyPoint3x4(new Vector3(35f, 85f, 0f));
@@ -553,7 +555,7 @@ namespace PlantsVsZombies.Game
                 return;
             }
 
-            string? key;
+            PresentationIdentity key;
             Vector3 offset;
             var seedOffset = 0;
             var head = _zombie.Kind == ZombieKind.Conehead ? "anim_cone"
@@ -580,7 +582,7 @@ namespace PlantsVsZombies.Game
                 return;
             }
 
-            if (key == null)
+            if (key.IsEmpty)
             {
                 return;
             }

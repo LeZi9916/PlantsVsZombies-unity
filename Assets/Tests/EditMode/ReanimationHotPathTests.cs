@@ -69,6 +69,118 @@ namespace PlantsVsZombies.Tests.EditMode
             Directory.Delete(_root, true);
         }
 
+        /// <summary>Checks leaving and reentering preparation replaces stage ownership and restarts incremental image work.</summary>
+        [Test]
+        public void StagePreparationReleaseIsIdempotentAndReentryRestartsImageProgress()
+        {
+            _renderer.PreparePresentationSession(this);
+            Assert.That(_renderer.PreparePresentationAsset("Synthetic"), Is.True);
+            var prepared = false;
+            for (var step = 0; step < 100 && !prepared; step++)
+            {
+                prepared = _renderer.PreparePresentationAssetRegionsStep("Synthetic", 1);
+            }
+            Assert.That(prepared, Is.True);
+            var leaseField = typeof(ReanimationRenderer).GetField("_stagePageLease", BindingFlags.Instance | BindingFlags.NonPublic)!;
+            var first = leaseField.GetValue(_renderer);
+            Assert.That(first, Is.Not.Null);
+            var generation = _renderer.PresentationPreparationGeneration;
+            _renderer.ReleasePreparedPages();
+            _renderer.ReleasePreparedPages();
+            Assert.That(leaseField.GetValue(_renderer), Is.Null);
+            _renderer.PreparePresentationSession(this);
+            Assert.That(_renderer.PresentationPreparationGeneration, Is.GreaterThan(generation));
+            Assert.That(leaseField.GetValue(_renderer), Is.Not.Null.And.Not.SameAs(first));
+            Assert.That(_renderer.PreparePresentationAssetRegionsStep("Synthetic", 1), Is.False,
+                "The first image must be visited and retained again instead of reusing a completed stage cursor.");
+            prepared = false;
+            for (var step = 0; step < 100 && !prepared; step++)
+            {
+                prepared = _renderer.PreparePresentationAssetRegionsStep("Synthetic", 1);
+            }
+            Assert.That(prepared, Is.True);
+        }
+
+        /// <summary>Checks exact pose hits retain the live placement and invalidate when the source time changes.</summary>
+        [Test]
+        public void ExactPoseCacheKeepsPlacementLiveAndRejectsDifferentSampleTimes()
+        {
+            var identity = PresentationIdentity.Create("actor-", 19, -1, 1);
+            var session = new object();
+            Matrix4x4 first;
+            using (ObjectSpriteRenderer.BeginSceneFrameScope())
+            {
+                _renderer.Hierarchy.BeginFrame(session);
+                using var actor = _renderer.Hierarchy.BeginActor("Zombies", 19, "Synthetic");
+                Assert.That(_renderer.DrawNativePlaybackIdentity("Synthetic", new Vector2(20f, 30f), 1f,
+                    .03125f, "anim_idle", true, instanceKey: identity), Is.True);
+                first = ObjectPool().SubmittedSprites[0].GameObject!.GetComponent<SpriteHierarchySprite>().DestinationTransform;
+            }
+            var hits = _renderer.LocalPoseCacheHitCount;
+            using (ObjectSpriteRenderer.BeginSceneFrameScope())
+            {
+                _renderer.Hierarchy.BeginFrame(session);
+                using var actor = _renderer.Hierarchy.BeginActor("Zombies", 19, "Synthetic");
+                Assert.That(_renderer.DrawNativePlaybackIdentity("Synthetic", new Vector2(30f, 30f), 1f,
+                    .03125f, "anim_idle", true, instanceKey: identity), Is.True);
+                var second = ObjectPool().SubmittedSprites[0].GameObject!.GetComponent<SpriteHierarchySprite>().DestinationTransform;
+                Assert.That(second.m03, Is.EqualTo(first.m03 + 10f));
+            }
+            Assert.That(_renderer.LocalPoseCacheHitCount, Is.GreaterThan(hits));
+            hits = _renderer.LocalPoseCacheHitCount;
+            using (ObjectSpriteRenderer.BeginSceneFrameScope())
+            {
+                _renderer.Hierarchy.BeginFrame(session);
+                using var actor = _renderer.Hierarchy.BeginActor("Zombies", 19, "Synthetic");
+                Assert.That(_renderer.DrawNativePlaybackIdentity("Synthetic", new Vector2(20f, 30f), 1f,
+                    .0625f, "anim_idle", true, instanceKey: identity), Is.True);
+            }
+            Assert.That(_renderer.LocalPoseCacheHitCount, Is.EqualTo(hits));
+        }
+
+        /// <summary>Checks missing optional resources do not construct an exception on every warmed lookup.</summary>
+        [Test]
+        public void MissingOptionalSpriteLookupsDoNotAllocateAfterWarmup()
+        {
+            _renderer.TryGetNativeSpriteSize("IMAGE_REANIM_missing", out _);
+            _renderer.DrawResourceSprite("IMAGE_REANIM_missing", Vector2.zero, 1f);
+            var before = GC.GetAllocatedBytesForCurrentThread();
+            var found = false;
+            for (var iteration = 0; iteration < 100; iteration++)
+            {
+                found |= _renderer.TryGetNativeSpriteSize("IMAGE_REANIM_missing", out _);
+                found |= _renderer.DrawResourceSprite("IMAGE_REANIM_missing", Vector2.zero, 1f);
+            }
+            var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+            Assert.That(found, Is.False);
+            Assert.That(allocated, Is.Zero);
+        }
+
+        /// <summary>Checks retiring and respawning one particle definition reuses complete emitter and random-state containers.</summary>
+        [Test]
+        public void RetiredParticleSystemsReuseTheirPreparedLayout()
+        {
+            var particles = new OriginalParticleRenderer(_root, _renderer);
+            var ready = false;
+            for (var step = 0; step < 100 && !ready; step++)
+            {
+                ready = particles.PrepareSystemCapacityStep("Synthetic", 1);
+            }
+            Assert.That(ready, Is.True);
+            var created = particles.CreatedSystemCount;
+            for (var identity = 1; identity < 4; identity++)
+            {
+                particles.BeginFrame();
+                Assert.That(particles.Draw(PresentationIdentity.Create("effect-", identity, -1, 1),
+                    "Synthetic", 0f, Vector2.zero, 7529), Is.True);
+                particles.EndFrame();
+                particles.BeginFrame();
+                particles.EndFrame();
+            }
+            Assert.That(particles.CreatedSystemCount, Is.EqualTo(created));
+            particles.Clear();
+        }
+
         /// <summary>Preserves default selection, aliases, and case-insensitive clip identities after caching.</summary>
         /// <param name="animation">The requested alias for the idle clip.</param>
         [TestCase(null)]
@@ -305,8 +417,8 @@ namespace PlantsVsZombies.Tests.EditMode
             Assert.That(valid, Is.True);
             Assert.That(recorder.Count, Is.Zero, "Warmed native arm and detached-part identities must emit no GC.Alloc events.");
             var systems = (IDictionary)typeof(OriginalParticleRenderer).GetField("_systems", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(particles)!;
-            Assert.That(systems.Contains("native-arm-17"), Is.True);
-            Assert.That(systems.Contains("native-zombie-part-17"), Is.True);
+            Assert.That(systems.Contains(PresentationIdentity.Create("native-arm-", 17, -1, 0)), Is.True);
+            Assert.That(systems.Contains(PresentationIdentity.Create("native-zombie-part-", 17, -1, 0)), Is.True);
             Assert.That(systems.Count, Is.EqualTo(2), "Different native effect roles with the same entity ID must remain independent.");
             particles.Clear();
         }

@@ -35,11 +35,12 @@ namespace PlantsVsZombies.Rendering
             internal bool Visible = true;
 
             /// <summary>Creates a logical actor below its category.</summary>
+            /// <param name="owner">The inspection registry owning this node.</param>
             /// <param name="parent">The category containing the actor.</param>
             /// <param name="name">The readable actor identity.</param>
-            internal Actor(Transform parent, string name)
+            internal Actor(SpriteHierarchy owner, Transform parent, string name)
             {
-                Root = CreateNode(parent, name);
+                Root = owner.CreateObservedNode(parent, name);
                 RootTransform = Root.transform;
                 DisplayName = name;
             }
@@ -49,7 +50,7 @@ namespace PlantsVsZombies.Rendering
         private sealed class TrackNodes
         {
             /// <summary>The lazily expanded source-index table, bounded independently of sparse external indices.</summary>
-            internal Node?[] Nodes = new Node?[16];
+            internal Node?[] Nodes = new Node?[64];
         }
 
         /// <summary>The largest source-track table retained for one asset and attachment slot.</summary>
@@ -68,15 +69,57 @@ namespace PlantsVsZombies.Rendering
             internal bool Visible = true;
 
             /// <summary>Creates a source sprite node.</summary>
+            /// <param name="owner">The inspection registry owning this source component.</param>
             /// <param name="parent">The actor owning this sprite.</param>
             /// <param name="name">The original track or attachment name.</param>
-            internal Node(Transform parent, string name)
+            internal Node(SpriteHierarchy owner, Transform parent, string name)
             {
-                Object = CreateNode(parent, name);
+                Object = owner.CreateObservedNode(parent, name, true);
                 Transform = Object.transform;
-                Metadata = Object.AddComponent<SpriteHierarchySprite>();
+                Metadata = Object.GetComponent<SpriteHierarchySprite>();
             }
         }
+
+        /// <summary>Bounds retired actor roots retained between spawns.</summary>
+        private const int MaximumInactiveActors = 256;
+        /// <summary>Bounds retired source-track objects retained between spawns.</summary>
+        private const int MaximumInactiveSprites = 4096;
+        /// <summary>Bounds retired attachment nodes retained between spawns.</summary>
+        private const int MaximumInactiveAttachments = 512;
+        /// <summary>Reuses complete actor dictionaries and root objects after model retirement.</summary>
+        private readonly Stack<Actor> _inactiveActors = new Stack<Actor>();
+        /// <summary>Reuses inspected sprite objects separately from logical track bindings.</summary>
+        private readonly Stack<Node> _inactiveSprites = new Stack<Node>();
+        /// <summary>Reuses numeric source-track lookup tables after actor retirement.</summary>
+        private readonly Stack<TrackNodes> _inactiveTrackTables = new Stack<TrackNodes>();
+        /// <summary>Retains caller-prepared labels only until their exact model binding consumes them.</summary>
+        private readonly Dictionary<(string Category, int Id, string Name), string> _preparedActorLabels = new Dictionary<(string, int, string), string>();
+        /// <summary>Counts model labels that were formatted outside explicit preparation.</summary>
+        internal int ActorLabelMissCount { get; private set; }
+        /// <summary>Counts actor roots constructed because prepared and recycled capacity was exhausted.</summary>
+        internal int ActorRootCreationCount { get; private set; }
+        /// <summary>Reuses named head and held-item grouping nodes.</summary>
+        private readonly Stack<GameObject> _inactiveAttachments = new Stack<GameObject>();
+        /// <summary>The hidden inactive root whose children cannot affect live actor visibility.</summary>
+        private GameObject? _poolRoot;
+        /// <summary>Rejects lifecycle notifications from a previous match binding.</summary>
+        private uint _bindingGeneration;
+        /// <summary>Gets whether inspection objects are enabled for this build.</summary>
+        internal bool Enabled
+        {
+            get
+            {
+#if UNITY_EDITOR
+                return true;
+#else
+                return false;
+#endif
+            }
+        }
+        /// <summary>Gets how often a source node needed a new Unity component.</summary>
+        internal int SpriteNodeCreationCount { get; private set; }
+        /// <summary>Gets the number of reusable retired source nodes.</summary>
+        internal int InactiveSpriteCount => _inactiveSprites.Count;
 
         /// <summary>The stable actor identities belonging to the current simulation session.</summary>
         private readonly Dictionary<(string Category, int Id), Actor> _actors = new Dictionary<(string, int), Actor>();
@@ -110,6 +153,10 @@ namespace PlantsVsZombies.Rendering
         /// <param name="session">The simulation instance separating numeric identities across matches.</param>
         internal void BeginFrame(object session)
         {
+            if (!Enabled)
+            {
+                return;
+            }
             using var profile = SpriteRenderingProfiler.Measure(SpriteRenderingProfiler.Hierarchy);
             if (!ReferenceEquals(_session, session))
             {
@@ -118,7 +165,6 @@ namespace PlantsVsZombies.Rendering
             }
 
             _frame++;
-            RefreshVisibility();
         }
 
         /// <summary>Retains an actor independently of whether it is visible or submits any artwork.</summary>
@@ -127,6 +173,10 @@ namespace PlantsVsZombies.Rendering
         /// <param name="displayName">The readable species name used when first binding the actor.</param>
         internal void MarkAlive(string category, int id, string displayName)
         {
+            if (!Enabled)
+            {
+                return;
+            }
             GetActor(category, id, displayName).AliveFrame = _frame;
         }
 
@@ -137,6 +187,10 @@ namespace PlantsVsZombies.Rendering
         /// <returns>A scope restoring the preceding actor and attachment context.</returns>
         internal SpriteHierarchyScope BeginActor(string category, int id, string displayName)
         {
+            if (!Enabled)
+            {
+                return default;
+            }
             var scope = SaveContext();
             _actor = GetActor(category, id, displayName);
             _actor.AliveFrame = _frame;
@@ -152,6 +206,10 @@ namespace PlantsVsZombies.Rendering
         /// <returns>A scope restoring the previous attachment slot.</returns>
         internal SpriteHierarchyScope BeginAttachment(int slot)
         {
+            if (!Enabled)
+            {
+                return default;
+            }
             var scope = SaveContext();
             _attachment = slot;
             return scope;
@@ -164,6 +222,10 @@ namespace PlantsVsZombies.Rendering
         /// <returns>A scope restoring the preceding sprite context.</returns>
         internal SpriteHierarchyScope BeginSprite(object asset, int trackIndex, string displayName)
         {
+            if (!Enabled)
+            {
+                return default;
+            }
             var scope = SaveContext();
             if (_actor != null)
             {
@@ -176,7 +238,7 @@ namespace PlantsVsZombies.Rendering
                     {
                         if (!_actor.TrackTables.TryGetValue((asset, _attachment), out var tracks))
                         {
-                            tracks = new TrackNodes();
+                            tracks = _inactiveTrackTables.Count > 0 ? _inactiveTrackTables.Pop() : new TrackNodes();
                             _actor.TrackTables.Add((asset, _attachment), tracks);
                         }
                         _actor.LastTrackAsset = asset;
@@ -197,11 +259,11 @@ namespace PlantsVsZombies.Rendering
                     {
                         var attachmentName = _attachment == 10 ? "Flag"
                             : _attachment == 11 ? "Held Item" : _attachment == 12 ? "Plant Head" : "Head " + _attachment;
-                        parent = CreateNode(_actor.RootTransform, attachmentName);
+                        parent = RentAttachment(_actor.RootTransform, attachmentName);
                         _actor.Attachments.Add(_attachment, parent);
                     }
 
-                    node = new Node(parent.transform, displayName);
+                    node = RentSprite(parent.transform, displayName);
                     _actor.Sprites.Add(key, node);
                 }
                 if (table != null && (trackIndex >= table.Nodes.Length || table.Nodes[trackIndex] == null))
@@ -253,6 +315,10 @@ namespace PlantsVsZombies.Rendering
         /// <summary>Removes actors absent from both the live simulation and retained corpse list.</summary>
         internal void EndFrame()
         {
+            if (!Enabled)
+            {
+                return;
+            }
             _retired.Clear();
             foreach (var pair in _actors)
             {
@@ -264,7 +330,7 @@ namespace PlantsVsZombies.Rendering
 
             foreach (var key in _retired)
             {
-                DestroyNode(_actors[key].Root);
+                RetireActor(_actors[key]);
                 _actors.Remove(key);
             }
 
@@ -274,25 +340,11 @@ namespace PlantsVsZombies.Rendering
         /// <summary>Detects external hierarchy switches without modifying the user's active state.</summary>
         internal void RefreshVisibility()
         {
-            foreach (var actor in _actors.Values)
+            if (!Enabled)
             {
-                var visible = actor.Root != null && actor.Root.activeInHierarchy;
-                if (actor.Visible != visible)
-                {
-                    actor.Visible = visible;
-                    VisibilityRevision++;
-                }
-
-                foreach (var node in actor.Sprites.Values)
-                {
-                    visible = node.Object != null && node.Object.activeInHierarchy;
-                    if (node.Visible != visible)
-                    {
-                        node.Visible = visible;
-                        VisibilityRevision++;
-                    }
-                }
+                return;
             }
+            // Lifecycle observers notify immediately, including changes to ancestor active state.
         }
 
         /// <summary>Releases all inspection nodes without affecting independently owned batch meshes.</summary>
@@ -337,7 +389,7 @@ namespace PlantsVsZombies.Rendering
                 if (!string.Equals(actor.DisplayName, displayName, StringComparison.Ordinal))
                 {
                     actor.DisplayName = displayName;
-                    actor.Root.name = displayName + " " + id;
+                    actor.Root.name = ActorLabel(category, id, displayName);
                 }
 
                 return actor;
@@ -345,16 +397,29 @@ namespace PlantsVsZombies.Rendering
 
             if (_root == null)
             {
-                _root = CreateNode(null, "PvZ Actors");
+                _root = CreateObservedNode(null, "PvZ Actors");
             }
 
             if (!_categories.TryGetValue(category, out var parent))
             {
-                parent = CreateNode(_root.transform, category);
+                parent = CreateObservedNode(_root.transform, category);
                 _categories.Add(category, parent);
             }
 
-            actor = new Actor(parent.transform, displayName + " " + id);
+            if (_inactiveActors.Count > 0)
+            {
+                actor = _inactiveActors.Pop();
+                actor.RootTransform.SetParent(parent.transform, false);
+                ResetTransform(actor.RootTransform);
+                actor.Root.name = ActorLabel(category, id, displayName);
+                BindObserver(actor.Root);
+                actor.Root.SetActive(true);
+            }
+            else
+            {
+                actor = new Actor(this, parent.transform, ActorLabel(category, id, displayName));
+                ActorRootCreationCount++;
+            }
             actor.DisplayName = displayName;
             _actors.Add(key, actor);
             return actor;
@@ -363,6 +428,24 @@ namespace PlantsVsZombies.Rendering
         /// <summary>Clears actor bindings when a simulation session or renderer ends.</summary>
         private void Clear()
         {
+            _bindingGeneration++;
+            foreach (var actor in _inactiveActors)
+            {
+                if (actor.Root != null)
+                {
+                    DestroyNode(actor.Root);
+                }
+            }
+            _inactiveActors.Clear();
+            _inactiveSprites.Clear();
+            _inactiveTrackTables.Clear();
+            _preparedActorLabels.Clear();
+            _inactiveAttachments.Clear();
+            if (_poolRoot != null)
+            {
+                DestroyNode(_poolRoot);
+                _poolRoot = null;
+            }
             if (_root != null)
             {
                 DestroyNode(_root);
@@ -382,8 +465,9 @@ namespace PlantsVsZombies.Rendering
         /// <summary>Creates an inspection-only node with no rendering components.</summary>
         /// <param name="parent">The optional logical parent.</param>
         /// <param name="name">The hierarchy label.</param>
+        /// <param name="sprite">Whether to attach the source-pose inspector instead of a grouping observer.</param>
         /// <returns>The newly created node.</returns>
-        private static GameObject CreateNode(Transform? parent, string name)
+        private GameObject CreateObservedNode(Transform? parent, string name, bool sprite = false)
         {
             var node = new GameObject(name)
             {
@@ -391,7 +475,295 @@ namespace PlantsVsZombies.Rendering
                 layer = 31
             };
             node.transform.SetParent(parent, false);
+            if (sprite)
+            {
+                node.AddComponent<SpriteHierarchySprite>().BindVisibility(this, _bindingGeneration);
+                SpriteNodeCreationCount++;
+            }
+            else
+            {
+                node.AddComponent<SpriteHierarchyVisibility>().Bind(this, _bindingGeneration);
+            }
             return node;
+        }
+
+        /// <summary>Notifies synchronous visibility changes from a currently bound inspection component.</summary>
+        /// <param name="generation">The observer's match generation.</param>
+        internal void NotifyVisibilityChanged(uint generation)
+        {
+            if (generation == _bindingGeneration)
+            {
+                VisibilityRevision++;
+            }
+        }
+
+        /// <summary>Clears manual transform edits before another logical model acquires a pooled inspection node.</summary>
+        /// <param name="transform">The reused source or grouping transform.</param>
+        private static void ResetTransform(Transform transform)
+        {
+            transform.localPosition = Vector3.zero;
+            transform.localRotation = Quaternion.identity;
+            transform.localScale = Vector3.one;
+        }
+
+        /// <summary>Rebinds a grouping observer after an inactive node is reused.</summary>
+        /// <param name="node">The grouping object.</param>
+        private void BindObserver(GameObject node)
+        {
+            node.GetComponent<SpriteHierarchyVisibility>().Bind(this, _bindingGeneration);
+        }
+
+        /// <summary>Gets the inactive root without adding it below the visible actor hierarchy.</summary>
+        /// <returns>The inactive storage transform.</returns>
+        private Transform PoolRoot()
+        {
+            if (_poolRoot == null)
+            {
+                _poolRoot = new GameObject("PvZ inactive inspection nodes")
+                {
+                    hideFlags = HideFlags.HideAndDontSave,
+                    layer = 31
+                };
+                _poolRoot.SetActive(false);
+            }
+            return _poolRoot.transform;
+        }
+
+        /// <summary>Takes a source object while resetting all metadata and visibility from the previous binding.</summary>
+        /// <param name="parent">The new actor or attachment.</param>
+        /// <param name="name">The immutable source-track label.</param>
+        /// <returns>A visible source node with no previous pose.</returns>
+        private Node RentSprite(Transform parent, string name)
+        {
+            if (_inactiveSprites.Count == 0)
+            {
+                return new Node(this, parent, name);
+            }
+            var node = _inactiveSprites.Pop();
+            node.Metadata.ResetPose();
+            node.Object.name = name;
+            node.Transform.SetParent(parent, false);
+            ResetTransform(node.Transform);
+            node.Metadata.BindVisibility(this, _bindingGeneration);
+            node.Object.SetActive(true);
+            return node;
+        }
+
+        /// <summary>Takes an attachment grouping object without creating another component when warmed.</summary>
+        /// <param name="parent">The actor root.</param>
+        /// <param name="name">The attachment label.</param>
+        /// <returns>The rebound grouping object.</returns>
+        private GameObject RentAttachment(Transform parent, string name)
+        {
+            if (_inactiveAttachments.Count == 0)
+            {
+                return CreateObservedNode(parent, name);
+            }
+            var node = _inactiveAttachments.Pop();
+            node.transform.SetParent(parent, false);
+            ResetTransform(node.transform);
+            node.name = name;
+            BindObserver(node);
+            node.SetActive(true);
+            return node;
+        }
+
+        /// <summary>Recycles retired bindings without carrying user visibility or old source references to another model.</summary>
+        /// <param name="actor">The logically retired actor.</param>
+        private void RetireActor(Actor actor)
+        {
+            foreach (var node in actor.Sprites.Values)
+            {
+                node.Metadata.BindVisibility(null, 0);
+                node.Metadata.ResetPose();
+                node.Object.SetActive(false);
+                node.Transform.SetParent(PoolRoot(), false);
+                if (_inactiveSprites.Count < MaximumInactiveSprites)
+                {
+                    _inactiveSprites.Push(node);
+                }
+                else
+                {
+                    DestroyNode(node.Object);
+                }
+            }
+            foreach (var attachment in actor.Attachments.Values)
+            {
+                attachment.GetComponent<SpriteHierarchyVisibility>().Bind(null, 0);
+                attachment.SetActive(false);
+                attachment.transform.SetParent(PoolRoot(), false);
+                if (_inactiveAttachments.Count < MaximumInactiveAttachments)
+                {
+                    _inactiveAttachments.Push(attachment);
+                }
+                else
+                {
+                    DestroyNode(attachment);
+                }
+            }
+            actor.Sprites.Clear();
+            foreach (var table in actor.TrackTables.Values)
+            {
+                Array.Clear(table.Nodes, 0, table.Nodes.Length);
+                if (_inactiveTrackTables.Count < 1024)
+                {
+                    _inactiveTrackTables.Push(table);
+                }
+            }
+            actor.TrackTables.Clear();
+            actor.Attachments.Clear();
+            actor.LastTrackAsset = null;
+            actor.LastTrackTable = null;
+            actor.DisplayName = string.Empty;
+            actor.Root.GetComponent<SpriteHierarchyVisibility>().Bind(null, 0);
+            actor.Root.SetActive(false);
+            actor.RootTransform.SetParent(PoolRoot(), false);
+            if (_inactiveActors.Count < MaximumInactiveActors)
+            {
+                _inactiveActors.Push(actor);
+            }
+            else
+            {
+                DestroyNode(actor.Root);
+            }
+            VisibilityRevision++;
+        }
+
+        /// <summary>Formats one known Editor label before gameplay without consuming simulation state.</summary>
+        /// <param name="category">The actor category.</param>
+        /// <param name="id">The reserved model identifier.</param>
+        /// <param name="displayName">The native species label.</param>
+        internal void PrepareActorLabel(string category, int id, string displayName)
+        {
+            if (!Enabled)
+            {
+                return;
+            }
+            var key = (category, id, displayName);
+            if (_preparedActorLabels.Count < 16384 && !_preparedActorLabels.ContainsKey(key))
+            {
+                _preparedActorLabels.Add(key, displayName + " " + id);
+            }
+        }
+
+        /// <summary>Consumes a prepared label or records a capacity miss while preserving the correct inspection name.</summary>
+        /// <param name="category">The actor category.</param>
+        /// <param name="id">The logical identifier.</param>
+        /// <param name="name">The species label.</param>
+        /// <returns>The complete readable actor label.</returns>
+        private string ActorLabel(string category, int id, string name)
+        {
+            var key = (category, id, name);
+            if (_preparedActorLabels.TryGetValue(key, out var label))
+            {
+                _preparedActorLabels.Remove(key);
+                return label;
+            }
+            ActorLabelMissCount++;
+            return name + " " + id;
+        }
+
+        /// <summary>Adopts the session before caller-budgeted preparation so the first draw preserves prepared objects.</summary>
+        /// <param name="session">The owning simulation.</param>
+        internal void PrepareSession(object session)
+        {
+            if (!Enabled)
+            {
+                return;
+            }
+            if (!ReferenceEquals(_session, session))
+            {
+                Clear();
+                _session = session;
+            }
+            _preparedActorLabels.Clear();
+            if (_root == null)
+            {
+                _root = CreateObservedNode(null, "PvZ Actors");
+            }
+            if (!_categories.ContainsKey("Plants"))
+            {
+                _categories.Add("Plants", CreateObservedNode(_root.transform, "Plants"));
+            }
+            if (!_categories.ContainsKey("Zombies"))
+            {
+                _categories.Add("Zombies", CreateObservedNode(_root.transform, "Zombies"));
+            }
+        }
+
+        /// <summary>Creates at most the requested number of reusable inspection objects.</summary>
+        /// <param name="actorCount">The desired live plus inactive actor capacity.</param>
+        /// <param name="spriteCount">The desired live plus inactive source-node capacity.</param>
+        /// <param name="maxObjects">The maximum number of Unity objects to create in this call.</param>
+        /// <returns>Whether the bounded requested capacity is available.</returns>
+        internal bool PrepareCapacityStep(int actorCount, int spriteCount, int maxObjects)
+        {
+            if (!Enabled)
+            {
+                return true;
+            }
+            _actors.EnsureCapacity(Math.Max(_actors.Count, actorCount));
+            if (_retired.Capacity < actorCount)
+            {
+                _retired.Capacity = actorCount;
+            }
+            var liveSprites = 0;
+            foreach (var actor in _actors.Values)
+            {
+                liveSprites += actor.Sprites.Count;
+            }
+            var actors = Math.Min(Math.Max(0, actorCount - _actors.Count), MaximumInactiveActors);
+            var sprites = Math.Min(Math.Max(0, spriteCount - liveSprites), MaximumInactiveSprites);
+            var remaining = Math.Max(1, maxObjects);
+            while (remaining > 0 && _inactiveActors.Count < actors)
+            {
+                var actor = new Actor(this, PoolRoot(), "Prepared actor");
+                ActorRootCreationCount++;
+                actor.Root.GetComponent<SpriteHierarchyVisibility>().Bind(null, 0);
+                actor.Root.SetActive(false);
+                actor.Sprites.EnsureCapacity(64);
+                actor.TrackTables.EnsureCapacity(4);
+                actor.Attachments.EnsureCapacity(4);
+                if (_inactiveTrackTables.Count < 1024)
+                {
+                    _inactiveTrackTables.Push(new TrackNodes());
+                }
+                _inactiveActors.Push(actor);
+                remaining--;
+            }
+            while (remaining > 0 && _inactiveSprites.Count < sprites)
+            {
+                PrepareSpriteNodes(1);
+                remaining--;
+            }
+            var attachments = Math.Min(Math.Max(0, actorCount * 3), MaximumInactiveAttachments);
+            while (remaining > 0 && _inactiveAttachments.Count < attachments)
+            {
+                var attachment = CreateObservedNode(PoolRoot(), "Prepared attachment");
+                attachment.GetComponent<SpriteHierarchyVisibility>().Bind(null, 0);
+                attachment.SetActive(false);
+                _inactiveAttachments.Push(attachment);
+                remaining--;
+            }
+            return _inactiveActors.Count >= actors && _inactiveSprites.Count >= sprites
+                && _inactiveAttachments.Count >= attachments;
+        }
+
+        /// <summary>Creates reusable source nodes during a caller-budgeted preparation step.</summary>
+        /// <param name="count">The number of additional source nodes to prepare.</param>
+        internal void PrepareSpriteNodes(int count)
+        {
+            if (!Enabled)
+            {
+                return;
+            }
+            for (var index = 0; index < count && _inactiveSprites.Count < MaximumInactiveSprites; index++)
+            {
+                var node = new Node(this, PoolRoot(), "Prepared sprite");
+                node.Metadata.BindVisibility(null, 0);
+                node.Object.SetActive(false);
+                _inactiveSprites.Push(node);
+            }
         }
 
         /// <summary>Destroys a logical hierarchy object using the current Unity lifetime mode.</summary>

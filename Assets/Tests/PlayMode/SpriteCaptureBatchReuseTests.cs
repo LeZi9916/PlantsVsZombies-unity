@@ -204,8 +204,10 @@ namespace PlantsVsZombies.Tests.PlayMode
                 var batches = (List<SpriteMeshBatch>)typeof(ObjectSpriteRenderer).GetField("_batches", flags)!.GetValue(_capture)!;
                 var boundary = reversed ? -23.5f : -12.5f;
                 var sharedVertices = 0;
-                foreach (var vertex in batches[0].Mesh.vertices)
+                var activeVertices = batches[0].Mesh.vertices;
+                for (var activeIndex = 0; activeIndex < batches[0].VertexCount; activeIndex++)
                 {
+                    var vertex = activeVertices[activeIndex];
                     if (Mathf.Abs(vertex.y - boundary) < .001f)
                     {
                         Assert.That(vertex.y, Is.EqualTo(boundary), "Neighboring pieces must preserve the same exact source-pixel edge.");

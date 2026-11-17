@@ -5,9 +5,46 @@ namespace PlantsVsZombies.Rendering
 {
     /// <summary>Exposes the last submitted full affine sprite pose without adding a renderer or per-object update.</summary>
     [DisallowMultipleComponent]
+    [ExecuteAlways]
     [AddComponentMenu("")]
     public sealed class SpriteHierarchySprite : MonoBehaviour
     {
+        /// <summary>The registry receiving synchronous visibility changes.</summary>
+        private SpriteHierarchy? _visibilityOwner;
+        /// <summary>The current pool binding generation.</summary>
+        private uint _visibilityGeneration;
+
+        /// <summary>Updates the visibility binding before reusing this source node.</summary>
+        /// <param name="owner">The active owner, or null while pooled.</param>
+        /// <param name="generation">The owner's current match generation.</param>
+        internal void BindVisibility(SpriteHierarchy? owner, uint generation)
+        {
+            _visibilityOwner = owner;
+            _visibilityGeneration = generation;
+        }
+
+        private void OnEnable()
+        {
+            _visibilityOwner?.NotifyVisibilityChanged(_visibilityGeneration);
+        }
+
+        private void OnDisable()
+        {
+            _visibilityOwner?.NotifyVisibilityChanged(_visibilityGeneration);
+        }
+
+        /// <summary>Clears source references and sampled data before another model acquires this object.</summary>
+        internal void ResetPose()
+        {
+            SourceIdentity = string.Empty;
+            LogicalSize = default;
+            SourceUv = default;
+            DestinationTransform = Matrix4x4.identity;
+            Tint = Color.white;
+            RenderMode = 0;
+            HasPose = false;
+        }
+
         /// <summary>Gets the original resource identity sampled by this logical sprite.</summary>
         public string SourceIdentity { get; private set; } = "";
         /// <summary>Gets the requested logical drawing size before trimming or atlas tiling.</summary>

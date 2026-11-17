@@ -210,6 +210,7 @@ namespace PlantsVsZombies.Rendering
                 mesh.RecalculateBounds();
                 var renderer = _renderers[layer];
                 renderer.sortingOrder = order;
+                SpriteSceneRenderQueues.RegisterRenderer(renderer, _material, order);
                 _properties.SetTexture(s_texture, layer == 2 ? _caustics : _artwork[(layer == 0 ? 0 : 2) + (night ? 1 : 0)]);
                 _properties.SetVector(s_clip, new Vector4(clip.xMin, clip.yMin, clip.xMax, clip.yMax));
                 _properties.SetFloat(s_clipEnabled, 1f);

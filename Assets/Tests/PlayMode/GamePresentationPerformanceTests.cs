@@ -20,6 +20,11 @@ namespace PlantsVsZombies.Tests.PlayMode
     /// <summary>Protects actor callback reuse, presentation identities, and native track filtering.</summary>
     public sealed class GamePresentationPerformanceTests
     {
+        /// <summary>The stable adventure and feedback branches measured once per real Unity frame.</summary>
+        private static readonly string[] s_adventureAllocationScenarios =
+        {
+            "Combat", "Paused", "Conveyor", "DetachedArm", "SnowTrail", "Explosion", "Corpse", "FrozenCorpse", "CharredCorpse"
+        };
         /// <summary>Contains synthetic native animation definitions and their small source images.</summary>
         private string _root = "";
         /// <summary>Samples the fixture animations through the production renderer.</summary>
@@ -128,20 +133,21 @@ namespace PlantsVsZombies.Tests.PlayMode
         [Test]
         public void ReusesLiveKeysAndRetiresAbsentIdentities()
         {
+            var session = new object();
+            _keys.SetSession(session);
             _keys.BeginFrame();
             var first = _keys.Get("plant-", 123);
             var part = _keys.Get("effect-", 123, 2);
-            Assert.That(first, Is.EqualTo("plant-123"));
-            Assert.That(part, Is.EqualTo("effect-123-2"));
-            Assert.That(_keys.Get("plant-", 123), Is.SameAs(first));
+            Assert.That(first, Is.Not.EqualTo(part));
+            Assert.That(_keys.Get("plant-", 123), Is.EqualTo(first));
             _keys.BeginFrame();
-            Assert.That(_keys.Get("plant-", 123), Is.SameAs(first));
-            Assert.That(_keys.Get("effect-", 123, 2), Is.SameAs(part));
+            Assert.That(_keys.Get("plant-", 123), Is.EqualTo(first));
+            Assert.That(_keys.Get("effect-", 123, 2), Is.EqualTo(part));
             _keys.BeginFrame();
             _keys.BeginFrame();
-            var replacement = _keys.Get("plant-", 123);
-            Assert.That(replacement, Is.EqualTo(first));
-            Assert.That(replacement, Is.Not.SameAs(first));
+            Assert.That(_keys.Get("plant-", 123), Is.EqualTo(first), "A value identity needs no retained string to survive an absent frame.");
+            _keys.SetSession(new object());
+            Assert.That(_keys.Get("plant-", 123), Is.Not.EqualTo(first), "Another match must not share playback state for a reused entity ID.");
         }
 
         /// <summary>Uses the current plant's butter selection even when two actors share one retained predicate.</summary>
@@ -252,9 +258,9 @@ namespace PlantsVsZombies.Tests.PlayMode
             {
                 var key = "feedback-" + actor;
                 BeginFrame();
-                Assert.That(_renderer.DrawNativeClipped(key, new Rect(0f, 0f, 32f, 32f), draw), Is.True);
+                Assert.That(_renderer.DrawNativeClippedIdentity(key, new Rect(0f, 0f, 32f, 32f), draw), Is.True);
                 _renderer.EndObjectFrame();
-                _renderer.ReleaseNativeSurface(key);
+                _renderer.ReleaseNativeSurfaceIdentity(key);
                 Assert.That(_renderer.NativeSurfaceCount, Is.Zero);
                 Assert.That(_renderer.InactiveNativeSurfaceCount, Is.EqualTo(1));
             }
@@ -262,7 +268,7 @@ namespace PlantsVsZombies.Tests.PlayMode
             Assert.That(_renderer.NativeSurfaceCreationCount, Is.EqualTo(1), "Completed feedback must reuse its capture GameObjects.");
             Assert.That(_renderer.NativeCaptureRendererCount, Is.EqualTo(1));
             BeginFrame();
-            Assert.That(_renderer.DrawNativeClipped("next-level", new Rect(0f, 0f, 32f, 32f), draw), Is.True);
+            Assert.That(_renderer.DrawNativeClippedIdentity("next-level", new Rect(0f, 0f, 32f, 32f), draw), Is.True);
             _renderer.EndObjectFrame();
             _renderer.ResetNativePlayback();
             Assert.That(_renderer.NativeSurfaceCount, Is.Zero);
@@ -275,12 +281,12 @@ namespace PlantsVsZombies.Tests.PlayMode
         public void ReusedFrozenCaptureClearsThePreviousActorsReadyState()
         {
             BeginFrame();
-            Assert.That(_renderer.DrawNativeClipped("red-capture", new Rect(0f, 0f, 32f, 32f),
+            Assert.That(_renderer.DrawNativeClippedIdentity("red-capture", new Rect(0f, 0f, 32f, 32f),
                 () => _renderer.DrawResourceSprite("IMAGE_REANIM_red", new Vector2(8f, 8f), 1f), freeze: true), Is.True);
             _renderer.EndObjectFrame();
-            _renderer.ReleaseNativeSurface("red-capture");
+            _renderer.ReleaseNativeSurfaceIdentity("red-capture");
             BeginFrame();
-            Assert.That(_renderer.DrawNativeClipped("blue-capture", new Rect(0f, 0f, 32f, 32f),
+            Assert.That(_renderer.DrawNativeClippedIdentity("blue-capture", new Rect(0f, 0f, 32f, 32f),
                 () => _renderer.DrawResourceSprite("IMAGE_REANIM_blue", new Vector2(8f, 8f), 1f), freeze: true), Is.True);
             _renderer.EndObjectFrame();
             Capture();
@@ -293,10 +299,10 @@ namespace PlantsVsZombies.Tests.PlayMode
         public void CapturesSubmittedThisFrameAreNotRewrittenForAnotherActor()
         {
             BeginFrame();
-            Assert.That(_renderer.DrawNativeClipped("first-capture", new Rect(0f, 0f, 32f, 32f),
+            Assert.That(_renderer.DrawNativeClippedIdentity("first-capture", new Rect(0f, 0f, 32f, 32f),
                 () => _renderer.DrawResourceSprite("IMAGE_REANIM_red", new Vector2(8f, 8f), 1f)), Is.True);
-            _renderer.ReleaseNativeSurface("first-capture");
-            Assert.That(_renderer.DrawNativeClipped("second-capture", new Rect(44f, 0f, 32f, 32f),
+            _renderer.ReleaseNativeSurfaceIdentity("first-capture");
+            Assert.That(_renderer.DrawNativeClippedIdentity("second-capture", new Rect(44f, 0f, 32f, 32f),
                 () => _renderer.DrawResourceSprite("IMAGE_REANIM_blue", new Vector2(52f, 8f), 1f)), Is.True);
             _renderer.EndObjectFrame();
             Capture();
@@ -312,10 +318,10 @@ namespace PlantsVsZombies.Tests.PlayMode
         {
             BeginFrame();
             DrawKernel(new Vector2(4f, 4f));
-            Assert.That(_renderer.DrawNativeClipped("outer-capture", new Rect(40f, 0f, 40f, 32f), () =>
+            Assert.That(_renderer.DrawNativeClippedIdentity("outer-capture", new Rect(40f, 0f, 40f, 32f), () =>
             {
                 var drawn = _renderer.DrawResourceSprite("IMAGE_REANIM_blue", new Vector2(48f, 8f), 1f);
-                drawn |= _renderer.DrawNativeClipped("inner-capture", new Rect(56f, 0f, 24f, 32f),
+                drawn |= _renderer.DrawNativeClippedIdentity("inner-capture", new Rect(56f, 0f, 24f, 32f),
                     () => _renderer.DrawResourceSprite("IMAGE_REANIM_green", new Vector2(64f, 8f), 1f));
                 return drawn;
             }), Is.True);
@@ -378,7 +384,7 @@ namespace PlantsVsZombies.Tests.PlayMode
             BeginFrame();
             for (var actor = 0; actor < 24; actor++)
             {
-                Assert.That(_renderer.DrawNativeClipped("burst-" + actor, new Rect(0f, 0f, 32f, 32f), draw), Is.True);
+                Assert.That(_renderer.DrawNativeClippedIdentity("burst-" + actor, new Rect(0f, 0f, 32f, 32f), draw), Is.True);
             }
 
             _renderer.EndObjectFrame();
@@ -615,7 +621,7 @@ namespace PlantsVsZombies.Tests.PlayMode
             using (hierarchy.BeginActor("Plants", 1, "KernelPult"))
             {
                 actor = SpriteHierarchy.CurrentSprite!;
-                Assert.That(_renderer.DrawNativeClipped("hierarchy-freeze", new Rect(0f, 0f, 128f, 64f), draw, true), Is.True);
+                Assert.That(_renderer.DrawNativeClippedIdentity("hierarchy-freeze", new Rect(0f, 0f, 128f, 64f), draw, true), Is.True);
             }
 
             _renderer.EndObjectFrame();
@@ -627,7 +633,7 @@ namespace PlantsVsZombies.Tests.PlayMode
             using (hierarchy.BeginActor("Plants", 1, "KernelPult"))
             {
                 Assert.That(SpriteHierarchy.CurrentSprite, Is.SameAs(actor));
-                Assert.That(_renderer.DrawNativeClipped("hierarchy-freeze", new Rect(0f, 0f, 128f, 64f), draw, true), Is.True);
+                Assert.That(_renderer.DrawNativeClippedIdentity("hierarchy-freeze", new Rect(0f, 0f, 128f, 64f), draw, true), Is.True);
             }
 
             _renderer.EndObjectFrame();
@@ -655,13 +661,13 @@ namespace PlantsVsZombies.Tests.PlayMode
                     return drawn;
                 };
                 BeginFrame();
-                Assert.That(_renderer.DrawProducerGlow("direct-feedback", viewport, draw, visual, true), Is.True);
+                Assert.That(_renderer.DrawProducerGlowIdentity("direct-feedback", viewport, draw, visual, true), Is.True);
                 _renderer.EndObjectFrame();
                 Assert.That(_renderer.NativeSurfaceCount, Is.Zero, "Source-track feedback must not allocate an actor surface.");
                 Capture();
                 var direct = _pixels.GetPixels32();
                 BeginFrame();
-                Assert.That(_renderer.DrawNativeClipped("feedback-reference", viewport, draw,
+                Assert.That(_renderer.DrawNativeClippedIdentity("feedback-reference", viewport, draw,
                     grayscale: true, producerAdditive: visual.SourceAdditive), Is.True);
                 _renderer.EndObjectFrame();
                 Capture();
@@ -725,12 +731,12 @@ namespace PlantsVsZombies.Tests.PlayMode
             Func<bool> outer = () =>
             {
                 var drawn = _renderer.DrawResourceSprite("IMAGE_REANIM_blue", new Vector2(4f, 4f), 1f);
-                drawn |= _renderer.DrawNativeClipped("nested-effect-state", new Rect(28f, 0f, 16f, 16f), inner);
+                drawn |= _renderer.DrawNativeClippedIdentity("nested-effect-state", new Rect(28f, 0f, 16f, 16f), inner);
                 drawn |= _renderer.DrawResourceSprite("IMAGE_REANIM_blue", new Vector2(60f, 4f), 1f);
                 return drawn;
             };
             BeginFrame();
-            Assert.That(_renderer.DrawProducerGlow("outer-effect-state", new Rect(0f, 0f, 128f, 64f), outer, visual, true), Is.True);
+            Assert.That(_renderer.DrawProducerGlowIdentity("outer-effect-state", new Rect(0f, 0f, 128f, 64f), outer, visual, true), Is.True);
             Assert.That(_renderer.DrawResourceSprite("IMAGE_REANIM_red", new Vector2(92f, 4f), 1f), Is.True);
             _renderer.EndObjectFrame();
             Capture();
@@ -831,17 +837,11 @@ namespace PlantsVsZombies.Tests.PlayMode
         }
 
         /// <summary>Measures the full adventure input, simulation, audio, and presentation traversal after resources stabilize.</summary>
+        /// <remarks>One presentation per Unity frame is the steady-state allocation contract. Repeated presentations within one frame retain immutable native snapshots until that frame expires.</remarks>
         /// <param name="scenario">The stable board or original feedback path kept alive throughout measurement.</param>
-        [TestCase("Combat")]
-        [TestCase("Paused")]
-        [TestCase("Conveyor")]
-        [TestCase("DetachedArm")]
-        [TestCase("SnowTrail")]
-        [TestCase("Explosion")]
-        [TestCase("Corpse")]
-        [TestCase("FrozenCorpse")]
-        [TestCase("CharredCorpse")]
-        public void WarmAdventureUpdateAndPresentDoesNotAllocateManagedMemory(string scenario)
+        /// <returns>Real frame boundaries during preparation, all warmup frames, and all measured traversals outside their allocation recording scopes.</returns>
+        [UnityTest]
+        public IEnumerator WarmAdventureUpdateAndPresentDoesNotAllocateManagedMemory([ValueSource(nameof(s_adventureAllocationScenarios))] string scenario)
         {
             WriteOptionsFixture();
             WriteAdventureFeedbackFixture();
@@ -888,10 +888,22 @@ namespace PlantsVsZombies.Tests.PlayMode
                 }
                 var update = (Action)Delegate.CreateDelegate(typeof(Action), owner,
                     typeof(PvZGame).GetMethod("Update", BindingFlags.Instance | BindingFlags.NonPublic)!);
+                for (var preparation = 0; preparation < 10000; preparation++)
+                {
+                    update();
+                    presenter.Present();
+                    yield return null;
+                    if (owner.Preparation.IsReady)
+                    {
+                        break;
+                    }
+                }
+                Assert.That(owner.Preparation.IsReady, Is.True, "Preparation must finish before steady-state allocation recording begins.");
                 for (var frame = 0; frame < 120; frame++)
                 {
                     update();
                     presenter.Present();
+                    yield return null;
                 }
                 Assert.That(_renderer.TryGetNativeAnimationInfo("Zombie", actor.PresentationAnimation, out _), Is.True,
                     "The measured zombie must use an available synthetic clip.");
@@ -902,35 +914,27 @@ namespace PlantsVsZombies.Tests.PlayMode
                     ProfilerRecorderOptions.CollectOnlyOnCurrentThread);
                 recorder.Stop();
                 recorder.Reset();
-                recorder.Start();
+                var allocationEvents = 0;
+                var measuredTraversals = 0;
                 for (var frame = 0; frame < 100; frame++)
                 {
-                    update();
-                    presenter.Present();
-                }
-                recorder.Stop();
-                var allocationEvents = recorder.Count;
-                Assert.That(recorder.Valid, Is.True);
-                if (allocationEvents > 0)
-                {
                     recorder.Reset();
                     recorder.Start();
-                    for (var frame = 0; frame < 100; frame++)
+                    try
                     {
                         update();
-                    }
-                    recorder.Stop();
-                    var updateEvents = recorder.Count;
-                    recorder.Reset();
-                    recorder.Start();
-                    for (var frame = 0; frame < 100; frame++)
-                    {
                         presenter.Present();
                     }
-                    recorder.Stop();
-                    UnityEngine.Debug.Log("Adventure allocation stages for " + scenario + ": Update=" + updateEvents
-                        + ", Present=" + recorder.Count + " events per 100 traversals.");
+                    finally
+                    {
+                        recorder.Stop();
+                    }
+                    allocationEvents += recorder.Count;
+                    measuredTraversals++;
+                    yield return null;
                 }
+                Assert.That(recorder.Valid, Is.True);
+                Assert.That(measuredTraversals, Is.EqualTo(100), "Every planned update and presentation scope must contribute its allocation events.");
                 Assert.That(allocationEvents, Is.Zero, scenario + " must produce no GC.Alloc events once assets, identities, and buffers are warm.");
                 if (game.State == MatchState.Playing)
                 {

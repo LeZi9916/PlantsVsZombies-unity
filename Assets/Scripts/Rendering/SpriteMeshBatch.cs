@@ -10,24 +10,51 @@ namespace PlantsVsZombies.Rendering
     {
         /// <summary>The maximum vertices addressable without requiring 32-bit GPU indices.</summary>
         internal const int MaximumVertexCount = 65532;
-        /// <summary>The retained transformed-position buffer; only its populated prefix is uploaded.</summary>
-        private Vector3[] _vertices = new Vector3[256];
-        /// <summary>The accumulated atlas coordinates.</summary>
-        private Vector2[] _coordinates = new Vector2[256];
-        /// <summary>The accumulated source tint and alpha.</summary>
-        private Color[] _colors = new Color[256];
-        /// <summary>The grayscale, producer brightness, render mode, and fused-hit switch per vertex.</summary>
-        private Vector4[] _effects = new Vector4[256];
-        /// <summary>The unfiltered source-color highlight per vertex.</summary>
-        private Vector4[] _highlights = new Vector4[256];
-        /// <summary>The ordered triangle indices.</summary>
-        private int[] _indices = new int[384];
-        /// <summary>The populated vertex prefix shared by all attribute buffers.</summary>
+        /// <summary>The interleaved CPU staging buffer, retained across changing populations.</summary>
+        private SpriteBatchVertex[] _vertices = new SpriteBatchVertex[256];
+        /// <summary>The portable fan indices retained independently of their active prefix.</summary>
+        private ushort[] _indices = new ushort[384];
+        /// <summary>The fixed Float32 shader attribute layout, allocated once.</summary>
+        private static readonly VertexAttributeDescriptor[] s_layout =
+        {
+            new VertexAttributeDescriptor(VertexAttribute.Position, VertexAttributeFormat.Float32, 3),
+            new VertexAttributeDescriptor(VertexAttribute.Color, VertexAttributeFormat.Float32, 4),
+            new VertexAttributeDescriptor(VertexAttribute.TexCoord0, VertexAttributeFormat.Float32, 2),
+            new VertexAttributeDescriptor(VertexAttribute.TexCoord1, VertexAttributeFormat.Float32, 4),
+            new VertexAttributeDescriptor(VertexAttribute.TexCoord2, VertexAttributeFormat.Float32, 4)
+        };
+        /// <summary>The populated vertex count.</summary>
         private int _vertexCount;
-        /// <summary>The populated triangle-index prefix.</summary>
+        /// <summary>The populated index count.</summary>
         private int _indexCount;
-        /// <summary>Whether the CPU buffers differ from the uploaded mesh.</summary>
-        private bool _dirty;
+        /// <summary>The GPU vertex capacity, changed only when staging capacity grows.</summary>
+        private int _gpuVertexCapacity;
+        /// <summary>The GPU index capacity, changed only when staging capacity grows.</summary>
+        private int _gpuIndexCapacity;
+        /// <summary>The previously published active vertex count.</summary>
+        private int _publishedVertexCount;
+        /// <summary>The previously published active index count.</summary>
+        private int _publishedIndexCount;
+        /// <summary>Whether any retained vertex value changed.</summary>
+        private bool _verticesDirty;
+        /// <summary>Whether any retained fan index changed.</summary>
+        private bool _indicesDirty;
+        /// <summary>The minimum live position of this completed batch.</summary>
+        private Vector3 _minimum;
+        /// <summary>The maximum live position of this completed batch.</summary>
+        private Vector3 _maximum;
+        /// <summary>Gets the cumulative number of vertex buffer uploads for diagnostics.</summary>
+        internal int VertexUploadCount { get; private set; }
+        /// <summary>Gets the cumulative number of index buffer uploads for diagnostics.</summary>
+        internal int IndexUploadCount { get; private set; }
+        /// <summary>Gets the cumulative number of GPU buffer reconfigurations.</summary>
+        internal int BufferReconfigurationCount { get; private set; }
+        /// <summary>Gets all mesh objects created during this process, including subsequently disposed batches.</summary>
+        internal static long TotalMeshCreationCount { get; private set; }
+        /// <summary>Gets all actual vertex and index buffer reconfigurations during this process.</summary>
+        internal static long TotalBufferReconfigurationCount { get; private set; }
+        /// <summary>Gets all actual vertex and index upload bytes during this process.</summary>
+        internal static long TotalUploadBytes { get; private set; }
         /// <summary>Gets the reusable geometry drawn by this batch.</summary>
         internal Mesh Mesh { get; }
         /// <summary>Gets the renderer for the combined geometry.</summary>
@@ -61,6 +88,7 @@ namespace PlantsVsZombies.Rendering
                 indexFormat = IndexFormat.UInt16
             };
             Mesh.MarkDynamic();
+            TotalMeshCreationCount++;
             owner.AddComponent<MeshFilter>().sharedMesh = Mesh;
             Renderer = owner.AddComponent<MeshRenderer>();
             Renderer.shadowCastingMode = ShadowCastingMode.Off;
@@ -92,7 +120,6 @@ namespace PlantsVsZombies.Rendering
                 Renderer.sortingOrder = sortingOrder;
             }
             LastOrder = order;
-            _dirty = true;
         }
 
         /// <summary>Checks material, painter continuity, and the portable vertex limit.</summary>
@@ -119,12 +146,25 @@ namespace PlantsVsZombies.Rendering
                 GrowVertexBuffers(_vertexCount + 1);
             }
             var index = _vertexCount++;
-            _vertices[index] = position;
-            _coordinates[index] = coordinates;
-            _colors[index] = color;
-            _effects[index] = effects;
-            _highlights[index] = highlight;
-            _dirty = true;
+            var vertex = new SpriteBatchVertex
+            {
+                Position = position, Coordinates = coordinates, Color = color, Effects = effects, Highlight = highlight
+            };
+            if (!_vertices[index].Equals(vertex))
+            {
+                _vertices[index] = vertex;
+                _verticesDirty = true;
+            }
+            if (index == 0)
+            {
+                _minimum = position;
+                _maximum = position;
+            }
+            else
+            {
+                _minimum = Vector3.Min(_minimum, position);
+                _maximum = Vector3.Max(_maximum, position);
+            }
         }
 
         /// <summary>Appends a completed numeric polygon with one capacity check and one copy of its shared attributes.</summary>
@@ -148,16 +188,10 @@ namespace PlantsVsZombies.Rendering
             for (var index = 0; index < count; index++)
             {
                 var vertex = vertices[offset + index];
-                var target = first + index;
-                _vertices[target] = new Vector3(vertex.Position.x, -vertex.Position.y, depth);
-                _coordinates[target] = vertex.Coordinates;
-                _colors[target] = color;
-                _effects[target] = effects;
-                _highlights[target] = highlight;
+                AddVertex(new Vector3(vertex.Position.x, -vertex.Position.y, depth), vertex.Coordinates,
+                    color, effects, highlight);
             }
-            _vertexCount = required;
             CompletePolygon(first, count, order);
-            _dirty = true;
         }
 
         /// <summary>Grows all attribute buffers together only when a new population exceeds their retained capacity.</summary>
@@ -166,10 +200,6 @@ namespace PlantsVsZombies.Rendering
         {
             var capacity = Math.Min(MaximumVertexCount, Math.Max(required, _vertices.Length * 2));
             Array.Resize(ref _vertices, capacity);
-            Array.Resize(ref _coordinates, capacity);
-            Array.Resize(ref _colors, capacity);
-            Array.Resize(ref _effects, capacity);
-            Array.Resize(ref _highlights, capacity);
         }
 
         /// <summary>Triangulates the last convex polygon without changing primitive order.</summary>
@@ -185,31 +215,74 @@ namespace PlantsVsZombies.Rendering
             }
             for (var index = 1; index < vertexCount - 1; index++)
             {
-                _indices[_indexCount++] = firstVertex;
-                _indices[_indexCount++] = firstVertex + index;
-                _indices[_indexCount++] = firstVertex + index + 1;
+                AppendIndex(firstVertex);
+                AppendIndex(firstVertex + index);
+                AppendIndex(firstVertex + index + 1);
             }
 
             LastOrder = order;
         }
 
-        /// <summary>Uploads the completed batch once, without reallocating per source sprite.</summary>
+        /// <summary>Stores one fan index and detects topology changes without allocating a comparison snapshot.</summary>
+        /// <param name="value">The validated portable vertex index.</param>
+        private void AppendIndex(int value)
+        {
+            var index = _indexCount++;
+            if (_indices[index] != (ushort)value)
+            {
+                _indices[index] = (ushort)value;
+                _indicesDirty = true;
+            }
+        }
+
+        /// <summary>Publishes changed live prefixes without clearing or resizing stable GPU buffers.</summary>
         internal void Publish()
         {
-            if (!_dirty)
+            var vertexCapacityChanged = _gpuVertexCapacity != _vertices.Length;
+            var indexCapacityChanged = _gpuIndexCapacity != _indices.Length;
+            var rangeChanged = _publishedVertexCount != _vertexCount || _publishedIndexCount != _indexCount;
+            if (!vertexCapacityChanged && !indexCapacityChanged && !rangeChanged && !_verticesDirty && !_indicesDirty)
             {
                 return;
             }
-
             using var upload = SpriteRenderingProfiler.Measure(SpriteRenderingProfiler.Upload);
-            Mesh.Clear();
-            Mesh.SetVertices(_vertices, 0, _vertexCount);
-            Mesh.SetUVs(0, _coordinates, 0, _vertexCount);
-            Mesh.SetColors(_colors, 0, _vertexCount);
-            Mesh.SetUVs(1, _effects, 0, _vertexCount);
-            Mesh.SetUVs(2, _highlights, 0, _vertexCount);
-            Mesh.SetTriangles(_indices, 0, _indexCount, 0, true);
-            _dirty = false;
+            if (vertexCapacityChanged)
+            {
+                Mesh.SetVertexBufferParams(_vertices.Length, s_layout);
+                _gpuVertexCapacity = _vertices.Length;
+                BufferReconfigurationCount++;
+                TotalBufferReconfigurationCount++;
+            }
+            if (indexCapacityChanged)
+            {
+                Mesh.SetIndexBufferParams(_indices.Length, IndexFormat.UInt16);
+                _gpuIndexCapacity = _indices.Length;
+                BufferReconfigurationCount++;
+                TotalBufferReconfigurationCount++;
+            }
+            if (_vertexCount > 0 && (vertexCapacityChanged || _verticesDirty || _vertexCount > _publishedVertexCount))
+            {
+                Mesh.SetVertexBufferData(_vertices, 0, 0, _vertexCount, 0, MeshUpdateFlags.DontRecalculateBounds);
+                VertexUploadCount++;
+                TotalUploadBytes += _vertexCount * 68L;
+            }
+            if (_indexCount > 0 && (indexCapacityChanged || _indicesDirty || _indexCount > _publishedIndexCount))
+            {
+                Mesh.SetIndexBufferData(_indices, 0, 0, _indexCount, MeshUpdateFlags.DontRecalculateBounds);
+                IndexUploadCount++;
+                TotalUploadBytes += _indexCount * 2L;
+            }
+            var bounds = _vertexCount == 0 ? new Bounds() : new Bounds((_minimum + _maximum) * .5f, _maximum - _minimum);
+            Mesh.subMeshCount = 1;
+            Mesh.SetSubMesh(0, new SubMeshDescriptor(0, _indexCount, MeshTopology.Triangles)
+            {
+                firstVertex = 0, vertexCount = _vertexCount, bounds = bounds
+            }, MeshUpdateFlags.DontRecalculateBounds);
+            Mesh.bounds = bounds;
+            _publishedVertexCount = _vertexCount;
+            _publishedIndexCount = _indexCount;
+            _verticesDirty = false;
+            _indicesDirty = false;
         }
     }
 }

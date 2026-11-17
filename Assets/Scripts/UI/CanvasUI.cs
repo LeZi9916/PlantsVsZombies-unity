@@ -187,6 +187,7 @@ namespace PlantsVsZombies.UI
                 s_layers[index].gameObject.SetActive(false);
             }
 
+            SpriteSceneRenderQueues.SetCanvasLayers(s_layers, s_layerCount);
             IsFrameActive = false;
         }
 
@@ -535,6 +536,7 @@ namespace PlantsVsZombies.UI
             s_ownedEventSystem = null;
             s_currentLayer = null;
             s_layers.Clear();
+            SpriteSceneRenderQueues.SetCanvasLayers(s_layers, 0);
             s_images.Clear();
             s_bitmapRuns.Clear();
             s_labels.Clear();
