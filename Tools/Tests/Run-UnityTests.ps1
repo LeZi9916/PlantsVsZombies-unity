@@ -89,10 +89,13 @@ foreach ($testPlatform in $platforms) {
     }
     $start = [Diagnostics.ProcessStartInfo]::new($Unity)
     $start.UseShellExecute = $false
+    # The test framework reparses command-line values using the platform encoding.
+    # Relative ASCII result paths remain valid when the repository path contains Unicode.
+    $start.WorkingDirectory = $project
     $start.CreateNoWindow = $true
     $start.WindowStyle = [Diagnostics.ProcessWindowStyle]::Hidden
     foreach ($argument in @('-batchmode', '-projectPath', $project, '-runTests', '-testPlatform', $testPlatform,
-            '-testResults', $result, '-logFile', $log, '-pvz-test-runner')) {
+            '-testResults', ('../' + $testPlatform + '.xml'), '-logFile', ('../' + $testPlatform + '.log'), '-pvz-test-runner')) {
         $start.ArgumentList.Add($argument)
     }
     if ($AssemblyNames) {
