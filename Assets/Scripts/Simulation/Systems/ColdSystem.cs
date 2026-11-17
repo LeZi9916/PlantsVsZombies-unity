@@ -163,17 +163,15 @@ namespace PlantsVsZombies.Simulation
 
             float x, y;
             AdventureIceProjectileTopLeft(shot, out x, out y);
-            var trail = new global::PlantsVsZombies.Adventure.AdventureSnowTrail
-            {
-                Id = ++_world.Presentation._effectId,
-                Seed = _world._random.Next(),
-                Projectile = shot,
-                Row = shot.Row,
-                X = x + 8f,
-                Y = y + 13f,
-                PreviousX = x + 8f,
-                PreviousY = y + 13f
-            };
+            var trail = _world.LifetimePool.Rent<AdventureSnowTrail>();
+            trail.Id = ++_world.Presentation._effectId;
+            trail.Seed = _world._random.Next();
+            trail.Projectile = shot;
+            trail.Row = shot.Row;
+            trail.X = x + 8f;
+            trail.Y = y + 13f;
+            trail.PreviousX = x + 8f;
+            trail.PreviousY = y + 13f;
             shot.PresentationSnowTrail = trail;
             _world.Presentation.SnowTrails.Add(trail);
         }

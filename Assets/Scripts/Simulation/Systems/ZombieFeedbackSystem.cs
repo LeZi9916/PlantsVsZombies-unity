@@ -90,13 +90,13 @@ namespace PlantsVsZombies.Simulation
             if (zombie.PresentationDeath == global::PlantsVsZombies.Adventure.AdventureZombieDeathPresentation.Mowed)
             {
                 AdventurePresentationZombieMowedParts(zombie);
-                _world.Presentation.Impacts.Add(new global::PlantsVsZombies.Adventure.AdventureImpact {
-                    Id = ++_world.Presentation._effectId,
-                    Seed = _world._random.Next(),
-                    X = zombie.X,
-                    Row = zombie.Row,
-                    Mowed = true
-                });
+                var pooledRecord1 = _world.LifetimePool.Rent<AdventureImpact>();
+                pooledRecord1.Id = ++_world.Presentation._effectId;
+                pooledRecord1.Seed = _world._random.Next();
+                pooledRecord1.X = zombie.X;
+                pooledRecord1.Row = zombie.Row;
+                pooledRecord1.Mowed = true;
+                _world.Presentation.Impacts.Add(pooledRecord1);
                 return;
             }
 
@@ -146,7 +146,11 @@ namespace PlantsVsZombies.Simulation
                 rate = 14f;
             }
 
-            _world.Presentation.Corpses.Add(InitializeAdventureZombieCorpse(new global::PlantsVsZombies.Adventure.AdventureZombieCorpse { Zombie = zombie, Animation = clip, Rate = rate }));
+            var pooledRecord2 = _world.LifetimePool.Rent<AdventureZombieCorpse>();
+            pooledRecord2.Zombie = zombie;
+            pooledRecord2.Animation = clip;
+            pooledRecord2.Rate = rate;
+            _world.Presentation.Corpses.Add(InitializeAdventureZombieCorpse(pooledRecord2));
         }
 
         /// <summary>Performs initialize adventure zombie corpse.</summary>
@@ -170,14 +174,14 @@ namespace PlantsVsZombies.Simulation
             {
                 corpse.RequiredZombie.PresentationAltitude = 0f;
                 corpse.RequiredZombie.PresentationBiteBodyY = 0;
-                (corpse.RequiredZombie.PogoState ??= new AdventurePogoState()).AnimationBlendTicks = 20;
+                (corpse.RequiredZombie.PogoState ??= _world.LifetimePool.Rent<AdventurePogoState>()).AnimationBlendTicks = 20;
             }
 
             if (corpse.RequiredZombie.Kind == ZombieKind.DolphinRider)
             {
                 corpse.RequiredZombie.PresentationNativeVelocity = 0f;
                 corpse.RequiredZombie.Speed = 0f;
-                (corpse.RequiredZombie.DolphinState ??= new AdventureDolphinState()).AnimationBlendTicks = 20;
+                (corpse.RequiredZombie.DolphinState ??= _world.LifetimePool.Rent<AdventureDolphinState>()).AnimationBlendTicks = 20;
             }
 
             int frames;
@@ -364,13 +368,15 @@ namespace PlantsVsZombies.Simulation
             }
             else if (z.Kind == ZombieKind.Pogo)
             {
-                z.PogoState = new AdventurePogoState { PhaseTicks = 1 + _world._random.Next(AdventurePogoRules.BounceTicks) };
+                var pooledRecord3 = _world.LifetimePool.Rent<AdventurePogoState>();
+                pooledRecord3.PhaseTicks = 1 + _world._random.Next(AdventurePogoRules.BounceTicks);
+                z.PogoState = pooledRecord3;
                 z.PresentationNativePhase = 20;
                 z.PresentationNativeHeight = 0;
             }
             else if (z.Kind == ZombieKind.Digger)
             {
-                z.DiggerState = new AdventureDiggerState();
+                z.DiggerState = _world.LifetimePool.Rent<AdventureDiggerState>();
                 z.PresentationNativePhase = 32;
                 z.PresentationNativeHeight = 0;
             }
@@ -381,7 +387,7 @@ namespace PlantsVsZombies.Simulation
             }
             else if (z.Kind == ZombieKind.DolphinRider)
             {
-                z.DolphinState = new AdventureDolphinState();
+                z.DolphinState = _world.LifetimePool.Rent<AdventureDolphinState>();
                 z.PresentationNativePhase = 51;
             }
             else if (z.Kind == ZombieKind.Balloon)
@@ -394,10 +400,9 @@ namespace PlantsVsZombies.Simulation
             if (z.Kind == ZombieKind.Gargantuar || (int)z.Kind == 32)
             {
                 var roll = _world._random.Next(100);
-                z.GargantuarState = new AdventureGargantuarState
-                {
-                    Weapon = _adventureModeRunner.Adventure.Level.Number == 48 ? 0 : roll < 10 ? 2 : roll < 35 ? 1 : 0
-                };
+                var pooledRecord4 = _world.LifetimePool.Rent<AdventureGargantuarState>();
+                pooledRecord4.Weapon = _adventureModeRunner.Adventure.Level.Number == 48 ? 0 : roll < 10 ? 2 : roll < 35 ? 1 : 0;
+                z.GargantuarState = pooledRecord4;
                 z.NativeVariant = false;
                 z.PresentationNativePhase = 0;
                 z.PresentationBodyBlendTicks = 0;
@@ -405,7 +410,7 @@ namespace PlantsVsZombies.Simulation
 
             if (z.Kind == ZombieKind.Catapult)
             {
-                z.CatapultState = new AdventureCatapultState();
+                z.CatapultState = _world.LifetimePool.Rent<AdventureCatapultState>();
                 z.PresentationNativePhase = 0;
                 z.PresentationBodyBlendTicks = 0;
             }
@@ -459,7 +464,9 @@ namespace PlantsVsZombies.Simulation
             // These assignments occur after the initial PickRandomSpeed in PC Init.
             if (z.Kind == ZombieKind.Bobsled && !z.UsedAbility)
             {
-                z.BobsledState = new AdventureBobsledState { LeaderId = z.Id };
+                var pooledRecord5 = _world.LifetimePool.Rent<AdventureBobsledState>();
+                pooledRecord5.LeaderId = z.Id;
+                z.BobsledState = pooledRecord5;
                 z.PresentationNativePhase = 17;
                 z.PresentationHasSled = true;
                 z.PresentationAltitude = AdventureBobsledRules.InitialAltitude(0);
@@ -578,26 +585,26 @@ namespace PlantsVsZombies.Simulation
         internal void AddAdventureZombiePart(Zombie z, int kind, int particleId, string? anchor, string? image)
         {
             var clip = SynchronizeAdventureZombieAnimation(z);
-            _world.Presentation.ZombiePartDrops.Add(new global::PlantsVsZombies.Adventure.AdventureZombiePartDrop {
-                Id = ++_world.Presentation._effectId,
-                Seed = z.Id * 397 ^ _world.Presentation._effectId,
-                NativeKind = kind,
-                NativePhase = z.Kind == ZombieKind.DolphinRider || z.Kind == ZombieKind.Pogo ? z.PresentationNativePhase : -1,
-                NativeAltitude = z.Kind == ZombieKind.DolphinRider || z.Kind == ZombieKind.Pogo ? z.PresentationAltitude : 0f,
-                ParticleId = particleId,
-                X = z.X,
-                Row = z.Row,
-                Scale = AdventureDancerRules.Scale(z),
-                Asset = AdventureZombiePresentationAsset(z),
-                Animation = clip,
-                AnimationAge = z.PresentationAnimationAge,
-                Rate = SynchronizeAdventureZombieRate(z),
-                Anchor = anchor,
-                Image = image,
-                Backwards = z.PresentationWalkingBackwards ?? (z.Hypnotized || z.Kind == ZombieKind.Digger && AdventureDiggerState.WalksBackwards(z)),
-                Chilled = z.ChillRemaining > 0f || z.FrozenRemaining > 0f,
-                Hypnotized = z.Hypnotized
-            });
+            var pooledRecord6 = _world.LifetimePool.Rent<AdventureZombiePartDrop>();
+            pooledRecord6.Id = ++_world.Presentation._effectId;
+            pooledRecord6.Seed = z.Id * 397 ^ _world.Presentation._effectId;
+            pooledRecord6.NativeKind = kind;
+            pooledRecord6.NativePhase = z.Kind == ZombieKind.DolphinRider || z.Kind == ZombieKind.Pogo ? z.PresentationNativePhase : -1;
+            pooledRecord6.NativeAltitude = z.Kind == ZombieKind.DolphinRider || z.Kind == ZombieKind.Pogo ? z.PresentationAltitude : 0f;
+            pooledRecord6.ParticleId = particleId;
+            pooledRecord6.X = z.X;
+            pooledRecord6.Row = z.Row;
+            pooledRecord6.Scale = AdventureDancerRules.Scale(z);
+            pooledRecord6.Asset = AdventureZombiePresentationAsset(z);
+            pooledRecord6.Animation = clip;
+            pooledRecord6.AnimationAge = z.PresentationAnimationAge;
+            pooledRecord6.Rate = SynchronizeAdventureZombieRate(z);
+            pooledRecord6.Anchor = anchor;
+            pooledRecord6.Image = image;
+            pooledRecord6.Backwards = z.PresentationWalkingBackwards ?? (z.Hypnotized || z.Kind == ZombieKind.Digger && AdventureDiggerState.WalksBackwards(z));
+            pooledRecord6.Chilled = z.ChillRemaining > 0f || z.FrozenRemaining > 0f;
+            pooledRecord6.Hypnotized = z.Hypnotized;
+            _world.Presentation.ZombiePartDrops.Add(pooledRecord6);
         }
 
         /// <summary>Performs lose adventure zombie head.</summary>
@@ -806,7 +813,7 @@ namespace PlantsVsZombies.Simulation
             var step = dt * z._presentationTickSlow;
             if (AdventurePogoRules.IsBouncing(z))
             {
-                var state = z.PogoState ??= new AdventurePogoState();
+                var state = z.PogoState ??= _world.LifetimePool.Rent<AdventurePogoState>();
                 state.AnimationSeconds = Math.Min(AdventurePogoRules.HeldAnimationSeconds, state.AnimationSeconds + step);
                 z.PresentationAnimationAge = state.AnimationSeconds;
                 return;
@@ -1072,7 +1079,7 @@ namespace PlantsVsZombies.Simulation
                 if (z.Kind == ZombieKind.DolphinRider
                     && (z.Eating || string.Equals(z.PresentationAnimation, "anim_eat", StringComparison.Ordinal)))
                 {
-                    (z.DolphinState ??= new AdventureDolphinState()).AnimationBlendTicks = 20;
+                    (z.DolphinState ??= _world.LifetimePool.Rent<AdventureDolphinState>()).AnimationBlendTicks = 20;
                 }
 
                 if (AdventureDancerRules.IsDancer(z) && z.DancerState != null
@@ -1484,7 +1491,7 @@ namespace PlantsVsZombies.Simulation
         {
             if (z.Kind == ZombieKind.Catapult)
             {
-                var state = z.CatapultState ??= new AdventureCatapultState();
+                var state = z.CatapultState ??= _world.LifetimePool.Rent<AdventureCatapultState>();
                 if (z.Health > 0f && state.SmokeStartAge < 0f
                     && AdventureZombieEquipmentRules.DamageIndex(z.Health, (int)z.StartingHealth) == 2)
                 {
@@ -1496,7 +1503,7 @@ namespace PlantsVsZombies.Simulation
 
             if (z.Kind == ZombieKind.Zomboni)
             {
-                var state = z.ZomboniState ??= new AdventureZomboniState();
+                var state = z.ZomboniState ??= _world.LifetimePool.Rent<AdventureZomboniState>();
                 if (z.Health > 0f && state.SmokeStartAge < 0f
                     && AdventureZombieEquipmentRules.DamageIndex(z.Health, (int)z.StartingHealth) == 2)
                 {
@@ -1551,26 +1558,26 @@ namespace PlantsVsZombies.Simulation
             _world.Presentation.ZombiePartSoundSerial++;
             RequestAdventureZombieFoley(25);
             var clip = SynchronizeAdventureZombieAnimation(z);
-            _world.Presentation.ArmDrops.Add(new global::PlantsVsZombies.Adventure.AdventureZombieArmDrop {
-                Id = ++_world.Presentation._effectId,
-                Seed = z.Id * 397 ^ _world.Presentation._effectId,
-                NativeKind = kind,
-                NativePhase = z.Kind == ZombieKind.DolphinRider || z.Kind == ZombieKind.Pogo ? z.PresentationNativePhase : -1,
-                NativeAltitude = z.Kind == ZombieKind.DolphinRider || z.Kind == ZombieKind.Pogo ? z.PresentationAltitude : 0f,
-                X = z.X,
-                Row = z.Row,
-                Scale = AdventureDancerRules.Scale(z),
-                Asset = AdventureZombiePresentationAsset(z),
-                Animation = clip,
-                AnimationAge = z.PresentationAnimationAge,
-                Rate = SynchronizeAdventureZombieRate(z),
-                Anchor = global::PlantsVsZombies.Adventure.AdventureZombieFeedbackRules.ArmAnchor(kind),
-                Image = global::PlantsVsZombies.Adventure.AdventureZombieFeedbackRules.ArmImage(kind),
-                Mowed = phase == 3,
-                Backwards = z.PresentationWalkingBackwards ?? (z.Hypnotized || z.Kind == ZombieKind.Digger && AdventureDiggerState.WalksBackwards(z)),
-                Chilled = z.ChillRemaining > 0f || z.FrozenRemaining > 0f,
-                Hypnotized = z.Hypnotized
-            });
+            var pooledRecord7 = _world.LifetimePool.Rent<AdventureZombieArmDrop>();
+            pooledRecord7.Id = ++_world.Presentation._effectId;
+            pooledRecord7.Seed = z.Id * 397 ^ _world.Presentation._effectId;
+            pooledRecord7.NativeKind = kind;
+            pooledRecord7.NativePhase = z.Kind == ZombieKind.DolphinRider || z.Kind == ZombieKind.Pogo ? z.PresentationNativePhase : -1;
+            pooledRecord7.NativeAltitude = z.Kind == ZombieKind.DolphinRider || z.Kind == ZombieKind.Pogo ? z.PresentationAltitude : 0f;
+            pooledRecord7.X = z.X;
+            pooledRecord7.Row = z.Row;
+            pooledRecord7.Scale = AdventureDancerRules.Scale(z);
+            pooledRecord7.Asset = AdventureZombiePresentationAsset(z);
+            pooledRecord7.Animation = clip;
+            pooledRecord7.AnimationAge = z.PresentationAnimationAge;
+            pooledRecord7.Rate = SynchronizeAdventureZombieRate(z);
+            pooledRecord7.Anchor = global::PlantsVsZombies.Adventure.AdventureZombieFeedbackRules.ArmAnchor(kind);
+            pooledRecord7.Image = global::PlantsVsZombies.Adventure.AdventureZombieFeedbackRules.ArmImage(kind);
+            pooledRecord7.Mowed = phase == 3;
+            pooledRecord7.Backwards = z.PresentationWalkingBackwards ?? (z.Hypnotized || z.Kind == ZombieKind.Digger && AdventureDiggerState.WalksBackwards(z));
+            pooledRecord7.Chilled = z.ChillRemaining > 0f || z.FrozenRemaining > 0f;
+            pooledRecord7.Hypnotized = z.Hypnotized;
+            _world.Presentation.ArmDrops.Add(pooledRecord7);
         }
 
         /// <summary>Performs request adventure zombie foley.</summary>
@@ -1579,10 +1586,11 @@ namespace PlantsVsZombies.Simulation
         /// <param name="presentationTick">The advancing cutscene tick when the battle elapsed clock is frozen.</param>
         internal void RequestAdventureZombieFoley(int id, float pitch = 0f, int? presentationTick = null)
         {
-            var sound = new AdventureZombieSoundEvent
-            {
-                Id = ++_world.Presentation._effectId, Foley = id, Tick = Math.Max(_world._nativeFeedbackTick, presentationTick ?? _world._nativeFeedbackTick), Pitch = pitch
-            };
+            var sound = _world.LifetimePool.Rent<AdventureZombieSoundEvent>();
+            sound.Id = ++_world.Presentation._effectId;
+            sound.Foley = id;
+            sound.Tick = Math.Max(_world._nativeFeedbackTick, presentationTick ?? _world._nativeFeedbackTick);
+            sound.Pitch = pitch;
             if (id >= 0)
             {
                 _world._foleyRandom.Resolve(sound, _world._random, _world.Rules.AdventureSoundMuted);

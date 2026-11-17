@@ -5,7 +5,7 @@ using System;
 namespace PlantsVsZombies.Adventure
 {
     /// <summary>Retains the local PC Squash's look, launch, flight, impact, and flattened body playback.</summary>
-    public sealed class AdventureSquashState
+    public sealed class AdventureSquashState : PlantsVsZombies.Simulation.ISimulationPooledObject
     {
         /// <summary>Stores the PC plant state: idle 0, look 3, prelaunch 4, rising 5, falling 6, and landed 7.</summary>
         public int NativePhase;
@@ -59,5 +59,27 @@ namespace PlantsVsZombies.Adventure
         {
             return AnimationTicks * .01f + Math.Max(0f, remainder);
         }
+        /// <summary>Restores all mutable fields to construction defaults after live references expire.</summary>
+        void PlantsVsZombies.Simulation.ISimulationPooledObject.ResetForPool()
+        {
+            NativePhase = default;
+            Countdown = default;
+            AnimationTicks = default;
+            TargetZombieId = default;
+            TargetX = default;
+            NativeX = default;
+            NativeY = default;
+            Animation = "anim_idle";
+            Rate = default;
+            BlendTicks = default;
+        }
+
+        /// <summary>Retains linked records while this object is reachable from the board.</summary>
+        /// <param name="pool">The owning runtime lifetime tracker.</param>
+        void PlantsVsZombies.Simulation.ISimulationPooledObject.MarkPoolReferences(PlantsVsZombies.Simulation.SimulationRuntimePool pool)
+        {
+
+        }
+
     }
 }

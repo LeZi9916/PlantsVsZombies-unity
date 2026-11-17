@@ -4,7 +4,7 @@ using System;
 namespace PlantsVsZombies.Adventure
 {
     /// <summary>Retains the original Blover's authored blow, looping body, delayed effect, and special-state lifetime.</summary>
-    public sealed class AdventureBloverState
+    public sealed class AdventureBloverState : PlantsVsZombies.Simulation.ISimulationPooledObject
     {
         /// <summary>Gets elapsed native updates since planting began the twenty-fps blow animation.</summary>
         public int AgeTicks { get; private set; }
@@ -51,5 +51,21 @@ namespace PlantsVsZombies.Adventure
         {
             return (Loop ? AgeTicks - 100 : AgeTicks) * .01f + Math.Max(0f, remainder);
         }
+        /// <summary>Restores all mutable fields to construction defaults after live references expire.</summary>
+        void PlantsVsZombies.Simulation.ISimulationPooledObject.ResetForPool()
+        {
+            AgeTicks = default;
+            SpecialTicks = 50;
+            DisappearTicks = 200;
+            Triggered = default;
+        }
+
+        /// <summary>Retains linked records while this object is reachable from the board.</summary>
+        /// <param name="pool">The owning runtime lifetime tracker.</param>
+        void PlantsVsZombies.Simulation.ISimulationPooledObject.MarkPoolReferences(PlantsVsZombies.Simulation.SimulationRuntimePool pool)
+        {
+
+        }
+
     }
 }

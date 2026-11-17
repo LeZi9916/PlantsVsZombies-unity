@@ -3,7 +3,7 @@
 namespace PlantsVsZombies.Adventure
 {
     /// <summary>Retains the original dancer's phase counters and four independently owned backup slots.</summary>
-    public sealed class AdventureDancerState
+    public sealed class AdventureDancerState : PlantsVsZombies.Simulation.ISimulationPooledObject
     {
         /// <summary>Identifies the summoning leader, or zero for an independent dancer.</summary>
         public int LeaderId;
@@ -22,5 +22,23 @@ namespace PlantsVsZombies.Adventure
 
         /// <summary>Retains the native blend duration selected when the current body clip starts.</summary>
         public int AnimationBlendTicks;
+        /// <summary>Restores all mutable fields to construction defaults after live references expire.</summary>
+        void PlantsVsZombies.Simulation.ISimulationPooledObject.ResetForPool()
+        {
+            LeaderId = default;
+            System.Array.Clear(Followers, 0, Followers.Length);
+            PhaseTicks = default;
+            SummonTicks = default;
+            PhaseAge = default;
+            AnimationBlendTicks = default;
+        }
+
+        /// <summary>Retains linked records while this object is reachable from the board.</summary>
+        /// <param name="pool">The owning runtime lifetime tracker.</param>
+        void PlantsVsZombies.Simulation.ISimulationPooledObject.MarkPoolReferences(PlantsVsZombies.Simulation.SimulationRuntimePool pool)
+        {
+
+        }
+
     }
 }

@@ -110,16 +110,15 @@ namespace PlantsVsZombies.Simulation
             else
             {
                 // PC 0x42D616..0x42D65F: Pow at the click, followed by immediate death with loot.
-                _world.Presentation.Explosions.Add(new AdventureExplosion
-                {
-                    Id = ++_world.Presentation._effectId,
-                    Seed = _world._random.Next(),
-                    Row = z.Row,
-                    X = z.X,
-                    NativeX = hitX - 3f,
-                    NativeY = hitY + 9f,
-                    Effect = AdventureExplosionEffect.Pow
-                });
+                var pooledRecord1 = _world.LifetimePool.Rent<AdventureExplosion>();
+                pooledRecord1.Id = ++_world.Presentation._effectId;
+                pooledRecord1.Seed = _world._random.Next();
+                pooledRecord1.Row = z.Row;
+                pooledRecord1.X = z.X;
+                pooledRecord1.NativeX = hitX - 3f;
+                pooledRecord1.NativeY = hitY + 9f;
+                pooledRecord1.Effect = AdventureExplosionEffect.Pow;
+                _world.Presentation.Explosions.Add(pooledRecord1);
                 _zombieLifecycle.KillAdventureZombie(z, 16U);
             }
 

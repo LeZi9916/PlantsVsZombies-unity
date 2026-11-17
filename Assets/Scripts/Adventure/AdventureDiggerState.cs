@@ -6,7 +6,7 @@ using PlantsVsZombies.Simulation;
 namespace PlantsVsZombies.Adventure
 {
     /// <summary>Retains the PC digger's independent emergence countdown and original attached effects.</summary>
-    public sealed class AdventureDiggerState
+    public sealed class AdventureDiggerState : PlantsVsZombies.Simulation.ISimulationPooledObject
     {
         /// <summary>Stores the remaining native updates in the axe-loss pause or emergence.</summary>
         public int PhaseTicks;
@@ -59,5 +59,22 @@ namespace PlantsVsZombies.Adventure
                 && AdventureZombieTargetingRules.BodyRectangle(zombie).X <= 800
                 && (phase == 32 || phase == 36 || phase == 37);
         }
+        /// <summary>Restores all mutable fields to construction defaults after live references expire.</summary>
+        void PlantsVsZombies.Simulation.ISimulationPooledObject.ResetForPool()
+        {
+            PhaseTicks = default;
+            AnimationBlendTicks = default;
+            PausedDigSeconds = default;
+            TunnelStopAge = -1f;
+            SurpriseAge = -1f;
+        }
+
+        /// <summary>Retains linked records while this object is reachable from the board.</summary>
+        /// <param name="pool">The owning runtime lifetime tracker.</param>
+        void PlantsVsZombies.Simulation.ISimulationPooledObject.MarkPoolReferences(PlantsVsZombies.Simulation.SimulationRuntimePool pool)
+        {
+
+        }
+
     }
 }

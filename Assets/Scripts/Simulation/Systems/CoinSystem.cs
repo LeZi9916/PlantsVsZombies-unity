@@ -61,13 +61,11 @@ namespace PlantsVsZombies.Simulation
                 return null;
             }
 
-            var coin = new AdventureCoin
-            {
-                Id = ++_adventureModeRunner.Adventure._coinId,
-                Kind = kind,
-                X = x,
-                Row = row
-            };
+            var coin = _world.LifetimePool.Rent<AdventureCoin>();
+            coin.Id = ++_adventureModeRunner.Adventure._coinId;
+            coin.Kind = kind;
+            coin.X = x;
+            coin.Row = row;
             var pitch = _adventureModeRunner.Adventure.Level.HasPool || _adventureModeRunner.Adventure.Level.HasRoof ? 85f : 100f;
             var slope = _adventureModeRunner.Adventure.Level.HasRoof ? Math.Max(0f, 5f - x) * 20f - 10f : 0f;
             coin.PresentationX = coin.PresentationPreviousX = 40f + x * 80f - 20f;

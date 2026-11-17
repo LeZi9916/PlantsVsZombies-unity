@@ -5,7 +5,7 @@ using PlantsVsZombies.Simulation;
 namespace PlantsVsZombies.Adventure
 {
     /// <summary>Defines adventure coin.</summary>
-    public sealed class AdventureCoin
+    public sealed class AdventureCoin : PlantsVsZombies.Simulation.ISimulationPooledObject
     {
         /// <summary>Gets or sets id.</summary>
         public int Id { get; internal set; }
@@ -108,5 +108,39 @@ namespace PlantsVsZombies.Adventure
 
         /// <summary>Stores collection remaining.</summary>
         internal float _collectionRemaining;
+        /// <summary>Restores all mutable fields to construction defaults after live references expire.</summary>
+        void PlantsVsZombies.Simulation.ISimulationPooledObject.ResetForPool()
+        {
+            Id = default;
+            Kind = default;
+            GiftPlant = default;
+            X = default;
+            Row = default;
+            Age = default;
+            IsBeingCollected = default;
+            PersistencePending = default;
+            CollectorPlantId = default;
+            PresentationX = default;
+            PresentationY = default;
+            PresentationPreviousX = default;
+            PresentationPreviousY = default;
+            PresentationScale = 1f;
+            PresentationAlpha = 1f;
+            FallVelocityX = default;
+            FallVelocityY = default;
+            GroundY = default;
+            HitGround = default;
+            AnimationRate = 1f;
+            AnimationOffset = default;
+            _collectionRemaining = default;
+        }
+
+        /// <summary>Retains linked records while this object is reachable from the board.</summary>
+        /// <param name="pool">The owning runtime lifetime tracker.</param>
+        void PlantsVsZombies.Simulation.ISimulationPooledObject.MarkPoolReferences(PlantsVsZombies.Simulation.SimulationRuntimePool pool)
+        {
+
+        }
+
     }
 }

@@ -67,7 +67,7 @@ namespace PlantsVsZombies.Simulation
         internal void SetAdventureGargantuarPhase(Zombie zombie, int phase)
         {
             zombie.Eating = false;
-            (zombie.GargantuarState ??= new AdventureGargantuarState()).ActionTriggered = false;
+            (zombie.GargantuarState ??= _world.LifetimePool.Rent<AdventureGargantuarState>()).ActionTriggered = false;
             if (phase == 0)
             {
                 _vaultZombieActions.SetAdventureZombieMotionPhase(zombie, phase);
@@ -93,7 +93,7 @@ namespace PlantsVsZombies.Simulation
                 return false;
             }
 
-            var state = zombie.GargantuarState ??= new AdventureGargantuarState();
+            var state = zombie.GargantuarState ??= _world.LifetimePool.Rent<AdventureGargantuarState>();
             var phase = zombie.PresentationNativePhase;
             if (phase == 69 || phase == 70)
             {
@@ -227,11 +227,10 @@ namespace PlantsVsZombies.Simulation
             imp.PresentationAltitude = 88f;
             imp.PresentationBiteBodyY = -88;
             imp.ChillRemaining = giant.ChillRemaining;
-            imp.ThrownImpState = new AdventureThrownImpState
-            {
-                VelocityZ = .5f * (distance / 3f) * .05f,
-                NativeY = _biteSystem.AdventureBiteNativeY(giant, x)
-            };
+            var pooledRecord1 = _world.LifetimePool.Rent<AdventureThrownImpState>();
+            pooledRecord1.VelocityZ = .5f * (distance / 3f) * .05f;
+            pooledRecord1.NativeY = _biteSystem.AdventureBiteNativeY(giant, x);
+            imp.ThrownImpState = pooledRecord1;
             imp.PresentationBodyBlendTicks = 0;
             imp.PresentationAnimation = string.Empty;
             _zombieFeedbackSystem.SynchronizeAdventureZombieAnimation(imp);

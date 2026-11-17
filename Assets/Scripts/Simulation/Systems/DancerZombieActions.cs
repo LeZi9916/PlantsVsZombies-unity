@@ -97,14 +97,13 @@ namespace PlantsVsZombies.Simulation
                 backup.DancerState!.LeaderId = zombie.Id;
                 backup.DancerState.PhaseTicks = AdventureDancerRules.RiseTicks;
                 state.Followers[slot] = backup.Id;
-                _world.Presentation.ZombieRiseEffects.Add(new AdventureZombieRiseEffect
-                {
-                    Id = ++_world.Presentation._effectId,
-                    Row = row,
-                    X = backupX + 60f,
-                    Y = _biteSystem.AdventureBiteNativeY(backup, backupX) + 110f,
-                    Dancer = true
-                });
+                var pooledRecord1 = _world.LifetimePool.Rent<AdventureZombieRiseEffect>();
+                pooledRecord1.Id = ++_world.Presentation._effectId;
+                pooledRecord1.Row = row;
+                pooledRecord1.X = backupX + 60f;
+                pooledRecord1.Y = _biteSystem.AdventureBiteNativeY(backup, backupX) + 110f;
+                pooledRecord1.Dancer = true;
+                _world.Presentation.ZombieRiseEffects.Add(pooledRecord1);
                 _zombieFeedbackSystem.RequestAdventureZombieFoley(79);
             }
         }

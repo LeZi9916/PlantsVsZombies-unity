@@ -399,12 +399,11 @@ namespace PlantsVsZombies.Simulation
             if (plant.SleepingPresentation == null)
             {
                 var rate = 6f + (float)_world._random.NextDouble() * 2f;
-                plant.SleepingPresentation = new AdventureSleepingState
-                {
-                    Rate = rate,
-                    // PC reanimation 68 is Z.reanim: seventeen frames, random normalized time in [0,.9].
-                    AnimationSeconds = (float)_world._random.NextDouble() * .9f * 17f / rate
-                };
+                var pooledRecord1 = _world.LifetimePool.Rent<AdventureSleepingState>();
+                pooledRecord1.Rate = rate;
+                // PC reanimation 68 is Z.reanim: seventeen frames, random normalized time in [0,.9].
+                pooledRecord1.AnimationSeconds = (float)_world._random.NextDouble() * .9f * 17f / rate;
+                plant.SleepingPresentation = pooledRecord1;
             }
         }
 
@@ -463,18 +462,16 @@ namespace PlantsVsZombies.Simulation
                 _world.Plants.Remove(old);
             }
 
-            var plant = new Plant
-            {
-                Id = ++_adventureModeRunner.Adventure._plantId,
-                Kind = kind,
-                Row = row,
-                Column = column,
-                Layer = LayerFor(kind),
-                Health = kind == PlantKind.Wallnut || kind == PlantKind.Pumpkin ? 4000f : kind == PlantKind.TallNut ? 8000f : kind == PlantKind.Garlic ? 400f : 300f,
-                Asleep = Nocturnal(kind) && !_adventureModeRunner.Adventure.Level.IsNight,
-                ActionTimer = kind == PlantKind.PotatoMine ? 15f : kind == PlantKind.CherryBomb || kind == PlantKind.Jalapeno || kind == PlantKind.DoomShroom || kind == PlantKind.IceShroom ? 1f : kind == PlantKind.GraveBuster ? global::PlantsVsZombies.Adventure.AdventureGraveBusterRules.TotalSeconds : 0.5f,
-                IsSmall = false
-            };
+            var plant = _world.LifetimePool.Rent<Plant>();
+            plant.Id = ++_adventureModeRunner.Adventure._plantId;
+            plant.Kind = kind;
+            plant.Row = row;
+            plant.Column = column;
+            plant.Layer = LayerFor(kind);
+            plant.Health = kind == PlantKind.Wallnut || kind == PlantKind.Pumpkin ? 4000f : kind == PlantKind.TallNut ? 8000f : kind == PlantKind.Garlic ? 400f : 300f;
+            plant.Asleep = Nocturnal(kind) && !_adventureModeRunner.Adventure.Level.IsNight;
+            plant.ActionTimer = kind == PlantKind.PotatoMine ? 15f : kind == PlantKind.CherryBomb || kind == PlantKind.Jalapeno || kind == PlantKind.DoomShroom || kind == PlantKind.IceShroom ? 1f : kind == PlantKind.GraveBuster ? global::PlantsVsZombies.Adventure.AdventureGraveBusterRules.TotalSeconds : 0.5f;
+            plant.IsSmall = false;
             AdventurePlantBlinkRules.Initialize(plant, _world._random);
             // PC 46BE80 creates the free sleep animation before the launch counter and planting displacement.
             InitializeAdventureSleepingPlant(plant);
@@ -488,7 +485,7 @@ namespace PlantsVsZombies.Simulation
             }
             if (kind == PlantKind.CoffeeBean)
             {
-                plant.CoffeePresentation = new AdventureCoffeeBeanState();
+                plant.CoffeePresentation = _world.LifetimePool.Rent<AdventureCoffeeBeanState>();
                 plant._presentationKind = kind;
 
                 plant.ActionTimer = 1f;

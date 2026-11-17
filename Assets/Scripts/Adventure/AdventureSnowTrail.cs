@@ -4,7 +4,7 @@ using PlantsVsZombies.Simulation;
 namespace PlantsVsZombies.Adventure
 {
     /// <summary>Defines adventure snow trail.</summary>
-    public sealed class AdventureSnowTrail
+    public sealed class AdventureSnowTrail : PlantsVsZombies.Simulation.ISimulationPooledObject
     {
         /// <summary>Stores id, seed, row.</summary>
         public int Id, Seed, Row;
@@ -20,5 +20,27 @@ namespace PlantsVsZombies.Adventure
                 return StopAge >= 0f;
             }
         }
+        /// <summary>Restores all mutable fields to construction defaults after live references expire.</summary>
+        void PlantsVsZombies.Simulation.ISimulationPooledObject.ResetForPool()
+        {
+            Id = default;
+            Seed = default;
+            Row = default;
+            Age = default;
+            X = default;
+            Y = default;
+            PreviousX = default;
+            PreviousY = default;
+            StopAge = -1f;
+            Projectile = default;
+        }
+
+        /// <summary>Retains linked records while this object is reachable from the board.</summary>
+        /// <param name="pool">The owning runtime lifetime tracker.</param>
+        void PlantsVsZombies.Simulation.ISimulationPooledObject.MarkPoolReferences(PlantsVsZombies.Simulation.SimulationRuntimePool pool)
+        {
+
+        }
+
     }
 }

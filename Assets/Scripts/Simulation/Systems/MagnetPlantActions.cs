@@ -56,10 +56,13 @@ namespace PlantsVsZombies.Simulation
         /// <param name="plant">The awake Magnet-shroom updated at one hundred hertz.</param>
         internal void AdvanceAdventureMagnetShroom(Plant plant)
         {
-            var state = plant.MagnetPresentation ??= new AdventureMagnetState
+            var state = plant.MagnetPresentation;
+            if (state == null)
             {
-                AnimationRate = plant.PresentationRate > 0f ? plant.PresentationRate : 12f
-            };
+                state = _world.LifetimePool.Rent<AdventureMagnetState>();
+                state.AnimationRate = plant.PresentationRate > 0f ? plant.PresentationRate : 12f;
+                plant.MagnetPresentation = state;
+            }
             state.AnimationSeconds += .01f;
             if (state.Item != null)
             {
@@ -159,15 +162,14 @@ namespace PlantsVsZombies.Simulation
                     }
                 }
 
-                BeginAdventureMagnetAttraction(plant, new AdventureMagnetItem
-                {
-                    NativeKind = 20,
-                    X = 40 + ladder.Column * 80 + 40,
-                    Y = _biteSystem.AdventurePlantEatingRectangle(ladder).Y,
-                    PositionResolved = true,
-                    DestinationX = 10f + RandomAdventureMagnetOffset(),
-                    DestinationY = RandomAdventureMagnetOffset()
-                });
+                var pooledRecord1 = _world.LifetimePool.Rent<AdventureMagnetItem>();
+                pooledRecord1.NativeKind = 20;
+                pooledRecord1.X = 40 + ladder.Column * 80 + 40;
+                pooledRecord1.Y = _biteSystem.AdventurePlantEatingRectangle(ladder).Y;
+                pooledRecord1.PositionResolved = true;
+                pooledRecord1.DestinationX = 10f + RandomAdventureMagnetOffset();
+                pooledRecord1.DestinationY = RandomAdventureMagnetOffset();
+                BeginAdventureMagnetAttraction(plant, pooledRecord1);
             }
         }
 
@@ -210,22 +212,21 @@ namespace PlantsVsZombies.Simulation
                 age = zombie.DiggerState.PausedDigSeconds;
             }
 
-            return new AdventureZombiePartDrop
-            {
-                NativeKind = (int)zombie.Kind,
-                NativePhase = zombie.PresentationNativePhase,
-                NativeAltitude = zombie.PoolState != null ? AdventureZombiePoolRules.BodyAltitude(zombie) : zombie.PresentationAltitude,
-                Row = zombie.Row,
-                X = zombie.X,
-                Scale = AdventureDancerRules.Scale(zombie),
-                Asset = ZombieFeedbackSystem.AdventureZombiePresentationAsset(zombie),
-                Animation = animation,
-                AnimationAge = age,
-                Rate = rate,
-                Anchor = track,
-                Backwards = zombie.PresentationWalkingBackwards ?? (zombie.Hypnotized
-                    || zombie.Kind == ZombieKind.Digger && AdventureDiggerState.WalksBackwards(zombie))
-            };
+            var pooledRecord2 = _world.LifetimePool.Rent<AdventureZombiePartDrop>();
+            pooledRecord2.NativeKind = (int)zombie.Kind;
+            pooledRecord2.NativePhase = zombie.PresentationNativePhase;
+            pooledRecord2.NativeAltitude = zombie.PoolState != null ? AdventureZombiePoolRules.BodyAltitude(zombie) : zombie.PresentationAltitude;
+            pooledRecord2.Row = zombie.Row;
+            pooledRecord2.X = zombie.X;
+            pooledRecord2.Scale = AdventureDancerRules.Scale(zombie);
+            pooledRecord2.Asset = ZombieFeedbackSystem.AdventureZombiePresentationAsset(zombie);
+            pooledRecord2.Animation = animation;
+            pooledRecord2.AnimationAge = age;
+            pooledRecord2.Rate = rate;
+            pooledRecord2.Anchor = track;
+            pooledRecord2.Backwards = zombie.PresentationWalkingBackwards ?? (zombie.Hypnotized
+                    || zombie.Kind == ZombieKind.Digger && AdventureDiggerState.WalksBackwards(zombie));
+            return pooledRecord2;
         }
 
         /// <summary>Applies PC 46F9C0's per-item removal without damaging unrelated equipment or creating duplicate debris.</summary>
@@ -236,7 +237,9 @@ namespace PlantsVsZombies.Simulation
             _zombieFeedbackSystem.EnsureAdventureZombieEquipment(zombie);
             var nativeX = AdventureZombieNativeRules.NativePositionX(zombie.X, AdventureDancerRules.Scale(zombie));
             var nativeY = _biteSystem.AdventureBiteNativeY(zombie, nativeX);
-            var item = new AdventureMagnetItem { X = nativeX, Y = nativeY };
+            var item = _world.LifetimePool.Rent<AdventureMagnetItem>();
+            item.X = nativeX;
+            item.Y = nativeY;
             var helm = AdventureZombieEquipmentRules.HelmType(zombie);
             if (zombie.ArmorHealth > 0f && (helm == 2 || helm == 3))
             {

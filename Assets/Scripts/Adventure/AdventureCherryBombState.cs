@@ -6,7 +6,7 @@ namespace PlantsVsZombies.Adventure
     // Local PC: 46C07A..46C0A4 (10 + Rand(5)), 46C624..46C645
     // (anim_explode, PlayOnceAndHold, special=100, reverse-explosion Foley 57).
     /// <summary>Defines adventure cherry bomb state.</summary>
-    public sealed class AdventureCherryBombState
+    public sealed class AdventureCherryBombState : PlantsVsZombies.Simulation.ISimulationPooledObject
     {
         /// <summary>Stores fuse ticks.</summary>
         public const int FuseTicks = 100;
@@ -44,5 +44,24 @@ namespace PlantsVsZombies.Adventure
             double phase = Math.Min(.999999f, NormalizedTime + Math.Max(0f, remainder) * Rate / ExplodeFrameCount);
             return (float)(phase * ExplodeFrameCount / Rate);
         }
+        /// <summary>Restores all mutable fields to construction defaults after live references expire.</summary>
+        void PlantsVsZombies.Simulation.ISimulationPooledObject.ResetForPool()
+        {
+            Countdown = FuseTicks;
+            AnimationTicks = default;
+            Rate = default;
+            NormalizedTime = default;
+            ShakeX = default;
+            ShakeY = default;
+            Detonated = default;
+        }
+
+        /// <summary>Retains linked records while this object is reachable from the board.</summary>
+        /// <param name="pool">The owning runtime lifetime tracker.</param>
+        void PlantsVsZombies.Simulation.ISimulationPooledObject.MarkPoolReferences(PlantsVsZombies.Simulation.SimulationRuntimePool pool)
+        {
+
+        }
+
     }
 }

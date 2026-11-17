@@ -239,7 +239,7 @@ namespace PlantsVsZombies.Simulation
                 return;
             }
 
-            var state = zombie.BungeeState ??= new AdventureBungeeState();
+            var state = zombie.BungeeState ??= _world.LifetimePool.Rent<AdventureBungeeState>();
             if (state.TargetPlant != null && !_world.Plants.Contains(state.TargetPlant))
             {
                 state.TargetPlant = null;

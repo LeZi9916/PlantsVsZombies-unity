@@ -5,7 +5,7 @@ using System;
 namespace PlantsVsZombies.Adventure
 {
     /// <summary>Retains PC 541460's twenty-shot ammunition, independent reload timer and punctured vehicle death.</summary>
-    public sealed class AdventureCatapultState
+    public sealed class AdventureCatapultState : PlantsVsZombies.Simulation.ISimulationPooledObject
     {
         /// <summary>Stores the original summon counter, decremented after the complete shooting clip.</summary>
         public int Ammunition = 20;
@@ -88,5 +88,25 @@ namespace PlantsVsZombies.Adventure
 
             return Ammunition == 0 ? "IMAGE_REANIM_ZOMBIE_CATAPULT_POLE" : null;
         }
+        /// <summary>Restores all mutable fields to construction defaults after live references expire.</summary>
+        void PlantsVsZombies.Simulation.ISimulationPooledObject.ResetForPool()
+        {
+            Ammunition = 20;
+            PhaseTicks = default;
+            Fired = default;
+            WalkingRate = 5.5f;
+            FlatTires = default;
+            DeathTicks = default;
+            SmokeStartAge = -1f;
+            Exploded = default;
+        }
+
+        /// <summary>Retains linked records while this object is reachable from the board.</summary>
+        /// <param name="pool">The owning runtime lifetime tracker.</param>
+        void PlantsVsZombies.Simulation.ISimulationPooledObject.MarkPoolReferences(PlantsVsZombies.Simulation.SimulationRuntimePool pool)
+        {
+
+        }
+
     }
 }

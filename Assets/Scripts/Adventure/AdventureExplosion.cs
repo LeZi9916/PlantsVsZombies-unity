@@ -3,7 +3,7 @@
 namespace PlantsVsZombies.Adventure
 {
     /// <summary>Defines adventure explosion.</summary>
-    public sealed class AdventureExplosion
+    public sealed class AdventureExplosion : PlantsVsZombies.Simulation.ISimulationPooledObject
     {
         /// <summary>Stores id, seed, row, ticks.</summary>
         public int Id, Seed, Row, Ticks;
@@ -66,5 +66,25 @@ namespace PlantsVsZombies.Adventure
                     : Effect == AdventureExplosionEffect.GraveBusterDie ? 500 : 200;
             }
         }
+        /// <summary>Restores all mutable fields to construction defaults after live references expire.</summary>
+        void PlantsVsZombies.Simulation.ISimulationPooledObject.ResetForPool()
+        {
+            Id = default;
+            Seed = default;
+            Row = default;
+            Ticks = default;
+            X = default;
+            NativeX = default;
+            NativeY = default;
+            Effect = default;
+        }
+
+        /// <summary>Retains linked records while this object is reachable from the board.</summary>
+        /// <param name="pool">The owning runtime lifetime tracker.</param>
+        void PlantsVsZombies.Simulation.ISimulationPooledObject.MarkPoolReferences(PlantsVsZombies.Simulation.SimulationRuntimePool pool)
+        {
+
+        }
+
     }
 }

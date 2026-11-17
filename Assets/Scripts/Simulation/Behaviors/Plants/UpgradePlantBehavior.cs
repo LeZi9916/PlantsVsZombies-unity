@@ -30,5 +30,24 @@ namespace PlantsVsZombies.Simulation
         {
             return context._upgradePlantActions.AdvanceAdventureUpgradePlant(plant, dt);
         }
+        /// <summary>Restores construction defaults after all board references expire.</summary>
+        internal override void ResetPoolState()
+        {
+            base.ResetPoolState();
+            BurstTicks = default;
+            CannonTargetRow = default;
+            CannonTargetX = default;
+            CannonReloadRemaining = default;
+            CannonPhase = default;
+            CannonResetVersion = default;
+        }
+
+        /// <summary>Retains capability-owned records while this behavior is live.</summary>
+        /// <param name="pool">The owning lifetime tracker.</param>
+        internal override void MarkPoolState(SimulationRuntimePool pool)
+        {
+            base.MarkPoolState(pool);
+        }
+
     }
 }

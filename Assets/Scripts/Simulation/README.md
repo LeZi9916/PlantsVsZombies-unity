@@ -64,7 +64,23 @@ rules. The phase names are ordering contracts, not independently scheduled updat
 retain the existing removal and side-effect rules. Removing a stored reference is
 not equivalent to killing it: upgrades, imitation, stage cleanup, bungee release,
 linked sled deaths, and ordinary damage have different effects and notifications.
-Plants and zombies are not pooled because corpses and linked effects retain them.
+Plants, zombies, behavior-owned capabilities and short-lived presentation records
+are pooled through a match-local runtime sidecar. Store removal never returns an
+actor directly. At each complete facade update, typed reference traversal retains
+live actors, corpses, ice attachments, squished plants, Bungee cargo, Magnet-shroom
+source snapshots and pending coins. Records are reset only after two further
+complete update boundaries without any authoritative reference. Nested simulation
+snapshots and synchronous sound/receipt callbacks have returned before retirement.
+Shared capabilities remain live until their final owner releases them.
+
+Every reset explicitly restores construction defaults, including negative native
+sentinels, positive rates and retained-array contents. Preparation creates default
+records and collection capacity in bounded loading steps; it does not initialize
+gameplay behaviors, consume either random stream or change checkpoint model bytes.
+`GameSimulation.GetCapacityRequirements` and `PrepareCapacityStep` expose the
+loading contract; `RuntimePoolStatistics` returns allocation-free value counters.
+The world sidecar ends in `Pool` and actor owner pointers are `[NonSerialized]`,
+so existing checkpoint type schemas and field names remain unchanged.
 
 ## Collections and queries
 

@@ -264,12 +264,16 @@ namespace PlantsVsZombies.Simulation
                     target.Health -= shot.Damage;
                     target.PresentationEatenFlashTicks = Math.Max(target.PresentationEatenFlashTicks, 25);
                     _zombieFeedbackSystem.RequestAdventureZombieFoley(1);
-                    _world.Presentation.Impacts.Add(new AdventureImpact
-                    {
-                        Id = ++_world.Presentation._effectId, Seed = _world._random.Next(), Kind = PlantKind.Peashooter,
-                        X = shot.X, Row = shot.Row, NativeIcePoint = true,
-                        NativeParticleX = shot.NativeX - 3, NativeParticleY = shot.NativeY + 17
-                    });
+                    var pooledRecord1 = _world.LifetimePool.Rent<AdventureImpact>();
+                    pooledRecord1.Id = ++_world.Presentation._effectId;
+                    pooledRecord1.Seed = _world._random.Next();
+                    pooledRecord1.Kind = PlantKind.Peashooter;
+                    pooledRecord1.X = shot.X;
+                    pooledRecord1.Row = shot.Row;
+                    pooledRecord1.NativeIcePoint = true;
+                    pooledRecord1.NativeParticleX = shot.NativeX - 3;
+                    pooledRecord1.NativeParticleY = shot.NativeY + 17;
+                    _world.Presentation.Impacts.Add(pooledRecord1);
                     if (target.Health <= 0)
                     {
                         _plantingSystem.RemoveAdventurePlantAndStack(target);

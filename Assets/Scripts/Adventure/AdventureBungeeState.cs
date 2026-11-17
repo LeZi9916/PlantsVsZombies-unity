@@ -5,7 +5,7 @@ using PlantsVsZombies.Simulation;
 namespace PlantsVsZombies.Adventure
 {
     /// <summary>Retains the PC bungee descent, waiting, grabbing, cargo and departure state.</summary>
-    public sealed class AdventureBungeeState
+    public sealed class AdventureBungeeState : PlantsVsZombies.Simulation.ISimulationPooledObject
     {
         /// <summary>Gets the original BungeeDiving, Screaming, AtBottom, Grabbing, Rising or Cutscene phase.</summary>
         public int Phase { get; internal set; } = 4;
@@ -40,5 +40,24 @@ namespace PlantsVsZombies.Adventure
             BlendTicks = blendTicks;
             AnimationSeconds = phase == 6 ? 10f / 24f : 0f;
         }
+        /// <summary>Restores all mutable fields to construction defaults after live references expire.</summary>
+        void PlantsVsZombies.Simulation.ISimulationPooledObject.ResetForPool()
+        {
+            Phase = 4;
+            PhaseTicks = default;
+            HitUmbrella = default;
+            CarriesZombie = default;
+            TargetPlant = default;
+            AnimationSeconds = default;
+            BlendTicks = default;
+        }
+
+        /// <summary>Retains linked records while this object is reachable from the board.</summary>
+        /// <param name="pool">The owning runtime lifetime tracker.</param>
+        void PlantsVsZombies.Simulation.ISimulationPooledObject.MarkPoolReferences(PlantsVsZombies.Simulation.SimulationRuntimePool pool)
+        {
+            pool.Mark(TargetPlant);
+        }
+
     }
 }

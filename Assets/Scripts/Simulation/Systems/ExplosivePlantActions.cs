@@ -82,7 +82,9 @@ namespace PlantsVsZombies.Simulation
         /// <returns>The immutable original playback selection.</returns>
         private AdventureZombieSoundEvent SampleCherryFoley(int foley)
         {
-            var sound = new AdventureZombieSoundEvent { Foley = foley, Tick = _world._nativeFeedbackTick };
+            var sound = _world.LifetimePool.Rent<AdventureZombieSoundEvent>();
+            sound.Foley = foley;
+            sound.Tick = _world._nativeFeedbackTick;
             _world._foleyRandom.Resolve(sound, _world._random, _world.Rules.AdventureSoundMuted);
             return sound;
         }
@@ -96,10 +98,8 @@ namespace PlantsVsZombies.Simulation
                 return;
             }
 
-            var state = new global::PlantsVsZombies.Adventure.AdventureCherryBombState
-            {
-                Rate = plant._presentationKind == plant.Kind ? plant.PresentationRate : 10f + AdventureCherryRandomFloat(5f)
-            };
+            var state = _world.LifetimePool.Rent<AdventureCherryBombState>();
+            state.Rate = plant._presentationKind == plant.Kind ? plant.PresentationRate : 10f + AdventureCherryRandomFloat(5f);
             plant.CherryBombPresentation = state;
             plant._presentationKind = PlantKind.CherryBomb;
             plant.PresentationRate = state.Rate;
@@ -179,7 +179,8 @@ namespace PlantsVsZombies.Simulation
             }
 
             // PC 46C07A..46C0A4 selects 10 + RandFloat(5); case 20 shares 46C615's special=100/once-and-hold branch.
-            var state = new AdventureJalapenoState { Rate = plant._presentationKind == plant.Kind ? plant.PresentationRate : 10f + AdventureCherryRandomFloat(5f) };
+            var state = _world.LifetimePool.Rent<AdventureJalapenoState>();
+            state.Rate = plant._presentationKind == plant.Kind ? plant.PresentationRate : 10f + AdventureCherryRandomFloat(5f);
             plant.JalapenoPresentation = state;
             plant._presentationKind = PlantKind.Jalapeno;
             plant.PresentationRate = state.Rate;

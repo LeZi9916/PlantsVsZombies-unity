@@ -4,8 +4,11 @@ using System;
 namespace PlantsVsZombies.Simulation
 {
     /// <summary>Defines zombie.</summary>
-    public sealed class Zombie
+    public sealed class Zombie : ISimulationPooledObject
     {
+        /// <summary>Connects lazily rented capabilities without adding any checkpoint state.</summary>
+        [NonSerialized]
+        internal SimulationRuntimePool? RuntimePool;
         /// <summary>Creates an unattached ordinary actor for simulation factories and probes.</summary>
         public Zombie() : this(ZombieKind.Normal)
         {
@@ -28,7 +31,7 @@ namespace PlantsVsZombies.Simulation
             {
                 if (_behavior == null || _behaviorKind != Kind)
                 {
-                    _behavior = ZombieBehaviorFactory.Create(Kind);
+                    _behavior = ZombieBehaviorFactory.Create(Kind, RuntimePool);
                     _behaviorKind = Kind;
                 }
                 return _behavior;
@@ -360,5 +363,114 @@ namespace PlantsVsZombies.Simulation
         internal float _modeHeadTimer = 1.5f;
         /// <summary>Stores mode portal cooldown.</summary>
         internal float _modePortalCooldown;
+        /// <summary>Restores all mutable fields to construction defaults after live references expire.</summary>
+        void ISimulationPooledObject.ResetForPool()
+        {
+            RuntimePool = null;
+            _behavior = default;
+            _behaviorKind = (ZombieKind)(-1);
+            IndexChanged = default;
+            TangleKelpGrab = default;
+            PoolState = default;
+            PresentationAnimationAge = default;
+            PresentationPlantHeadAge = default;
+            PresentationFlash = default;
+            PresentationArmorFlash = default;
+            PresentationButter = default;
+            PresentationPreviousX = default;
+            PresentationWalk2 = default;
+            PresentationBodyBlendTicks = -1;
+            PresentationAnimation = string.Empty;
+            PresentationPoleVaultBlendTicks = 20;
+            PresentationDeath = default;
+            _presentationInitialized = default;
+            PresentationHealthBeforeHit = -1f;
+            PresentationNativePhase = -1;
+            PresentationWhackSpeed = default;
+            PresentationInPool = default;
+            PresentationHasSled = default;
+            PresentationWalkingBackwards = default;
+            _id = default;
+            Wave = default;
+            Speed = default;
+            FrozenRemaining = default;
+            PresentationPoolRow = default;
+            PresentationAltitude = default;
+            PresentationVaultPositionY = default;
+            _poleVaultVelocity = default;
+            PresentationBalloonBlendTicks = default;
+            JackInTheBoxTicks = default;
+            GroanTicks = default;
+            AbilityTimer = default;
+            FlyingHealth = default;
+            NativeVariant = default;
+            Airborne = default;
+            BlowingAway = default;
+            Submerged = default;
+            Hypnotized = default;
+            UsedAbility = default;
+            ThrownImp = default;
+            AbilityPhase = default;
+            IsSmall = default;
+            Headless = default;
+            BungeeCarrierId = default;
+            BungeeCarrier = default;
+            DropRemaining = default;
+            GraveRiseTicks = default;
+            LinkedZombieId = default;
+            UseLadderColumn = -1;
+            TargetColumn = -1;
+            StartingHealth = default;
+            PresentationBiteBodyY = default;
+            PresentationBiteClipHeight = -10000;
+            PresentationGarlicCounter = -1;
+            _presentationBiteClip = default;
+            _presentationBiteCycle = default;
+            PresentationGarlicRowOffset = default;
+            PresentationMaxArmor = default;
+            PresentationMaxShield = default;
+            PresentationNewspaperGaspRemaining = default;
+            PresentationNewspaperSurpriseAge = -1f;
+            _presentationArmorBeforeHit = default;
+            _presentationShieldBeforeHit = default;
+            PresentationNativeVelocity = default;
+            _presentationSpeedPhase = int.MinValue;
+            _presentationSpeedKind = -1;
+            PresentationArmLost = default;
+            PresentationShieldRecoil = default;
+            PresentationNativeHeight = -1;
+            PresentationMovementRate = -1f;
+            _presentationMovementAnimation = default;
+            _presentationWalkPhase = default;
+            _presentationTickSlow = 1f;
+            _presentationWalkLoops = default;
+            _presentationPreviousWalkCycle = default;
+            Kind = default;
+            _row = default;
+            X = default;
+            Health = default;
+            ArmorHealth = default;
+            ShieldHealth = default;
+            BiteTimer = default;
+            Age = default;
+            ChillRemaining = default;
+            Eating = default;
+            ModeHead = -1;
+            PlantZombieState = default;
+            PresentationPlantHeadKey = default;
+            _modeHeadTimer = 1.5f;
+            _modePortalCooldown = default;
+        }
+
+        /// <summary>Retains linked records while this object is reachable from the board.</summary>
+        /// <param name="pool">The owning runtime lifetime tracker.</param>
+        void ISimulationPooledObject.MarkPoolReferences(SimulationRuntimePool pool)
+        {
+            pool.Mark(PlantZombieState);
+            pool.Mark(_behavior);
+            pool.Mark(TangleKelpGrab);
+            pool.Mark(PoolState);
+        }
+
     }
 }

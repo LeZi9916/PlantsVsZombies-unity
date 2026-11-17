@@ -379,7 +379,8 @@ namespace PlantsVsZombies.Simulation
             {
                 foreach (var field in current.GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly))
                 {
-                    if (typeof(Delegate).IsAssignableFrom(field.FieldType) || field.FieldType == typeof(GameSimulation))
+                    if (field.IsDefined(typeof(NonSerializedAttribute), false)
+                        || typeof(Delegate).IsAssignableFrom(field.FieldType) || field.FieldType == typeof(GameSimulation))
                     {
                         continue;
                     }

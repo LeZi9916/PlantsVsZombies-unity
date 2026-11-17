@@ -46,6 +46,32 @@ namespace PlantsVsZombies.Simulation
         }
         /// <summary>Gets the number of live entries.</summary>
         public int Count => _items.Count;
+
+        /// <summary>Reserves derived index storage during loading without changing ordered membership.</summary>
+        /// <param name="capacity">The expected concurrent entity population.</param>
+        /// <param name="rowCount">The number of native board rows.</param>
+        internal void PrepareCapacity(int capacity, int rowCount)
+        {
+            if (_items.Capacity < capacity)
+            {
+                _items.Capacity = capacity;
+            }
+            _members.EnsureCapacity(capacity);
+            _ids.EnsureCapacity(capacity);
+            _rows.EnsureCapacity(rowCount);
+            for (var row = 0; row < rowCount; row++)
+            {
+                if (!_rows.TryGetValue(row, out var candidates))
+                {
+                    candidates = new List<T>(capacity);
+                    _rows.Add(row, candidates);
+                }
+                else if (candidates.Capacity < capacity)
+                {
+                    candidates.Capacity = capacity;
+                }
+            }
+        }
         /// <summary>Gets a live entry in update order.</summary>
         /// <param name="index">The ordered index.</param>
         /// <returns>The selected entry.</returns>

@@ -5,7 +5,7 @@ using PlantsVsZombies.Simulation;
 namespace PlantsVsZombies.Adventure
 {
     /// <summary>Retains PC UpdateCactus (0x46F5B0) body states and the original authored animation clocks.</summary>
-    public sealed class AdventureCactusState
+    public sealed class AdventureCactusState : PlantsVsZombies.Simulation.ISimulationPooledObject
     {
         /// <summary>Gets the native plant state: low 30, rising 31, high 32 or lowering 33.</summary>
         public int NativePhase { get; private set; } = 30;
@@ -27,6 +27,13 @@ namespace PlantsVsZombies.Adventure
         /// <summary>Creates the original low cactus while retaining its randomized initial idle rate.</summary>
         /// <param name="initialRate">The existing plant idle rate; a nonpositive rate selects the authored twelve fps.</param>
         public AdventureCactusState(float initialRate = 12f)
+        {
+            Rate = initialRate > 0f ? initialRate : 12f;
+        }
+
+        /// <summary>Applies the caller's existing initial idle rate after a pooled default reset.</summary>
+        /// <param name="initialRate">The original plant's randomized idle rate.</param>
+        internal void InitializePooledRate(float initialRate)
         {
             Rate = initialRate > 0f ? initialRate : 12f;
         }
@@ -131,5 +138,26 @@ namespace PlantsVsZombies.Adventure
             Rate = rate;
             AnimationTicks = 0;
         }
+        /// <summary>Restores all mutable fields to construction defaults after live references expire.</summary>
+        void PlantsVsZombies.Simulation.ISimulationPooledObject.ResetForPool()
+        {
+            NativePhase = 30;
+            Animation = "anim_idle";
+            AnimationTicks = default;
+            Rate = 12f;
+        }
+
+        /// <summary>Retains linked records while this object is reachable from the board.</summary>
+        /// <param name="pool">The owning runtime lifetime tracker.</param>
+        void PlantsVsZombies.Simulation.ISimulationPooledObject.MarkPoolReferences(PlantsVsZombies.Simulation.SimulationRuntimePool pool)
+        {
+
+        }
+
+        /// <summary>Creates the default native idle state during runtime capacity preparation.</summary>
+        public AdventureCactusState() : this(12f)
+        {
+        }
+
     }
 }

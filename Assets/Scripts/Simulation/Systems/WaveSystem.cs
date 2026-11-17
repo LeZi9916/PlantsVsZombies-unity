@@ -399,7 +399,10 @@ namespace PlantsVsZombies.Simulation
                         sled.X = leader.X + follower * 50f / 80f;
                         sled.PresentationPreviousX = sled.X;
                         sled.LinkedZombieId = leader.Id;
-                        sled.BobsledState = new AdventureBobsledState { LeaderId = leader.Id, Position = follower };
+                        var pooledRecord1 = _world.LifetimePool.Rent<AdventureBobsledState>();
+                        pooledRecord1.LeaderId = leader.Id;
+                        pooledRecord1.Position = follower;
+                        sled.BobsledState = pooledRecord1;
                         sled.PresentationAltitude = AdventureBobsledRules.InitialAltitude(follower);
                         sled.ArmorHealth = 0f;
                         sled.PresentationMaxArmor = 0f;

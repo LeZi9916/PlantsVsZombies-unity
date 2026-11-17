@@ -57,7 +57,7 @@ namespace PlantsVsZombies.Simulation
         internal void SetAdventureDolphinPhase(Zombie z, int phase)
         {
             z.PresentationNativePhase = phase;
-            var state = z.DolphinState ??= new AdventureDolphinState();
+            var state = z.DolphinState ??= _world.LifetimePool.Rent<AdventureDolphinState>();
             state.AnimationBlendTicks = phase == 52 ? 20 : 0;
             if (phase == 55 || phase == 56)
             {
@@ -101,7 +101,7 @@ namespace PlantsVsZombies.Simulation
                 return false;
             }
 
-            var state = z.DolphinState ??= new AdventureDolphinState();
+            var state = z.DolphinState ??= _world.LifetimePool.Rent<AdventureDolphinState>();
             var phase = z.PresentationNativePhase;
             if (phase == 54 && state.JumpTicks > 0)
             {
@@ -170,13 +170,14 @@ namespace PlantsVsZombies.Simulation
                     if (barrier != null && barrier.Kind == PlantKind.TallNut)
                     {
                         _zombieFeedbackSystem.RequestAdventureZombieFoley(48);
-                        _world.Presentation.PlantBiteEffects.Add(new AdventurePlantBiteEffect
-                        {
-                            Id = ++_world.Presentation._effectId, Row = z.Row, ParticleId = 29,
-                            NativeX = 40 + barrier.Column * 80 + 60,
-                            NativeY = 80 + barrier.Row * (_adventureModeRunner.Adventure.Level.HasPool || _adventureModeRunner.Adventure.Level.HasRoof ? 85 : 100) - 20,
-                            Seed = z.Id
-                        });
+                        var pooledRecord1 = _world.LifetimePool.Rent<AdventurePlantBiteEffect>();
+                        pooledRecord1.Id = ++_world.Presentation._effectId;
+                        pooledRecord1.Row = z.Row;
+                        pooledRecord1.ParticleId = 29;
+                        pooledRecord1.NativeX = 40 + barrier.Column * 80 + 60;
+                        pooledRecord1.NativeY = 80 + barrier.Row * (_adventureModeRunner.Adventure.Level.HasPool || _adventureModeRunner.Adventure.Level.HasRoof ? 85 : 100) - 20;
+                        pooledRecord1.Seed = z.Id;
+                        _world.Presentation.PlantBiteEffects.Add(pooledRecord1);
                         z.X = AdventureZombieNativeRules.GridX(40 + barrier.Column * 80 + 25, AdventureDancerRules.Scale(z));
                         z.PresentationAltitude = 30f;
                         z.PresentationNativeHeight = 7;
@@ -374,14 +375,16 @@ namespace PlantsVsZombies.Simulation
         {
             var nativeX = (int)AdventureZombieNativeRules.NativePositionX(z.X, AdventureDancerRules.Scale(z));
             var nativeY = (int)_biteSystem.AdventureBiteNativeY(z, nativeX);
-            _world.Presentation.ZombieSplashes.Add(new AdventureZombieSplash
-            {
-                Id = ++_world.Presentation._effectId, Row = z.Row,
-                X = nativeX + offsetX,
-                Y = nativeY + offsetY,
-                ParticleX = nativeX + offsetX + 37f, ParticleY = nativeY + (particleOffsetY ?? offsetY + 42f),
-                ScaleX = scaleX, ScaleY = scaleY
-            });
+            var pooledRecord2 = _world.LifetimePool.Rent<AdventureZombieSplash>();
+            pooledRecord2.Id = ++_world.Presentation._effectId;
+            pooledRecord2.Row = z.Row;
+            pooledRecord2.X = nativeX + offsetX;
+            pooledRecord2.Y = nativeY + offsetY;
+            pooledRecord2.ParticleX = nativeX + offsetX + 37f;
+            pooledRecord2.ParticleY = nativeY + (particleOffsetY ?? offsetY + 42f);
+            pooledRecord2.ScaleX = scaleX;
+            pooledRecord2.ScaleY = scaleY;
+            _world.Presentation.ZombieSplashes.Add(pooledRecord2);
             _zombieFeedbackSystem.RequestAdventureZombieFoley(foley);
         }
 
@@ -393,7 +396,12 @@ namespace PlantsVsZombies.Simulation
             var nativeX = 40f + column * 80f - 25f;
             zombie.X = AdventureZombieNativeRules.GridX(nativeX, AdventureDancerRules.Scale(zombie));
             zombie.PresentationPreviousX = zombie.X;
-            zombie.PoolState ??= new AdventureZombiePoolState { HasDuckyTube = AdventureZombiePoolRules.UsesPlainBody(zombie.Kind) };
+            if (zombie.PoolState == null)
+            {
+                var pooledRecord3 = _world.LifetimePool.Rent<AdventureZombiePoolState>();
+                pooledRecord3.HasDuckyTube = AdventureZombiePoolRules.UsesPlainBody(zombie.Kind);
+                zombie.PoolState = pooledRecord3;
+            }
             zombie.PoolState.Altitude = AdventureZombiePoolRules.RiseAltitude(50, AdventureDancerRules.Scale(zombie));
             zombie.PoolState.SeaweedAge = 0f;
             zombie.PresentationInPool = true;
@@ -526,14 +534,13 @@ namespace PlantsVsZombies.Simulation
             zombie.DropRemaining = 0f;
             zombie.Eating = false;
             // PC 0x54DCCF uses mPosX+60,mPosY+110 for the original ZombieRise particle.
-            _world.Presentation.ZombieRiseEffects.Add(new AdventureZombieRiseEffect
-            {
-                Id = ++_world.Presentation._effectId,
-                Row = zombie.Row,
-                X = nativeX + 60f,
-                Y = _biteSystem.AdventureBiteNativeY(zombie, (int)nativeX) + 110f,
-                Whack = whack
-            });
+            var pooledRecord4 = _world.LifetimePool.Rent<AdventureZombieRiseEffect>();
+            pooledRecord4.Id = ++_world.Presentation._effectId;
+            pooledRecord4.Row = zombie.Row;
+            pooledRecord4.X = nativeX + 60f;
+            pooledRecord4.Y = _biteSystem.AdventureBiteNativeY(zombie, (int)nativeX) + 110f;
+            pooledRecord4.Whack = whack;
+            _world.Presentation.ZombieRiseEffects.Add(pooledRecord4);
             if (whack)
             {
                 _world.Presentation.ZombieRiseSoundSerial++;

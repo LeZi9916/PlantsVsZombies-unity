@@ -256,7 +256,15 @@ namespace PlantsVsZombies.Simulation
 
             if (resolved == PlantKind.CoffeeBean)
             {
-                return _world.Plants.Exists(p => p.Asleep && p.WakeTimer <= 0 && _boardQueries.AdventurePlantAt(p.Row, p.Column, PlantLayer.Effect) == null);
+                foreach (var plant in _world.Plants)
+                {
+                    if (plant.Asleep && plant.WakeTimer <= 0
+                        && _boardQueries.AdventurePlantAt(plant.Row, plant.Column, PlantLayer.Effect) == null)
+                    {
+                        return true;
+                    }
+                }
+                return false;
             }
 
             if (resolved == PlantKind.GraveBuster)

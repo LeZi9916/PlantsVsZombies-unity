@@ -215,7 +215,8 @@ namespace PlantsVsZombies.Simulation
             var pose = plant.CactusPresentation;
             if (pose == null)
             {
-                pose = new AdventureCactusState(plant.PresentationRate);
+                pose = _world.LifetimePool.Rent<AdventureCactusState>();
+                pose.InitializePooledRate(plant.PresentationRate);
                 plant.CactusPresentation = pose;
             }
 
@@ -292,7 +293,7 @@ namespace PlantsVsZombies.Simulation
             var state = plant.ScaredyShroomPresentation;
             if (state == null)
             {
-                state = new AdventureScaredyShroomState();
+                state = _world.LifetimePool.Rent<AdventureScaredyShroomState>();
                 plant.ScaredyShroomPresentation = state;
             }
 
@@ -542,17 +543,17 @@ namespace PlantsVsZombies.Simulation
                 y += 40f;
             }
 
-            _world.Presentation.PlantBiteEffects.Add(new global::PlantsVsZombies.Adventure.AdventurePlantBiteEffect {
-                Id = ++_world.Presentation._effectId,
-                ParticleId = 35,
-                Row = z.Row,
-                Kind = z.Kind,
-                NativeX = global::PlantsVsZombies.Adventure.AdventureZombieNativeRules.NativePositionX(z.X, AdventureDancerRules.Scale(z)),
-                NativeY = _biteSystem.AdventureBiteNativeY(z, global::PlantsVsZombies.Adventure.AdventureZombieNativeRules.NativePositionX(z.X, AdventureDancerRules.Scale(z))),
-                OffsetX = x,
-                OffsetY = y + z.PresentationBiteBodyY,
-                Seed = z.Id * 397 ^ _world.Presentation._effectId
-            });
+            var pooledRecord1 = _world.LifetimePool.Rent<AdventurePlantBiteEffect>();
+            pooledRecord1.Id = ++_world.Presentation._effectId;
+            pooledRecord1.ParticleId = 35;
+            pooledRecord1.Row = z.Row;
+            pooledRecord1.Kind = z.Kind;
+            pooledRecord1.NativeX = global::PlantsVsZombies.Adventure.AdventureZombieNativeRules.NativePositionX(z.X, AdventureDancerRules.Scale(z));
+            pooledRecord1.NativeY = _biteSystem.AdventureBiteNativeY(z, global::PlantsVsZombies.Adventure.AdventureZombieNativeRules.NativePositionX(z.X, AdventureDancerRules.Scale(z)));
+            pooledRecord1.OffsetX = x;
+            pooledRecord1.OffsetY = y + z.PresentationBiteBodyY;
+            pooledRecord1.Seed = z.Id * 397 ^ _world.Presentation._effectId;
+            _world.Presentation.PlantBiteEffects.Add(pooledRecord1);
         }
     }
 }

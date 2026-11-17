@@ -318,6 +318,39 @@ namespace PlantsVsZombies.Simulation
         /// <summary>Gets the authoritative model inspected by the offline checkpoint editor.</summary>
         internal SimulationWorld CheckpointState => _world;
 
+        /// <summary>Reads preparation targets without changing model values or random streams.</summary>
+        /// <returns>The bounded live-population targets and short-lived event allowance.</returns>
+        internal SimulationCapacityRequirements GetCapacityRequirements()
+        {
+            return new SimulationCapacityRequirements(Math.Max(128, Plants.Count + 32),
+                Math.Max(256, Zombies.Count + Presentation.Corpses.Count + 64),
+                Math.Max(128, Peas.Count + 64), 128, 16, soundEvents: SimulationCapacityRequirements.MaximumSoundEvents);
+        }
+
+        /// <summary>Gets current runtime record pool counters without allocating a report object.</summary>
+        internal SimulationPoolStatistics RuntimePoolStatistics => new SimulationPoolStatistics(
+            _world.LifetimePool.CreatedCount + _world._peaPool.CreatedCount + _world._sunPool.CreatedCount + _world._flamePool.CreatedCount,
+            _world.LifetimePool.ActiveCount, _world.LifetimePool.RecycledCount);
+
+        /// <summary>Prepares only the requested number of reusable objects during a loading frame.</summary>
+        /// <param name="requirements">The high-water preparation targets.</param>
+        /// <param name="maxObjects">The maximum number of objects constructed by this call.</param>
+        /// <returns>Whether every requested reusable capacity is available.</returns>
+        internal bool PrepareCapacityStep(in SimulationCapacityRequirements requirements, int maxObjects = 16)
+        {
+            if (maxObjects <= 0 || !_world.LifetimePool.PrepareCollectionsStep(_world, requirements))
+            {
+                return false;
+            }
+            var remaining = Math.Max(0, maxObjects);
+            remaining -= _world._peaPool.PrepareCapacityStep(Math.Max(0, requirements.Projectiles - _world.Peas.Count), remaining);
+            remaining -= _world._sunPool.PrepareCapacityStep(32, remaining);
+            remaining -= _world._flamePool.PrepareCapacityStep(6, remaining);
+            var modelComplete = _world.LifetimePool.PrepareCapacityStep(requirements, remaining);
+            return modelComplete && _world._peaPool.AvailableCount + _world.Peas.Count >= requirements.Projectiles
+                && _world._sunPool.AvailableCount >= 32 && _world._flamePool.AvailableCount >= 6;
+        }
+
         /// <summary>Completes the original end-level coin cleanup when leaving during the award sequence.</summary>
         /// <returns>Whether pending coin and unused-mower account writes succeeded.</returns>
         internal bool FinishAdventureForSaving()
@@ -561,6 +594,7 @@ namespace PlantsVsZombies.Simulation
         public void Update(float deltaTime)
         {
             _legacySimulation.Update(deltaTime);
+            _world.LifetimePool.CompleteFrame(_world);
         }
         // Explicit notifications survive a headless tick or a host attaching before its first
         // Update. The host drains them at the corresponding existing Planted/Explosion event.
@@ -1427,6 +1461,7 @@ namespace PlantsVsZombies.Simulation
         public void UpdateMode(float dt)
         {
             _independentModeRunner.UpdateMode(dt);
+            _world.LifetimePool.CompleteFrame(_world);
         }
 
         /// <summary>Performs continue mode stage.</summary>

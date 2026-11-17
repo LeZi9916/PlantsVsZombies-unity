@@ -155,7 +155,7 @@ namespace PlantsVsZombies.Simulation
 
                 if (plant.Kind == PlantKind.DoomShroom)
                 {
-                    (plant.DoomShroomPresentation ??= new AdventureDoomShroomState()).Countdown = 0;
+                    (plant.DoomShroomPresentation ??= _world.LifetimePool.Rent<AdventureDoomShroomState>()).Countdown = 0;
                     _specialPlantActions.AdvanceAdventureDoomShroom(plant);
                     return;
                 }
@@ -410,17 +410,17 @@ namespace PlantsVsZombies.Simulation
                 // PC 0x547610 retains the eating latch: 0.17 is replaced when StopEating restarts walking.
                 z.PresentationNativeVelocity = .17f;
                 z.Speed = global::PlantsVsZombies.Adventure.AdventureZombieNativeRules.GridSpeed(.17f);
-                _world.Presentation.PlantBiteEffects.Add(new global::PlantsVsZombies.Adventure.AdventurePlantBiteEffect {
-                    Id = ++_world.Presentation._effectId,
-                    ParticleId = 88,
-                    Row = z.Row,
-                    Kind = z.Kind,
-                    NativeX = global::PlantsVsZombies.Adventure.AdventureZombieNativeRules.NativePositionX(z.X, AdventureDancerRules.Scale(z)),
-                    NativeY = AdventureBiteNativeY(z, global::PlantsVsZombies.Adventure.AdventureZombieNativeRules.NativePositionX(z.X, AdventureDancerRules.Scale(z))),
-                    OffsetX = 60,
-                    OffsetY = 40,
-                    Seed = z.Id * 397 ^ _world.Presentation._effectId
-                });
+                var pooledRecord1 = _world.LifetimePool.Rent<AdventurePlantBiteEffect>();
+                pooledRecord1.Id = ++_world.Presentation._effectId;
+                pooledRecord1.ParticleId = 88;
+                pooledRecord1.Row = z.Row;
+                pooledRecord1.Kind = z.Kind;
+                pooledRecord1.NativeX = global::PlantsVsZombies.Adventure.AdventureZombieNativeRules.NativePositionX(z.X, AdventureDancerRules.Scale(z));
+                pooledRecord1.NativeY = AdventureBiteNativeY(z, global::PlantsVsZombies.Adventure.AdventureZombieNativeRules.NativePositionX(z.X, AdventureDancerRules.Scale(z)));
+                pooledRecord1.OffsetX = 60;
+                pooledRecord1.OffsetY = 40;
+                pooledRecord1.Seed = z.Id * 397 ^ _world.Presentation._effectId;
+                _world.Presentation.PlantBiteEffects.Add(pooledRecord1);
                 return;
             }
 

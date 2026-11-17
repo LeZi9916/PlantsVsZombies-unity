@@ -5,7 +5,7 @@ using System;
 namespace PlantsVsZombies.Adventure
 {
     /// <summary>Retains the PC Jalapeno's independent hundred-update fuse, original body playback, and shake.</summary>
-    public sealed class AdventureJalapenoState
+    public sealed class AdventureJalapenoState : PlantsVsZombies.Simulation.ISimulationPooledObject
     {
         /// <summary>The original special countdown, independent of animation completion.</summary>
         public const int FuseTicks = 100;
@@ -41,5 +41,24 @@ namespace PlantsVsZombies.Adventure
             var phase = Math.Min(.999999f, NormalizedTime + Math.Max(0f, remainder) * Rate / ExplodeFrameCount);
             return phase * ExplodeFrameCount / Rate;
         }
+        /// <summary>Restores all mutable fields to construction defaults after live references expire.</summary>
+        void PlantsVsZombies.Simulation.ISimulationPooledObject.ResetForPool()
+        {
+            Countdown = FuseTicks;
+            AnimationTicks = default;
+            Rate = default;
+            NormalizedTime = default;
+            ShakeX = default;
+            ShakeY = default;
+            Detonated = default;
+        }
+
+        /// <summary>Retains linked records while this object is reachable from the board.</summary>
+        /// <param name="pool">The owning runtime lifetime tracker.</param>
+        void PlantsVsZombies.Simulation.ISimulationPooledObject.MarkPoolReferences(PlantsVsZombies.Simulation.SimulationRuntimePool pool)
+        {
+
+        }
+
     }
 }

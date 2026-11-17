@@ -6,7 +6,7 @@ using System;
 namespace PlantsVsZombies.Adventure
 {
     /// <summary>Defines adventure zombie corpse.</summary>
-    public sealed class AdventureZombieCorpse
+    public sealed class AdventureZombieCorpse : PlantsVsZombies.Simulation.ISimulationPooledObject
     {
         /// <summary>Stores zombie.</summary>
         public Zombie? Zombie;
@@ -52,5 +52,33 @@ namespace PlantsVsZombies.Adventure
             // PC 0x548D40 uses min(255,255*fade/10), NOT fade/100 or mobile fade/30.
             return Math.Min(255, 255 * remaining / 10) / 255f;
         }
+        /// <summary>Restores all mutable fields to construction defaults after live references expire.</summary>
+        void PlantsVsZombies.Simulation.ISimulationPooledObject.ResetForPool()
+        {
+            Zombie = default;
+            Animation = default;
+            Burn = default;
+            FrozenSeconds = default;
+            FrozenRate = default;
+            FrozenHeadSeconds = default;
+            FrozenPlantHeadState = default;
+            Age = default;
+            Rate = default;
+            RateScale = 1f;
+            Duration = float.PositiveInfinity;
+            AnimationDuration = default;
+            FadeDuration = default;
+            InPool = default;
+            FallSoundPlayed = default;
+        }
+
+        /// <summary>Retains linked records while this object is reachable from the board.</summary>
+        /// <param name="pool">The owning runtime lifetime tracker.</param>
+        void PlantsVsZombies.Simulation.ISimulationPooledObject.MarkPoolReferences(PlantsVsZombies.Simulation.SimulationRuntimePool pool)
+        {
+            pool.Mark(FrozenPlantHeadState);
+            pool.Mark(Zombie);
+        }
+
     }
 }

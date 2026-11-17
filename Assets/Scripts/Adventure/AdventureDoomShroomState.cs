@@ -5,7 +5,7 @@ using System;
 namespace PlantsVsZombies.Adventure
 {
     /// <summary>Retains the PC Doom-shroom's awake pre-explosion animation (Plant::UpdateDoomShroom, 0x46F1A0).</summary>
-    public sealed class AdventureDoomShroomState
+    public sealed class AdventureDoomShroomState : PlantsVsZombies.Simulation.ISimulationPooledObject
     {
         /// <summary>Defines the original exploding body's animation rate.</summary>
         public const float Rate = 23f;
@@ -27,5 +27,21 @@ namespace PlantsVsZombies.Adventure
         {
             return Math.Min(.999999f * FrameCount / Rate, AnimationTicks * .01f + Math.Max(0f, remainder));
         }
+        /// <summary>Restores all mutable fields to construction defaults after live references expire.</summary>
+        void PlantsVsZombies.Simulation.ISimulationPooledObject.ResetForPool()
+        {
+            Countdown = 100;
+            AnimationTicks = default;
+            System.Array.Clear(HeadShakeX, 0, HeadShakeX.Length);
+            System.Array.Clear(HeadShakeY, 0, HeadShakeY.Length);
+        }
+
+        /// <summary>Retains linked records while this object is reachable from the board.</summary>
+        /// <param name="pool">The owning runtime lifetime tracker.</param>
+        void PlantsVsZombies.Simulation.ISimulationPooledObject.MarkPoolReferences(PlantsVsZombies.Simulation.SimulationRuntimePool pool)
+        {
+
+        }
+
     }
 }

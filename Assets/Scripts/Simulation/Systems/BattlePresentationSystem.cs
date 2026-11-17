@@ -535,17 +535,15 @@ namespace PlantsVsZombies.Simulation
                 ApplyAdventureButter(zombie);
             }
 
-            var effect = new global::PlantsVsZombies.Adventure.AdventureImpact
-            {
-                Id = ++_world.Presentation._effectId,
-                Seed = _world._random.Next(),
-                Kind = shot.SourceKind,
-                X = zombie == null ? shot.X : zombie.X,
-                Row = shot.FlightRow,
-                Snow = shot.IsSnow,
-                Fire = shot.Fire,
-                Butter = shot.Butter
-            };
+            var effect = _world.LifetimePool.Rent<AdventureImpact>();
+            effect.Id = ++_world.Presentation._effectId;
+            effect.Seed = _world._random.Next();
+            effect.Kind = shot.SourceKind;
+            effect.X = zombie == null ? shot.X : zombie.X;
+            effect.Row = shot.FlightRow;
+            effect.Snow = shot.IsSnow;
+            effect.Fire = shot.Fire;
+            effect.Butter = shot.Butter;
             _coldSystem.RecordAdventureIceImpact(shot, zombie, effect);
             if (shot.Lobbed && !shot.IsSnow && (shot.Splash || shot.Butter || shot.SourceKind == PlantKind.CabbagePult))
             {
@@ -646,16 +644,16 @@ namespace PlantsVsZombies.Simulation
                 return true;
             }
 
-            _world.Presentation.Corpses.Add(new global::PlantsVsZombies.Adventure.AdventureZombieCorpse {
-                Zombie = zombie,
-                Burn = pose,
-                Animation = zombie.PresentationAnimation,
-                FrozenSeconds = zombie.PresentationAnimationAge,
-                FrozenHeadSeconds = zombie.PresentationPlantHeadAge,
-                FrozenPlantHeadState = zombie.PlantZombieState?.Snapshot(),
-                RateScale = pose.Visual == global::PlantsVsZombies.Adventure.AdventureBurnVisual.CharredDefinition ? .9f + (float)_world._random.NextDouble() * .2f : 1f,
-                Duration = pose.Visual == global::PlantsVsZombies.Adventure.AdventureBurnVisual.FrozenOriginal ? 3f : float.PositiveInfinity
-            });
+            var pooledRecord2 = _world.LifetimePool.Rent<AdventureZombieCorpse>();
+            pooledRecord2.Zombie = zombie;
+            pooledRecord2.Burn = pose;
+            pooledRecord2.Animation = zombie.PresentationAnimation;
+            pooledRecord2.FrozenSeconds = zombie.PresentationAnimationAge;
+            pooledRecord2.FrozenHeadSeconds = zombie.PresentationPlantHeadAge;
+            pooledRecord2.FrozenPlantHeadState = zombie.PlantZombieState?.Snapshot(_world.LifetimePool);
+            pooledRecord2.RateScale = pose.Visual == global::PlantsVsZombies.Adventure.AdventureBurnVisual.CharredDefinition ? .9f + (float)_world._random.NextDouble() * .2f : 1f;
+            pooledRecord2.Duration = pose.Visual == global::PlantsVsZombies.Adventure.AdventureBurnVisual.FrozenOriginal ? 3f : float.PositiveInfinity;
+            _world.Presentation.Corpses.Add(pooledRecord2);
             return true;
         }
 
@@ -781,14 +779,14 @@ namespace PlantsVsZombies.Simulation
         {
             // PC Projectile::DoImpact 0x47D410 uses the ash plants' twelve-tick shake.
             _world.Presentation.ScreenShake.Start(3, -4);
-            _world.Presentation.Impacts.Add(new global::PlantsVsZombies.Adventure.AdventureImpact {
-                Id = ++_world.Presentation._effectId,
-                Seed = _world._random.Next(),
-                Kind = PlantKind.CobCannon,
-                X = x,
-                Row = row,
-                Cob = true
-            });
+            var pooledRecord3 = _world.LifetimePool.Rent<AdventureImpact>();
+            pooledRecord3.Id = ++_world.Presentation._effectId;
+            pooledRecord3.Seed = _world._random.Next();
+            pooledRecord3.Kind = PlantKind.CobCannon;
+            pooledRecord3.X = x;
+            pooledRecord3.Row = row;
+            pooledRecord3.Cob = true;
+            _world.Presentation.Impacts.Add(pooledRecord3);
         }
     }
 }

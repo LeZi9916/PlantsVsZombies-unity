@@ -37,7 +37,7 @@ namespace PlantsVsZombies.Simulation
         /// <param name="zombie">The digger whose retained pickaxe has been removed.</param>
         internal void LoseAdventureDiggerAxe(Zombie zombie)
         {
-            var state = zombie.DiggerState ??= new AdventureDiggerState();
+            var state = zombie.DiggerState ??= _world.LifetimePool.Rent<AdventureDiggerState>();
             if (_zombieFeedbackSystem.AdventureZombieFeedbackPhase(zombie) == 32)
             {
                 state.PausedDigSeconds = zombie.PresentationAnimationAge;
@@ -54,7 +54,7 @@ namespace PlantsVsZombies.Simulation
         /// <param name="withoutAxe">Whether this follows the original two-hundred-update axe-loss pause.</param>
         internal void BeginAdventureDiggerRise(Zombie zombie, bool withoutAxe)
         {
-            var state = zombie.DiggerState ??= new AdventureDiggerState();
+            var state = zombie.DiggerState ??= _world.LifetimePool.Rent<AdventureDiggerState>();
             zombie.PresentationNativePhase = withoutAxe ? 35 : 33;
             zombie.AbilityPhase = 1;
             zombie.Submerged = false;
@@ -67,14 +67,13 @@ namespace PlantsVsZombies.Simulation
             }
 
             var nativeX = AdventureZombieNativeRules.NativePositionX(zombie.X, AdventureDancerRules.Scale(zombie));
-            _world.Presentation.ZombieRiseEffects.Add(new AdventureZombieRiseEffect
-            {
-                Id = ++_world.Presentation._effectId,
-                Row = zombie.Row,
-                X = nativeX + 60f,
-                Y = _biteSystem.AdventureBiteNativeY(zombie, nativeX) + 118f,
-                Digger = true
-            });
+            var pooledRecord1 = _world.LifetimePool.Rent<AdventureZombieRiseEffect>();
+            pooledRecord1.Id = ++_world.Presentation._effectId;
+            pooledRecord1.Row = zombie.Row;
+            pooledRecord1.X = nativeX + 60f;
+            pooledRecord1.Y = _biteSystem.AdventureBiteNativeY(zombie, nativeX) + 118f;
+            pooledRecord1.Digger = true;
+            _world.Presentation.ZombieRiseEffects.Add(pooledRecord1);
             _zombieFeedbackSystem.SynchronizeAdventureZombieAnimation(zombie);
             _zombieFeedbackSystem.RequestAdventureZombieFoley(80);
             if (!withoutAxe)
@@ -94,7 +93,7 @@ namespace PlantsVsZombies.Simulation
                 return false;
             }
 
-            var state = zombie.DiggerState ??= new AdventureDiggerState();
+            var state = zombie.DiggerState ??= _world.LifetimePool.Rent<AdventureDiggerState>();
             var phase = _zombieFeedbackSystem.AdventureZombieFeedbackPhase(zombie);
             zombie.PresentationNativePhase = phase;
             if (phase == 32)

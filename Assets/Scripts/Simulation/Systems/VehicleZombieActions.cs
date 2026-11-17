@@ -53,7 +53,7 @@ namespace PlantsVsZombies.Simulation
         /// <param name="zombie">The original vehicle receiving spike damage bit five.</param>
         internal void BeginAdventureCatapultFlatDeath(Zombie zombie)
         {
-            var state = zombie.CatapultState ??= new AdventureCatapultState();
+            var state = zombie.CatapultState ??= _world.LifetimePool.Rent<AdventureCatapultState>();
             state.FlatTires = true;
             state.DeathTicks = 280;
             state.SmokeStartAge = state.SmokeStartAge < 0f ? zombie.Age : state.SmokeStartAge;
@@ -68,7 +68,7 @@ namespace PlantsVsZombies.Simulation
         /// <param name="zombie">The catapult whose normal or punctured death has completed.</param>
         internal void ExplodeAdventureCatapult(Zombie zombie)
         {
-            var state = zombie.CatapultState ??= new AdventureCatapultState();
+            var state = zombie.CatapultState ??= _world.LifetimePool.Rent<AdventureCatapultState>();
             if (!state.Exploded)
             {
                 state.Exploded = true;
@@ -116,7 +116,7 @@ namespace PlantsVsZombies.Simulation
         /// <returns>Whether launching or reloading prevents ordinary horizontal movement.</returns>
         internal bool AdvanceAdventureCatapult(Zombie zombie)
         {
-            var state = zombie.CatapultState ??= new AdventureCatapultState();
+            var state = zombie.CatapultState ??= _world.LifetimePool.Rent<AdventureCatapultState>();
             if (state.PhaseTicks > 0)
             {
                 state.PhaseTicks--;
@@ -308,7 +308,7 @@ namespace PlantsVsZombies.Simulation
         /// <param name="zombie">The vehicle hit by the original spike damage flag.</param>
         internal void BeginAdventureZomboniFlatDeath(Zombie zombie)
         {
-            var state = zombie.ZomboniState ??= new AdventureZomboniState();
+            var state = zombie.ZomboniState ??= _world.LifetimePool.Rent<AdventureZomboniState>();
             state.FlatTires = true;
             state.DeathTicks = 280;
             state.Wheelie2 = _world._random.Next(4) == 0
@@ -344,7 +344,7 @@ namespace PlantsVsZombies.Simulation
         /// <param name="zombie">The ice vehicle whose body is being removed.</param>
         internal void ExplodeAdventureZomboni(Zombie zombie)
         {
-            var state = zombie.ZomboniState ??= new AdventureZomboniState();
+            var state = zombie.ZomboniState ??= _world.LifetimePool.Rent<AdventureZomboniState>();
             if (state.Exploded)
             {
                 return;

@@ -5,8 +5,11 @@ using PlantsVsZombies.Adventure;
 namespace PlantsVsZombies.Simulation
 {
     /// <summary>Defines plant.</summary>
-    public sealed class Plant
+    public sealed class Plant : ISimulationPooledObject
     {
+        /// <summary>Connects lazily rented capabilities without adding any checkpoint state.</summary>
+        [NonSerialized]
+        internal SimulationRuntimePool? RuntimePool;
         /// <summary>Retains behavior-owned state for the current kind.</summary>
         private IPlantBehavior? _behavior;
         /// <summary>Identifies the behavior's native plant kind.</summary>
@@ -18,7 +21,7 @@ namespace PlantsVsZombies.Simulation
             {
                 if (_behavior == null || _behaviorKind != Kind)
                 {
-                    _behavior = PlantBehaviorFactory.Create(Kind);
+                    _behavior = PlantBehaviorFactory.Create(Kind, RuntimePool);
                     _behaviorKind = Kind;
                 }
                 return _behavior;
@@ -497,5 +500,82 @@ namespace PlantsVsZombies.Simulation
         public bool ModeFacesLeft { get; internal set; }
         /// <summary>Stores mode fire timer.</summary>
         internal float _modeFireTimer;
+        /// <summary>Restores all mutable fields to construction defaults after live references expire.</summary>
+        void ISimulationPooledObject.ResetForPool()
+        {
+            RuntimePool = null;
+            for (var head = 0; head < PresentationHeadAge.Length; head++)
+            {
+                PresentationHeadAge[head] = -1f;
+            }
+            _behavior = default;
+            _behaviorKind = (PlantKind)(-1);
+            AnimationFrameLength = default;
+            BlinkCountdown = default;
+            BlinkAnimation = default;
+            BlinkAnimationTicks = default;
+            BlinkBaseAnimation = default;
+            BlinkHead = default;
+            PositionOffsetX = default;
+            PositionOffsetY = default;
+            IndexChanged = default;
+            PresentationCoffeeWakeAge = -1f;
+            SleepingPresentation = default;
+            _kernelWeaponPrepared = default;
+            PresentationEatenFlashTicks = default;
+            PresentationBodyFrames = default;
+            PresentationBodyRate = default;
+            _presentationDefensiveDamageStage = default;
+            _presentationDefensiveChewing = default;
+            PresentationFlowerPotPaused = default;
+            PresentationRate = default;
+            PresentationAwakeAge = default;
+            PresentationLobberIdleAge = -1f;
+            PresentationShotAge = -1f;
+            PresentationButter = default;
+            _presentationPrefiring = default;
+            _presentationKind = (PlantKind)(-1);
+            ProducerGlow = default;
+            PresentationUmbrellaAge = -1f;
+            BungeeState = default;
+            _layer = default;
+            Asleep = default;
+            AwakeByCoffee = default;
+            IsSmall = default;
+            HasLadder = default;
+            ActionCount = default;
+            SpecialTimer = default;
+            WakeTimer = default;
+            _id = default;
+            ImitaterTarget = default;
+            IsImitated = default;
+            ImitaterTransformRemaining = default;
+            RecentlyEatenTicks = default;
+            VehicleHitsTaken = default;
+            PresentationBiteNativeState = -1;
+            PresentationBiteNotOnGround = default;
+            _columnSpan = 1;
+            Kind = default;
+            _row = default;
+            _column = default;
+            Health = default;
+            ActionTimer = default;
+            Age = default;
+            ShootAge = -1f;
+            PhaseAge = default;
+            GraveBusterEatingStarted = default;
+            Timing = default;
+            ModeFacesLeft = default;
+            _modeFireTimer = default;
+        }
+
+        /// <summary>Retains linked records while this object is reachable from the board.</summary>
+        /// <param name="pool">The owning runtime lifetime tracker.</param>
+        void ISimulationPooledObject.MarkPoolReferences(SimulationRuntimePool pool)
+        {
+            pool.Mark(_behavior);
+            pool.Mark(SleepingPresentation);
+        }
+
     }
 }

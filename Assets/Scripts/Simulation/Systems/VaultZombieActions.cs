@@ -90,13 +90,14 @@ namespace PlantsVsZombies.Simulation
                 if (barrier != null && barrier.Kind == PlantKind.TallNut)
                 {
                     _zombieFeedbackSystem.RequestAdventureZombieFoley(48);
-                    _world.Presentation.PlantBiteEffects.Add(new AdventurePlantBiteEffect
-                    {
-                        Id = ++_world.Presentation._effectId, Row = z.Row, ParticleId = 29,
-                        NativeX = 40 + barrier.Column * 80 + 60,
-                        NativeY = 80 + barrier.Row * (_adventureModeRunner.Adventure.Level.HasPool || _adventureModeRunner.Adventure.Level.HasRoof ? 85 : 100) - 20,
-                        Seed = z.Id
-                    });
+                    var pooledRecord1 = _world.LifetimePool.Rent<AdventurePlantBiteEffect>();
+                    pooledRecord1.Id = ++_world.Presentation._effectId;
+                    pooledRecord1.Row = z.Row;
+                    pooledRecord1.ParticleId = 29;
+                    pooledRecord1.NativeX = 40 + barrier.Column * 80 + 60;
+                    pooledRecord1.NativeY = 80 + barrier.Row * (_adventureModeRunner.Adventure.Level.HasPool || _adventureModeRunner.Adventure.Level.HasRoof ? 85 : 100) - 20;
+                    pooledRecord1.Seed = z.Id;
+                    _world.Presentation.PlantBiteEffects.Add(pooledRecord1);
                     z.X = AdventureZombieNativeRules.GridX(40 + barrier.Column * 80, AdventureDancerRules.Scale(z));
                     // PC 0x541A98 changes mPosY, not mAltitude; the next position update restores the row floor.
                     z.PresentationVaultPositionY = -30f;

@@ -154,18 +154,16 @@ namespace PlantsVsZombies.Simulation
             if (kind == PlantKind.Imitater)
             {
                 var target = _seedBankSystem.ResolveAdventureSeed(kind);
-                var mimic = new Plant
-                {
-                    Id = ++_adventureModeRunner.Adventure._plantId,
-                    Kind = kind,
-                    Row = row,
-                    Column = column,
-                    Health = 300f,
-                    Layer = target == PlantKind.CoffeeBean ? PlantLayer.Effect : PlantingSystem.LayerFor(target),
-                    ImitaterTarget = target,
-                    ImitaterTransformRemaining = 3.2f,
-                    ActionTimer = float.MaxValue
-                };
+                var mimic = _world.LifetimePool.Rent<Plant>();
+                mimic.Id = ++_adventureModeRunner.Adventure._plantId;
+                mimic.Kind = kind;
+                mimic.Row = row;
+                mimic.Column = column;
+                mimic.Health = 300f;
+                mimic.Layer = target == PlantKind.CoffeeBean ? PlantLayer.Effect : PlantingSystem.LayerFor(target);
+                mimic.ImitaterTarget = target;
+                mimic.ImitaterTransformRemaining = 3.2f;
+                mimic.ActionTimer = float.MaxValue;
                 AdventurePlantBlinkRules.Initialize(mimic, _world._random);
                 AdventurePlantBlinkRules.CompleteInitialization(mimic, _world._random);
                 _world.Plants.Add(mimic);
@@ -190,22 +188,20 @@ namespace PlantsVsZombies.Simulation
                 }
             }
 
-            var result = new Plant
-            {
-                Id = ++_adventureModeRunner.Adventure._plantId,
-                Kind = kind,
-                Row = row,
-                Column = column,
-                Layer = PlantLayer.Main,
-                Health = kind == PlantKind.Spikerock ? 450f : 300f,
-                ColumnSpan = kind == PlantKind.CobCannon ? 2 : 1,
-                Asleep = kind == PlantKind.GloomShroom && asleep,
-                AwakeByCoffee = kind == PlantKind.GloomShroom && coffee,
-                WakeTimer = kind == PlantKind.GloomShroom ? wake : 0,
-                ActionTimer = kind == PlantKind.TwinSunflower ? Math.Max(0.01f, source == null ? 5f : source.ActionTimer) : 0.5f,
-                CannonPhase = CobCannonPhase.Arming,
-                CannonReloadRemaining = kind == PlantKind.CobCannon ? 5f : 0
-            };
+            var result = _world.LifetimePool.Rent<Plant>();
+            result.Id = ++_adventureModeRunner.Adventure._plantId;
+            result.Kind = kind;
+            result.Row = row;
+            result.Column = column;
+            result.Layer = PlantLayer.Main;
+            result.Health = kind == PlantKind.Spikerock ? 450f : 300f;
+            result.ColumnSpan = kind == PlantKind.CobCannon ? 2 : 1;
+            result.Asleep = kind == PlantKind.GloomShroom && asleep;
+            result.AwakeByCoffee = kind == PlantKind.GloomShroom && coffee;
+            result.WakeTimer = kind == PlantKind.GloomShroom ? wake : 0;
+            result.ActionTimer = kind == PlantKind.TwinSunflower ? Math.Max(0.01f, source == null ? 5f : source.ActionTimer) : 0.5f;
+            result.CannonPhase = CobCannonPhase.Arming;
+            result.CannonReloadRemaining = kind == PlantKind.CobCannon ? 5f : 0;
             AdventurePlantBlinkRules.Initialize(result, _world._random);
             _plantingSystem.InitializeAdventureSleepingPlant(result);
             _plantTimingSystem.InitializeAdventureNativePlantTiming(result);

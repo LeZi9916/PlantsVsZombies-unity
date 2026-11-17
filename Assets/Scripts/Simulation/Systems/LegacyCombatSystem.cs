@@ -35,14 +35,14 @@ namespace PlantsVsZombies.Simulation
             var kind = number == _world.Rules.ZombieCount ? ZombieKind.Flag : number >= 10 && number % 5 == 0 ? ZombieKind.ScreenDoor : number >= 8 && number % 4 == 0 ? ZombieKind.Buckethead : number >= 4 && number % 3 == 0 ? ZombieKind.Conehead : ZombieKind.Normal;
             var armor = kind == ZombieKind.Buckethead ? 1100f : kind == ZombieKind.Conehead ? 370f : 0f;
             var shield = kind == ZombieKind.ScreenDoor ? 1100f : 0f;
-            _world.Zombies.Add(new Zombie {
-                Kind = kind,
-                Row = _world._random.Next(SimulationWorld.Rows),
-                X = 9.5f,
-                Health = 270f,
-                ArmorHealth = armor,
-                ShieldHealth = shield
-            });
+            var pooledRecord1 = _world.LifetimePool.Rent<Zombie>();
+            pooledRecord1.Kind = kind;
+            pooledRecord1.Row = _world._random.Next(SimulationWorld.Rows);
+            pooledRecord1.X = 9.5f;
+            pooledRecord1.Health = 270f;
+            pooledRecord1.ArmorHealth = armor;
+            pooledRecord1.ShieldHealth = shield;
+            _world.Zombies.Add(pooledRecord1);
         }
 
         /// <summary>Performs update peas.</summary>

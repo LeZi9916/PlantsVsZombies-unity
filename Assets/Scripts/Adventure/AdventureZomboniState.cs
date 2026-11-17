@@ -3,7 +3,7 @@
 namespace PlantsVsZombies.Adventure
 {
     /// <summary>Retains the PC ice vehicle's damage smoke and original punctured-tire death.</summary>
-    public sealed class AdventureZomboniState
+    public sealed class AdventureZomboniState : PlantsVsZombies.Simulation.ISimulationPooledObject
     {
         /// <summary>Stores the zombie age at which the original damaged-engine smoke was attached.</summary>
         public float SmokeStartAge = -1f;
@@ -19,5 +19,22 @@ namespace PlantsVsZombies.Adventure
         public string Animation => Wheelie2 ? "anim_wheelie2" : "anim_wheelie1";
         /// <summary>Gets the original puncture animation's frame rate.</summary>
         public float Rate => Wheelie2 ? 10f : 12f;
+        /// <summary>Restores all mutable fields to construction defaults after live references expire.</summary>
+        void PlantsVsZombies.Simulation.ISimulationPooledObject.ResetForPool()
+        {
+            SmokeStartAge = -1f;
+            FlatTires = default;
+            Wheelie2 = default;
+            DeathTicks = default;
+            Exploded = default;
+        }
+
+        /// <summary>Retains linked records while this object is reachable from the board.</summary>
+        /// <param name="pool">The owning runtime lifetime tracker.</param>
+        void PlantsVsZombies.Simulation.ISimulationPooledObject.MarkPoolReferences(PlantsVsZombies.Simulation.SimulationRuntimePool pool)
+        {
+
+        }
+
     }
 }

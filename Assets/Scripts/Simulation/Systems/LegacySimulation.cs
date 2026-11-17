@@ -164,14 +164,12 @@ namespace PlantsVsZombies.Simulation
 
             _world.SunAmount -= Cost(kind);
             _world._seedCooldownTicks[index] = DefinitionFor(kind).RechargeThresholdRaw + 1;
-            var plant = new Plant
-            {
-                Kind = kind,
-                Row = row,
-                Column = column,
-                Health = kind == PlantKind.Wallnut ? 4000f : kind == PlantKind.TallNut ? 8000f : 300f,
-                ActionTimer = kind == PlantKind.CherryBomb ? 1f : kind == PlantKind.PotatoMine ? 15f : kind == PlantKind.Jalapeno ? 1f : 0.5f
-            };
+            var plant = _world.LifetimePool.Rent<Plant>();
+            plant.Kind = kind;
+            plant.Row = row;
+            plant.Column = column;
+            plant.Health = kind == PlantKind.Wallnut ? 4000f : kind == PlantKind.TallNut ? 8000f : 300f;
+            plant.ActionTimer = kind == PlantKind.CherryBomb ? 1f : kind == PlantKind.PotatoMine ? 15f : kind == PlantKind.Jalapeno ? 1f : 0.5f;
             if (LegacyPlantActions.HasOriginalTiming(kind))
             {
                 var timingKind = (global::PlantsVsZombies.Timing.PlantKind)(int)kind;

@@ -60,6 +60,8 @@ namespace PlantsVsZombies.Simulation
         internal readonly SimulationObjectPool<global::PlantsVsZombies.Simulation.Sun> _sunPool = new SimulationObjectPool<global::PlantsVsZombies.Simulation.Sun>(16, 128);
         /// <summary>Retains short-lived lane flames for this match.</summary>
         internal readonly SimulationObjectPool<LaneFlame> _flamePool = new SimulationObjectPool<LaneFlame>(5, 16);
+        /// <summary>Owns nonserialized actor, capability and presentation-event lifetimes.</summary>
+        internal readonly SimulationRuntimePool LifetimePool = new SimulationRuntimePool();
         /// <summary>Stores rules.</summary>
         internal GameRules Rules = null!;
         /// <summary>Gets or sets state.</summary>

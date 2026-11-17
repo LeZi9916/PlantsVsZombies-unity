@@ -5,7 +5,7 @@ using System;
 namespace PlantsVsZombies.Adventure
 {
     /// <summary>Retains the original Scaredy-shroom lowering, frightened idle, and raising animations.</summary>
-    public sealed class AdventureScaredyShroomState
+    public sealed class AdventureScaredyShroomState : PlantsVsZombies.Simulation.ISimulationPooledObject
     {
         /// <summary>Gets the original plant state: ready 1, lowering 20, scared 21, and raising 22.</summary>
         public int NativePhase { get; private set; } = 1;
@@ -99,5 +99,21 @@ namespace PlantsVsZombies.Adventure
             Rate = rate;
             AnimationTicks = 0;
         }
+        /// <summary>Restores all mutable fields to construction defaults after live references expire.</summary>
+        void PlantsVsZombies.Simulation.ISimulationPooledObject.ResetForPool()
+        {
+            NativePhase = 1;
+            AnimationTicks = default;
+            Animation = "anim_idle";
+            Rate = default;
+        }
+
+        /// <summary>Retains linked records while this object is reachable from the board.</summary>
+        /// <param name="pool">The owning runtime lifetime tracker.</param>
+        void PlantsVsZombies.Simulation.ISimulationPooledObject.MarkPoolReferences(PlantsVsZombies.Simulation.SimulationRuntimePool pool)
+        {
+
+        }
+
     }
 }

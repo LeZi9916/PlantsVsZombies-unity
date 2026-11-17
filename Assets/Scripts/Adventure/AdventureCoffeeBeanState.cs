@@ -5,7 +5,7 @@ using System;
 namespace PlantsVsZombies.Adventure
 {
     /// <summary>Retains the original coffee bean's independent special countdown and authored crumble playback.</summary>
-    public sealed class AdventureCoffeeBeanState
+    public sealed class AdventureCoffeeBeanState : PlantsVsZombies.Simulation.ISimulationPooledObject
     {
         /// <summary>Stores original idle updates remaining before coffee starts the mushroom's separate wake counter.</summary>
         public int Countdown = 100;
@@ -33,5 +33,20 @@ namespace PlantsVsZombies.Adventure
             var wave = (float)Math.Sin(eased * (float)(Math.PI * 2d));
             return (float)(1d - .2d * wave);
         }
+        /// <summary>Restores all mutable fields to construction defaults after live references expire.</summary>
+        void PlantsVsZombies.Simulation.ISimulationPooledObject.ResetForPool()
+        {
+            Countdown = 100;
+            Crumbling = default;
+            AnimationTicks = default;
+        }
+
+        /// <summary>Retains linked records while this object is reachable from the board.</summary>
+        /// <param name="pool">The owning runtime lifetime tracker.</param>
+        void PlantsVsZombies.Simulation.ISimulationPooledObject.MarkPoolReferences(PlantsVsZombies.Simulation.SimulationRuntimePool pool)
+        {
+
+        }
+
     }
 }

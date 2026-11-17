@@ -7,46 +7,47 @@ namespace PlantsVsZombies.Simulation
     {
         /// <summary>Creates an actor's capability owner.</summary>
         /// <param name="kind">The native kind.</param>
+        /// <param name="pool">The optional match-local capability owner.</param>
         /// <returns>The matching special or ordinary walking behavior.</returns>
-        internal static IZombieBehavior Create(ZombieKind kind)
+        internal static IZombieBehavior Create(ZombieKind kind, SimulationRuntimePool? pool = null)
         {
             switch (kind)
             {
                 case ZombieKind.Balloon:
-                    return new BalloonZombieBehavior();
+                    return pool?.Rent<BalloonZombieBehavior>() ?? new BalloonZombieBehavior();
                 case ZombieKind.JackInTheBox:
-                    return new JackInTheBoxZombieBehavior();
+                    return pool?.Rent<JackInTheBoxZombieBehavior>() ?? new JackInTheBoxZombieBehavior();
                 case ZombieKind.PoleVaulter:
-                    return new PoleVaulterZombieBehavior();
+                    return pool?.Rent<PoleVaulterZombieBehavior>() ?? new PoleVaulterZombieBehavior();
                 case ZombieKind.Snorkel:
-                    return new SnorkelZombieBehavior();
+                    return pool?.Rent<SnorkelZombieBehavior>() ?? new SnorkelZombieBehavior();
                 case ZombieKind.DolphinRider:
-                    return new DolphinZombieBehavior();
+                    return pool?.Rent<DolphinZombieBehavior>() ?? new DolphinZombieBehavior();
                 case ZombieKind.Bobsled:
-                    return new BobsledZombieBehavior();
+                    return pool?.Rent<BobsledZombieBehavior>() ?? new BobsledZombieBehavior();
                 case ZombieKind.Ladder:
-                    return new LadderZombieBehavior();
+                    return pool?.Rent<LadderZombieBehavior>() ?? new LadderZombieBehavior();
                 case ZombieKind.Bungee:
-                    return new BungeeZombieBehavior();
+                    return pool?.Rent<BungeeZombieBehavior>() ?? new BungeeZombieBehavior();
                 case ZombieKind.BackupDancer:
                 case ZombieKind.Dancing:
-                    return new DancerZombieBehavior();
+                    return pool?.Rent<DancerZombieBehavior>() ?? new DancerZombieBehavior();
                 case ZombieKind.Gargantuar:
-                    return new GargantuarZombieBehavior();
+                    return pool?.Rent<GargantuarZombieBehavior>() ?? new GargantuarZombieBehavior();
                 case ZombieKind.Imp:
-                    return new ThrownImpZombieBehavior();
+                    return pool?.Rent<ThrownImpZombieBehavior>() ?? new ThrownImpZombieBehavior();
                 case ZombieKind.Digger:
-                    return new DiggerZombieBehavior();
+                    return pool?.Rent<DiggerZombieBehavior>() ?? new DiggerZombieBehavior();
                 case ZombieKind.Catapult:
-                    return new CatapultZombieBehavior();
+                    return pool?.Rent<CatapultZombieBehavior>() ?? new CatapultZombieBehavior();
                 case ZombieKind.Zomboni:
-                    return new ZomboniZombieBehavior();
+                    return pool?.Rent<ZomboniZombieBehavior>() ?? new ZomboniZombieBehavior();
                 case ZombieKind.Pogo:
-                    return new PogoZombieBehavior();
+                    return pool?.Rent<PogoZombieBehavior>() ?? new PogoZombieBehavior();
                 case ZombieKind.Newspaper:
-                    return new NewspaperZombieBehavior();
+                    return pool?.Rent<NewspaperZombieBehavior>() ?? new NewspaperZombieBehavior();
                 default:
-                    return new WalkingZombieBehavior();
+                    return pool?.Rent<WalkingZombieBehavior>() ?? new WalkingZombieBehavior();
             }
         }
     }

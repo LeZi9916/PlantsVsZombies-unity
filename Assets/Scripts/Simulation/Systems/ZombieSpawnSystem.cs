@@ -228,23 +228,21 @@ namespace PlantsVsZombies.Simulation
             var health = kind == ZombieKind.Yeti ? 1350f : kind == ZombieKind.Bungee ? 450f : kind == ZombieKind.Ladder ? 500f : kind == ZombieKind.Gargantuar ? 3000f : kind == ZombieKind.Zomboni ? 1350f : kind == ZombieKind.Catapult ? 850f : kind == ZombieKind.PoleVaulter || kind == ZombieKind.DolphinRider || kind == ZombieKind.JackInTheBox || kind == ZombieKind.Pogo || kind == ZombieKind.Dancing ? 500f : 270f;
             var armor = global::PlantsVsZombies.Adventure.AdventureZombieEquipmentRules.StartingArmor(kind);
             var shield = global::PlantsVsZombies.Adventure.AdventureZombieEquipmentRules.StartingShield(kind);
-            var z = new Zombie
-            {
-                Id = ++_adventureModeRunner.Adventure._zombieId,
-                Kind = kind,
-                Row = row,
-                X = x,
-                Wave = wave,
-                Health = health,
-                StartingHealth = health,
-                ArmorHealth = armor,
-                ShieldHealth = shield,
-                Airborne = kind == ZombieKind.Balloon,
-                FlyingHealth = kind == ZombieKind.Balloon ? 20 : 0,
-                PresentationNativeHeight = 0,
-                Submerged = kind == ZombieKind.Digger,
-                AbilityTimer = kind == ZombieKind.Dancing ? 4f : kind == ZombieKind.Bungee ? 4f : 5f
-            };
+            var z = _world.LifetimePool.Rent<Zombie>();
+            z.Id = ++_adventureModeRunner.Adventure._zombieId;
+            z.Kind = kind;
+            z.Row = row;
+            z.X = x;
+            z.Wave = wave;
+            z.Health = health;
+            z.StartingHealth = health;
+            z.ArmorHealth = armor;
+            z.ShieldHealth = shield;
+            z.Airborne = kind == ZombieKind.Balloon;
+            z.FlyingHealth = kind == ZombieKind.Balloon ? 20 : 0;
+            z.PresentationNativeHeight = 0;
+            z.Submerged = kind == ZombieKind.Digger;
+            z.AbilityTimer = kind == ZombieKind.Dancing ? 4f : kind == ZombieKind.Bungee ? 4f : 5f;
             if (_adventureModeRunner.Adventure.Level.Mode == AdventureMode.LittleTrouble)
             {
                 z.IsSmall = true;
@@ -269,7 +267,7 @@ namespace PlantsVsZombies.Simulation
             _zombieFeedbackSystem.InitializeAdventureZombieNative(z, x >= 9.5f && kind != ZombieKind.Bungee);
             if (kind == ZombieKind.Bungee)
             {
-                z.BungeeState = new AdventureBungeeState();
+                z.BungeeState = _world.LifetimePool.Rent<AdventureBungeeState>();
                 z.PresentationAltitude = 3000f + _world._random.Next(151);
                 z.PresentationNativeVelocity = 0f;
                 z.Speed = 0f;
@@ -295,7 +293,9 @@ namespace PlantsVsZombies.Simulation
                 || kind == ZombieKind.DuckyTube)
             {
                 // PC LoadPlainZombieReanim 0x53FE40 enables tube artwork by the row, retaining the original kind and armor.
-                z.PoolState = new AdventureZombiePoolState { HasDuckyTube = AdventureZombiePoolRules.UsesPlainBody(kind) };
+                var pooledRecord2 = _world.LifetimePool.Rent<AdventureZombiePoolState>();
+                pooledRecord2.HasDuckyTube = AdventureZombiePoolRules.UsesPlainBody(kind);
+                z.PoolState = pooledRecord2;
                 z.PresentationAltitude = kind == ZombieKind.Balloon ? 25f : 0f;
                 z.PoolState.Altitude = z.PresentationAltitude;
                 z.PresentationInPool = false;
@@ -308,7 +308,8 @@ namespace PlantsVsZombies.Simulation
                 z.Kind = ZombieKind.Normal;
                 z.PresentationWalk2 = true;
                 var fuse = nativeKind == 28 ? 2 * (int)((275 + _world._random.Next(175)) / (double)z.PresentationNativeVelocity) : 0;
-                z.PlantZombieState = new AdventurePlantZombieState(nativeKind, fuse);
+                z.PlantZombieState = _world.LifetimePool.Rent<AdventurePlantZombieState>();
+                z.PlantZombieState.InitializePooled(nativeKind, fuse);
                 if (nativeKind == 28)
                 {
                     z.Health = z.StartingHealth = 500;
@@ -339,7 +340,7 @@ namespace PlantsVsZombies.Simulation
 
             if (kind == ZombieKind.Zomboni)
             {
-                z.ZomboniState = new AdventureZomboniState();
+                z.ZomboniState = _world.LifetimePool.Rent<AdventureZomboniState>();
                 _zombieFeedbackSystem.RequestAdventureZombieFoley(16);
             }
 

@@ -19,6 +19,7 @@ namespace PlantsVsZombies.Tests.Checkpoints
         {
             try
             {
+                SimulationPoolRegression.Run();
                 foreach (var level in new[] { 1, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50 })
                 {
                     RoundTrip(new GameSimulation(new GameRules { AdventureLevel = level }, 1000 + level), "adventure " + level);

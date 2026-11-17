@@ -513,12 +513,12 @@ namespace PlantsVsZombies.Simulation
             var count = LevelOneData.GetZombieCount(wave);
             for (var index = 0; index < count; index++)
             {
-                _world.Zombies.Add(new Zombie {
-                    Kind = (ZombieKind)LevelOneData.GetZombieId(wave, index),
-                    Row = LevelOneData.ZombieSpawnRow,
-                    X = _world._levelOneZombieSpawnX + index * _world._levelOneZombieSpacing,
-                    Health = _world._levelOneZombieHealth
-                });
+                var pooledRecord1 = _world.LifetimePool.Rent<Zombie>();
+                pooledRecord1.Kind = (ZombieKind)LevelOneData.GetZombieId(wave, index);
+                pooledRecord1.Row = LevelOneData.ZombieSpawnRow;
+                pooledRecord1.X = _world._levelOneZombieSpawnX + index * _world._levelOneZombieSpacing;
+                pooledRecord1.Health = _world._levelOneZombieHealth;
+                _world.Zombies.Add(pooledRecord1);
                 _world.SpawnedZombies++;
             }
 

@@ -49,7 +49,7 @@ namespace PlantsVsZombies.Simulation
                 _zombieFeedbackSystem.AddAdventureZombiePart(zombie, (int)ZombieKind.Pogo, 16, "Zombie_pogo_stick", null);
             }
 
-            var state = zombie.PogoState ??= new AdventurePogoState();
+            var state = zombie.PogoState ??= _world.LifetimePool.Rent<AdventurePogoState>();
             state.AnimationBlendTicks = 0;
             zombie.PresentationNativeHeight = 7;
             zombie.PresentationNativePhase = 0;
@@ -110,7 +110,13 @@ namespace PlantsVsZombies.Simulation
                 return;
             }
 
-            var state = zombie.PogoState ??= new AdventurePogoState { PhaseTicks = AdventurePogoRules.BounceTicks };
+            var state = zombie.PogoState;
+            if (state == null)
+            {
+                state = _world.LifetimePool.Rent<AdventurePogoState>();
+                state.PhaseTicks = AdventurePogoRules.BounceTicks;
+                zombie.PogoState = state;
+            }
             var phase = zombie.PresentationNativePhase < 0 ? 20 : zombie.PresentationNativePhase;
             zombie.PresentationNativePhase = phase;
             state.PhaseTicks = Math.Max(0, state.PhaseTicks - 1);
@@ -154,15 +160,14 @@ namespace PlantsVsZombies.Simulation
                 if (barrier?.Kind == PlantKind.TallNut)
                 {
                     _zombieFeedbackSystem.RequestAdventureZombieFoley(48);
-                    _world.Presentation.PlantBiteEffects.Add(new AdventurePlantBiteEffect
-                    {
-                        Id = ++_world.Presentation._effectId,
-                        ParticleId = 29,
-                        Row = barrier.Row,
-                        NativeX = 40f + barrier.Column * 80f + 60f,
-                        NativeY = _biteSystem.AdventurePlantEatingRectangle(barrier).Y - 20f,
-                        Seed = zombie.Id * 397 ^ _world.Presentation._effectId
-                    });
+                    var pooledRecord2 = _world.LifetimePool.Rent<AdventurePlantBiteEffect>();
+                    pooledRecord2.Id = ++_world.Presentation._effectId;
+                    pooledRecord2.ParticleId = 29;
+                    pooledRecord2.Row = barrier.Row;
+                    pooledRecord2.NativeX = 40f + barrier.Column * 80f + 60f;
+                    pooledRecord2.NativeY = _biteSystem.AdventurePlantEatingRectangle(barrier).Y - 20f;
+                    pooledRecord2.Seed = zombie.Id * 397 ^ _world.Presentation._effectId;
+                    _world.Presentation.PlantBiteEffects.Add(pooledRecord2);
                     BreakAdventurePogo(zombie);
                     return;
                 }

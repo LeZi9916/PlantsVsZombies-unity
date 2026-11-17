@@ -1,4 +1,5 @@
 #nullable enable
+using PlantsVsZombies.Adventure;
 
 using System;
 
@@ -60,26 +61,26 @@ namespace PlantsVsZombies.Simulation
                 _world.Presentation.ScreenShake.Start(3, -4);
             }
 
-            _world.Presentation.Explosions.Add(new global::PlantsVsZombies.Adventure.AdventureExplosion {
-                Id = ++_world.Presentation._effectId,
-                Seed = _world._random.Next(),
-                Row = row,
-                X = x,
-                Effect = effect
-            });
+            var pooledRecord1 = _world.LifetimePool.Rent<AdventureExplosion>();
+            pooledRecord1.Id = ++_world.Presentation._effectId;
+            pooledRecord1.Seed = _world._random.Next();
+            pooledRecord1.Row = row;
+            pooledRecord1.X = x;
+            pooledRecord1.Effect = effect;
+            _world.Presentation.Explosions.Add(pooledRecord1);
         }
 
         /// <summary>Performs adventure presentation potato mine rise.</summary>
         /// <param name = "plant">The plant.</param>
         internal void AdventurePresentationPotatoMineRise(Plant plant)
         {
-            _world.Presentation.Explosions.Add(new global::PlantsVsZombies.Adventure.AdventureExplosion {
-                Id = ++_world.Presentation._effectId,
-                Seed = _world._random.Next(),
-                Row = plant.Row,
-                X = plant.Column + .5f,
-                Effect = global::PlantsVsZombies.Adventure.AdventureExplosionEffect.PotatoMineRise
-            });
+            var pooledRecord2 = _world.LifetimePool.Rent<AdventureExplosion>();
+            pooledRecord2.Id = ++_world.Presentation._effectId;
+            pooledRecord2.Seed = _world._random.Next();
+            pooledRecord2.Row = plant.Row;
+            pooledRecord2.X = plant.Column + .5f;
+            pooledRecord2.Effect = global::PlantsVsZombies.Adventure.AdventureExplosionEffect.PotatoMineRise;
+            _world.Presentation.Explosions.Add(pooledRecord2);
         }
 
         /// <summary>Creates one of the original Grave Buster particle systems above the plant's cell.</summary>
@@ -87,13 +88,13 @@ namespace PlantsVsZombies.Simulation
         /// <param name="effect">Either the eating (GraveBuster) or the finishing (GraveBusterDie) effect.</param>
         internal void AdventurePresentationGraveBuster(Plant plant, global::PlantsVsZombies.Adventure.AdventureExplosionEffect effect)
         {
-            _world.Presentation.Explosions.Add(new global::PlantsVsZombies.Adventure.AdventureExplosion {
-                Id = ++_world.Presentation._effectId,
-                Seed = _world._random.Next(),
-                Row = plant.Row,
-                X = plant.Column + .5f,
-                Effect = effect
-            });
+            var pooledRecord3 = _world.LifetimePool.Rent<AdventureExplosion>();
+            pooledRecord3.Id = ++_world.Presentation._effectId;
+            pooledRecord3.Seed = _world._random.Next();
+            pooledRecord3.Row = plant.Row;
+            pooledRecord3.X = plant.Column + .5f;
+            pooledRecord3.Effect = effect;
+            _world.Presentation.Explosions.Add(pooledRecord3);
         }
 
         /// <summary>Starts the attached rock particles when the Grave Buster finishes landing (Plant::UpdateGraveBuster).</summary>

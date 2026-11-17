@@ -46,6 +46,91 @@ namespace PlantsVsZombies.Tests.EditMode
             AssertFieldsEqual(new global::PlantsVsZombies.Simulation.Sun(), sun);
         }
 
+        /// <summary>Prepares match capacity incrementally without changing saved state or battle randomness.</summary>
+        [Test]
+        public void PreparationPreservesCheckpointBytesAndRandomDraws()
+        {
+            var game = new GameSimulation(new GameRules { AdventureLevel = 9 }, 7123);
+            game.ChooseDefaultAdventureSeeds();
+            var before = game.CaptureCheckpoint();
+            var random = game.BattleRandomDrawCount;
+            var requirements = game.GetCapacityRequirements();
+            var complete = false;
+            for (var step = 0; step < 1000 && !complete; step++)
+            {
+                var created = game.RuntimePoolStatistics.CreatedCount;
+                complete = game.PrepareCapacityStep(requirements, 16);
+                Assert.That(game.RuntimePoolStatistics.CreatedCount - created, Is.LessThanOrEqualTo(16));
+            }
+            Assert.That(complete, Is.True);
+            Assert.That(game.BattleRandomDrawCount, Is.EqualTo(random));
+            Assert.That(game.CaptureCheckpoint(), Is.EqualTo(before));
+        }
+
+        /// <summary>Prevents a removed zombie from being reset while a corpse or ice-impact attachment keeps it alive.</summary>
+        [Test]
+        public void RemovedActorRetiresOnlyAfterAllPresentationReferencesExpire()
+        {
+            var game = new GameSimulation(new GameRules { AdventureLevel = 9 }, 7123);
+            var world = game.CheckpointState;
+            var zombie = world.LifetimePool.Rent<Zombie>();
+            zombie.Id = 700;
+            zombie.Health = 123f;
+            world.Zombies.Add(zombie);
+            var corpse = world.LifetimePool.Rent<AdventureZombieCorpse>();
+            corpse.Zombie = zombie;
+            var impact = world.LifetimePool.Rent<AdventureImpact>();
+            impact.AttachedZombie = zombie;
+            world.Presentation.Corpses.Add(corpse);
+            world.Presentation.Impacts.Add(impact);
+            game.Update(0f);
+            world.Zombies.Remove(zombie);
+            for (var frame = 0; frame < 5; frame++)
+            {
+                game.Update(0f);
+            }
+            Assert.That(zombie.Id, Is.EqualTo(700));
+            Assert.That(zombie.Health, Is.EqualTo(123f));
+            world.Presentation.Corpses.Clear();
+            for (var frame = 0; frame < 5; frame++)
+            {
+                game.Update(0f);
+            }
+            Assert.That(zombie.Id, Is.EqualTo(700), "The independent impact attachment still owns this actor.");
+            world.Presentation.Impacts.Clear();
+            game.Update(0f);
+            Assert.That(zombie.Id, Is.EqualTo(700), "A complete frame grace period protects returned presentation callbacks.");
+            for (var frame = 0; frame < 3; frame++)
+            {
+                game.Update(0f);
+            }
+            Assert.That(world.LifetimePool.Rent<Zombie>(), Is.SameAs(zombie));
+            Assert.That(zombie.Id, Is.Zero);
+        }
+
+        /// <summary>Resets nonzero actor defaults and retained head arrays without reconstructing their storage.</summary>
+        [Test]
+        public void ActorResetRestoresNativeDefaultsAndRetainedHeadStorage()
+        {
+            var plant = new Plant { ShootAge = 88f, PresentationBiteNativeState = 88, PresentationCoffeeWakeAge = 88f };
+            var heads = plant.PresentationHeadAge;
+            for (var index = 0; index < heads.Length; index++)
+            {
+                heads[index] = 88f;
+            }
+            ((ISimulationPooledObject)plant).ResetForPool();
+            Assert.That(plant.PresentationHeadAge, Is.SameAs(heads));
+            Assert.That(heads, Is.EqualTo(new[] { -1f, -1f, -1f }));
+            Assert.That(plant.ShootAge, Is.EqualTo(-1f));
+            Assert.That(plant.PresentationBiteNativeState, Is.EqualTo(-1));
+            Assert.That(plant.PresentationCoffeeWakeAge, Is.EqualTo(-1f));
+            var corpse = new AdventureZombieCorpse { RateScale = 88f, Duration = 88f, Zombie = new Zombie() };
+            ((ISimulationPooledObject)corpse).ResetForPool();
+            Assert.That(corpse.RateScale, Is.EqualTo(1f));
+            Assert.That(corpse.Duration, Is.EqualTo(float.PositiveInfinity));
+            Assert.That(corpse.Zombie, Is.Null);
+        }
+
         /// <summary>Checks nested snapshots preserve original membership and ordering while the live list mutates.</summary>
         [Test]
         public void SnapshotKeepsOriginalOrderAcrossNestedMutationAndEarlyExit()

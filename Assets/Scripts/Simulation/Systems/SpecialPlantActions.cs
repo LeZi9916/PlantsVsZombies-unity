@@ -97,12 +97,10 @@ namespace PlantsVsZombies.Simulation
 
                 _zombieFeedbackSystem.RequestAdventureZombieFoley(68);
                 SplashAdventureTangleKelpTarget(target);
-                state = new AdventureTangleKelpState
-                {
-                    TargetZombieId = target.Id,
-                    OffsetX = target.Kind == ZombieKind.Snorkel ? -43 : _zombieFeedbackSystem.AdventureZombieFeedbackPhase(target) == 53 ? -20 : -13,
-                    OffsetY = target.Kind == ZombieKind.Snorkel ? 55 : _zombieFeedbackSystem.AdventureZombieFeedbackPhase(target) == 53 ? 37 : 15
-                };
+                state = _world.LifetimePool.Rent<AdventureTangleKelpState>();
+                state.TargetZombieId = target.Id;
+                state.OffsetX = target.Kind == ZombieKind.Snorkel ? -43 : _zombieFeedbackSystem.AdventureZombieFeedbackPhase(target) == 53 ? -20 : -13;
+                state.OffsetY = target.Kind == ZombieKind.Snorkel ? 55 : _zombieFeedbackSystem.AdventureZombieFeedbackPhase(target) == 53 ? 37 : 15;
                 plant.TangleKelpPresentation = state;
                 target.TangleKelpGrab = state;
                 plant.PresentationBiteNativeState = 34;
@@ -126,12 +124,16 @@ namespace PlantsVsZombies.Simulation
             {
                 var x = 40f + plant.Column * 80f;
                 var y = 80f + plant.Row * 85f;
-                _world.Presentation.ZombieSplashes.Add(new AdventureZombieSplash
-                {
-                    Id = ++_world.Presentation._effectId, Row = plant.Row,
-                    X = x - 23f, Y = y + 7f, ParticleX = x + 31f, ParticleY = y + 64f,
-                    ScaleX = 1.3f, ScaleY = 1.3f
-                });
+                var pooledRecord2 = _world.LifetimePool.Rent<AdventureZombieSplash>();
+                pooledRecord2.Id = ++_world.Presentation._effectId;
+                pooledRecord2.Row = plant.Row;
+                pooledRecord2.X = x - 23f;
+                pooledRecord2.Y = y + 7f;
+                pooledRecord2.ParticleX = x + 31f;
+                pooledRecord2.ParticleY = y + 64f;
+                pooledRecord2.ScaleX = 1.3f;
+                pooledRecord2.ScaleY = 1.3f;
+                _world.Presentation.ZombieSplashes.Add(pooledRecord2);
                 _zombieFeedbackSystem.RequestAdventureZombieFoley(53);
             }
 
@@ -173,7 +175,7 @@ namespace PlantsVsZombies.Simulation
         /// <param name="plant">The planted Blover whose original state is advanced.</param>
         internal void AdvanceAdventureBlover(Plant plant)
         {
-            var state = plant.BloverPresentation ??= new AdventureBloverState();
+            var state = plant.BloverPresentation ??= _world.LifetimePool.Rent<AdventureBloverState>();
             if (state.Advance())
             {
                 _zombieFeedbackSystem.RequestAdventureZombieFoley(-2);
@@ -193,7 +195,7 @@ namespace PlantsVsZombies.Simulation
         /// <param name="plant">The live flying bean, independent of the mushroom below it.</param>
         internal void AdvanceAdventureCoffeeBean(Plant plant)
         {
-            var state = plant.CoffeePresentation ??= new AdventureCoffeeBeanState();
+            var state = plant.CoffeePresentation ??= _world.LifetimePool.Rent<AdventureCoffeeBeanState>();
             if (!state.Crumbling)
             {
                 state.Countdown = Math.Max(0, state.Countdown - 1);
@@ -323,11 +325,9 @@ namespace PlantsVsZombies.Simulation
             var state = plant.SquashPresentation;
             if (state == null)
             {
-                state = new AdventureSquashState
-                {
-                    NativeX = 40 + plant.Column * 80,
-                    NativeY = AdventureSquashCellY(plant.Row, plant.Column)
-                };
+                state = _world.LifetimePool.Rent<AdventureSquashState>();
+                state.NativeX = 40 + plant.Column * 80;
+                state.NativeY = AdventureSquashCellY(plant.Row, plant.Column);
                 plant.SquashPresentation = state;
             }
 
@@ -449,7 +449,7 @@ namespace PlantsVsZombies.Simulation
             var state = plant.DoomShroomPresentation;
             if (state == null)
             {
-                state = new AdventureDoomShroomState();
+                state = _world.LifetimePool.Rent<AdventureDoomShroomState>();
                 plant.DoomShroomPresentation = state;
                 plant.PresentationRate = AdventureDoomShroomState.Rate;
                 _zombieFeedbackSystem.RequestAdventureZombieFoley(57);
@@ -499,7 +499,7 @@ namespace PlantsVsZombies.Simulation
                 return;
             }
 
-            p.PotatoMinePresentation = new global::PlantsVsZombies.Adventure.AdventurePotatoMineState();
+            p.PotatoMinePresentation = _world.LifetimePool.Rent<AdventurePotatoMineState>();
             p._presentationKind = PlantKind.PotatoMine;
             p.PresentationRate = 12f;
             p.ActionTimer = 15f;
@@ -513,7 +513,7 @@ namespace PlantsVsZombies.Simulation
             var state = plant.ChomperPresentation;
             if (state == null)
             {
-                state = new AdventureChomperState();
+                state = _world.LifetimePool.Rent<AdventureChomperState>();
                 plant.ChomperPresentation = state;
             }
 
@@ -661,15 +661,14 @@ namespace PlantsVsZombies.Simulation
             var stage = AdventureDefensivePlantRules.DamageStage(plant.Kind, plant.Health);
             if (plant.Kind != PlantKind.Pumpkin && stage > 0 && stage != plant._presentationDefensiveDamageStage)
             {
-                _world.Presentation.PlantBiteEffects.Add(new AdventurePlantBiteEffect
-                {
-                    Id = ++_world.Presentation._effectId,
-                    ParticleId = 36,
-                    Row = plant.Row,
-                    NativeX = 40 + plant.Column * 80 + 40,
-                    NativeY = 80 + plant.Row * (_adventureModeRunner.Adventure.Level.HasPool || _adventureModeRunner.Adventure.Level.HasRoof ? 85 : 100) + (_adventureModeRunner.Adventure.Level.HasRoof ? Math.Max(0f, 5f - plant.Column) * 20f - 10f : 0f) + (plant.Kind == PlantKind.TallNut ? -22 : 10),
-                    Seed = plant.Id * 397 ^ _world.Presentation._effectId
-                });
+                var pooledRecord4 = _world.LifetimePool.Rent<AdventurePlantBiteEffect>();
+                pooledRecord4.Id = ++_world.Presentation._effectId;
+                pooledRecord4.ParticleId = 36;
+                pooledRecord4.Row = plant.Row;
+                pooledRecord4.NativeX = 40 + plant.Column * 80 + 40;
+                pooledRecord4.NativeY = 80 + plant.Row * (_adventureModeRunner.Adventure.Level.HasPool || _adventureModeRunner.Adventure.Level.HasRoof ? 85 : 100) + (_adventureModeRunner.Adventure.Level.HasRoof ? Math.Max(0f, 5f - plant.Column) * 20f - 10f : 0f) + (plant.Kind == PlantKind.TallNut ? -22 : 10);
+                pooledRecord4.Seed = plant.Id * 397 ^ _world.Presentation._effectId;
+                _world.Presentation.PlantBiteEffects.Add(pooledRecord4);
             }
 
             plant._presentationDefensiveDamageStage = stage;

@@ -23,5 +23,20 @@ namespace PlantsVsZombies.Simulation
             context._plantTimingSystem.AdvanceAdventureStarfruit(plant);
             return true;
         }
+        /// <summary>Restores construction defaults after all board references expire.</summary>
+        internal override void ResetPoolState()
+        {
+            base.ResetPoolState();
+            ShootingCountdown = default;
+            LaunchCountdown = -1;
+        }
+
+        /// <summary>Retains capability-owned records while this behavior is live.</summary>
+        /// <param name="pool">The owning lifetime tracker.</param>
+        internal override void MarkPoolState(SimulationRuntimePool pool)
+        {
+            base.MarkPoolState(pool);
+        }
+
     }
 }

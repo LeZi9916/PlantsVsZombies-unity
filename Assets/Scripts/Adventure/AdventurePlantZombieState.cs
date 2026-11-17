@@ -2,10 +2,10 @@
 namespace PlantsVsZombies.Adventure
 {
     /// <summary>Owns PC 542E50/543040/5431D0/543520's independent head animation and integer phase counter.</summary>
-    public sealed class AdventurePlantZombieState
+    public sealed class AdventurePlantZombieState : PlantsVsZombies.Simulation.ISimulationPooledObject
     {
         /// <summary>Gets the unchanged original plant-headed zombie identifier.</summary>
-        public int NativeKind { get; }
+        public int NativeKind { get; private set; }
         /// <summary>Gets or sets the original phase counter, decremented once per non-immobilized update.</summary>
         public int Counter { get; internal set; }
         /// <summary>Gets the original once-and-hold or looping child animation.</summary>
@@ -41,16 +41,64 @@ namespace PlantsVsZombies.Adventure
             HeadClip = nativeKind == 26 || nativeKind == 29 ? "anim_head_idle" : "anim_idle";
         }
 
-        /// <summary>Captures the original child's held animation for a frozen burned silhouette.</summary>
-        /// <returns>An independent copy whose clock cannot be changed by later corpse updates.</returns>
-        internal AdventurePlantZombieState Snapshot()
+        /// <summary>Creates an empty native child record for budgeted runtime capacity preparation.</summary>
+        public AdventurePlantZombieState() : this(0)
         {
-            return new AdventurePlantZombieState(NativeKind)
-            {
-                Counter = Counter, HeadClip = HeadClip, HeadRate = HeadRate, HeadLoops = HeadLoops,
-                HeadSeconds = HeadSeconds, HeadBlendTicks = 0, Detached = Detached, HeadRemoved = HeadRemoved,
-                SquashPhase = SquashPhase, DetachedX = DetachedX, DetachedY = DetachedY
-            };
+        }
+
+        /// <summary>Applies the original species parameters after resetting a rented child state.</summary>
+        /// <param name="nativeKind">The unchanged plant-headed species identifier.</param>
+        /// <param name="jalapenoCounter">The original velocity-derived Jalapeno fuse.</param>
+        internal void InitializePooled(int nativeKind, int jalapenoCounter)
+        {
+            NativeKind = nativeKind;
+            Counter = nativeKind == 26 || nativeKind == 29 ? 150 : nativeKind == 28 ? jalapenoCounter : 0;
+            HeadClip = nativeKind == 26 || nativeKind == 29 ? "anim_head_idle" : "anim_idle";
+        }
+
+        /// <summary>Restores all native child clocks before another actor rents this record.</summary>
+        void PlantsVsZombies.Simulation.ISimulationPooledObject.ResetForPool()
+        {
+            NativeKind = 0;
+            Counter = 0;
+            HeadClip = "anim_idle";
+            HeadRate = 15f;
+            HeadLoops = true;
+            HeadSeconds = 0f;
+            HeadBlendTicks = 0;
+            ImmobilizedAtTickStart = false;
+            Detached = false;
+            HeadRemoved = false;
+            SquashPhase = 92;
+            DetachedX = 0f;
+            DetachedY = 0f;
+        }
+
+        /// <summary>Declares that this value snapshot holds no actor or event references.</summary>
+        /// <param name="pool">The owning lifetime tracker.</param>
+        void PlantsVsZombies.Simulation.ISimulationPooledObject.MarkPoolReferences(PlantsVsZombies.Simulation.SimulationRuntimePool pool)
+        {
+        }
+
+        /// <summary>Captures the original child's held animation for a frozen burned silhouette.</summary>
+        /// <param name="pool">The optional match-local owner retaining the independent child snapshot.</param>
+        /// <returns>An independent copy whose clock cannot be changed by later corpse updates.</returns>
+        internal AdventurePlantZombieState Snapshot(PlantsVsZombies.Simulation.SimulationRuntimePool? pool = null)
+        {
+            var snapshot = pool?.Rent<AdventurePlantZombieState>() ?? new AdventurePlantZombieState();
+            snapshot.NativeKind = NativeKind;
+            snapshot.Counter = Counter;
+            snapshot.HeadClip = HeadClip;
+            snapshot.HeadRate = HeadRate;
+            snapshot.HeadLoops = HeadLoops;
+            snapshot.HeadSeconds = HeadSeconds;
+            snapshot.HeadBlendTicks = 0;
+            snapshot.Detached = Detached;
+            snapshot.HeadRemoved = HeadRemoved;
+            snapshot.SquashPhase = SquashPhase;
+            snapshot.DetachedX = DetachedX;
+            snapshot.DetachedY = DetachedY;
+            return snapshot;
         }
 
         /// <summary>Starts a native child clip without coupling it to the body's walking clock.</summary>

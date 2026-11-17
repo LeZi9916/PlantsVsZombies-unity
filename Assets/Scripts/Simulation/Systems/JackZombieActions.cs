@@ -114,11 +114,14 @@ namespace PlantsVsZombies.Simulation
                     }
                 }
 
-                _world.Presentation.Explosions.Add(new AdventureExplosion
-                {
-                    Id = ++_world.Presentation._effectId, Seed = _world._random.Next(), Row = zombie.Row,
-                    NativeX = x, NativeY = y, Effect = AdventureExplosionEffect.JackExplode
-                });
+                var pooledRecord1 = _world.LifetimePool.Rent<AdventureExplosion>();
+                pooledRecord1.Id = ++_world.Presentation._effectId;
+                pooledRecord1.Seed = _world._random.Next();
+                pooledRecord1.Row = zombie.Row;
+                pooledRecord1.NativeX = x;
+                pooledRecord1.NativeY = y;
+                pooledRecord1.Effect = AdventureExplosionEffect.JackExplode;
+                _world.Presentation.Explosions.Add(pooledRecord1);
                 _world.Presentation.ScreenShake.Start(4, -6);
                 _zombieFeedbackSystem.RequestAdventureZombieFoley(23);
                 zombie.PresentationDeath = AdventureZombieDeathPresentation.Removed;
