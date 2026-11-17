@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using Unity.Burst;
 using UnityEngine;
+using Unity.Collections;
 using UnityEngine.Rendering;
 
 namespace PlantsVsZombies.Rendering
@@ -195,6 +196,31 @@ namespace PlantsVsZombies.Rendering
             }
             return _sprites.Count >= target;
         }
+        /// <summary>Prepares one retained compatibility mesh and its fixed native buffers without submitting geometry.</summary>
+        /// <param name="batches">The known simultaneous material-run count for local captures.</param>
+        /// <param name="vertices">The maximum clipped vertices expected within one capture run.</param>
+        /// <returns>Whether all requested compatibility slots have prepared CPU and GPU storage.</returns>
+        internal bool PrepareMeshCapacityStep(int batches, int vertices)
+        {
+            ThrowIfDisposed();
+            var target = Math.Max(0, batches);
+            if (_batches.Count < target)
+            {
+                var batch = new SpriteMeshBatch(_root.transform, _batches.Count);
+                _batches.Add(batch);
+                batch.PrepareCapacity(vertices);
+                return false;
+            }
+            for (var index = 0; index < target; index++)
+            {
+                if (_batches[index].PrepareCapacity(vertices))
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
+
         /// <summary>Whether source geometry uses disjoint transparent-cell pieces rather than stable native-composition tile quads.</summary>
         private readonly bool _useTightGeometry;
         /// <summary>The source opacity classifications shared with related animation surface pools.</summary>
@@ -984,6 +1010,7 @@ namespace PlantsVsZombies.Rendering
             SetRenderersEnabled(false);
             foreach (var batch in _batches)
             {
+                batch.DisposeStaging();
                 DestroyResource(batch.Mesh);
             }
 
@@ -1066,9 +1093,13 @@ namespace PlantsVsZombies.Rendering
             sprite.ClipEnabled = clipEnabled;
         }
 
+        /// <summary>The last Unity frame whose expired bindings were retired, including loading-only capture pools.</summary>
+        private int _textureRetirementFrame = -1;
+
         /// <summary>Releases bindings whose source texture has been destroyed after the preceding batch is disabled.</summary>
         private void RetireDestroyedTextureBindings()
         {
+            _textureRetirementFrame = Time.frameCount;
             _retiredTextures.Clear();
             foreach (var entry in _materials)
             {
@@ -1089,6 +1120,25 @@ namespace PlantsVsZombies.Rendering
             }
 
             _retiredTextures.Clear();
+        }
+
+        /// <summary>Prepares fallback materials for an immutable image without recording geometry or changing painter state.</summary>
+        /// <param name="image">The source image whose existing texture pages are retained by stage preparation.</param>
+        internal void PrepareImageMaterials(SpriteImage image)
+        {
+            if (_textureRetirementFrame != Time.frameCount)
+            {
+                RetireDestroyedTextureBindings();
+            }
+            var uv = new Rect(0f, 0f, 1f, 1f);
+            var count = image.GetRegionCount(uv, false);
+            for (var index = 0; index < count; index++)
+            {
+                if (image.TryGetRegion(uv, index, false, out var region))
+                {
+                    GetMaterial(region.Texture, 0);
+                }
+            }
         }
 
         /// <summary>Gets an immutable binding for one texture and compatible hardware blend state.</summary>
@@ -1425,7 +1475,7 @@ namespace PlantsVsZombies.Rendering
         /// <param name="vertices">The retained compact GPU staging vertices.</param>
         /// <param name="data">The original polygon instance record.</param>
         /// <param name="texture">The unchanged source texture.</param>
-        internal void AppendCaptureInstance(Vector4[] vertices, SpriteInstanceData data, Texture texture)
+        internal void AppendCaptureInstance(NativeArray<Vector4> vertices, SpriteInstanceData data, Texture texture)
         {
             var order = (int)(-data.Depth * 32768f);
             var mode = (int)data.Effects.z;

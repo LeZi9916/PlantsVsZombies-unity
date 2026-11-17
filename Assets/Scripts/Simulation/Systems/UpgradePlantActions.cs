@@ -700,19 +700,18 @@ namespace PlantsVsZombies.Simulation
                 var targetColumn = Math.Max(0, Math.Min(8, (int)Math.Floor(p.CannonTargetX - 87f / 80f)));
                 var targetY = 80f + p.CannonTargetRow * pitch
                     + (level.HasRoof ? Math.Max(0, 5 - targetColumn) * 20f - 10f : 0f);
-                _adventureModeRunner.Adventure._cobShells.Add(new AdventureCobShell
-                {
-                    SourcePlantId = p.Id,
-                    TargetX = impactX,
-                    TargetRow = p.CannonTargetRow,
-                    TargetNativeY = targetY,
-                    LaunchX = p.Column + 37f / 80f,
-                    LaunchRow = p.Row,
-                    LaunchNativeY = 80f + p.Row * pitch - 145f
+                var shell = _world.LifetimePool.Rent<AdventureCobShell>();
+                shell.SourcePlantId = p.Id;
+                shell.TargetX = impactX;
+                shell.TargetRow = p.CannonTargetRow;
+                shell.TargetNativeY = targetY;
+                shell.LaunchX = p.Column + 37f / 80f;
+                shell.LaunchRow = p.Row;
+                shell.LaunchNativeY = 80f + p.Row * pitch - 145f
                         + (level.HasRoof ? Math.Max(0, 5 - p.Column) * 20f - 10f : 0f)
-                        - (_boardQueries.HasPlantKindAt(PlantKind.FlowerPot, p.Row, p.Column) ? 5f : 0f),
-                    FlightRemaining = SimulationWorld.AdventureCobFlightSeconds + (level.IsWaterRow((int)p.CannonTargetRow) ? .02f : 0f)
-                });
+                        - (_boardQueries.HasPlantKindAt(PlantKind.FlowerPot, p.Row, p.Column) ? 5f : 0f);
+                shell.FlightRemaining = SimulationWorld.AdventureCobFlightSeconds + (level.IsWaterRow((int)p.CannonTargetRow) ? .02f : 0f);
+                _adventureModeRunner.Adventure._cobShells.Add(shell);
                 _zombieFeedbackSystem.RequestAdventureZombieFoley(3);
                 _world.Presentation._nativeShootSuppressions++;
                 _legacySimulation.Raise(GameEvent.Shoot);

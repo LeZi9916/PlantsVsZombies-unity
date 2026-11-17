@@ -29,6 +29,42 @@ namespace PlantsVsZombies.Tests.EditMode
             }
         }
 
+        /// <summary>Checks loading preparation preserves missing optional tracks that control particle random draws.</summary>
+        [Test]
+        public void PreparationPreservesAbsentConditionalTracks()
+        {
+            var root = Path.Combine(Path.GetTempPath(), "PvZConditionalTracks-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(Path.Combine(root, "particles"));
+            Directory.CreateDirectory(Path.Combine(root, "reanim"));
+            File.WriteAllText(Path.Combine(root, "particles", "Conditional.xml"),
+                "<Emitter><Image>IMAGE_UNUSED</Image><SpawnMinActive>1</SpawnMinActive>"
+                + "<ParticleDuration>10</ParticleDuration><ParticleAlpha>0</ParticleAlpha></Emitter>");
+            using var renderer = new ReanimationRenderer(root);
+            var particles = new OriginalParticleRenderer(root, renderer);
+            try
+            {
+                var ready = false;
+                for (var step = 0; step < 100 && !ready; step++)
+                {
+                    ready = particles.PrepareSystemCapacityStep("Conditional", 1);
+                }
+                Assert.That(ready, Is.True);
+                var flags = BindingFlags.Instance | BindingFlags.NonPublic;
+                var definitions = (IDictionary)typeof(OriginalParticleRenderer).GetField("_definitions", flags)!.GetValue(particles)!;
+                var emitters = (IList)definitions["Conditional"]!;
+                var tracks = (IDictionary)emitters[0]!.GetType().GetField("Tracks")!.GetValue(emitters[0])!;
+                foreach (var track in new[] { "EmitterSkewX", "EmitterSkewY", "LaunchAngle", "ImageRow", "SpawnMaxActive", "SpawnMaxLaunched", "AnimationRate" })
+                {
+                    Assert.That(tracks.Contains(track), Is.False, track + " must retain its original absence.");
+                }
+            }
+            finally
+            {
+                particles.Clear();
+                Directory.Delete(root, true);
+            }
+        }
+
         /// <summary>Checks PC 52B7E4 randomizes integer age, performs one birth update, and does not rerandomize loops.</summary>
         [Test]
         public void RandomStartUsesIntegerAgesWithoutPrewarmingOrRerandomizingLoops()

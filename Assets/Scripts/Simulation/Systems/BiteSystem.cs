@@ -184,7 +184,9 @@ namespace PlantsVsZombies.Simulation
                 _adventureModeRunner.Adventure.SelectedCobCannonId = null;
             }
 
-            _world.Presentation.SquishedPlants.Add(new AdventureSquishedPlant(plant));
+            var squished = _world.LifetimePool.Rent<AdventureSquishedPlant>();
+            squished.Plant = plant;
+            _world.Presentation.SquishedPlants.Add(squished);
             _zombieFeedbackSystem.RequestAdventureZombieFoley(21);
         }
 

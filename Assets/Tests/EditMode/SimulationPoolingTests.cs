@@ -56,7 +56,7 @@ namespace PlantsVsZombies.Tests.EditMode
             var random = game.BattleRandomDrawCount;
             var requirements = game.GetCapacityRequirements();
             var complete = false;
-            for (var step = 0; step < 1000 && !complete; step++)
+            for (var step = 0; step < 5000 && !complete; step++)
             {
                 var created = game.RuntimePoolStatistics.CreatedCount;
                 complete = game.PrepareCapacityStep(requirements, 16);

@@ -528,6 +528,8 @@ namespace PlantsVsZombies.Simulation
 
         /// <summary>Stores wave schedule event raised.</summary>
         internal Action<global::PlantsVsZombies.Waves.WaveScheduleEvent>? WaveScheduleEventRaised;
+        /// <summary>Notifies production audio and banners without allocating the public retained event snapshot.</summary>
+        internal Action<global::PlantsVsZombies.Waves.WaveScheduleEventKind>? WaveScheduleNotification;
         /// <summary>Stores scheduled wave remainder.</summary>
         internal double _scheduledWaveRemainder;
         /// <summary>Stores scheduled final ambush enabled.</summary>

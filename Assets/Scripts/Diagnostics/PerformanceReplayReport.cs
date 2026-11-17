@@ -33,7 +33,7 @@ namespace PlantsVsZombies.Diagnostics
         /// <summary>Identifies the Player boundary at which binary profiling ends.</summary>
         public int ProfilerCaptureEndFrame;
         /// <summary>Describes the direct GPU sampler and supported fallback timing source.</summary>
-        public string GpuTimingSource = "CustomSampler GPU scene-render span; FrameTimingManager fallback; unavailable=-1";
+        public string GpuTimingSource = "FrameTimingManager whole-frame GPU timing; unavailable=-1";
         /// <summary>Stores the source checkpoint SHA-256 before playback.</summary>
         public string SourceHashBefore = string.Empty;
         /// <summary>Stores the source checkpoint SHA-256 after playback.</summary>
@@ -60,6 +60,8 @@ namespace PlantsVsZombies.Diagnostics
         public int GpuTimingFrameCount;
         /// <summary>Counts source reloads during long stress observations.</summary>
         public int ReloadCount;
+        /// <summary>The explicit short lifetime-diagnostic restore interval; zero identifies ordinary gameplay-driven restores.</summary>
+        public int ForcedRestoreFrameInterval;
         /// <summary>Identifies the setup frame whose render counters precede the first measured frame.</summary>
         public int InitialRenderingFrame;
         /// <summary>Stores pre-measurement instanced draws, or minus one when unavailable.</summary>
@@ -86,12 +88,30 @@ namespace PlantsVsZombies.Diagnostics
         public long InitialMeshUploadBytes;
         /// <summary>Stores immutable submission binding constructions before the first measured frame.</summary>
         public long InitialInstanceSubmissionBindingCreationCount;
+        /// <summary>Stores retained painter-span descriptors created before measurement, or minus one when unavailable.</summary>
+        public long InitialInstanceRunCreationCount;
+        /// <summary>Stores owned submission materials created before measurement, or minus one when unavailable.</summary>
+        public long InitialInstanceSubmissionMaterialCreationCount;
+        /// <summary>Stores unprepared painter-span requests before measurement, or minus one when unavailable.</summary>
+        public long InitialInstanceRunCapacityMissCount;
+        /// <summary>Stores unprepared native binding requests before measurement, or minus one when unavailable.</summary>
+        public long InitialInstanceSubmissionBindingCapacityMissCount;
+        /// <summary>Stores the cumulative NativePlaybackCreations before measurement.</summary>
+        public long InitialNativePlaybackCreations;
+        /// <summary>Stores the cumulative NativePlaybackCapacityMisses before measurement.</summary>
+        public long InitialNativePlaybackCapacityMisses;
+        /// <summary>Stores the cumulative NativeSurfaceCreations before measurement.</summary>
+        public long InitialNativeSurfaceCreations;
         /// <summary>Stores same-frame instance-data protection fallbacks before the first measured frame.</summary>
         public long InitialInstanceSameFrameBufferFallbackCount;
         /// <summary>Stores resource context at each stress-cycle preparation and ending boundary.</summary>
         public PerformanceReplayCycle[] Cycles = Array.Empty<PerformanceReplayCycle>();
         /// <summary>Records whether a fixed evidence array prevented recording a stress-cycle boundary.</summary>
         public bool CycleEvidenceTruncated;
+        /// <summary>Records whether a bounded production allocation scope recorder overflowed during this replay.</summary>
+        public bool ScopedAllocationRecorderOverflowed;
+        /// <summary>Stores nested diagnostic allocation attribution, which must not be summed as disjoint scopes.</summary>
+        public string AllocationDetails = string.Empty;
         /// <summary>Records whether the source revision exposes a candidate preparation gate.</summary>
         public bool PreparationGateAvailable;
         /// <summary>Confirms the candidate still reports ready at the first measured boundary, or true for a baseline without a gate.</summary>
@@ -108,6 +128,10 @@ namespace PlantsVsZombies.Diagnostics
         public int WarmupFrames;
         /// <summary>Stores extra frozen frames after warm-up that clear metadata allocations from complete-frame recorders.</summary>
         public int CounterBoundaryFrames;
+        /// <summary>The logical Player window width at the measured boundary.</summary>
+        public int WindowWidth;
+        /// <summary>The logical Player window height at the measured boundary.</summary>
+        public int WindowHeight;
         /// <summary>Stores the actual pixel width.</summary>
         public int Width;
         /// <summary>Stores the actual pixel height.</summary>

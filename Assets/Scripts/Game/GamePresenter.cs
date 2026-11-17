@@ -293,6 +293,9 @@ namespace PlantsVsZombies.Game
         /// <summary>Submits the scene and Canvas presentation once after simulation.</summary>
         internal void Present()
         {
+#if PVZ_PERFORMANCE_REPLAY
+            using var allocations = new Diagnostics.PerformanceReplayAllocations.Scope(true);
+#endif
             using var presentation = SpriteRenderingProfiler.Measure(SpriteRenderingProfiler.Present);
             using var deferred = ObjectSpriteRenderer.BeginDeferred();
             _poolRenderer?.Hide();
@@ -666,6 +669,9 @@ namespace PlantsVsZombies.Game
         /// <returns>The resulting draw bitmap.</returns>
         private bool DrawBitmap(CanvasBitmapFont? bitmap, string text, float anchor, float baseline, float maxWidth, Color color, bool centered, bool integerCenter = false)
         {
+#if PVZ_PERFORMANCE_REPLAY
+            using var allocationDetail = new PlantsVsZombies.Diagnostics.PerformanceReplayAllocations.DetailScope("DrawBitmap");
+#endif
             if (bitmap == null || string.IsNullOrEmpty(text))
             {
                 return false;
@@ -1250,6 +1256,9 @@ namespace PlantsVsZombies.Game
         /// <param name = "bold">The bold.</param>
         private void Label(Rect rect, string text, int size, Color color, TextAnchor alignment, bool bold)
         {
+#if PVZ_PERFORMANCE_REPLAY
+            using var allocationDetail = new PlantsVsZombies.Diagnostics.PerformanceReplayAllocations.DetailScope("Label");
+#endif
             if (_label == null)
             {
                 _label = new GUIStyle();
@@ -2474,6 +2483,9 @@ namespace PlantsVsZombies.Game
         /// <summary>Performs draw adventure board.</summary>
         private void DrawAdventureBoard()
         {
+#if PVZ_PERFORMANCE_REPLAY
+            using var allocationDetail = new PlantsVsZombies.Diagnostics.PerformanceReplayAllocations.DetailScope("DrawAdventureBoard");
+#endif
             _poolRenderer?.Hide();
             BeginAdventurePresentation();
             var openingMatrix = CanvasUI.Matrix;
@@ -3151,6 +3163,28 @@ namespace PlantsVsZombies.Game
             }
         }
 
+        /// <summary>Reserves battle-owned identity sets before combat can add new actors or retire their captures.</summary>
+        /// <param name="actors">The prepared actor and corpse population.</param>
+        internal void PrepareBattlePresentationCapacity(int actors)
+        {
+            var capacity = Math.Max(1, actors * 2);
+            if (_owner._game?.ModeSession?.Definition.Survival == true)
+            {
+                var flags = _owner.RequiredGame.RequiredModeSession.NativeSurvivalFlagsCompleted;
+                var upcoming = Math.Max(1, (_owner.RequiredGame.Adventure.Waves.Count + 9) / 10);
+                for (var value = flags; value <= flags + upcoming; value++)
+                {
+                    SurvivalCaption(value);
+                }
+            }
+            _adventurePresentationSurfaces.EnsureCapacity(capacity);
+            _adventurePresentationLiveSurfaces.EnsureCapacity(capacity);
+            if (_expiredSurfaces.Capacity < capacity)
+            {
+                _expiredSurfaces.Capacity = capacity;
+            }
+        }
+
         /// <summary>Begins one normal battle presentation after preparation has adopted its session.</summary>
         private void BeginAdventurePresentation()
         {
@@ -3169,7 +3203,7 @@ namespace PlantsVsZombies.Game
         private int _battleParticleResource;
 
         /// <summary>Prepares at most one complete battle particle system using the actual live presenter owner.</summary>
-        /// <param name="expectedSystems">The anticipated concurrent systems per known effect, bounded to 32.</param>
+        /// <param name="expectedSystems">The anticipated concurrent systems per known effect, bounded to 128.</param>
         /// <returns>Whether all known current-stage effect layouts have their bounded prepared capacity.</returns>
         internal bool PrepareBattleParticlesStep(int expectedSystems)
         {
@@ -3186,6 +3220,7 @@ namespace PlantsVsZombies.Game
                 _particlePreparationStage = stage;
                 _battleParticleResources.Clear();
                 _battleParticleResource = 0;
+                AddBattleParticle("IceSparkle");
                 AddBattleParticle("ZombieArm");
                 AddBattleParticle("ZombieHead");
                 AddBattleParticle("MoweredZombieHead");
@@ -3229,14 +3264,15 @@ namespace PlantsVsZombies.Game
             }
             if (_battleParticleResource >= _battleParticleResources.Count)
             {
-                return true;
+                PrepareSeedBankParticleSession();
+                return RequiredSeedBankParticles.PrepareSystemCapacityStep(AdventureSeedPacketFlash.Asset, Math.Max(4, _owner._deck.Count * 2));
             }
             if (RequiredAdventureParticles.PrepareSystemCapacityStep(
-                _battleParticleResources[_battleParticleResource], Math.Min(32, Math.Max(1, expectedSystems))))
+                _battleParticleResources[_battleParticleResource], Math.Min(128, Math.Max(1, expectedSystems))))
             {
                 _battleParticleResource++;
             }
-            return _battleParticleResource >= _battleParticleResources.Count;
+            return false;
         }
 
         /// <summary>Collects an immutable effect name once without changing decorative or battle randomness.</summary>
@@ -3371,6 +3407,14 @@ namespace PlantsVsZombies.Game
                     AddBattleParticle("ZombieBalloonHead");
                     break;
             }
+        }
+
+        /// <summary>Describes last particle capacity misses outside measured production scopes.</summary>
+        /// <returns>The battle and packet effect identities whose prepared particle capacity was exceeded.</returns>
+        internal string DescribeParticleCapacityMisses()
+        {
+            return "battle:" + _adventureParticles?.LastParticleCapacityMissResource
+                + ",packet:" + _seedBankParticles?.LastParticleCapacityMissResource;
         }
 
         /// <summary>Performs end adventure presentation.</summary>
@@ -5233,6 +5277,9 @@ namespace PlantsVsZombies.Game
         /// <param name = "loop">The loop.</param>
         private void DrawAdventureZombiePose(Zombie zombie, string name, string? clip, Vector2 origin, float size, float age, float rate, bool loop)
         {
+#if PVZ_PERFORMANCE_REPLAY
+            using var allocationDetail = new PlantsVsZombies.Diagnostics.PerformanceReplayAllocations.DetailScope("DrawAdventureZombiePose");
+#endif
             var previous = CanvasUI.Color;
             var surface = _presentationKeys.Get("native-zombie-combat-", zombie.Id);
             _adventurePresentationSurfaces.Add(surface);
@@ -5388,6 +5435,9 @@ namespace PlantsVsZombies.Game
         /// <param name = "row">The row.</param>
         private void DrawAdventureCorpses(int row)
         {
+#if PVZ_PERFORMANCE_REPLAY
+            using var allocationDetail = new PlantsVsZombies.Diagnostics.PerformanceReplayAllocations.DetailScope("DrawAdventureCorpses");
+#endif
             foreach (AdventureZombieCorpse corpse in _owner.RequiredGame.Presentation.Corpses)
             {
                 var zombie = corpse.RequiredZombie;
@@ -6306,14 +6356,21 @@ namespace PlantsVsZombies.Game
             }
         }
 
+        /// <summary>Associates prepared packet flashes with their board before the first ready event.</summary>
+        private void PrepareSeedBankParticleSession()
+        {
+            if (!ReferenceEquals(_seedBankPresentedGame, _owner._game) || _seedBankParticles == null)
+            {
+                _seedBankParticles?.Clear();
+                _seedBankPresentedGame = _owner._game;
+                _seedBankParticles ??= new OriginalParticleRenderer(_owner._root, _owner._animations);
+            }
+        }
+
         /// <summary>Performs draw adventure packet ready flashes.</summary>
         private void DrawAdventurePacketReadyFlashes()
         {
-            if (!ReferenceEquals(_seedBankPresentedGame, _owner._game))
-            {
-                _seedBankPresentedGame = _owner._game;
-                _seedBankParticles = new OriginalParticleRenderer(_owner._root, _owner._animations);
-            }
+            PrepareSeedBankParticleSession();
 
             RequiredSeedBankParticles.BeginFrame();
             foreach (var flash in _owner.RequiredGame.Adventure.SeedFlashes)
@@ -6682,9 +6739,40 @@ namespace PlantsVsZombies.Game
 
         }
 
+        /// <summary>Retains complete flag captions for known upcoming wave boundaries.</summary>
+        private readonly Dictionary<(int Mode, int Flags), string> _survivalCaptions = new Dictionary<(int, int), string>(16);
+
+        /// <summary>Resolves an original survival caption once for each native flag value.</summary>
+        /// <param name="flags">The completed original flag count.</param>
+        /// <returns>The unchanged localized caption.</returns>
+        private string SurvivalCaption(int flags)
+        {
+            var mode = _owner.RequiredGame.RequiredModeSession.Definition.Id;
+            var key = (mode, flags);
+            if (_survivalCaptions.TryGetValue(key, out var caption))
+            {
+                return caption;
+            }
+            caption = OriginalProgressionText(VerifiedDataCatalog.ChallengeModes[mode - 1].LocalizationKey.Trim('[', ']'));
+            if (flags > 0)
+            {
+                var count = flags == 1 ? OriginalProgressionText("ONE_FLAG") : OriginalProgressionText("COUNT_FLAGS").Replace("{COUNT}", flags.ToString());
+                caption += " - " + OriginalProgressionText("FLAGS_COMPLETED").Replace("{FLAGS}", count);
+            }
+            if (_survivalCaptions.Count >= 128)
+            {
+                _survivalCaptions.Clear();
+            }
+            _survivalCaptions.Add(key, caption);
+            return caption;
+        }
+
         /// <summary>Draws the original PC flag meter and right-aligned adventure level name.</summary>
         private void DrawAdventureProgressAndName()
         {
+#if PVZ_PERFORMANCE_REPLAY
+            using var allocationDetail = new PlantsVsZombies.Diagnostics.PerformanceReplayAllocations.DetailScope("DrawAdventureProgressAndName");
+#endif
             var board = _owner.RequiredGame.Adventure;
             var progress = _owner.RequiredGame.Presentation.ProgressMeter;
             var survival = _owner.RequiredGame.ModeSession?.Definition.Survival == true;
@@ -6730,16 +6818,8 @@ namespace PlantsVsZombies.Game
             {
                 _captionBoard = board;
                 _captionSurvivalFlags = flags;
-                _waveCaption = OriginalProgressionText("LEVEL") + " " + board.Level.Label;
-                if (survival)
-                {
-                    _waveCaption = OriginalProgressionText(VerifiedDataCatalog.ChallengeModes[_owner.RequiredGame.RequiredModeSession.Definition.Id - 1].LocalizationKey.Trim('[', ']'));
-                    if (flags > 0)
-                    {
-                        var count = flags == 1 ? OriginalProgressionText("ONE_FLAG") : OriginalProgressionText("COUNT_FLAGS").Replace("{COUNT}", flags.ToString());
-                        _waveCaption += " - " + OriginalProgressionText("FLAGS_COMPLETED").Replace("{FLAGS}", count);
-                    }
-                }
+                _waveCaption = survival ? SurvivalCaption(flags)
+                    : OriginalProgressionText("LEVEL") + " " + board.Level.Label;
             }
 
             if (!_levelNameFontLoaded)
@@ -6798,6 +6878,9 @@ namespace PlantsVsZombies.Game
         /// <summary>Performs draw adventure interface.</summary>
         private void DrawAdventureInterface()
         {
+#if PVZ_PERFORMANCE_REPLAY
+            using var allocationDetail = new PlantsVsZombies.Diagnostics.PerformanceReplayAllocations.DetailScope("DrawAdventureInterface");
+#endif
             var board = _owner.RequiredGame.Adventure;
             if (AdventureStormLost)
             {
@@ -6816,14 +6899,13 @@ namespace PlantsVsZombies.Game
 
             if (WalletAlpha > 0f)
             {
-                var wallet = ReadDisplayAccount();
-                if (wallet != null)
+                if (_owner.Accounts.TryReadDisplayCoins(out var coins))
                 {
                     var walletTint = CanvasUI.Color;
                     var alpha = WalletAlpha;
                     CanvasUI.Color = new Color(walletTint.r, walletTint.g, walletTint.b, walletTint.a * alpha);
                     DrawImage("coinbank.png", new Rect(16, 559, 128, 31));
-                    Label(new Rect(22, 561, 112, 26), "$" + wallet.DisplayCoins.ToString("N0", System.Globalization.CultureInfo.InvariantCulture), 17, new Color(.7f, 1f, .35f, alpha), TextAnchor.MiddleRight, true);
+                    Label(new Rect(22, 561, 112, 26), WalletLabel(coins), 17, new Color(.7f, 1f, .35f, alpha), TextAnchor.MiddleRight, true);
                     CanvasUI.Color = walletTint;
                 }
             }
@@ -7707,7 +7789,11 @@ namespace PlantsVsZombies.Game
             }
         }
         /// <summary>Stores display account refresh,  wallet visible until.</summary>
-        private float _displayAccountRefresh, _walletVisibleUntil;
+        private float _walletVisibleUntil;
+        /// <summary>The committed wallet value whose visible label is already formatted.</summary>
+        private long _walletLabelCoins = long.MinValue;
+        /// <summary>The retained wallet label, replaced only when its numeric content changes.</summary>
+        private string _walletLabel = string.Empty;
         /// <summary>Stores original progression strings.</summary>
         private readonly Dictionary<string, string> _originalProgressionStrings = new Dictionary<string, string>();
         /// <summary>Retains the last original advice key to avoid per-frame substring and placeholder allocations.</summary>
@@ -7717,22 +7803,17 @@ namespace PlantsVsZombies.Game
         /// <summary>Identifies the mode whose native advice placeholders were resolved.</summary>
         private int _resolvedAdviceModeId = -1;
 
-        /// <summary>Performs read display account.</summary>
-        /// <returns>The resulting read display account.</returns>
-        private PlayerAccount? ReadDisplayAccount()
+        /// <summary>Formats the board wallet only after its visible committed value changes.</summary>
+        /// <param name="coins">The committed visible coin units.</param>
+        /// <returns>The retained original wallet label.</returns>
+        private string WalletLabel(long coins)
         {
-            if (_owner._profiles == null || !_owner._profiles.SelectedId.HasValue)
+            if (_walletLabelCoins != coins)
             {
-                return null;
+                _walletLabelCoins = coins;
+                _walletLabel = "$" + coins.ToString("N0", System.Globalization.CultureInfo.InvariantCulture);
             }
-
-            if (_owner.Accounts._displayAccountSnapshot == null || _owner.Accounts._displayAccountSnapshot.ProfileId != _owner._profiles.SelectedId.Value || Time.unscaledTime >= _displayAccountRefresh)
-            {
-                _owner.Accounts._displayAccountSnapshot = _owner.Accounts.GetSelectedAccount();
-                _displayAccountRefresh = Time.unscaledTime + 1f;
-            }
-
-            return _owner.Accounts._displayAccountSnapshot;
+            return _walletLabel;
         }
 
         /// <summary>Performs draw account status.</summary>

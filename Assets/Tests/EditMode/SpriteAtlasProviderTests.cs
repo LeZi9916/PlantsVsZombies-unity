@@ -90,6 +90,41 @@ namespace PlantsVsZombies.Tests.EditMode
             Assert.That(provider.PreparedRegionCacheCount, Is.EqualTo(2));
         }
 
+        /// <summary>Checks first-use fractional crops and subsequent bounded eviction reuse prepared records and arrays.</summary>
+        [Test]
+        public void PreparedFractionalCropsAllocateNoManagedStorage()
+        {
+            var page = CreateTexture(4, 4);
+            using var provider = new SpriteAssetProvider(Catalog(Layout(256, "small", false)), 1024,
+                _ => page, IgnoreReleasedTexture);
+            var image = provider.LoadImage("image_fixture");
+            image.GetRegionCount(new Rect(0f, 0f, 1f, 1f));
+            provider.PrepareRegionCacheCapacity(64);
+            var ready = false;
+            for (var step = 0; step < 1024 && !ready; step++)
+            {
+                ready = provider.PrepareRegionStorageStep();
+            }
+            Assert.That(ready, Is.True);
+            var regions = 0;
+            var firstAllocation = -1;
+            var allocated = 0L;
+            for (var crop = 0; crop < 1000; crop++)
+            {
+                var cropBefore = GC.GetAllocatedBytesForCurrentThread();
+                regions += image.GetRegionCount(new Rect(crop * .0003f, .1f, .5f, .7f));
+                var cropBytes = GC.GetAllocatedBytesForCurrentThread() - cropBefore;
+                allocated += cropBytes;
+                if (firstAllocation < 0 && cropBytes != 0)
+                {
+                    firstAllocation = crop;
+                }
+            }
+            Assert.That(regions, Is.EqualTo(1000));
+            Assert.That(allocated, Is.Zero, "New exact UV keys and eviction must consume prepared cache storage; first allocating crop: " + firstAllocation);
+            Assert.That(provider.PreparedRegionCacheCount, Is.EqualTo(512));
+        }
+
         /// <summary>Checks arbitrary original sheet crops map independently to multiple losslessly tiled pages.</summary>
         [Test]
         public void PartialSourceUvCrossingTilesPreservesOriginalCoordinates()

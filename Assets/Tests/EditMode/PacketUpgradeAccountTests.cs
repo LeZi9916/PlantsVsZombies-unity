@@ -13,6 +13,36 @@ namespace PlantsVsZombies.Tests.EditMode
     /// <summary>Checks durable adventure packet offer choices and legacy account compatibility.</summary>
     public sealed class PacketUpgradeAccountTests
     {
+        /// <summary>Checks the live wallet projection observes committed values without cloning account collections.</summary>
+        [Test]
+        public void BoardWalletReadsCommittedValueWithoutAllocatingSnapshots()
+        {
+            var directory = Path.Combine(Path.GetTempPath(), "wallet-projection-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(directory);
+            try
+            {
+                var store = new PlayerAccountStore(Path.Combine(directory, "player.account"));
+                var id = Guid.NewGuid();
+                Assert.That(store.ReadDisplayCoins(id), Is.Zero);
+                store.Import(id, 123, new int[80], new int[100], 0, Array.Empty<GardenPlant>());
+                Assert.That(store.ReadDisplayCoins(id), Is.EqualTo(store.Get(id).DisplayCoins));
+                var sum = 0L;
+                var allocated = 0L;
+                for (var read = 0; read < 1000; read++)
+                {
+                    var before = GC.GetAllocatedBytesForCurrentThread();
+                    sum += store.ReadDisplayCoins(id);
+                    allocated += GC.GetAllocatedBytesForCurrentThread() - before;
+                }
+                Assert.That(sum, Is.EqualTo(1230000L));
+                Assert.That(allocated, Is.Zero);
+            }
+            finally
+            {
+                Directory.Delete(directory, true);
+            }
+        }
+
         /// <summary>Checks two declines survive reload and stop subsequent offers.</summary>
         [Test]
         public void DeclinesArePersistentAndLimited()

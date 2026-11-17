@@ -3,6 +3,7 @@ using PlantsVsZombies.Adventure;
 using PlantsVsZombies.Game;
 using PlantsVsZombies.Rendering;
 using PlantsVsZombies.Simulation;
+using PlantsVsZombies.VerifiedData;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
@@ -26,11 +27,13 @@ namespace PlantsVsZombies.Reanimation
         internal int ThumbnailPoseBuildCount { get; private set; }
         /// <summary>Gets how many actor playback containers were constructed before reuse was available.</summary>
         internal int NativePlaybackCreationCount { get; private set; }
+        /// <summary>Gets playback requests that exhausted prepared inactive containers.</summary>
+        internal long NativePlaybackCapacityMissCount { get; private set; }
         /// <summary>Gets the bounded number of retained fixed thumbnail poses.</summary>
         internal int ThumbnailPoseCount => _thumbnailPoses.Count;
 
         /// <summary>Limits dictionary buffers retained after actors leave the visible presentation.</summary>
-        private const int MaximumRetainedPoseBlends = 256;
+        private const int MaximumRetainedPoseBlends = 2048;
         /// <summary>Bounds inactive capture textures after temporary combat feedback ends.</summary>
         private const int MaximumRetainedNativeSurfaces = 16;
         /// <summary>Bounds inactive color and depth attachment storage to roughly 32 MiB.</summary>
@@ -88,7 +91,7 @@ namespace PlantsVsZombies.Reanimation
             /// <summary>Stores bounds.</summary>
             public Rect Bounds;
             /// <summary>Stores variant bounds.</summary>
-            public readonly Dictionary<int, Rect> VariantBounds = new Dictionary<int, Rect>();
+            public readonly Dictionary<int, Rect> VariantBounds = new Dictionary<int, Rect>(10);
         }
 
         /// <summary>Retains one exact local sample, independently of destination transform and rendering feedback.</summary>
@@ -149,8 +152,12 @@ namespace PlantsVsZombies.Reanimation
             _stagePageLease?.Dispose();
             _stagePageLease = null;
             _preparedPresentationImages.Clear();
+            _preparedResourceLayouts.Clear();
+            _preparedRegionRequests = 0;
             foreach (var asset in _animations.Values)
             {
+                asset.PreparedVariantTrack = 0;
+                asset.PreparedClip = 0;
                 asset.PreparedTrack = 0;
                 asset.PreparedFrame = 0;
             }
@@ -165,13 +172,17 @@ namespace PlantsVsZombies.Reanimation
         internal bool PreparePresentationCapacityStep(int actorCount, int spriteCount, int identityCount, int maxObjects = 1)
         {
             var target = Math.Min(Math.Max(0, identityCount - _nativePoseBlends.Count), MaximumRetainedPoseBlends);
+            foreach (var blend in _nativePoseBlends.Values)
+            {
+                if (PrepareNativePoseStorage(blend))
+                {
+                    return false;
+                }
+            }
             foreach (var blend in _inactiveNativePoseBlends)
             {
-                if (blend.Samples.Length < _maximumPreparedTracks)
+                if (PrepareNativePoseStorage(blend))
                 {
-                    blend.Samples = new LocalPoseSample[_maximumPreparedTracks];
-                    blend.Current.EnsureCapacity(_maximumPreparedTracks * 2);
-                    blend.From.EnsureCapacity(_maximumPreparedTracks * 2);
                     return false;
                 }
             }
@@ -181,9 +192,149 @@ namespace PlantsVsZombies.Reanimation
                 PreparePresentationCapacity(identityCount, 128);
                 remaining--;
             }
-            var hierarchyReady = remaining > 0 && Hierarchy.PrepareCapacityStep(actorCount, spriteCount, remaining);
+            var regionsReady = remaining > 0 && Assets.PrepareRegionStorageStep();
+            var capturesReady = regionsReady && PrepareNativeCapacityStep(actorCount, identityCount);
+            var hierarchyReady = capturesReady && Hierarchy.PrepareCapacityStep(actorCount, spriteCount, remaining);
             var sourcesReady = hierarchyReady && GetObjectRenderer().PrepareSourceCapacityStep(spriteCount, 128);
-            return _inactiveNativePoseBlends.Count >= target && hierarchyReady && sourcesReady;
+            return _inactiveNativePoseBlends.Count >= target && capturesReady && hierarchyReady && sourcesReady;
+        }
+
+        /// <summary>Prepares both active and inactive pose storage without discarding the actor's visible or prior pose.</summary>
+        /// <param name="blend">The retained live or idle playback state.</param>
+        /// <returns>Whether any retained pose storage grew during this loading step.</returns>
+        private bool PrepareNativePoseStorage(NativePoseBlend blend)
+        {
+            var tracks = Math.Max(128, _maximumPreparedTracks);
+            var capacity = tracks * 2;
+            var changed = blend.Samples.Length < tracks || blend.Current.EnsureCapacity(0) < capacity
+                || blend.From.EnsureCapacity(0) < capacity;
+            if (!changed)
+            {
+                return false;
+            }
+            if (blend.Samples.Length < tracks)
+            {
+                Array.Resize(ref blend.Samples, tracks);
+            }
+            blend.Current.EnsureCapacity(capacity);
+            blend.From.EnsureCapacity(capacity);
+            return true;
+        }
+
+        /// <summary>Reserves native capture metadata and one source or surface work unit without rendering.</summary>
+        /// <param name="actorCount">The expected actor population used to bound standard cropped captures.</param>
+        /// <param name="identities">The expected independently owned capture identities.</param>
+        /// <returns>Whether the bounded standard capture capacity is ready.</returns>
+        private bool PrepareNativeCapacityStep(int actorCount, int identities)
+        {
+            _nativeSurfaces.EnsureCapacity(Math.Max(1, identities));
+            if (_inactiveNativeSurfaces.Capacity < MaximumRetainedNativeSurfaces)
+            {
+                _inactiveNativeSurfaces.Capacity = MaximumRetainedNativeSurfaces;
+            }
+            var capture = GetNativeCaptureRenderer();
+            if (!capture.PrepareSourceCapacityStep(Math.Max(128, _maximumPreparedTracks * 4), 128))
+            {
+                return false;
+            }
+            if (!capture.PrepareMeshCapacityStep(4, Math.Max(256, _maximumPreparedTracks * 12)))
+            {
+                return false;
+            }
+            var target = Math.Min(MaximumRetainedNativeSurfaces, Math.Max(4, (actorCount + 31) / 32));
+            var available = 0;
+            foreach (var surface in _inactiveNativeSurfaces)
+            {
+                if (surface.Texture.width == 500 && surface.Texture.height == 460)
+                {
+                    available++;
+                }
+            }
+            foreach (var surface in _nativeSurfaces.Values)
+            {
+                if (surface.Texture.width == 500 && surface.Texture.height == 460)
+                {
+                    available++;
+                }
+            }
+            if (available >= target)
+            {
+                return true;
+            }
+            var prepared = new NativeSurface(500, 460);
+            NativeSurfaceCreationCount++;
+            SpriteImage.FromTexture(prepared.Texture);
+            _inactiveNativeSurfaces.Add(prepared);
+            return false;
+        }
+
+        /// <summary>Prepares damage and detached-arm image variants using detached defaults and the production equipment rules.</summary>
+        /// <param name="asset">The parsed native body animation.</param>
+        /// <param name="track">The source track whose optional replacement images are collected.</param>
+        private void PrepareZombieTrackImages(Reanimation asset, Track track)
+        {
+            for (var nativeKind = 0; nativeKind < VerifiedDataCatalog.Zombies.Count; nativeKind++)
+            {
+                var kind = nativeKind == 32 ? ZombieKind.Gargantuar : (ZombieKind)nativeKind;
+                var zombie = new Zombie(kind) { ModeHead = nativeKind >= 26 ? nativeKind : -1 };
+                if (!string.Equals(GameSimulation.AdventureZombiePresentationAsset(zombie), asset.Name, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+                var head = AdventureZombiePartsRules.HeadImage(nativeKind);
+                if (head != null)
+                {
+                    PreparePresentationImage(head);
+                }
+                PreparePresentationImage(AdventureZombieFeedbackRules.ArmImage(nativeKind));
+                zombie.StartingHealth = 300f;
+                zombie.PresentationMaxArmor = 300f;
+                zombie.PresentationMaxShield = 300f;
+                if (kind == ZombieKind.Gargantuar)
+                {
+                    zombie.GargantuarState = new AdventureGargantuarState();
+                }
+                if (kind == ZombieKind.Catapult)
+                {
+                    zombie.CatapultState = new AdventureCatapultState();
+                }
+                for (var damage = 0; damage < 3; damage++)
+                {
+                    zombie.Health = zombie.ArmorHealth = zombie.ShieldHealth = 300f - damage * 110f;
+                    zombie.PresentationNativePhase = kind == ZombieKind.Newspaper ? 31 : 0;
+                    for (var weapon = 0; weapon < (kind == ZombieKind.Gargantuar ? 3 : 1); weapon++)
+                    {
+                        if (zombie.GargantuarState != null)
+                        {
+                            zombie.GargantuarState.Weapon = weapon;
+                        }
+                        var equipment = AdventureZombieEquipmentRules.Image(zombie, asset.Name, asset.Name, track.Name);
+                        if (equipment != null)
+                        {
+                            PreparePresentationImage(equipment);
+                        }
+                    }
+                    if (zombie.CatapultState != null)
+                    {
+                        foreach (var frame in track.Frames)
+                        {
+                            if (frame.Texture != null)
+                            {
+                                var equipment = zombie.CatapultState.Image(track.Name, frame.Texture.SourceIdentity, damage);
+                                if (equipment != null)
+                                {
+                                    PreparePresentationImage(equipment);
+                                }
+                            }
+                        }
+                    }
+                }
+                var arm = AdventureZombieFeedbackRules.ArmReplacement(nativeKind, track.Name);
+                if (arm != null)
+                {
+                    PreparePresentationImage(arm);
+                }
+            }
         }
 
         /// <summary>Parses one known animation dependency before its first gameplay draw.</summary>
@@ -191,7 +342,7 @@ namespace PlantsVsZombies.Reanimation
         /// <returns>Whether the source and its default clip are available.</returns>
         internal bool PreparePresentationAsset(string name)
         {
-            if (!TryGetClip(name, null, out var asset, out _))
+            if (!TryGetNativeDefinitionClip(name, out var asset, out _))
             {
                 return false;
             }
@@ -205,11 +356,29 @@ namespace PlantsVsZombies.Reanimation
         /// <returns>Whether all frame images for the asset have been prepared.</returns>
         internal bool PreparePresentationAssetRegionsStep(string name, int maxImages = 1)
         {
-            if (!TryGetClip(name, null, out var asset, out _))
+            if (!TryGetNativeDefinitionClip(name, out var asset, out _))
             {
                 return true;
             }
             var remaining = Math.Max(1, maxImages);
+            while (asset.PreparedClip < asset.Tracks.Count)
+            {
+                var marker = asset.Tracks[asset.PreparedClip++].Name;
+                if (marker.StartsWith("anim_", StringComparison.OrdinalIgnoreCase))
+                {
+                    TryGetClip(name, marker, out _, out _);
+                    return false;
+                }
+            }
+            while (asset.PreparedVariantTrack < asset.Tracks.Count)
+            {
+                var track = asset.Tracks[asset.PreparedVariantTrack++];
+                if (asset.Name.StartsWith("Zombie", StringComparison.OrdinalIgnoreCase))
+                {
+                    PrepareZombieTrackImages(asset, track);
+                    return false;
+                }
+            }
             while (asset.PreparedTrack < asset.Tracks.Count)
             {
                 var track = asset.Tracks[asset.PreparedTrack];
@@ -220,8 +389,11 @@ namespace PlantsVsZombies.Reanimation
                     {
                         continue;
                     }
+                    ReserveRegionRequests(2);
                     image.GetRegionCount(new Rect(0f, 0f, 1f, 1f), true);
                     image.GetRegionCount(new Rect(0f, 0f, 1f, 1f), false);
+                    GetObjectRenderer().PrepareImageMaterials(image);
+                    GetNativeCaptureRenderer().PrepareImageMaterials(image);
                     if (_stagePageLease != null)
                     {
                         image.RetainPreparedPages(_stagePageLease);
@@ -243,18 +415,63 @@ namespace PlantsVsZombies.Reanimation
         /// <returns>Whether existing source artwork was successfully prepared.</returns>
         internal bool PreparePresentationImage(string resource)
         {
+            if (_preparedResourceLayouts.Contains(resource))
+            {
+                return true;
+            }
             if (!TryLoadTexture(resource, out var image))
             {
                 return false;
             }
-            image.GetRegionCount(new Rect(0f, 0f, 1f, 1f), true);
-            image.GetRegionCount(new Rect(0f, 0f, 1f, 1f), false);
+            _preparedResourceLayouts.Add(resource);
+            if (_preparedPresentationImages.Add(image))
+            {
+                ReserveRegionRequests(2);
+                image.GetRegionCount(new Rect(0f, 0f, 1f, 1f), true);
+                image.GetRegionCount(new Rect(0f, 0f, 1f, 1f), false);
+            }
+            EnsureNativeAtlas();
+            if (_nativeAtlas.TryGetValue(resource, out var cells) && cells.x * cells.y > 1)
+            {
+                ReserveRegionRequests(cells.x * cells.y * 2);
+                for (var row = 0; row < cells.y; row++)
+                {
+                    for (var column = 0; column < cells.x; column++)
+                    {
+                        var uv = new Rect(column / (float)cells.x, 1f - (row + 1f) / cells.y, 1f / cells.x, 1f / cells.y);
+                        image.GetRegionCount(uv, true);
+                        image.GetRegionCount(uv, false);
+                    }
+                }
+            }
+            GetObjectRenderer().PrepareImageMaterials(image);
+            GetNativeCaptureRenderer().PrepareImageMaterials(image);
             if (_stagePageLease != null)
             {
                 image.RetainPreparedPages(_stagePageLease);
             }
             return true;
         }
+
+        /// <summary>Completes bounded crop storage after particle dependencies have added their source layouts.</summary>
+        /// <returns>Whether all known region arrays and spare records are prepared.</returns>
+        internal bool PrepareFinalRegionStorageStep()
+        {
+            return Assets.PrepareRegionStorageStep();
+        }
+
+        /// <summary>Reserves stage-known geometry keys before adding new prepared image or source-cell combinations.</summary>
+        /// <param name="count">The additional exact image/crop/geometry combinations.</param>
+        private void ReserveRegionRequests(int count)
+        {
+            _preparedRegionRequests += count;
+            Assets.PrepareRegionCacheCapacity(_preparedRegionRequests);
+        }
+
+        /// <summary>Deduplicates native resource layouts whose individual particle cells have been prepared.</summary>
+        private readonly HashSet<string> _preparedResourceLayouts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        /// <summary>Counts known geometry combinations for the current stage's bounded region cache.</summary>
+        private int _preparedRegionRequests;
 
         /// <summary>Deduplicates immutable source images across caller-budgeted animation preparation steps.</summary>
         private readonly HashSet<SpriteImage> _preparedPresentationImages = new HashSet<SpriteImage>();
@@ -281,9 +498,10 @@ namespace PlantsVsZombies.Reanimation
             {
                 var blend = new NativePoseBlend();
                 NativePlaybackCreationCount++;
-                blend.Current.EnsureCapacity(trackCount);
-                blend.From.EnsureCapacity(trackCount);
-                blend.Samples = new LocalPoseSample[Math.Max(trackCount, _maximumPreparedTracks)];
+                var capacity = Math.Max(trackCount, _maximumPreparedTracks);
+                blend.Current.EnsureCapacity(capacity * 2);
+                blend.From.EnsureCapacity(capacity * 2);
+                blend.Samples = new LocalPoseSample[capacity];
                 _inactiveNativePoseBlends.Push(blend);
             }
             Hierarchy.PrepareSpriteNodes(spriteNodes);
@@ -338,6 +556,10 @@ namespace PlantsVsZombies.Reanimation
             public readonly Dictionary<string, Clip> RequestedClips = new Dictionary<string, Clip>(StringComparer.OrdinalIgnoreCase);
             /// <summary>Stores attached bounds.</summary>
             public readonly Dictionary<(Clip Body, Clip? Head, Track Anchor), Rect> AttachedBounds = new Dictionary<(Clip Body, Clip? Head, Track Anchor), Rect>();
+            /// <summary>The next authored clip marker visited by incremental preparation.</summary>
+            internal int PreparedClip;
+            /// <summary>The next source track whose native damage replacements are prepared.</summary>
+            internal int PreparedVariantTrack;
             /// <summary>The next source track visited by incremental atlas preparation.</summary>
             internal int PreparedTrack;
             /// <summary>The next source frame visited by incremental atlas preparation.</summary>
@@ -2416,6 +2638,8 @@ namespace PlantsVsZombies.Reanimation
             _recordingThumbnail = null;
             _texturesById.Clear();
             _preparedPresentationImages.Clear();
+            _preparedResourceLayouts.Clear();
+            _preparedRegionRequests = 0;
             _animations.Clear();
             _poseTrackIds.Clear();
             _nativePoseBlends.Clear();
@@ -2761,6 +2985,9 @@ namespace PlantsVsZombies.Reanimation
         /// <returns>The same local frame as the original interpolation and blend path.</returns>
         private Frame SampleLocalPose(Track track, FrameSample time, NativePoseBlend? blend, out Matrix4x4 matrix)
         {
+#if PVZ_PERFORMANCE_REPLAY
+            using var allocationDetail = new PlantsVsZombies.Diagnostics.PerformanceReplayAllocations.DetailScope("SampleLocalPose");
+#endif
             var cached = track.LocalSample;
             if (blend != null)
             {
@@ -3391,6 +3618,9 @@ namespace PlantsVsZombies.Reanimation
         /// <returns>The resulting prepare native blend.</returns>
         private NativePoseBlend? PrepareNativeBlend(PresentationIdentity key, string? animation, float seconds, int ticks)
         {
+#if PVZ_PERFORMANCE_REPLAY
+            using var allocationDetail = new PlantsVsZombies.Diagnostics.PerformanceReplayAllocations.DetailScope("PrepareNativeBlend");
+#endif
             if (key.IsEmpty)
             {
                 return null;
@@ -3407,6 +3637,7 @@ namespace PlantsVsZombies.Reanimation
                 {
                     blend = new NativePoseBlend();
                     NativePlaybackCreationCount++;
+                    NativePlaybackCapacityMissCount++;
                 }
                 blend.Animation = animation;
                 blend.StartedAt = seconds;
@@ -4738,6 +4969,9 @@ namespace PlantsVsZombies.Reanimation
         /// <returns>The resulting draw native zombie combat.</returns>
         internal bool DrawNativeZombieCombatIdentity(Zombie zombie, Rect viewport, Func<bool> draw, PresentationIdentity surfaceKey = default, float? bodyClipBottom = null, Rect? bodyClipBounds = null)
         {
+#if PVZ_PERFORMANCE_REPLAY
+            using var allocationDetail = new PlantsVsZombies.Diagnostics.PerformanceReplayAllocations.DetailScope("DrawNativeZombieCombatIdentity");
+#endif
             using var objectScope = BeginObjectScope();
             if (zombie == null || draw == null)
             {

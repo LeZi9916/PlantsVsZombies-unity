@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using Unity.Collections;
 using UnityEngine.Rendering;
 
 namespace PlantsVsZombies.Rendering
@@ -685,9 +686,9 @@ namespace PlantsVsZombies.Rendering
         private sealed class Chunk : IDisposable
         {
             /// <summary>The compact clipped vertex staging array.</summary>
-            internal readonly Vector4[] Vertices = new Vector4[InstancesPerChunk * VerticesPerInstance];
+            internal NativeArray<Vector4> Vertices;
             /// <summary>The compact polygon staging array.</summary>
-            internal readonly SpriteInstanceData[] Instances = new SpriteInstanceData[InstancesPerChunk];
+            internal NativeArray<SpriteInstanceData> Instances;
             /// <summary>The stable vertex structured buffer.</summary>
             internal readonly GraphicsBuffer VertexBuffer;
             /// <summary>The stable instance structured buffer.</summary>
@@ -709,16 +710,28 @@ namespace PlantsVsZombies.Rendering
             /// <param name="owner">The renderer accumulating actual native allocation diagnostics.</param>
             internal Chunk(SpriteInstancingRenderer owner)
             {
-                VertexBuffer = new GraphicsBuffer(GraphicsBuffer.Target.Structured, Vertices.Length, 16);
-                owner.BufferCreationCount++;
+                GraphicsBuffer? vertices = null;
                 try
                 {
+                    Vertices = new NativeArray<Vector4>(InstancesPerChunk * VerticesPerInstance, Allocator.Persistent);
+                    Instances = new NativeArray<SpriteInstanceData>(InstancesPerChunk, Allocator.Persistent);
+                    vertices = new GraphicsBuffer(GraphicsBuffer.Target.Structured, Vertices.Length, 16);
+                    owner.BufferCreationCount++;
                     InstanceBuffer = new GraphicsBuffer(GraphicsBuffer.Target.Structured, Instances.Length, 64);
                     owner.BufferCreationCount++;
+                    VertexBuffer = vertices;
                 }
                 catch
                 {
-                    VertexBuffer.Dispose();
+                    vertices?.Dispose();
+                    if (Vertices.IsCreated)
+                    {
+                        Vertices.Dispose();
+                    }
+                    if (Instances.IsCreated)
+                    {
+                        Instances.Dispose();
+                    }
                     throw;
                 }
             }
@@ -735,6 +748,8 @@ namespace PlantsVsZombies.Rendering
             {
                 VertexBuffer.Dispose();
                 InstanceBuffer.Dispose();
+                Vertices.Dispose();
+                Instances.Dispose();
             }
         }
 

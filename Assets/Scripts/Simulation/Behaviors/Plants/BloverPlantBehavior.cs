@@ -13,7 +13,7 @@ namespace PlantsVsZombies.Simulation
         public override void Initialize(Plant plant, PlantBehaviorContext context)
         {
             // PC PlantInit 46C23A starts anim_blow immediately at twenty fps and delays its special action fifty updates.
-            plant.BloverPresentation = new AdventureBloverState();
+            plant.BloverPresentation = context._world.LifetimePool.Rent<AdventureBloverState>();
             plant.ActionTimer = .5f;
         }
         /// <inheritdoc/>

@@ -21,6 +21,9 @@ namespace PlantsVsZombies.Tests.Checkpoints
             BungeeCargoSurvivesPlantRemoval();
             MagnetSourceSurvivesItsTemporaryList();
             PreparationPreservesCheckpointAndRandomStreams();
+            ImpactCuesAndSpawnGatesDoNotAllocate();
+            WaveNotificationsKeepRetainedPublicSnapshots();
+            VehicleAndCrushedPlantRecordsFollowTheirOwners();
             ExistingCheckpointRemainsCompatible();
             Console.WriteLine("PASS explicit model reset, shared ownership and capacity preparation");
         }
@@ -226,7 +229,7 @@ namespace PlantsVsZombies.Tests.Checkpoints
             var draws = game.BattleRandomDrawCount;
             var requirements = game.GetCapacityRequirements();
             var complete = false;
-            for (var step = 0; step < 1000 && !complete; step++)
+            for (var step = 0; step < 5000 && !complete; step++)
             {
                 var created = game.RuntimePoolStatistics.CreatedCount;
                 complete = game.PrepareCapacityStep(requirements, 16);
@@ -235,6 +238,15 @@ namespace PlantsVsZombies.Tests.Checkpoints
             Require(complete, "bounded preparation finishes");
             Require(game.BattleRandomDrawCount == draws, "preparation preserves battle randomness");
             Require(before.SequenceEqual(game.CaptureCheckpoint()), "runtime sidecar does not change checkpoint bytes");
+            var rehearsal = game.CreatePreparationRehearsal();
+            var rehearsed = false;
+            for (var step = 0; step < 1000 && !rehearsed; step++)
+            {
+                rehearsed = rehearsal.Step();
+            }
+            Require(rehearsed, "detached production birth, damage, death, corpse and return rehearsal finishes");
+            Require(game.BattleRandomDrawCount == draws && before.SequenceEqual(game.CaptureCheckpoint()),
+                "production lifecycle rehearsal preserves the live model graph and random continuation");
             var restored = GameSimulation.RestoreCheckpoint(before);
             Require(before.SequenceEqual(restored.CaptureCheckpoint()), "checkpoint restore excludes pool metadata");
             var pool = game.CheckpointState.LifetimePool;
@@ -260,6 +272,155 @@ namespace PlantsVsZombies.Tests.Checkpoints
             Require(game.RuntimePoolStatistics.CreatedCount == createdBefore, "repeated event bursts retain their capacity");
         }
 
+        /// <summary>Checks native cue order and repeated real spawn gates without temporary collections or captured predicates.</summary>
+        private static void ImpactCuesAndSpawnGatesDoNotAllocate()
+        {
+            var cases = new[]
+            {
+                (Type: 0, Helm: 0, Fire: false, First: 1, Second: 0, Count: 1),
+                (Type: 0, Helm: 1, Fire: false, First: 58, Second: 1, Count: 2),
+                (Type: 0, Helm: 2, Fire: false, First: 46, Second: 0, Count: 1),
+                (Type: 3, Helm: 2, Fire: false, First: 62, Second: 46, Count: 2),
+                (Type: 5, Helm: 4, Fire: false, First: 62, Second: 58, Count: 2),
+                (Type: 6, Helm: 2, Fire: true, First: 38, Second: 0, Count: 1),
+                (Type: 10, Helm: 2, Fire: false, First: 32, Second: 0, Count: 1),
+                (Type: 12, Helm: 3, Fire: false, First: 43, Second: 58, Count: 2)
+            };
+            foreach (var item in cases)
+            {
+                var cues = AdventureZombieSoundRules.ProjectileFoleyValues(item.Type, item.Helm, item.Fire);
+                Require(cues == (item.First, item.Second, item.Count), "native impact cue order");
+            }
+            var game = CreateGame();
+            var spawn = (ZombieSpawnSystem)game.MemberOwner("CanAdventureZombieSpawnInRow");
+            spawn.CanAdventureZombieSpawnInRow(ZombieKind.Normal, 0);
+            spawn.CanAdventureZombieSpawnInRow(ZombieKind.Bobsled, 0);
+            var bytes = GC.GetAllocatedBytesForCurrentThread();
+            var checksum = 0;
+            for (var index = 0; index < 1000; index++)
+            {
+                var item = cases[index % cases.Length];
+                var cues = AdventureZombieSoundRules.ProjectileFoleyValues(item.Type, item.Helm, item.Fire);
+                checksum += cues.First;
+                spawn.CanAdventureZombieSpawnInRow(ZombieKind.Normal, index % 5);
+                spawn.CanAdventureZombieSpawnInRow(ZombieKind.Bobsled, index % 5);
+            }
+            Require(GC.GetAllocatedBytesForCurrentThread() == bytes, "impact cues and row gates allocate no managed bytes");
+            Require(checksum > 0, "cue workload is observed");
+        }
+
+        /// <summary>Checks synchronous production notifications avoid allocations while public snapshots retain independent values.</summary>
+        private static void WaveNotificationsKeepRetainedPublicSnapshots()
+        {
+            var game = CreateGame();
+            var waves = (WaveSystem)game.MemberOwner("RaiseScheduledWaveEvent");
+            var count = 0;
+            game.WaveScheduleNotification = kind => count++;
+            waves.RaiseScheduledWaveEvent(global::PlantsVsZombies.Waves.WaveScheduleEventKind.HugeWaveWarning, 1);
+            var bytes = GC.GetAllocatedBytesForCurrentThread();
+            for (var index = 0; index < 100; index++)
+            {
+                waves.RaiseScheduledWaveEvent(global::PlantsVsZombies.Waves.WaveScheduleEventKind.HugeWaveWarning, index);
+            }
+            Require(GC.GetAllocatedBytesForCurrentThread() == bytes, "production wave notifications allocate no event objects");
+            Require(count == 101, "every production notification is delivered once");
+            global::PlantsVsZombies.Waves.WaveScheduleEvent? first = null;
+            global::PlantsVsZombies.Waves.WaveScheduleEvent? second = null;
+            game.WaveScheduleEventRaised = value =>
+            {
+                if (first == null)
+                {
+                    first = value;
+                }
+                else
+                {
+                    second = value;
+                }
+            };
+            waves.RaiseScheduledWaveEvent(global::PlantsVsZombies.Waves.WaveScheduleEventKind.HugeWaveWarning, 7);
+            waves.RaiseScheduledWaveEvent(global::PlantsVsZombies.Waves.WaveScheduleEventKind.HugeWaveCleared, 8);
+            Require(first != null && second != null && !ReferenceEquals(first, second)
+                && first.WaveIndex == 7 && second.WaveIndex == 8, "public event snapshots remain independent and retain their original indices");
+            var notices = 0;
+            game.Adventure.NativeNoticeRaised = (kind, value, row, column) => notices++;
+            game.Adventure.Notice(AdventureNoticeKind.CoinCreated, 1);
+            bytes = GC.GetAllocatedBytesForCurrentThread();
+            for (var index = 0; index < 100; index++)
+            {
+                game.Adventure.Notice(AdventureNoticeKind.CoinCreated, index, 2, 3);
+            }
+            Require(GC.GetAllocatedBytesForCurrentThread() == bytes && notices == 101,
+                "production board notices allocate no retained event objects");
+            AdventureNotice? captured = null;
+            game.Adventure.NoticeRaised = notice => captured = notice;
+            game.Adventure.Notice(AdventureNoticeKind.CoinCreated, 42, 2, 3);
+            Require(captured != null && captured.Value == 42 && captured.Row == 2 && captured.Column == 3,
+                "public board notices retain complete independent payloads");
+        }
+
+        /// <summary>Exercises production vehicle particles, crushed plant ownership, and delayed reuse without allocating during repeat bursts.</summary>
+        private static void VehicleAndCrushedPlantRecordsFollowTheirOwners()
+        {
+            var game = CreateGame();
+            var world = game.CheckpointState;
+            var requirements = new SimulationCapacityRequirements(4, 4, 4, 8, 0, soundEvents: 64);
+            var ready = false;
+            for (var step = 0; step < 256 && !ready; step++)
+            {
+                ready = game.PrepareCapacityStep(requirements, 16);
+            }
+            Require(ready, "event fixture preparation finishes");
+            var vehicle = (VehicleZombieActions)game.MemberOwner("AddAdventureBasketballReflect");
+            var bite = (BiteSystem)game.MemberOwner("SquishAdventurePlant");
+            var shot = new Pea { Row = 1, PresentationLobNativeX = 123f, PresentationLobNativeY = 234f };
+            var plant = world.LifetimePool.Rent<Plant>();
+            plant.Id = 42;
+            plant.Kind = PlantKind.Sunflower;
+            plant.Row = 1;
+            plant.Column = 2;
+            world.Plants.Add(plant);
+            bite.SquishAdventurePlant(plant);
+            world.LifetimePool.CompleteFrame(world);
+            var crushed = world.Presentation.SquishedPlants[0];
+            for (var frame = 0; frame < 4; frame++)
+            {
+                world.LifetimePool.CompleteFrame(world);
+            }
+            Require(plant.Id == 42 && ReferenceEquals(crushed.Plant, plant), "crushed picture retains removed plant");
+            world.Presentation.SquishedPlants.Clear();
+            world.Presentation.ZombieSounds.Clear();
+            for (var frame = 0; frame < 3; frame++)
+            {
+                world.LifetimePool.CompleteFrame(world);
+            }
+            Require(plant.Id == 0, "last crushed owner releases its plant after the grace boundaries");
+            vehicle.AddAdventureBasketballReflect(shot);
+            var original = world.Presentation.ZomboniParticles[0];
+            Require(original.Foreground && original.Particle == "UmbrellaReflect" && original.X == 143f && original.Y == 254f,
+                "vehicle particle preserves original native fields");
+            world.Presentation.ZomboniParticles.Clear();
+            for (var frame = 0; frame < 3; frame++)
+            {
+                world.LifetimePool.CompleteFrame(world);
+            }
+            var created = world.LifetimePool.CreatedCount;
+            var bytes = GC.GetAllocatedBytesForCurrentThread();
+            for (var cycle = 0; cycle < 100; cycle++)
+            {
+                vehicle.AddAdventureBasketballReflect(shot);
+                world.LifetimePool.CompleteFrame(world);
+                world.Presentation.ZomboniParticles.Clear();
+                for (var frame = 0; frame < 3; frame++)
+                {
+                    world.LifetimePool.CompleteFrame(world);
+                }
+            }
+            Require(GC.GetAllocatedBytesForCurrentThread() == bytes, "prepared production particle bursts allocate no managed bytes");
+            Require(world.LifetimePool.CreatedCount == created, "production particle bursts reuse prepared records");
+            Require(original.Particle == "ZamboniExplosion" && !original.Foreground && original.Id == 0,
+                "vehicle record reset clears previous effect and foreground state");
+        }
+
         /// <summary>Optionally checks a private pre-change checkpoint without copying or changing the source file.</summary>
         private static void ExistingCheckpointRemainsCompatible()
         {
@@ -279,7 +440,7 @@ namespace PlantsVsZombies.Tests.Checkpoints
             Require(payload.SequenceEqual(game.CaptureCheckpoint()), "pre-change private checkpoint has unchanged field schema");
             var requirements = game.GetCapacityRequirements();
             var complete = false;
-            for (var step = 0; step < 1000 && !complete; step++)
+            for (var step = 0; step < 5000 && !complete; step++)
             {
                 complete = game.PrepareCapacityStep(requirements, 16);
             }

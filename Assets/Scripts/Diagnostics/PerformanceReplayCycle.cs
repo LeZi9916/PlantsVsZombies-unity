@@ -36,6 +36,8 @@ namespace PlantsVsZombies.Diagnostics
         public int Textures;
         /// <summary>Counts loaded materials.</summary>
         public int Materials;
+        /// <summary>Stores grouped material names outside measured combat to attribute lifetime growth.</summary>
+        public string MaterialInventory;
     }
 }
 #endif

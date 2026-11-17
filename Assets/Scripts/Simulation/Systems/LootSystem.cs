@@ -40,6 +40,9 @@ namespace PlantsVsZombies.Simulation
         /// <param name = "z">The z.</param>
         internal void DropAdventureLoot(Zombie z)
         {
+#if PVZ_PERFORMANCE_REPLAY
+            using var allocationDetail = new PlantsVsZombies.Diagnostics.PerformanceReplayAllocations.DetailScope("DropAdventureLoot");
+#endif
             var a = _adventureModeRunner.Adventure;
             if (_world.Rules.AdventureDisableLoot || (_world.ModeSession == null && !a.Level.IsReplay && a.Level.Number < 11) || z.BungeeCarrier)
             {

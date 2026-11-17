@@ -13,7 +13,7 @@ namespace PlantsVsZombies.Editor
     /// <summary>Builds opt-in replay Players only from explicitly isolated project copies.</summary>
     internal static class PerformanceReplayBuild
     {
-        /// <summary>Builds a Windows replay Player using explicit command-line controls.</summary>
+        /// <summary>Builds a Windows or macOS replay Player using explicit command-line controls.</summary>
         /// <exception cref="InvalidOperationException">The caller did not select an isolated replay project or the build failed.</exception>
         /// <exception cref="ArgumentException">The output, backend or graphics API argument is invalid.</exception>
         public static void BuildFromCommandLine()
@@ -32,19 +32,20 @@ namespace PlantsVsZombies.Editor
             {
                 throw new ArgumentException("The replay backend must be CoreCLR or IL2CPP; Mono is a legacy CoreCLR alias in Unity 7.");
             }
-            if (graphics != "Vulkan" && graphics != "D3D11")
+            if (graphics != "Vulkan" && graphics != "D3D11" && graphics != "Metal")
             {
-                throw new ArgumentException("The replay graphics API must be Vulkan or D3D11.");
+                throw new ArgumentException("The replay graphics API must be Vulkan, D3D11 or Metal.");
             }
+            var target = graphics == "Metal" ? BuildTarget.StandaloneOSX : BuildTarget.StandaloneWindows64;
             var implementation = backend == "IL2CPP" ? ScriptingImplementation.IL2CPP : ScriptingImplementation.CoreCLR;
             PlayerSettings.SetScriptingBackend(NamedBuildTarget.Standalone, implementation);
             if (PlayerSettings.GetScriptingBackend(NamedBuildTarget.Standalone) != implementation)
             {
                 throw new InvalidOperationException("The isolated project did not select the requested scripting backend.");
             }
-            PlayerSettings.SetUseDefaultGraphicsAPIs(BuildTarget.StandaloneWindows64, false);
-            PlayerSettings.SetGraphicsAPIs(BuildTarget.StandaloneWindows64,
-                new[] { graphics == "Vulkan" ? GraphicsDeviceType.Vulkan : GraphicsDeviceType.Direct3D11 });
+            PlayerSettings.SetUseDefaultGraphicsAPIs(target, false);
+            PlayerSettings.SetGraphicsAPIs(target,
+                new[] { graphics == "Metal" ? GraphicsDeviceType.Metal : graphics == "Vulkan" ? GraphicsDeviceType.Vulkan : GraphicsDeviceType.Direct3D11 });
             PlayerSettings.enableFrameTimingStats = true;
             PlayerSettings.companyName = "PvZ Performance Replay";
             PlayerSettings.productName = "Isolated Replay";
@@ -65,7 +66,7 @@ namespace PlantsVsZombies.Editor
             var report = BuildPipeline.BuildPlayer(new BuildPlayerOptions
             {
                 scenes = new[] { scenePath },
-                target = BuildTarget.StandaloneWindows64,
+                target = target,
                 locationPathName = Path.GetFullPath(output),
                 options = BuildOptions.Development,
                 extraScriptingDefines = new[] { "PVZ_PERFORMANCE_REPLAY", "ENABLE_PROFILER" }

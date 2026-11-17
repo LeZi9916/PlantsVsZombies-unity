@@ -134,6 +134,9 @@ namespace PlantsVsZombies.Simulation
         /// <returns>The resulting fire adventure pea.</returns>
         internal Pea FireAdventurePea(Plant p, int row, bool back, float damage)
         {
+#if PVZ_PERFORMANCE_REPLAY
+            using var allocationDetail = new PlantsVsZombies.Diagnostics.PerformanceReplayAllocations.DetailScope("FireAdventurePea");
+#endif
             var shot = RentPea();
             shot.SourceKind = p.Kind;
             shot.SourceIsImitated = p.IsImitated;
@@ -620,6 +623,9 @@ namespace PlantsVsZombies.Simulation
         /// <param name="allowDamage">Whether live combat targets can receive hits before the level has completed.</param>
         internal void AdvanceAdventureProjectiles(float dt, bool allowDamage = true)
         {
+#if PVZ_PERFORMANCE_REPLAY
+            using var allocationDetail = new PlantsVsZombies.Diagnostics.PerformanceReplayAllocations.DetailScope("AdvanceAdventureProjectiles");
+#endif
             for (var i = _world.Peas.Count - 1; i >= 0; i--)
             {
                 var p = _world.Peas[i];

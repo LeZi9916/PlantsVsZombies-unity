@@ -1608,9 +1608,11 @@ namespace PlantsVsZombies.Simulation
             var helm = z != null && z.ArmorHealth > 0 ? global::PlantsVsZombies.Adventure.AdventureZombieEquipmentRules.HelmType(z) : 0;
             // PC fire splash is disabled against vehicles and door/ladder shields.
             var fireSplash = z != null && z.Kind != ZombieKind.Zomboni && z.Kind != ZombieKind.Catapult && (z.ShieldHealth <= 0 || z.Kind != ZombieKind.ScreenDoor && z.Kind != ZombieKind.Ladder);
-            foreach (int id in global::PlantsVsZombies.Adventure.AdventureZombieSoundRules.ProjectileFoley(type, helm, fireSplash))
+            var cues = AdventureZombieSoundRules.ProjectileFoleyValues(type, helm, fireSplash);
+            RequestAdventureZombieFoley(cues.First);
+            if (cues.Count == 2)
             {
-                RequestAdventureZombieFoley(id);
+                RequestAdventureZombieFoley(cues.Second);
             }
         }
 

@@ -354,17 +354,32 @@ namespace PlantsVsZombies.Simulation
             }
         }
 
+        /// <summary>Finds ice admitting a native sled without constructing a first-use predicate delegate.</summary>
+        /// <returns>Whether an active ice trail reaches the native spawn gate.</returns>
+        private bool HasAdventureSpawnIce()
+        {
+            foreach (var ice in _adventureModeRunner.Adventure._ice)
+            {
+                if (ice.RemainingTicks > 0 && ice.MinX < 700)
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
         /// <summary>Performs spawn scheduled adventure wave.</summary>
         /// <param name = "wave">The wave.</param>
         internal void SpawnScheduledAdventureWave(AdventureWave wave)
         {
             var a = _adventureModeRunner.Adventure;
             var dropWeights = a.Level.Mode == AdventureMode.Bungee ? BungeeZombieActions.CreateAdventureBungeeDropWeights() : null;
-            foreach (var kind in wave.Zombies)
+            for (var actor = 0; actor < wave.Zombies.Count; actor++)
             {
+                var kind = wave.Zombies[actor];
                 // Each actor samples PC Zombie::Init's native range independently.
                 var x = 9.5f;
-                if (kind == ZombieKind.Bobsled && !a._ice.Exists(ice => ice.RemainingTicks > 0 && ice.MinX < 700))
+                if (kind == ZombieKind.Bobsled && !HasAdventureSpawnIce())
                 {
                     for (var follower = 0; follower < 4; follower++)
                     {
@@ -539,6 +554,7 @@ namespace PlantsVsZombies.Simulation
         /// <param name = "index">The index.</param>
         internal void RaiseScheduledWaveEvent(global::PlantsVsZombies.Waves.WaveScheduleEventKind kind, int index)
         {
+            _world.WaveScheduleNotification?.Invoke(kind);
             if (_world.WaveScheduleEventRaised != null)
             {
                 _world.WaveScheduleEventRaised(new global::PlantsVsZombies.Waves.WaveScheduleEvent { Kind = kind, WaveIndex = index, Tick = RequiredWaveSchedule.ElapsedTicks });

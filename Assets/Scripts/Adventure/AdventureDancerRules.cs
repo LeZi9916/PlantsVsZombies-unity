@@ -33,7 +33,7 @@ namespace PlantsVsZombies.Adventure
         /// <param name="entranceRandom">The original random integer in the range zero through eleven.</param>
         public static void Initialize(Zombie zombie, int entranceRandom)
         {
-            zombie.DancerState = new AdventureDancerState();
+            zombie.DancerState = zombie.RuntimePool?.Rent<AdventureDancerState>() ?? new AdventureDancerState();
             if (zombie.Kind == ZombieKind.Dancing)
             {
                 SetPhase(zombie, 40);

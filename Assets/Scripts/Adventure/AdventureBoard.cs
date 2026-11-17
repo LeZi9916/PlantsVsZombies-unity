@@ -233,6 +233,8 @@ namespace PlantsVsZombies.Adventure
 
         /// <summary>Stores notice raised.</summary>
         public Action<AdventureNotice>? NoticeRaised;
+        /// <summary>Delivers synchronous production notices without allocating a retained public snapshot.</summary>
+        internal Action<AdventureNoticeKind, int, int, int>? NativeNoticeRaised;
         /// <summary>Stores packet id.</summary>
         internal int _packetId;
         /// <summary>Stores zombie id.</summary>
@@ -282,6 +284,7 @@ namespace PlantsVsZombies.Adventure
         /// <param name = "column">The column.</param>
         internal void Notice(AdventureNoticeKind kind, int value = 0, int row = -1, int column = -1)
         {
+            NativeNoticeRaised?.Invoke(kind, value, row, column);
             if (NoticeRaised != null)
             {
                 NoticeRaised(new AdventureNotice {

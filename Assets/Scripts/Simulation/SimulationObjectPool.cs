@@ -10,11 +10,13 @@ namespace PlantsVsZombies.Simulation
     internal sealed class SimulationObjectPool<T> where T : class, new()
     {
         /// <summary>The inactive objects available for reuse.</summary>
-        private readonly Stack<T> _available;
+        private readonly List<T> _available;
         /// <summary>The maximum number of inactive objects retained after peak demand.</summary>
-        private readonly int _capacity;
+        private int _capacity;
         /// <summary>Gets the number of objects constructed by this pool.</summary>
         internal int CreatedCount { get; private set; }
+        /// <summary>Gets rent requests that exceeded explicitly prepared inactive storage.</summary>
+        internal long MissCount { get; private set; }
         /// <summary>Gets the number of retained inactive objects.</summary>
         internal int AvailableCount => _available.Count;
         /// <summary>Gets the maximum retained inactive count.</summary>
@@ -35,10 +37,10 @@ namespace PlantsVsZombies.Simulation
                 throw new ArgumentOutOfRangeException(nameof(initialCount));
             }
             _capacity = capacity;
-            _available = new Stack<T>(capacity);
+            _available = new List<T>(capacity);
             for (var i = 0; i < initialCount; i++)
             {
-                _available.Push(new T());
+                _available.Add(new T());
                 CreatedCount++;
             }
         }
@@ -50,9 +52,13 @@ namespace PlantsVsZombies.Simulation
             if (_available.Count > 0)
             {
                 ReuseCount++;
-                return _available.Pop();
+                var last = _available.Count - 1;
+                var item = _available[last];
+                _available.RemoveAt(last);
+                return item;
             }
             CreatedCount++;
+            MissCount++;
             return new T();
         }
 
@@ -70,7 +76,7 @@ namespace PlantsVsZombies.Simulation
         {
             if (_available.Count < _capacity)
             {
-                _available.Push(item);
+                _available.Add(item);
                 return true;
             }
             DiscardedCount++;
@@ -84,12 +90,17 @@ namespace PlantsVsZombies.Simulation
         /// <returns>The number of objects constructed.</returns>
         internal int PrepareCapacityStep(int targetAvailable, int maxObjects, Action<T>? prepared = null)
         {
+            if (maxObjects > 0 && targetAvailable > _capacity)
+            {
+                _available.Capacity = targetAvailable;
+                _capacity = targetAvailable;
+            }
             var count = Math.Min(Math.Max(0, maxObjects), Math.Max(0, Math.Min(targetAvailable, _capacity) - _available.Count));
             for (var index = 0; index < count; index++)
             {
                 var item = new T();
                 prepared?.Invoke(item);
-                _available.Push(item);
+                _available.Add(item);
                 CreatedCount++;
             }
             return count;

@@ -344,8 +344,14 @@ namespace PlantsVsZombies.Simulation
                     var floor = 80f + ball.Row * 85f + Math.Max(0f, 440f - (x - 40f)) * .25f - 10f;
                     var y = floor + 90f + AdventureSpawnRandom.NextRange(_world._random, -50f, 0f);
                     var id = ++_world.Presentation._effectId;
-                    _world.Presentation.ZomboniParticles.Add(new AdventureZomboniParticle { Id = id, Seed = id,
-                        Row = ball.Row, X = x, Y = y, Particle = ball.IsIce ? "IceballTrail" : "FireballTrail" });
+                    var effect = _world.LifetimePool.Rent<AdventureZomboniParticle>();
+                    effect.Id = id;
+                    effect.Seed = id;
+                    effect.Row = ball.Row;
+                    effect.X = x;
+                    effect.Y = y;
+                    effect.Particle = ball.IsIce ? "IceballTrail" : "FireballTrail";
+                    _world.Presentation.ZomboniParticles.Add(effect);
                 }
 
                 ball.AnimationSeconds += .01f;

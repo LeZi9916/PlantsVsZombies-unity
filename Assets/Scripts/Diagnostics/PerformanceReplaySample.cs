@@ -20,6 +20,14 @@ namespace PlantsVsZombies.Diagnostics
         public long GcBytes;
         /// <summary>The main-thread allocation bytes between consecutive replay boundaries, or minus one when the positive control fails.</summary>
         public long MainThreadGcBytes;
+        /// <summary>The preceding completed frame's production Update allocation bytes, or minus one when unavailable.</summary>
+        public long UpdateAllocationBytes;
+        /// <summary>The preceding completed frame's production Present allocation bytes, or minus one when unavailable.</summary>
+        public long PresentAllocationBytes;
+        /// <summary>The preceding completed frame's production Update allocation events, or minus one when unavailable.</summary>
+        public int UpdateAllocationEvents;
+        /// <summary>The preceding completed frame's production Present allocation events, or minus one when unavailable.</summary>
+        public int PresentAllocationEvents;
         /// <summary>The complete production Update marker in milliseconds.</summary>
         public double UpdateMilliseconds;
         /// <summary>The complete production Present marker in milliseconds.</summary>
@@ -54,6 +62,20 @@ namespace PlantsVsZombies.Diagnostics
         public long MeshUploadBytes;
         /// <summary>Stores immutable submission binding construction count, or minus one when unavailable.</summary>
         public long InstanceSubmissionBindingCreationCount;
+        /// <summary>Stores retained painter-span descriptors created at this frame, or minus one when unavailable.</summary>
+        public long InstanceRunCreationCount;
+        /// <summary>Stores owned submission materials created at this frame, or minus one when unavailable.</summary>
+        public long InstanceSubmissionMaterialCreationCount;
+        /// <summary>Stores unprepared painter-span requests at this frame, or minus one when unavailable.</summary>
+        public long InstanceRunCapacityMissCount;
+        /// <summary>Stores unprepared native binding requests at this frame, or minus one when unavailable.</summary>
+        public long InstanceSubmissionBindingCapacityMissCount;
+        /// <summary>Stores the cumulative NativePlaybackCreations at this frame.</summary>
+        public long NativePlaybackCreations;
+        /// <summary>Stores the cumulative NativePlaybackCapacityMisses at this frame.</summary>
+        public long NativePlaybackCapacityMisses;
+        /// <summary>Stores the cumulative NativeSurfaceCreations at this frame.</summary>
+        public long NativeSurfaceCreations;
         /// <summary>Stores fallbacks protecting same-frame submitted instance data, or minus one when unavailable.</summary>
         public long InstanceSameFrameBufferFallbackCount;
         /// <summary>The live plant population.</summary>

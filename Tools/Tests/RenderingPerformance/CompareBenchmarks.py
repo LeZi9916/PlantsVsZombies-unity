@@ -65,6 +65,10 @@ def summarize(document: dict) -> dict:
         final["Created"] - initial["Created"]
         if initial.get("Created", -1) >= 0 and final.get("Created", -1) >= 0 else None
     )
+    result["Pool"]["misses_during_measurement"] = (
+        final["Misses"] - initial["Misses"]
+        if initial.get("Misses", -1) >= 0 and final.get("Misses", -1) >= 0 else None
+    )
     result["ResourceReuse"] = {}
     for initial_field, frame_field in (
         ("InitialGpuBufferCreations", "GpuBufferCreations"),
@@ -74,6 +78,10 @@ def summarize(document: dict) -> dict:
         ("InitialMeshBufferReconfigurations", "MeshBufferReconfigurations"),
         ("InitialMeshCreations", "MeshCreations"),
         ("InitialSubmissionBindingCreations", "SubmissionBindingCreations"),
+        ("InitialRunCreations", "RunCreations"),
+        ("InitialSubmissionMaterialCreations", "SubmissionMaterialCreations"),
+        ("InitialRunCapacityMisses", "RunCapacityMisses"),
+        ("InitialSubmissionBindingCapacityMisses", "SubmissionBindingCapacityMisses"),
         ("InitialSameFrameBufferFallbacks", "SameFrameBufferFallbacks"),
     ):
         values = [sample.get(frame_field, -1) for sample in samples]
@@ -139,7 +147,8 @@ def compare(baseline: Path, candidate: Path) -> dict:
         second[field]["total"] == 0
         for field in ("SimulationAllocationEvents", "PresentationAllocationEvents")
     )
-    no_growth = second["Pool"]["created_during_measurement"] == 0 and all(
+    no_growth = (second["Pool"]["created_during_measurement"] == 0
+                 and second["Pool"]["misses_during_measurement"] == 0) and all(
         value == 0 for value in second["ResourceReuse"].values()
     )
     return {

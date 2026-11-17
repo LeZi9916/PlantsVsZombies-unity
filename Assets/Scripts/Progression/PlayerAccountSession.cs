@@ -76,6 +76,20 @@ namespace PlantsVsZombies.Progression
             return EnsurePlayerAccount() ? RequiredAccountStore.Get(_owner.RequiredProfiles.RequiredSelectedId) : null;
         }
 
+        /// <summary>Reads the selected wallet for the live board without copying persistent account collections.</summary>
+        /// <param name="coins">Receives the visible committed coin balance.</param>
+        /// <returns>Whether a selected profile and account store are available.</returns>
+        internal bool TryReadDisplayCoins(out long coins)
+        {
+            coins = 0;
+            if (!EnsurePlayerAccount())
+            {
+                return false;
+            }
+            coins = RequiredAccountStore.ReadDisplayCoins(_owner.RequiredProfiles.RequiredSelectedId);
+            return true;
+        }
+
         /// <summary>Calls <see cref="GetSelectedAccount"/> where a result must exist, failing with a descriptive exception instead of returning null.</summary>
         /// <returns>The non-null get selected account result.</returns>
         /// <exception cref="System.InvalidOperationException">The method returned no result.</exception>

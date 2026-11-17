@@ -317,6 +317,9 @@ namespace PlantsVsZombies.Simulation
         /// <param name = "anticipatedSun">The anticipated sun.</param>
         internal void AdventurePacketReady(PlantKind kind, int anticipatedSun = -1)
         {
+#if PVZ_PERFORMANCE_REPLAY
+            using var allocationDetail = new PlantsVsZombies.Diagnostics.PerformanceReplayAllocations.DetailScope("AdventurePacketReady");
+#endif
             if (_conveyorSystem.UsesNativeAdventureConveyor || !ContainsSeed(_adventureModeRunner.Adventure.SelectedSeeds, kind))
             {
                 return;
@@ -325,7 +328,10 @@ namespace PlantsVsZombies.Simulation
             var flash = AdventureSeedBankPresentation.ReadyCheck(AdventurePacketContext(kind, anticipatedSun: anticipatedSun, destination: _world._packetFeedbackContext), 0, 0, 0, 0);
             if (flash.Spawn)
             {
-                _adventureModeRunner.Adventure.SeedFlashes.Add(new AdventureSeedFlashState { Id = ++_adventureModeRunner.Adventure._seedFlashId, Kind = kind });
+                var state = _world.LifetimePool.Rent<AdventureSeedFlashState>();
+                state.Id = ++_adventureModeRunner.Adventure._seedFlashId;
+                state.Kind = kind;
+                _adventureModeRunner.Adventure.SeedFlashes.Add(state);
             }
         }
 

@@ -59,6 +59,17 @@ namespace PlantsVsZombies.Progression
             }
         }
 
+        /// <summary>Reads the committed wallet value without constructing a detached garden and receipt snapshot.</summary>
+        /// <param name="id">The selected profile identity.</param>
+        /// <returns>The visible original-game coin units, or zero for an account without a committed record.</returns>
+        internal long ReadDisplayCoins(Guid id)
+        {
+            lock (_gate)
+            {
+                return _records.TryGetValue(id, out var account) ? account.DisplayCoins : 0L;
+            }
+        }
+
 #if UNITY_EDITOR
         /// <summary>Copies the exact disk baseline read or committed by this store for editor draft recovery.</summary>
         /// <returns>The last accepted file bytes, or null when the account file did not exist.</returns>
@@ -116,6 +127,9 @@ namespace PlantsVsZombies.Progression
         /// <exception cref = "ArgumentException">The operation cannot satisfy its preconditions.</exception>
         public void CreditBattleCoins(Guid id, string attempt, int cumulativeUnits)
         {
+#if PVZ_PERFORMANCE_REPLAY
+            using var allocationDetail = new PlantsVsZombies.Diagnostics.PerformanceReplayAllocations.DetailScope("CreditBattleCoins");
+#endif
             if (string.IsNullOrEmpty(attempt) || attempt.Length > 80 || cumulativeUnits < 0)
             {
                 throw new ArgumentException("Invalid battle receipt.");
@@ -363,6 +377,9 @@ namespace PlantsVsZombies.Progression
         /// <exception cref = "IOException">The operation cannot satisfy its preconditions.</exception>
         private void Commit(PlayerAccount account)
         {
+#if PVZ_PERFORMANCE_REPLAY
+            using var allocationDetail = new PlantsVsZombies.Diagnostics.PerformanceReplayAllocations.DetailScope("AccountPersistence");
+#endif
             var next = new Dictionary<Guid, PlayerAccount>(_records);
             next[account.ProfileId] = account;
             if (next.Count > 1024)

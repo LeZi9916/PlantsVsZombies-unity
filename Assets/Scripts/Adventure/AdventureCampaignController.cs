@@ -157,7 +157,7 @@ namespace PlantsVsZombies.Adventure
             _owner.Opening._adventureOpeningIsRestart = isRestart;
             _owner.RequiredAnimations.ResetNativePlayback();
             _owner.RequiredGame.EventRaised = _owner.Sounds.PlaySound;
-            _owner.RequiredGame.Adventure.NoticeRaised = AdventureNotice;
+            _owner.RequiredGame.Adventure.NativeNoticeRaised = HandleNativeAdventureNotice;
             _owner.RequiredGame.Adventure.VaseInterludeDialogueEnabled = true;
             _owner.WaveNotices.InitializeAdventureWaveNotices(isRestored);
             _owner._deck.Clear();
@@ -225,28 +225,38 @@ namespace PlantsVsZombies.Adventure
         /// <param name = "notice">The notice.</param>
         private void AdventureNotice(AdventureNotice notice)
         {
-            if (notice.Kind == AdventureNoticeKind.VaseInterludeStarted)
+            HandleNativeAdventureNotice(notice.Kind, notice.Value, notice.Row, notice.Column);
+        }
+
+        /// <summary>Consumes a complete synchronous production notice without retaining a model event object.</summary>
+        /// <param name="kind">The original notice kind.</param>
+        /// <param name="value">The original notice payload.</param>
+        /// <param name="row">The original source row.</param>
+        /// <param name="column">The original source column.</param>
+        private void HandleNativeAdventureNotice(AdventureNoticeKind kind, int value, int row, int column)
+        {
+            if (kind == AdventureNoticeKind.VaseInterludeStarted)
             {
-                _owner.Opening.StartVaseInterlude(notice.Value);
+                _owner.Opening.StartVaseInterlude(value);
             }
 
-            if (notice.Kind == AdventureNoticeKind.CoinCollectionStarted)
+            if (kind == AdventureNoticeKind.CoinCollectionStarted)
             {
                 _owner._presenter.ShowWalletUntil(_owner.RequiredGame.Elapsed + 10f);
             }
 
-            if (notice.Kind == AdventureNoticeKind.CoinCollected)
+            if (kind == AdventureNoticeKind.CoinCollected)
             {
                 _owner.IndependentModes._modeAccountSnapshot = null;
                 _owner.Accounts._displayAccountSnapshot = null;
             }
 
-            if (notice.Kind == AdventureNoticeKind.CoinCollectionFailed)
+            if (kind == AdventureNoticeKind.CoinCollectionFailed)
             {
                 _owner.AdventureBoard.AdventureFeedback(_owner.IndependentModes._modeSaveError ?? ("金币尚未保存：" + (_adventureCampaign?.LastPersistenceError ?? "请重试")), 5f);
             }
 
-            _owner.Sounds.HandleAdventureRewardNoticeSound(notice);
+            _owner.Sounds.HandleAdventureRewardNoticeSound(kind);
         }
     }
 }

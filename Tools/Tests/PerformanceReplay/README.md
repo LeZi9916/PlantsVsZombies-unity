@@ -1,7 +1,9 @@
 # Complete Player performance replays
 
-Requires the exact Unity **7000.0.0a16** editor, Windows graphics hardware and
-PowerShell 7. The source checkpoint is private local input and must never be
+Requires the exact Unity **7000.0.0a16** editor. The PowerShell wrapper targets
+Windows graphics hardware and PowerShell 7; the isolated builder also accepts
+`-pvz-replay-graphics Metal` with `-buildTarget OSXUniversal` and an `.app` output
+for macOS CoreCLR validation. The source checkpoint is private local input and must never be
 committed. Supply an ASCII work directory to avoid Unity 7 command-line Unicode
 decoding issues. No run uses `-nographics` or changes the main project settings.
 
@@ -155,3 +157,37 @@ accepted as a CoreCLR alias; it never claims traditional Mono verification. The
 obsolete `Mono2x` editor selection can be ignored after an IL2CPP build, so the
 builder selects `ScriptingImplementation.CoreCLR` directly and checks the setting.
 The report and wrapper also check `ActualScriptingBackend` in the built Player.
+
+## Continuation allocation and lifetime evidence
+
+The opt-in replay now records complete production `UpdateAllocationBytes`,
+`PresentAllocationBytes`, `UpdateAllocationEvents` and `PresentAllocationEvents`
+from the preceding completed Unity frame. Both scoped recorders must detect a
+deliberately allocated 32 KiB array; `ScopedAllocationRecorderOverflowed` rejects
+an overflowing bounded recorder. Complete-frame `GcBytes` and boundary-thread
+`MainThreadGcBytes` remain separate and retain every event. Older source snapshots
+without the production scope hooks report scoped values as -1.
+
+`-pvz-replay-allocation-details` enables nested, cumulative attribution for a
+short diagnosis. Its nested values cannot be added as independent totals and
+its timing is not acceptance timing. Normal replays leave these detail scopes
+disabled. Native playback, capture-surface, run, material and binding creation
+counters preserve their initial values so first-measured-frame growth is visible.
+
+The previous CPU/command-buffer CustomSampler span generated mismatched GPU
+markers on Metal and has been removed. Those observations are rejected and kept.
+Current GPU data is FrameTimingManager's whole-frame reading when available,
+otherwise -1; isolated scene GPU time remains unverified. `Width`/`Height` describe
+the actual offscreen target, and `WindowWidth`/`WindowHeight` retain the logical
+Player window size at the measured boundary. A macOS batch Player can expose a
+640x480 logical window while rendering the 1920x1080 target.
+
+`-pvz-replay-restore-every-frames <n>` is an explicit, short reentry diagnostic
+used only with a duration replay. `ForcedRestoreFrameInterval` records it. It must
+be zero for natural gameplay acceptance/stress runs. Every forced restore and
+preparation frame remains in the samples, and cycle material inventories are
+collected outside ready-combat scopes to attribute resource growth.
+
+The macOS continuation results and outstanding acceptance failures are recorded in
+`Assets/Tests/OrderedInstancingPerformance.md`. They do not replace the Windows
+Vulkan/D3D11 and CoreCLR/IL2CPP matrix.

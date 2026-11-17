@@ -240,6 +240,9 @@ namespace PlantsVsZombies.Simulation
         /// <param name="damageFlags">The original TakeDamage behavior mask.</param>
         internal void ApplyAdventureZombieDamage(Zombie z, float damage, bool bypassShield, uint damageFlags)
         {
+#if PVZ_PERFORMANCE_REPLAY
+            using var allocationDetail = new PlantsVsZombies.Diagnostics.PerformanceReplayAllocations.DetailScope("ApplyAdventureZombieDamage");
+#endif
             _zombieFeedbackSystem.AdventurePresentationZombieHit(z, damage, bypassShield, damageFlags);
             if (z.Airborne)
             {

@@ -101,7 +101,7 @@ namespace PlantsVsZombies.Simulation
 
             // PC 419838 rejects vehicles on PlantRowType.HighGround, not on the normal rows used by roof boards.
             if (!AdventureZombiePoolRules.CanSpawnInRow(kind, level.IsWaterRow(row), wave)
-                || kind == ZombieKind.Bobsled && !_adventureModeRunner.Adventure._ice.Exists(ice => ice.Row == row && ice.RemainingTicks > 0))
+                || kind == ZombieKind.Bobsled && !HasAdventureIceInRow(row))
             {
                 return false;
             }
@@ -112,6 +112,21 @@ namespace PlantsVsZombies.Simulation
             }
 
             return kind != ZombieKind.Dancing || level.HasPool || level.IsLawnRow(row - 1) && level.IsLawnRow(row + 1);
+        }
+
+        /// <summary>Finds an active ice trail without capturing a lane in a predicate.</summary>
+        /// <param name="row">The candidate zero-based lane.</param>
+        /// <returns>Whether a nonexpired trail exists in the lane.</returns>
+        private bool HasAdventureIceInRow(int row)
+        {
+            foreach (var ice in _adventureModeRunner.Adventure._ice)
+            {
+                if (ice.Row == row && ice.RemainingTicks > 0)
+                {
+                    return true;
+                }
+            }
+            return false;
         }
 
         /// <summary>Checks PC 0x460B30's modes whose last authored wave is reused continuously.</summary>
@@ -225,6 +240,9 @@ namespace PlantsVsZombies.Simulation
         /// <returns>The newly initialized native zombie.</returns>
         private Zombie CreateAdventureZombie(ZombieKind kind, int row, float x, int wave, int bungeeColumn)
         {
+#if PVZ_PERFORMANCE_REPLAY
+            using var allocationDetail = new PlantsVsZombies.Diagnostics.PerformanceReplayAllocations.DetailScope("CreateAdventureZombie");
+#endif
             var health = kind == ZombieKind.Yeti ? 1350f : kind == ZombieKind.Bungee ? 450f : kind == ZombieKind.Ladder ? 500f : kind == ZombieKind.Gargantuar ? 3000f : kind == ZombieKind.Zomboni ? 1350f : kind == ZombieKind.Catapult ? 850f : kind == ZombieKind.PoleVaulter || kind == ZombieKind.DolphinRider || kind == ZombieKind.JackInTheBox || kind == ZombieKind.Pogo || kind == ZombieKind.Dancing ? 500f : 270f;
             var armor = global::PlantsVsZombies.Adventure.AdventureZombieEquipmentRules.StartingArmor(kind);
             var shield = global::PlantsVsZombies.Adventure.AdventureZombieEquipmentRules.StartingShield(kind);

@@ -17,7 +17,7 @@ namespace PlantsVsZombies.Reanimation
         /// <summary>Limits retained particles per immutable emitter definition after bursts have ended.</summary>
         private const int MaximumRetainedParticles = 256;
         /// <summary>Bounds complete inactive systems retained for each immutable effect definition.</summary>
-        private const int MaximumRetainedSystems = 32;
+        private const int MaximumRetainedSystems = 128;
         /// <summary>Defines node.</summary>
         private sealed class Node
         {
@@ -182,6 +182,9 @@ namespace PlantsVsZombies.Reanimation
             public Curve RequiredY => Y ?? throw new System.InvalidOperationException("The member 'Y' is not available.");
         }
 
+        /// <summary>Gets the last resource whose live particles exceeded prepared storage.</summary>
+        internal string? LastParticleCapacityMissResource { get; private set; }
+
         /// <summary>Defines emitter definition.</summary>
         private sealed class EmitterDefinition
         {
@@ -189,6 +192,8 @@ namespace PlantsVsZombies.Reanimation
             public string? Image = string.Empty, Type = string.Empty, Name = string.Empty;
             /// <summary>Stores image frames.</summary>
             public int ImageFrames = 1;
+            /// <summary>The immutable source effect name used to attribute capacity misses.</summary>
+            internal string Resource = string.Empty;
             /// <summary>Stores random spin, loops, particle loops, additive, dont follow, has alpha, and fullscreen drawing.</summary>
             public bool RandomSpin, Loops, ParticleLoops, Additive, DontFollow, HasAlpha, FullScreen;
             /// <summary>Starts each particle at the original random integer lifetime update instead of at birth.</summary>
@@ -409,6 +414,9 @@ namespace PlantsVsZombies.Reanimation
         /// <returns>The resulting draw.</returns>
         internal bool Draw(PresentationIdentity key, string name, float age, Vector2 origin, int seed, float scale = 1f, float stopAge = -1f, Matrix4x4? fullScreenMatrix = null)
         {
+#if PVZ_PERFORMANCE_REPLAY
+            using var allocationDetail = new PlantsVsZombies.Diagnostics.PerformanceReplayAllocations.DetailScope("Draw");
+#endif
             SystemInstance system;
             if (!_systems.TryGetValue(key, out system))
             {
@@ -586,7 +594,8 @@ namespace PlantsVsZombies.Reanimation
                 {
                     Image = image,
                     Type = "Box",
-                    Name = emitterName
+                    Name = emitterName,
+                    Resource = name
                 };
                 foreach (XmlNode child in node.ChildNodes)
                 {
@@ -672,6 +681,7 @@ namespace PlantsVsZombies.Reanimation
             }
             else
             {
+                LastParticleCapacityMissResource = definition.Resource;
                 particle = CreateParticle(definition);
             }
 
@@ -942,7 +952,14 @@ namespace PlantsVsZombies.Reanimation
             var estimate = Math.Ceiling(rate * duration * .01d + minimum + 1d);
             estimate = Math.Min(estimate, MaximumTrackValue(definition, "SpawnMaxActive", MaximumRetainedParticles));
             estimate = Math.Min(estimate, MaximumTrackValue(definition, "SpawnMaxLaunched", MaximumRetainedParticles));
-            return (int)Math.Max(1d, Math.Min(MaximumRetainedParticles, estimate));
+            var demand = (int)Math.Max(1d, Math.Min(MaximumRetainedParticles, estimate));
+            var target = Math.Min(MaximumRetainedParticles, demand + (demand + 3) / 4);
+            var capacity = 1;
+            while (capacity < target)
+            {
+                capacity *= 2;
+            }
+            return capacity;
         }
 
         /// <summary>Creates unconditional draw fallbacks before the first visible particle submission.</summary>
@@ -958,6 +975,26 @@ namespace PlantsVsZombies.Reanimation
             definition.Track("ParticleBlue", 1f);
             definition.Track("ClipTop");
             definition.Track("ClipBottom");
+            definition.Track("SystemAlpha", 1f);
+            definition.Track("ParticleDuration", 100f);
+            definition.Track("EmitterRadius");
+            definition.Track("EmitterBoxX");
+            definition.Track("EmitterBoxY");
+            if (definition.Tracks.ContainsKey("EmitterSkewX") || definition.Tracks.ContainsKey("EmitterSkewY"))
+            {
+                definition.Track("EmitterSkewX");
+                definition.Track("EmitterSkewY");
+            }
+            definition.Track("EmitterOffsetX");
+            definition.Track("EmitterOffsetY");
+            definition.Track("LaunchSpeed");
+            definition.Track("ParticleSpinAngle");
+            definition.Track("ParticleSpinSpeed");
+            definition.Track("CollisionReflect");
+            definition.Track("CollisionSpin");
+            definition.Track("CrossFadeDuration", 1f);
+            definition.Track("SpawnRate");
+            definition.Track("SpawnMinActive", -1f);
         }
 
         /// <summary>Prepares one complete effect layout without consuming the battle random stream.</summary>
@@ -1146,6 +1183,9 @@ namespace PlantsVsZombies.Reanimation
         /// <returns>Whether the system submitted visible artwork.</returns>
         public bool Draw(string key, string name, float age, Vector2 origin, int seed, float scale = 1f, float stopAge = -1f, Matrix4x4? fullScreenMatrix = null)
         {
+#if PVZ_PERFORMANCE_REPLAY
+            using var allocationDetail = new PlantsVsZombies.Diagnostics.PerformanceReplayAllocations.DetailScope("Draw");
+#endif
             return Draw(PresentationIdentity.FromExternal(key), name, age, origin, seed, scale, stopAge, fullScreenMatrix);
         }
     }

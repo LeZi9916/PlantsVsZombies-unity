@@ -212,6 +212,9 @@ namespace PlantsVsZombies.Audio
         /// <param name = "gameEvent">The game event.</param>
         internal void PlaySound(GameEvent gameEvent)
         {
+#if PVZ_PERFORMANCE_REPLAY
+            using var allocationDetail = new PlantsVsZombies.Diagnostics.PerformanceReplayAllocations.DetailScope("PlaySound");
+#endif
             if (SuppressLegacyZombieHitSound(gameEvent))
             {
                 return;
@@ -394,6 +397,9 @@ namespace PlantsVsZombies.Audio
         /// <summary>Plays the original swing at mallet creation and both impact sounds when the pot opens.</summary>
         internal void UpdateAdventureVaseAudio()
         {
+#if PVZ_PERFORMANCE_REPLAY
+            using var allocationDetail = new PlantsVsZombies.Diagnostics.PerformanceReplayAllocations.DetailScope("UpdateAdventureVaseAudio");
+#endif
             var game = _owner._game;
             if (!ReferenceEquals(_vaseAudioGame, game))
             {
@@ -515,16 +521,16 @@ namespace PlantsVsZombies.Audio
         }
 
         /// <summary>Performs handle adventure reward notice sound.</summary>
-        /// <param name = "notice">The notice.</param>
-        internal void HandleAdventureRewardNoticeSound(AdventureNotice notice)
+        /// <param name="kind">The original reward notice kind.</param>
+        internal void HandleAdventureRewardNoticeSound(AdventureNoticeKind kind)
         {
-            if (notice.Kind == AdventureNoticeKind.RewardFade)
+            if (kind == AdventureNoticeKind.RewardFade)
             {
                 PlayAdventureRewardSound("lightfill.ogg");
                 return;
             }
 
-            if (notice.Kind != AdventureNoticeKind.RewardCollected || _owner.RequiredGame.Adventure.RewardPresentation == null)
+            if (kind != AdventureNoticeKind.RewardCollected || _owner.RequiredGame.Adventure.RewardPresentation == null)
             {
                 return;
             }
@@ -781,6 +787,9 @@ namespace PlantsVsZombies.Audio
         /// <summary>Performs update adventure zombie part audio.</summary>
         internal void UpdateAdventureZombiePartAudio()
         {
+#if PVZ_PERFORMANCE_REPLAY
+            using var allocationDetail = new PlantsVsZombies.Diagnostics.PerformanceReplayAllocations.DetailScope("UpdateAdventureZombiePartAudio");
+#endif
             if (!ReferenceEquals(_zombiePartAudioGame, _owner._game))
             {
                 _zombiePartAudioGame = _owner._game;

@@ -33,6 +33,14 @@ namespace PlantsVsZombies.Diagnostics
         private readonly Func<long> _meshUploadBytes = Bind("MeshUploadBytes");
         /// <summary>Reads immutable native submission binding construction events.</summary>
         private readonly Func<long> _submissionBindings = Bind("InstanceSubmissionBindingCreationCount");
+        /// <summary>Reads retained painter-span descriptors created.</summary>
+        private readonly Func<long> _runCreations = Bind("InstanceRunCreationCount");
+        /// <summary>Reads owned submission materials created.</summary>
+        private readonly Func<long> _submissionMaterials = Bind("InstanceSubmissionMaterialCreationCount");
+        /// <summary>Reads unprepared painter-span requests.</summary>
+        private readonly Func<long> _runMisses = Bind("InstanceRunCapacityMissCount");
+        /// <summary>Reads unprepared native binding requests.</summary>
+        private readonly Func<long> _bindingMisses = Bind("InstanceSubmissionBindingCapacityMissCount");
         /// <summary>Reads scene fallbacks that protect instance data already submitted in the same Unity frame.</summary>
         private readonly Func<long> _sameFrameFallbacks = Bind("InstanceSameFrameBufferFallbackCount");
 
@@ -52,6 +60,10 @@ namespace PlantsVsZombies.Diagnostics
             sample.MeshCreationCount = _meshCreations();
             sample.MeshUploadBytes = _meshUploadBytes();
             sample.InstanceSubmissionBindingCreationCount = _submissionBindings();
+            sample.InstanceRunCreationCount = _runCreations();
+            sample.InstanceSubmissionMaterialCreationCount = _submissionMaterials();
+            sample.InstanceRunCapacityMissCount = _runMisses();
+            sample.InstanceSubmissionBindingCapacityMissCount = _bindingMisses();
             sample.InstanceSameFrameBufferFallbackCount = _sameFrameFallbacks();
         }
 
@@ -74,6 +86,25 @@ namespace PlantsVsZombies.Diagnostics
             {
                 var read = (Func<ulong>)Delegate.CreateDelegate(typeof(Func<ulong>), method);
                 return () => unchecked((long)read());
+            }
+            return Unavailable;
+        }
+
+        /// <summary>Binds an optional instance counter before warm-up while retaining compatibility with older source snapshots.</summary>
+        /// <param name="owner">The renderer supplying the optional property.</param>
+        /// <param name="name">The stable counter property name.</param>
+        /// <returns>An allocation-free getter or the unavailable sentinel.</returns>
+        internal static Func<long> BindInstance(object? owner, string name)
+        {
+            var method = owner?.GetType().GetProperty(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)?.GetGetMethod(true);
+            if (method?.ReturnType == typeof(long))
+            {
+                return (Func<long>)Delegate.CreateDelegate(typeof(Func<long>), owner, method);
+            }
+            if (method?.ReturnType == typeof(int))
+            {
+                var read = (Func<int>)Delegate.CreateDelegate(typeof(Func<int>), owner, method);
+                return () => read();
             }
             return Unavailable;
         }

@@ -111,6 +111,65 @@ namespace PlantsVsZombies.Tests.PlayMode
             Assert.That(Marshal.SizeOf<SpriteBatchVertex>(), Is.EqualTo(68));
         }
 
+        /// <summary>Checks single-unit loading preparation completes native bindings before their first new painter spans are submitted.</summary>
+        /// <returns>Frames expiring the earlier native binding snapshots.</returns>
+        [UnityTest]
+        public IEnumerator PreparedPainterSpansReuseBindingsAndMaterialsOnTheirFirstSubmission()
+        {
+            var ready = false;
+            var draws = ObjectSpriteRenderer.InstancedDrawCount;
+            var uploads = ObjectSpriteRenderer.InstanceTotalUploadBytes;
+            for (var step = 0; step < 1024 && !ready; step++)
+            {
+                var before = ObjectSpriteRenderer.InstanceRunCreationCount
+                    + ObjectSpriteRenderer.InstanceSubmissionBindingCreationCount
+                    + ObjectSpriteRenderer.InstanceSubmissionMaterialCreationCount
+                    + ObjectSpriteRenderer.InstanceBufferCreationCount / 2;
+                ready = ObjectSpriteRenderer.PrepareSceneCapacityStep(9, 1);
+                var after = ObjectSpriteRenderer.InstanceRunCreationCount
+                    + ObjectSpriteRenderer.InstanceSubmissionBindingCreationCount
+                    + ObjectSpriteRenderer.InstanceSubmissionMaterialCreationCount
+                    + ObjectSpriteRenderer.InstanceBufferCreationCount / 2;
+                Assert.That(after - before, Is.LessThanOrEqualTo(1), "One step prepares only one independently bounded resource unit.");
+            }
+            Assert.That(ready, Is.True);
+            Assert.That(ObjectSpriteRenderer.PreparedInstanceSubmissionBindingCapacity, Is.GreaterThanOrEqualTo(128));
+            Assert.That(ObjectSpriteRenderer.InstancedDrawCount, Is.EqualTo(draws));
+            Assert.That(ObjectSpriteRenderer.InstanceTotalUploadBytes, Is.EqualTo(uploads));
+            var bindings = ObjectSpriteRenderer.InstanceSubmissionBindingCreationCount;
+            var materials = ObjectSpriteRenderer.InstanceSubmissionMaterialCreationCount;
+            var runMisses = ObjectSpriteRenderer.InstanceRunCapacityMissCount;
+            var bindingMisses = ObjectSpriteRenderer.InstanceSubmissionBindingCapacityMissCount;
+            DrawFrame(9, false, false);
+            Assert.That(ObjectSpriteRenderer.InstancedDrawCount, Is.EqualTo(2));
+            yield return null;
+            DrawFrame(9, false, false);
+            Assert.That(ObjectSpriteRenderer.InstanceSubmissionBindingCreationCount, Is.EqualTo(bindings));
+            Assert.That(ObjectSpriteRenderer.InstanceSubmissionMaterialCreationCount, Is.EqualTo(materials));
+            Assert.That(ObjectSpriteRenderer.InstanceRunCapacityMissCount, Is.EqualTo(runMisses));
+            Assert.That(ObjectSpriteRenderer.InstanceSubmissionBindingCapacityMissCount, Is.EqualTo(bindingMisses));
+        }
+
+        /// <summary>Checks compatibility preparation creates hidden meshes and fixed buffers before their first submitted runs.</summary>
+        /// <returns>A frame retiring the explicitly prepared mesh scene.</returns>
+        [UnityTest]
+        public IEnumerator PreparedMeshRunsReuseTheirFirstNativeBuffers()
+        {
+            ObjectSpriteRenderer.Backend = SpriteRenderingBackend.Mesh;
+            var ready = false;
+            for (var step = 0; step < 32 && !ready; step++)
+            {
+                ready = _renderer.PrepareMeshCapacityStep(9, 512);
+            }
+            Assert.That(ready, Is.True);
+            var meshes = ObjectSpriteRenderer.MeshCreationCount;
+            var buffers = ObjectSpriteRenderer.MeshBufferReconfigurationCount;
+            DrawFrame(9, false, false);
+            Assert.That(ObjectSpriteRenderer.MeshCreationCount, Is.EqualTo(meshes));
+            Assert.That(ObjectSpriteRenderer.MeshBufferReconfigurationCount, Is.EqualTo(buffers));
+            yield return null;
+        }
+
         /// <summary>Checks each active native snapshot supplies the same required chunk buffers to both material validation and the draw property block.</summary>
         [Test]
         public void MaterialValidationBuffersMatchTheSubmittedPropertyBlock()

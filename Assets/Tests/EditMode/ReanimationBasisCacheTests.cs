@@ -1,6 +1,9 @@
 #nullable enable
 using System;
 using System.Reflection;
+using System.Collections;
+using System.IO;
+using PlantsVsZombies.Rendering;
 using NUnit.Framework;
 using PlantsVsZombies.Reanimation;
 using UnityEngine;
@@ -10,6 +13,47 @@ namespace PlantsVsZombies.Tests.EditMode
     /// <summary>Compares bounded track-basis reuse with the original uncached affine constructor.</summary>
     public sealed class ReanimationBasisCacheTests
     {
+        /// <summary>Checks loading prepares a visible actor's prior-pose dictionary without changing its current pose or exact sample.</summary>
+        [Test]
+        public void PreparationUpgradesActivePlaybackAndPreservesItsPose()
+        {
+            var root = Path.Combine(Path.GetTempPath(), "PvZActivePose-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(root);
+            try
+            {
+                using var renderer = new ReanimationRenderer(root);
+                var flags = BindingFlags.Instance | BindingFlags.NonPublic;
+                var prepare = typeof(ReanimationRenderer).GetMethod("PrepareNativeBlend", flags)!;
+                var identity = PresentationIdentity.Create("actor", 71, 0, 1);
+                var blend = prepare.Invoke(renderer, new object[] { identity, "anim_walk", 0f, 10 })!;
+                var type = blend.GetType();
+                var current = (IDictionary)type.GetField("Current")!.GetValue(blend)!;
+                var from = (IDictionary)type.GetField("From")!.GetValue(blend)!;
+                var frameType = typeof(ReanimationRenderer).GetNestedType("Frame", BindingFlags.NonPublic)!;
+                var frame = Activator.CreateInstance(frameType)!;
+                frameType.GetField("X")!.SetValue(frame, 123f);
+                current.Add(37, frame);
+                from.Add(12, frame);
+                typeof(ReanimationRenderer).GetField("_maximumPreparedTracks", flags)!.SetValue(renderer, 300);
+                Assert.That(renderer.PreparePresentationCapacityStep(0, 0, 1), Is.False);
+                Assert.That(current.Count, Is.EqualTo(1));
+                Assert.That(from.Count, Is.EqualTo(1));
+                Assert.That(frameType.GetField("X")!.GetValue(current[37]), Is.EqualTo(123f));
+                var method = current.GetType().GetMethod("EnsureCapacity")!;
+                var currentCapacity = (int)method.Invoke(current, new object[] { 0 })!;
+                var fromCapacity = (int)method.Invoke(from, new object[] { 0 })!;
+                Assert.That(currentCapacity, Is.GreaterThanOrEqualTo(600));
+                Assert.That(fromCapacity, Is.GreaterThanOrEqualTo(600));
+                prepare.Invoke(renderer, new object[] { identity, "anim_eat", 1f, 10 });
+                Assert.That(from.Contains(37), Is.True);
+                Assert.That((int)method.Invoke(from, new object[] { 0 })!, Is.EqualTo(fromCapacity));
+            }
+            finally
+            {
+                Directory.Delete(root, true);
+            }
+        }
+
         /// <summary>Checks translation-only reuse, skew, mirrored scale and alternating actor poses against the uncached oracle.</summary>
         [Test]
         public void CachedBasisMatchesUncachedConstructorAcrossExactPoseChanges()

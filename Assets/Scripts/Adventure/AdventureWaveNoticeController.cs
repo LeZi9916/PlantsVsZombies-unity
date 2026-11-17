@@ -30,7 +30,7 @@ namespace PlantsVsZombies.Adventure
         {
             if (_waveNoticeGame != null)
             {
-                _waveNoticeGame.WaveScheduleEventRaised -= HandleAdventureWaveNotice;
+                _waveNoticeGame.WaveScheduleNotification -= HandleAdventureWaveNotice;
             }
 
             _waveNoticeGame = _owner._game;
@@ -42,28 +42,28 @@ namespace PlantsVsZombies.Adventure
                     _hugeWaveNoticeStart = _waveNoticeGame.Presentation.HugeWaveNoticeStart;
                     _finalWaveNoticeStart = _waveNoticeGame.Presentation.FinalWaveNoticeStart;
                 }
-                _waveNoticeGame.WaveScheduleEventRaised += HandleAdventureWaveNotice;
+                _waveNoticeGame.WaveScheduleNotification += HandleAdventureWaveNotice;
             }
         }
 
         /// <summary>Performs handle adventure wave notice.</summary>
-        /// <param name = "e">The e.</param>
-        private void HandleAdventureWaveNotice(WaveScheduleEvent e)
+        /// <param name="kind">The native wave event kind consumed synchronously.</param>
+        private void HandleAdventureWaveNotice(WaveScheduleEventKind kind)
         {
             if (_waveNoticeGame != _owner._game)
             {
                 return;
             }
 
-            if (e.Kind == WaveScheduleEventKind.HugeWaveWarning)
+            if (kind == WaveScheduleEventKind.HugeWaveWarning)
             {
                 _hugeWaveNoticeStart = _owner.RequiredGame.Elapsed;
             }
-            else if (e.Kind == WaveScheduleEventKind.HugeWaveCleared)
+            else if (kind == WaveScheduleEventKind.HugeWaveCleared)
             {
                 _hugeWaveNoticeStart = -1f;
             }
-            else if (e.Kind == WaveScheduleEventKind.FinalWaveApproaching)
+            else if (kind == WaveScheduleEventKind.FinalWaveApproaching)
             {
                 _finalWaveNoticeStart = _owner.RequiredGame.Elapsed;
             }
@@ -74,7 +74,7 @@ namespace PlantsVsZombies.Adventure
         {
             if (_waveNoticeGame != null)
             {
-                _waveNoticeGame.WaveScheduleEventRaised -= HandleAdventureWaveNotice;
+                _waveNoticeGame.WaveScheduleNotification -= HandleAdventureWaveNotice;
             }
 
             _waveNoticeGame = null;

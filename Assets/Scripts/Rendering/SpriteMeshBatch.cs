@@ -1,6 +1,7 @@
 #nullable enable
 using System;
 using UnityEngine;
+using Unity.Collections;
 using UnityEngine.Rendering;
 
 namespace PlantsVsZombies.Rendering
@@ -11,9 +12,9 @@ namespace PlantsVsZombies.Rendering
         /// <summary>The maximum vertices addressable without requiring 32-bit GPU indices.</summary>
         internal const int MaximumVertexCount = 65532;
         /// <summary>The interleaved CPU staging buffer, retained across changing populations.</summary>
-        private SpriteBatchVertex[] _vertices = new SpriteBatchVertex[256];
+        private NativeArray<SpriteBatchVertex> _vertices = new NativeArray<SpriteBatchVertex>(256, Allocator.Persistent);
         /// <summary>The portable fan indices retained independently of their active prefix.</summary>
-        private ushort[] _indices = new ushort[384];
+        private NativeArray<ushort> _indices = new NativeArray<ushort>(384, Allocator.Persistent);
         /// <summary>The fixed Float32 shader attribute layout, allocated once.</summary>
         private static readonly VertexAttributeDescriptor[] s_layout =
         {
@@ -97,6 +98,70 @@ namespace PlantsVsZombies.Rendering
             Renderer.reflectionProbeUsage = ReflectionProbeUsage.Off;
             Renderer.motionVectorGenerationMode = MotionVectorGenerationMode.ForceNoMotion;
             Renderer.enabled = false;
+        }
+
+        /// <summary>Reserves fixed local-capture storage and validates upload bindings during loading.</summary>
+        /// <param name="vertices">The anticipated clipped vertex count for this material run.</param>
+        /// <returns>Whether this step enlarged or initialized any CPU or GPU storage.</returns>
+        internal bool PrepareCapacity(int vertices)
+        {
+            var capacity = 256;
+            while (capacity < vertices && capacity < MaximumVertexCount)
+            {
+                capacity = Math.Min(MaximumVertexCount, capacity * 2);
+            }
+            var indices = capacity * 3;
+            var changed = _vertices.Length < capacity || _indices.Length < indices
+                || _gpuVertexCapacity != _vertices.Length || _gpuIndexCapacity != _indices.Length;
+            if (_vertices.Length < capacity)
+            {
+                ResizeVertices(capacity);
+            }
+            if (_indices.Length < indices)
+            {
+                ResizeIndices(indices);
+            }
+            if (changed)
+            {
+                Publish();
+                Mesh.SetVertexBufferData(_vertices, 0, 0, 1, 0, MeshUpdateFlags.DontRecalculateBounds);
+                Mesh.SetIndexBufferData(_indices, 0, 0, 1, MeshUpdateFlags.DontRecalculateBounds);
+                TotalUploadBytes += 70;
+            }
+            return changed;
+        }
+
+        /// <summary>Grows persistent vertex staging while preserving retained geometry for change detection.</summary>
+        /// <param name="capacity">The new fixed vertex capacity.</param>
+        private void ResizeVertices(int capacity)
+        {
+            var replacement = new NativeArray<SpriteBatchVertex>(capacity, Allocator.Persistent);
+            NativeArray<SpriteBatchVertex>.Copy(_vertices, replacement, _vertices.Length);
+            _vertices.Dispose();
+            _vertices = replacement;
+        }
+
+        /// <summary>Grows persistent index staging while preserving retained topology for change detection.</summary>
+        /// <param name="capacity">The new fixed index capacity.</param>
+        private void ResizeIndices(int capacity)
+        {
+            var replacement = new NativeArray<ushort>(capacity, Allocator.Persistent);
+            NativeArray<ushort>.Copy(_indices, replacement, _indices.Length);
+            _indices.Dispose();
+            _indices = replacement;
+        }
+
+        /// <summary>Releases CPU staging after the owning renderer has retired its native mesh submissions.</summary>
+        internal void DisposeStaging()
+        {
+            if (_vertices.IsCreated)
+            {
+                _vertices.Dispose();
+            }
+            if (_indices.IsCreated)
+            {
+                _indices.Dispose();
+            }
         }
 
         /// <summary>Starts a new contiguous run while retaining all allocated buffers.</summary>
@@ -199,7 +264,7 @@ namespace PlantsVsZombies.Rendering
         private void GrowVertexBuffers(int required)
         {
             var capacity = Math.Min(MaximumVertexCount, Math.Max(required, _vertices.Length * 2));
-            Array.Resize(ref _vertices, capacity);
+            ResizeVertices(capacity);
         }
 
         /// <summary>Triangulates the last convex polygon without changing primitive order.</summary>
@@ -211,7 +276,7 @@ namespace PlantsVsZombies.Rendering
             var required = _indexCount + (vertexCount - 2) * 3;
             if (required > _indices.Length)
             {
-                Array.Resize(ref _indices, Math.Max(required, _indices.Length * 2));
+                ResizeIndices(Math.Max(required, _indices.Length * 2));
             }
             for (var index = 1; index < vertexCount - 1; index++)
             {

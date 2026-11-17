@@ -21,7 +21,7 @@ namespace PlantsVsZombies.Adventure
         }
 
         /// <summary>Stores adventure clips.</summary>
-        private readonly Dictionary<(string Asset, string? Clip), bool> _adventureClips = new Dictionary<(string, string?), bool>();
+        private readonly Dictionary<(string Asset, string? Clip), bool> _adventureClips = new Dictionary<(string, string?), bool>(256);
 
         /// <summary>Performs adventure clip exists.</summary>
         /// <param name = "name">The name.</param>

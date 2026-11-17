@@ -39,14 +39,8 @@ namespace PlantsVsZombies.Diagnostics
         private RenderTexture? _target;
         /// <summary>Reuses the production render-pipeline request without allocating per frame.</summary>
         private readonly RenderPipeline.StandardRequest _renderRequest = new RenderPipeline.StandardRequest();
-        /// <summary>Measures the explicit scene-render request on supported GPU profilers.</summary>
-        private UnityEngine.Profiling.CustomSampler? _gpuSampler;
-        /// <summary>Reads completed GPU samples without allocating per frame.</summary>
-        private UnityEngine.Profiling.Recorder? _gpuRecorder;
         /// <summary>Disposes measurement recorders if the replay host is destroyed before normal completion.</summary>
         private IEnumerator? _routine;
-        /// <summary>Inserts actual GPU timestamp markers into the render context instead of CPU-only sampler scopes.</summary>
-        private CommandBuffer? _gpuCommands;
         /// <summary>Identifies the complete scene camera while excluding nested actor captures.</summary>
         private Camera? _sceneCamera;
 
@@ -150,12 +144,6 @@ namespace PlantsVsZombies.Diagnostics
                     throw new InvalidOperationException("The requested native allocation-callstack profiler is unavailable.");
                 }
             }
-            _gpuSampler = UnityEngine.Profiling.CustomSampler.Create("PvZ.Replay.SceneRender", true);
-            _gpuRecorder = _gpuSampler.GetRecorder();
-            _gpuRecorder.enabled = true;
-            _gpuCommands = new CommandBuffer { name = "Replay GPU scene timestamps" };
-            RenderPipelineManager.beginCameraRendering += BeginGpuScene;
-            RenderPipelineManager.endCameraRendering += EndGpuScene;
             // The preparation controller must first observe the newly attached world in its normal Update.
             // Its old world's ready flag can remain true during this attachment frame.
             yield return null;
@@ -198,6 +186,10 @@ namespace PlantsVsZombies.Diagnostics
             var capacity = _report.DurationSeconds > 0f ? Math.Max(_requestedFrames, (int)(_report.DurationSeconds * 240f) + 120) : _requestedFrames;
             var samples = new PerformanceReplaySample[capacity];
             var renderingCounters = new PerformanceReplayCounters();
+            var playbackCreations = PerformanceReplayCounters.BindInstance(_owner._animations, "NativePlaybackCreationCount");
+            var playbackMisses = PerformanceReplayCounters.BindInstance(_owner._animations, "NativePlaybackCapacityMissCount");
+            var surfaceCreations = PerformanceReplayCounters.BindInstance(_owner._animations, "NativeSurfaceCreationCount");
+            PerformanceReplayAllocations.Initialize(HasArgument("-pvz-replay-allocation-details"));
             var cycles = new PerformanceReplayCycle[512];
             var cycleCount = 0;
             // Recorder setup and its deliberate allocation precede the formal warm-up window.
@@ -205,6 +197,7 @@ namespace PlantsVsZombies.Diagnostics
             {
                 yield return null;
             }
+            PerformanceReplayAllocations.ResetDetails();
             AddCycle(cycles, ref cycleCount, 0, 0, false);
             _report.InitialHierarchySprites = CountHierarchySprites();
             _report.InitialPoolStatistics = ReadPoolStatistics();
@@ -223,6 +216,10 @@ namespace PlantsVsZombies.Diagnostics
             }
             var initialRendering = default(PerformanceReplaySample);
             renderingCounters.Read(ref initialRendering);
+            _report.Width = _target.width;
+            _report.Height = _target.height;
+            _report.WindowWidth = Screen.width;
+            _report.WindowHeight = Screen.height;
             _report.InitialRenderingFrame = Time.frameCount;
             _report.InitialInstancedDrawCount = initialRendering.InstancedDrawCount;
             _report.InitialInstanceUploadCount = initialRendering.InstanceUploadCount;
@@ -236,6 +233,13 @@ namespace PlantsVsZombies.Diagnostics
             _report.InitialMeshCreationCount = initialRendering.MeshCreationCount;
             _report.InitialMeshUploadBytes = initialRendering.MeshUploadBytes;
             _report.InitialInstanceSubmissionBindingCreationCount = initialRendering.InstanceSubmissionBindingCreationCount;
+            _report.InitialInstanceRunCreationCount = initialRendering.InstanceRunCreationCount;
+            _report.InitialInstanceSubmissionMaterialCreationCount = initialRendering.InstanceSubmissionMaterialCreationCount;
+            _report.InitialInstanceRunCapacityMissCount = initialRendering.InstanceRunCapacityMissCount;
+            _report.InitialInstanceSubmissionBindingCapacityMissCount = initialRendering.InstanceSubmissionBindingCapacityMissCount;
+            _report.InitialNativePlaybackCreations = playbackCreations();
+            _report.InitialNativePlaybackCapacityMisses = playbackMisses();
+            _report.InitialNativeSurfaceCreations = surfaceCreations();
             _report.InitialInstanceSameFrameBufferFallbackCount = initialRendering.InstanceSameFrameBufferFallbackCount;
             if (_report.NativeProfilerEnabled)
             {
@@ -252,6 +256,7 @@ namespace PlantsVsZombies.Diagnostics
             var previousThreadBytes = GC.GetAllocatedBytesForCurrentThread();
             var previousPhase = 0;
             var cycle = 0;
+            var cycleStart = 0;
             var waitingForPreparation = false;
             // The first sample must cover a complete frame after the measured wall-clock boundary.
             yield return null;
@@ -276,16 +281,15 @@ namespace PlantsVsZombies.Diagnostics
                     Playing = _owner.RequiredGame.State == MatchState.Playing
                 };
                 previousThreadBytes = currentThreadBytes;
-                if (_gpuRecorder.gpuSampleBlockCount > 0 && _gpuRecorder.gpuElapsedNanoseconds > 0)
-                {
-                    sample.GpuMilliseconds = _gpuRecorder.gpuElapsedNanoseconds / 1000000d;
-                    sample.GpuSource = 1;
-                }
-                else if (FrameTimingManager.GetLatestTimings(1, frameTimings) > 0 && frameTimings[0].gpuFrameTime > 0d)
+                if (FrameTimingManager.GetLatestTimings(1, frameTimings) > 0 && frameTimings[0].gpuFrameTime > 0d)
                 {
                     sample.GpuMilliseconds = frameTimings[0].gpuFrameTime;
                     sample.GpuSource = 2;
                 }
+                sample.NativePlaybackCreations = playbackCreations();
+                sample.NativePlaybackCapacityMisses = playbackMisses();
+                sample.NativeSurfaceCreations = surfaceCreations();
+                PerformanceReplayAllocations.Read(ref sample);
                 renderingCounters.Read(ref sample);
                 samples[_report.SampleCount++] = sample;
                 if (sample.Playing)
@@ -304,11 +308,14 @@ namespace PlantsVsZombies.Diagnostics
                 }
                 previousPhase = 0;
                 if (_report.DurationSeconds > 0f && !_report.Frozen
-                    && (_owner.RequiredGame.State == MatchState.Lost || _owner.RequiredGame.State == MatchState.Won || _owner._choosingSeeds))
+                    && !waitingForPreparation
+                    && (_owner.RequiredGame.State == MatchState.Lost || _owner.RequiredGame.State == MatchState.Won || _owner._choosingSeeds
+                        || _report.ForcedRestoreFrameInterval > 0 && _report.SampleCount - cycleStart >= _report.ForcedRestoreFrameInterval))
                 {
                     previousPhase = 1;
                     AddCycle(cycles, ref cycleCount, cycle, _report.SampleCount, true);
                     cycle++;
+                    cycleStart = _report.SampleCount;
                     _report.ReloadCount++;
                     AttachCheckpoint();
                     ObjectSpriteRenderer.SceneCamera.targetTexture = _target;
@@ -347,12 +354,13 @@ namespace PlantsVsZombies.Diagnostics
             {
                 throw new InvalidOperationException($"Replay sample capacity {capacity} was exhausted after {_report.RecordedSeconds:F3} seconds, before the requested {_report.DurationSeconds:F3} seconds.");
             }
+            _report.AllocationDetails = PerformanceReplayAllocations.DescribeDetails() + ";" + _owner._presenter.DescribeParticleCapacityMisses();
+            _report.ScopedAllocationRecorderOverflowed = PerformanceReplayAllocations.Overflowed;
             _report.FinalHierarchySprites = CountHierarchySprites();
             _report.FinalPoolStatistics = ReadPoolStatistics();
             _report.FinalModelHash = Hash(_owner.RequiredGame.CaptureCheckpoint());
             _report.SourceHashAfter = Hash(File.ReadAllBytes(_source));
             _report.SourceUnchanged = _report.SourceHashBefore == _report.SourceHashAfter;
-            _gpuRecorder.enabled = false;
             _report.ScreenshotValid = SaveScreenshot();
             if (_report.PresentationFrameCount < _report.SampleCount / 2 || _report.DrawFrameCount < _report.SampleCount / 2 || !_report.ScreenshotValid)
             {
@@ -384,6 +392,7 @@ namespace PlantsVsZombies.Diagnostics
             _report.WarmupFrames = Math.Max(120, ReadInt("-pvz-replay-warmup-frames", 120));
             _report.CounterBoundaryFrames = 2;
             _report.DurationSeconds = Math.Max(0, ReadInt("-pvz-replay-duration", 0));
+            _report.ForcedRestoreFrameInterval = Math.Max(0, ReadInt("-pvz-replay-restore-every-frames", 0));
             _report.Frozen = HasArgument("-pvz-replay-freeze");
             if (HasArgument("-pvz-replay-native-profiler") && (_report.DurationSeconds > 0f || _requestedFrames > 900))
             {
@@ -512,16 +521,8 @@ namespace PlantsVsZombies.Diagnostics
         {
             if (_target != null)
             {
-                _gpuSampler?.Begin();
-                try
-                {
-                    Canvas.ForceUpdateCanvases();
-                    RenderPipeline.SubmitRenderRequest(ObjectSpriteRenderer.SceneCamera, _renderRequest);
-                }
-                finally
-                {
-                    _gpuSampler?.End();
-                }
+                Canvas.ForceUpdateCanvases();
+                RenderPipeline.SubmitRenderRequest(ObjectSpriteRenderer.SceneCamera, _renderRequest);
             }
         }
 
@@ -548,6 +549,11 @@ namespace PlantsVsZombies.Diagnostics
         /// <returns>The cycle's resource and pool context.</returns>
         private PerformanceReplayCycle ReadCycle(int cycle, int sampleIndex, bool ending)
         {
+            var materials = Resources.FindObjectsOfTypeAll<Material>();
+            var names = materials.GroupBy(material => material.name, StringComparer.Ordinal)
+                .OrderBy(group => group.Key, StringComparer.Ordinal)
+                .Select(group => group.Count() + " " + group.Key);
+            var inventory = string.Join("\n", names);
             return new PerformanceReplayCycle
             {
                 Cycle = cycle,
@@ -563,7 +569,8 @@ namespace PlantsVsZombies.Diagnostics
                 HierarchySprites = CountHierarchySprites(),
                 Meshes = Resources.FindObjectsOfTypeAll<Mesh>().Length,
                 Textures = Resources.FindObjectsOfTypeAll<Texture>().Length,
-                Materials = Resources.FindObjectsOfTypeAll<Material>().Length
+                Materials = materials.Length,
+                MaterialInventory = inventory
             };
         }
 
@@ -623,14 +630,9 @@ namespace PlantsVsZombies.Diagnostics
         /// <summary>Releases diagnostic-only native recorders and render targets with the replay host.</summary>
         private void OnDestroy()
         {
-            RenderPipelineManager.beginCameraRendering -= BeginGpuScene;
-            RenderPipelineManager.endCameraRendering -= EndGpuScene;
+            PerformanceReplayAllocations.Dispose();
             (_routine as IDisposable)?.Dispose();
             _routine = null;
-            if (_gpuRecorder != null && _gpuRecorder.isValid)
-            {
-                _gpuRecorder.enabled = false;
-            }
             if (_report.NativeProfilerEnabled)
             {
                 UnityEngine.Profiling.Profiler.enabled = false;
@@ -651,42 +653,7 @@ namespace PlantsVsZombies.Diagnostics
                 Destroy(_target);
                 _target = null;
             }
-            _gpuCommands?.Release();
-            _gpuCommands = null;
             Time.timeScale = 1f;
-        }
-
-        /// <summary>Records the beginning of the actual scene GPU command span.</summary>
-        /// <param name="context">The production pipeline's current context.</param>
-        /// <param name="camera">The camera about to render.</param>
-        private void BeginGpuScene(ScriptableRenderContext context, Camera camera)
-        {
-            if (camera != _sceneCamera || _gpuCommands == null || _gpuSampler == null)
-            {
-                return;
-            }
-#pragma warning disable CS0618 // The replay reads CustomSampler's GPU recorder, requiring this verified handle overload.
-            _gpuCommands.BeginSample(_gpuSampler);
-#pragma warning restore CS0618
-            context.ExecuteCommandBuffer(_gpuCommands);
-            _gpuCommands.Clear();
-        }
-
-        /// <summary>Completes and submits the matching GPU timestamp after the scene's draw commands.</summary>
-        /// <param name="context">The production pipeline's current context.</param>
-        /// <param name="camera">The camera that completed rendering.</param>
-        private void EndGpuScene(ScriptableRenderContext context, Camera camera)
-        {
-            if (camera != _sceneCamera || _gpuCommands == null || _gpuSampler == null)
-            {
-                return;
-            }
-#pragma warning disable CS0618 // Match the CustomSampler handle used by the beginning command.
-            _gpuCommands.EndSample(_gpuSampler);
-#pragma warning restore CS0618
-            context.ExecuteCommandBuffer(_gpuCommands);
-            _gpuCommands.Clear();
-            context.Submit();
         }
 
         /// <summary>Persists evidence only before or after measurement.</summary>

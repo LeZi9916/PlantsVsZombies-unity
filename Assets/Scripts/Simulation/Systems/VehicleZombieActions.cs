@@ -297,11 +297,15 @@ namespace PlantsVsZombies.Simulation
         /// <param name="shot">The basketball being deflected by an already-open umbrella.</param>
         internal void AddAdventureBasketballReflect(Pea shot)
         {
-            _world.Presentation.ZomboniParticles.Add(new AdventureZomboniParticle
-            {
-                Id = ++_world.Presentation._effectId, Seed = _world._random.Next(), Row = shot.Row, Particle = "UmbrellaReflect", Foreground = true,
-                X = shot.PresentationLobNativeX + 20f, Y = shot.PresentationLobNativeY + 20f
-            });
+            var effect = _world.LifetimePool.Rent<AdventureZomboniParticle>();
+            effect.Id = ++_world.Presentation._effectId;
+            effect.Seed = _world._random.Next();
+            effect.Row = shot.Row;
+            effect.Particle = "UmbrellaReflect";
+            effect.Foreground = true;
+            effect.X = shot.PresentationLobNativeX + 20f;
+            effect.Y = shot.PresentationLobNativeY + 20f;
+            _world.Presentation.ZomboniParticles.Add(effect);
         }
 
         /// <summary>Starts PC ZamboniDeath's authored tire puncture and 280-update wheelie.</summary>
@@ -333,11 +337,14 @@ namespace PlantsVsZombies.Simulation
         internal void AddAdventureZomboniParticle(Zombie zombie, string particle, float offsetX, float offsetY)
         {
             var nativeX = AdventureZombieNativeRules.NativePositionX(zombie.X, AdventureDancerRules.Scale(zombie));
-            _world.Presentation.ZomboniParticles.Add(new AdventureZomboniParticle
-            {
-                Id = ++_world.Presentation._effectId, Seed = _world._random.Next(), Row = zombie.Row, Particle = particle,
-                X = nativeX + offsetX, Y = _biteSystem.AdventureBiteNativeY(zombie, nativeX) + offsetY
-            });
+            var effect = _world.LifetimePool.Rent<AdventureZomboniParticle>();
+            effect.Id = ++_world.Presentation._effectId;
+            effect.Seed = _world._random.Next();
+            effect.Row = zombie.Row;
+            effect.Particle = particle;
+            effect.X = nativeX + offsetX;
+            effect.Y = _biteSystem.AdventureBiteNativeY(zombie, nativeX) + offsetY;
+            _world.Presentation.ZomboniParticles.Add(effect);
         }
 
         /// <summary>Emits PC ZamboniDeath's original explosion once, without a generic corpse animation.</summary>

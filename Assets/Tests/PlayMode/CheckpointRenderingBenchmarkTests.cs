@@ -115,6 +115,10 @@ namespace PlantsVsZombies.Tests.PlayMode
             var painterSplits = BindRendererCounter("InstancePainterOrderSplitCount", -1L);
             var capacitySplits = BindRendererCounter("InstanceCapacitySplitCount", -1L);
             var submissionBindings = BindRendererCounter("InstanceSubmissionBindingCreationCount", -1L);
+            var runCreations = BindRendererCounter("InstanceRunCreationCount", -1L);
+            var submissionMaterials = BindRendererCounter("InstanceSubmissionMaterialCreationCount", -1L);
+            var runMisses = BindRendererCounter("InstanceRunCapacityMissCount", -1L);
+            var bindingMisses = BindRendererCounter("InstanceSubmissionBindingCapacityMissCount", -1L);
             var sameFrameFallbacks = BindRendererCounter("InstanceSameFrameBufferFallbackCount", -1L);
             var hierarchyLabels = BindCounter(animations.Hierarchy, "ActorLabelMissCount", -1);
             var hierarchyActors = BindCounter(animations.Hierarchy, "ActorRootCreationCount", -1);
@@ -161,6 +165,7 @@ namespace PlantsVsZombies.Tests.PlayMode
                     presenter.Present();
                     yield return null;
                 }
+                var initialResources = profileAllocations ? ReadLoadedResourceKeys(animations) : null;
                 var startPayload = Hash(simulation.CaptureCheckpoint());
                 var initialPool = ReadPoolStatistics(simulation);
                 var initialGpuBufferCreations = gpuBufferCreations();
@@ -178,6 +183,10 @@ namespace PlantsVsZombies.Tests.PlayMode
                 var initialPainterSplits = painterSplits();
                 var initialCapacitySplits = capacitySplits();
                 var initialSubmissionBindings = submissionBindings();
+                var initialRunCreations = runCreations();
+                var initialSubmissionMaterialCreations = submissionMaterials();
+                var initialRunCapacityMisses = runMisses();
+                var initialSubmissionBindingCapacityMisses = bindingMisses();
                 var initialSameFrameFallbacks = sameFrameFallbacks();
 #if UNITY_EDITOR
                 if (profileAllocations)
@@ -254,6 +263,10 @@ namespace PlantsVsZombies.Tests.PlayMode
                         PainterOrderSplits = painterSplits(),
                         CapacitySplits = capacitySplits(),
                         SubmissionBindingCreations = submissionBindings(),
+                        RunCreations = runCreations(),
+                        SubmissionMaterialCreations = submissionMaterials(),
+                        RunCapacityMisses = runMisses(),
+                        SubmissionBindingCapacityMisses = bindingMisses(),
                         SameFrameBufferFallbacks = sameFrameFallbacks(),
                         HierarchyLabelMisses = hierarchyLabels(),
                         HierarchyActorCreations = hierarchyActors(),
@@ -276,6 +289,12 @@ namespace PlantsVsZombies.Tests.PlayMode
 #if UNITY_EDITOR
                 if (profileAllocations)
                 {
+                    if (initialResources != null)
+                    {
+                        var resources = ReadLoadedResourceKeys(animations);
+                        resources.ExceptWith(initialResources);
+                        File.WriteAllLines(Path.Combine(output!, "new-image-resources.txt"), resources);
+                    }
                     ExportAllocationStacks(output!);
                 }
 #endif
@@ -308,6 +327,10 @@ namespace PlantsVsZombies.Tests.PlayMode
                     InitialPainterOrderSplits = initialPainterSplits,
                     InitialCapacitySplits = initialCapacitySplits,
                     InitialSubmissionBindingCreations = initialSubmissionBindings,
+                    InitialRunCreations = initialRunCreations,
+                    InitialSubmissionMaterialCreations = initialSubmissionMaterialCreations,
+                    InitialRunCapacityMisses = initialRunCapacityMisses,
+                    InitialSubmissionBindingCapacityMisses = initialSubmissionBindingCapacityMisses,
                     InitialSameFrameBufferFallbacks = initialSameFrameFallbacks,
                     Samples = samples,
                     AllocationCounter = "Current-thread GC.Alloc event count; positive control required. Whole-frame bytes include the test runner."
@@ -419,6 +442,16 @@ namespace PlantsVsZombies.Tests.PlayMode
         }
 #endif
 
+        /// <summary>Reads resource identities outside allocation scopes to attribute new battle dependencies.</summary>
+        /// <param name="animations">The renderer whose immutable image lookup is inspected.</param>
+        /// <returns>A detached set of loaded resource identifiers.</returns>
+        private static HashSet<string> ReadLoadedResourceKeys(ReanimationRenderer animations)
+        {
+            var field = typeof(ReanimationRenderer).GetField("_texturesById", BindingFlags.Instance | BindingFlags.NonPublic)!;
+            var images = (Dictionary<string, SpriteImage>)field.GetValue(animations)!;
+            return new HashSet<string>(images.Keys, StringComparer.OrdinalIgnoreCase);
+        }
+
         /// <summary>Advances the authoritative mode facade by exactly one native tick.</summary>
         /// <param name="simulation">The detached board being replayed.</param>
         private static void Advance(GameSimulation simulation)
@@ -502,14 +535,15 @@ namespace PlantsVsZombies.Tests.PlayMode
             var value = typeof(GameSimulation).GetProperty("RuntimePoolStatistics", flags)?.GetValue(simulation);
             if (value == null)
             {
-                return new PoolSnapshot { Created = -1, Active = -1, Recycled = -1 };
+                return new PoolSnapshot { Created = -1, Active = -1, Recycled = -1, Misses = -1 };
             }
             var type = value.GetType();
             return new PoolSnapshot
             {
                 Created = (int)type.GetProperty("CreatedCount", flags)!.GetValue(value)!,
                 Active = (int)type.GetProperty("ActiveCount", flags)!.GetValue(value)!,
-                Recycled = (long)type.GetProperty("RecycledCount", flags)!.GetValue(value)!
+                Recycled = (long)type.GetProperty("RecycledCount", flags)!.GetValue(value)!,
+                Misses = type.GetProperty("MissCount", flags)?.GetValue(value) is long misses ? misses : -1
             };
         }
 
@@ -656,6 +690,14 @@ namespace PlantsVsZombies.Tests.PlayMode
             public long InitialCapacitySplits;
             /// <summary>The cumulative immutable native binding snapshots after warm-up, or minus one.</summary>
             public long InitialSubmissionBindingCreations;
+            /// <summary>The cumulative retained painter-span descriptors created before measurement, or minus one.</summary>
+            public long InitialRunCreations;
+            /// <summary>The cumulative owned submission materials created before measurement, or minus one.</summary>
+            public long InitialSubmissionMaterialCreations;
+            /// <summary>The cumulative unprepared painter-span requests before measurement, or minus one.</summary>
+            public long InitialRunCapacityMisses;
+            /// <summary>The cumulative unprepared native binding requests before measurement, or minus one.</summary>
+            public long InitialSubmissionBindingCapacityMisses;
             /// <summary>The cumulative same-frame buffer protection fallbacks after warm-up, or minus one.</summary>
             public long InitialSameFrameBufferFallbacks;
             /// <summary>The instance slots prepared immediately before the first measured traversal, or minus one.</summary>
@@ -722,6 +764,14 @@ namespace PlantsVsZombies.Tests.PlayMode
             public long CapacitySplits;
             /// <summary>The cumulative immutable native binding snapshot creations, or minus one.</summary>
             public long SubmissionBindingCreations;
+            /// <summary>The cumulative retained painter-span descriptors created at this frame, or minus one.</summary>
+            public long RunCreations;
+            /// <summary>The cumulative owned submission materials created at this frame, or minus one.</summary>
+            public long SubmissionMaterialCreations;
+            /// <summary>The cumulative unprepared painter-span requests at this frame, or minus one.</summary>
+            public long RunCapacityMisses;
+            /// <summary>The cumulative unprepared native binding requests at this frame, or minus one.</summary>
+            public long SubmissionBindingCapacityMisses;
             /// <summary>The cumulative same-frame buffer protection fallbacks, or minus one.</summary>
             public long SameFrameBufferFallbacks;
             /// <summary>The cumulative Editor actor-label formatting misses, or minus one.</summary>
@@ -760,6 +810,8 @@ namespace PlantsVsZombies.Tests.PlayMode
             public int Active;
             /// <summary>The records returned after complete reference retirement, or minus one.</summary>
             public long Recycled;
+            /// <summary>The unprepared object requests, or minus one for an older source revision.</summary>
+            public long Misses;
         }
     }
 }

@@ -57,6 +57,9 @@ namespace PlantsVsZombies.Simulation
         /// <param name="damageFlags">The original damage flags controlling whether death animation is permitted.</param>
         internal void KillAdventureZombie(Zombie z, uint damageFlags = 0)
         {
+#if PVZ_PERFORMANCE_REPLAY
+            using var allocationDetail = new PlantsVsZombies.Diagnostics.PerformanceReplayAllocations.DetailScope("KillAdventureZombie");
+#endif
             if (!_world.Zombies.Remove(z))
             {
                 return;

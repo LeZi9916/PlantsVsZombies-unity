@@ -26,3 +26,10 @@ copied over an active checkpoint.
 PC save eligibility is taken from `analysis/ida/decompiled/414A00.c` (Playing scene,
 excluding native modes 42, 43, 50, 71 and 72). Per-mode files follow the ownership
 of PC `464510`/`45C370`; the serialized replica models use their own versioned format.
+
+Preparation regressions also exercise production birth/hit/death/corpse/recycle
+paths on an independently restored model, retain public event snapshots while
+checking synchronous value notifications, and compare the live checkpoint bytes
+and random continuation before and after rehearsal. The larger derived capacity
+requests use a 5000-step fixture bound; the per-step construction assertion stays
+at 16 and all allocation/correctness assertions are unchanged.

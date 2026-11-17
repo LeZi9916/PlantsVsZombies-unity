@@ -56,7 +56,7 @@ namespace PlantsVsZombies.Simulation
         /// <returns>The new pickup, or null when the board or coordinates cannot accept it.</returns>
         internal AdventureCoin? SpawnAdventureCoin(AdventureCoinKind kind, float x, float row)
         {
-            if (!_world.IsAdventure || _world.State != MatchState.Playing || _adventureModeRunner.Adventure.Phase != AdventurePhase.Playing || !Enum.IsDefined(typeof(AdventureCoinKind), kind) || float.IsNaN(x) || float.IsInfinity(x) || float.IsNaN(row) || float.IsInfinity(row) || x < 0 || x >= SimulationWorld.Columns || row < 0 || row >= _world.RowCount)
+            if (!_world.IsAdventure || _world.State != MatchState.Playing || _adventureModeRunner.Adventure.Phase != AdventurePhase.Playing || (kind < AdventureCoinKind.Silver || kind > AdventureCoinKind.PuzzleUnlock) || float.IsNaN(x) || float.IsInfinity(x) || float.IsNaN(row) || float.IsInfinity(row) || x < 0 || x >= SimulationWorld.Columns || row < 0 || row >= _world.RowCount)
             {
                 return null;
             }

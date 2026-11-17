@@ -322,15 +322,23 @@ namespace PlantsVsZombies.Simulation
         /// <returns>The bounded live-population targets and short-lived event allowance.</returns>
         internal SimulationCapacityRequirements GetCapacityRequirements()
         {
-            return new SimulationCapacityRequirements(Math.Max(128, Plants.Count + 32),
-                Math.Max(256, Zombies.Count + Presentation.Corpses.Count + 64),
-                Math.Max(128, Peas.Count + 64), 128, 16, soundEvents: SimulationCapacityRequirements.MaximumSoundEvents);
+            return SimulationCapacityRequirements.ForWorld(_world);
+        }
+
+        /// <summary>Creates a production lifetime rehearsal whose model graph and random continuation are fully detached.</summary>
+        /// <returns>The incremental rehearsal; changes never reach this game's authoritative roots.</returns>
+        internal SimulationPreparationRehearsal CreatePreparationRehearsal()
+        {
+            var detached = RestoreCheckpoint(CaptureCheckpoint());
+            return new SimulationPreparationRehearsal(detached, detached._world, detached._zombieSpawnSystem,
+                detached._combatSystem, detached._zombieLifecycle, detached._plantingSystem);
         }
 
         /// <summary>Gets current runtime record pool counters without allocating a report object.</summary>
         internal SimulationPoolStatistics RuntimePoolStatistics => new SimulationPoolStatistics(
             _world.LifetimePool.CreatedCount + _world._peaPool.CreatedCount + _world._sunPool.CreatedCount + _world._flamePool.CreatedCount,
-            _world.LifetimePool.ActiveCount, _world.LifetimePool.RecycledCount);
+            _world.LifetimePool.ActiveCount, _world.LifetimePool.RecycledCount,
+            _world.LifetimePool.MissCount + _world._peaPool.MissCount + _world._sunPool.MissCount + _world._flamePool.MissCount);
 
         /// <summary>Prepares only the requested number of reusable objects during a loading frame.</summary>
         /// <param name="requirements">The high-water preparation targets.</param>
@@ -1633,6 +1641,13 @@ namespace PlantsVsZombies.Simulation
             {
                 return _waveSystem.RequiredWaveSchedule;
             }
+        }
+
+        /// <summary>Gets or sets production wave notifications whose listeners consume only the event kind synchronously.</summary>
+        internal Action<global::PlantsVsZombies.Waves.WaveScheduleEventKind>? WaveScheduleNotification
+        {
+            get => _world.WaveScheduleNotification;
+            set => _world.WaveScheduleNotification = value;
         }
 
         /// <summary>Stores wave schedule event raised.</summary>

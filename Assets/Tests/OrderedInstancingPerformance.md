@@ -1,5 +1,131 @@
 # Ordered instancing and prepared gameplay validation
 
+## macOS continuation on 2026-11-17
+
+The continuation uses Unity **7000.0.0a16**, macOS / Apple M4 / Metal. The original
+read-only checkpoint still has SHA-256
+`2D2A44D986C0D2EF9947B55463D6DB30131F79CC8D4785E312D5AC890B0D2848`.
+The earlier Windows checkpoint record below is historical; its immediate-stop
+notice does not describe the resumed work.
+
+**Acceptance remains incomplete.** All three minimal sequential comparisons have
+identical authoritative payloads and exact PNG bytes. Scoped simulation allocations
+are zero in the deterministic 900-tick battle comparison. A live Player still has
+small Update allocations, so a complete zero-allocation gameplay claim is rejected.
+Windows timing and its independent graphics/backend matrix remain unverified on
+this Mac. No original zero-allocation or correctness assertion was relaxed.
+
+| Starting point | Mesh sprite draws | Ordered draws | Reduction | Candidate Present mean / P95 / P99 (ms) |
+| --- | ---: | ---: | ---: | --- |
+| Saved cleared board | 185 | 13 | 92.97% | 0.510 / 0.568 / 0.587 |
+| Continue, advance 6000 ticks, measure 900 ticks | 421.31 | 17.95 | 95.74% | 1.626 / 1.867 / 2.040 |
+| Continue, advance 12000 ticks, frozen | 451 | 18 | 96.01% | 1.223 / 1.318 / 1.396 |
+
+These are one baseline/candidate pair per point, with 120 warm frames and 900
+unfiltered measured traversals. Deep Profile and allocation stacks are disabled.
+The baseline is the immutable `c1271aa` source snapshot with the independent Mesh
+backend selected, not a claim that a new full Windows AB/BA/AB matrix was completed.
+Both frozen candidate windows have zero scoped managed bytes. The advancing
+Editor candidate retains 29,576 presentation bytes, including inspection hierarchy
+naming and node work. All measured model-pool construction and miss deltas are
+zero. Whole-frame allocation events remain in every raw observation.
+
+### Completed continuation changes
+
+- Loading prepares painter descriptors, immutable native property blocks and owned
+  submission materials. First-use run/material/binding creations and misses are
+  sampled independently in the Editor benchmark and opt-in Player replay.
+- Simulation capacity incorporates selected cards, generated adjacent waves,
+  backup dancers, thrown imps, Redeye normalization, concrete behavior/state types
+  and observed high water. Targets add 25% headroom and round to powers of two;
+  retained inactive records are bounded at 8192 per concrete type. Sound capacity
+  separately protects still-owned pending history and its burst/grace reserve.
+- Existing checkpoint roots and linked owners are adopted incrementally before
+  gameplay. Production birth, damage, death, corpse release, planting and delayed
+  return are rehearsed on an independently restored model. Neither live checkpoint
+  bytes nor the formal random continuation changes.
+- Vehicle particles, reflected basketball effects, cob shells, crushed pictures,
+  seed-ready flashes, Blover state and dancer state use the existing typed lifetime
+  pools. Crushed pictures retain their removed plant until final release. Public
+  retained event snapshots remain independent; synchronous production board/wave
+  notifications use value payloads.
+- Impact Foley results use two inline cue values; row gates no longer capture
+  predicates. Case-insensitive death-clip lookup no longer concatenates a key.
+- Preparation covers active and idle pose containers, full definition clips,
+  damage/equipment/arm/head images, particle sheet cells and unconditional fallback
+  curves. Optional track absence is preserved, including skew and launch-angle
+  branches that affect decorative random consumption.
+- Exact fractional UV keys consume prepared bounded cache records and region
+  arrays. Native capture source slots, standard 500x460 surfaces, compatibility
+  meshes and their buffers are prepared before combat. Mesh and instance uploads
+  use persistent native CPU staging and explicitly dispose it with their owner.
+- Loading-only capture pools retire destroyed page material bindings, so restoring
+  the same model no longer accumulates six page materials per cycle. The 45-second
+  explicit reentry diagnostic keeps material count at 1124 across three restores.
+  This forced-restore diagnostic is labeled separately from natural gameplay stress.
+- The board wallet reads committed scalar balances without copying account
+  collections, and formats its visible text only when content changes. Known
+  survival flag captions and seed-ready particle owners are prepared separately.
+
+### Current verification and remaining limits
+
+- Focused instancing/capture GPU suite: **29 passed** on Metal, including the new
+  single-work-unit binding preparation and first-use prepared Mesh buffer checks.
+- Focused region/particle/active-pose/account preparation: **43 passed**, including
+  1000 first-use exact UV API scopes with eviction and zero allocation, preserved
+  optional particle tracks, and active actor pose preservation during preparation.
+- Standalone CheckpointTests pass, including the original private save schema,
+  complete reset enumeration, production pool ownership, detached lifecycle
+  rehearsal, immutable payloads and random continuation. Comparator tests: **6 pass**.
+- Architecture comparison: **211 baseline / 207 candidate violations, zero new**.
+  Remaining failures are pre-existing LF files in this checkout; unrelated files
+  were not reformatted. `git diff --check` passes. The opt-in original money-Foley
+  check fails identically on the unchanged baseline and candidate on this Mac
+  (`Silver and gold use the original pitched Coin Foley sample`); its assertion
+  remains unchanged.
+- A natural **300.017-second / 17,528-frame** CoreCLR Player stress run completed
+  two restores. Model pool construction/misses, meshes, structured buffers, capture
+  textures and pose container counts remained stable. Its ready-frame Present
+  mean/P95 was 3.727/4.886 ms and Update mean/P95 was 0.552/0.806 ms. This earlier
+  observation retained 1,324,193 whole-frame ready-phase GC bytes and preceded the
+  final active-pose/material/native-staging fixes; it is **rejected for zero GC**.
+- The subsequent short lifetime diagnostic has zero ready-phase Present allocation
+  and stable native material count, but Update still retains **2064 bytes** in its
+  ready-phase samples. It is not the final five-minute acceptance window.
+- Allocation recorders have deliberate 32 KiB positive controls and bounded sample
+  overflow checks. Player Update and Present scopes are recorded separately from
+  complete-frame engine/replay allocations; no allocating frame is deleted.
+- A prior macOS GPU CustomSampler used mismatched CPU/command-buffer spans and
+  generated native log allocations. That observation is rejected and preserved.
+  The helper now reports FrameTimingManager whole-frame GPU data when available,
+  otherwise -1. It does not claim isolated scene GPU timestamps.
+- The replay target is 1920x1080. The macOS batch Player has a 640x480 logical
+  window; both sizes are reported. Offscreen rendering is not a swapchain 60 FPS
+  guarantee. CPU results are diagnostic for this host, not Windows performance
+  acceptance. Traditional Mono, IL2CPP, Windows Vulkan/D3D11, Linux, mobile, other
+  ABIs and hardware remain unverified for the continuation.
+
+Ignored current evidence is under `.unity-runs/performance-continuation`,
+`.unity-runs/performance-continuation-candidate`, and
+`.unity-runs/performance-continuation-player`. Original artwork, private saves,
+raw profiles, screenshots, generated assets and Players remain uncommitted.
+
+### Commands
+
+```sh
+# SDK bundled with the pinned Unity Editor; standalone test project only.
+DOTNET_ROLL_FORWARD=Major <Unity-DotNetSdk>/dotnet run --project Tools/Tests/CheckpointTests/CheckpointTests.csproj -c Release
+python3 -B -m unittest discover -s Tools/Tests/RenderingPerformance -p 'test_*.py' -v
+```
+
+The focused Unity test filters are `SpriteInstancingTests`,
+`PlanternParticleTests;ReanimationBasisCacheTests;SpriteRegionGeometryPolicyTests;SpriteAtlasProviderTests;PacketUpgradeAccountTests.BoardWalletReadsCommittedValueWithoutAllocatingSnapshots`.
+They run through `Tools/Tests/Run-UnityTests.ps1` or the same pinned Editor command
+line in isolated `.unity-runs` copies. Existing full-suite baseline failures are
+not hidden or claimed fixed by these focused results.
+
+## Historical Windows implementation checkpoint
+
 Validation date: 2026-11-17. Use Unity **7000.0.0a16** throughout. Historical
 presentation and simulation reports remain records of their original revisions.
 

@@ -309,6 +309,9 @@ namespace PlantsVsZombies.Audio
         /// <summary>Performs update dynamic audio.</summary>
         internal void UpdateDynamicAudio()
         {
+#if PVZ_PERFORMANCE_REPLAY
+            using var allocationDetail = new PlantsVsZombies.Diagnostics.PerformanceReplayAllocations.DetailScope("UpdateDynamicAudio");
+#endif
             if (_dynamicMusicStems == null)
             {
                 return;
@@ -326,13 +329,13 @@ namespace PlantsVsZombies.Audio
             {
                 if (_subscribedAudioGame != null)
                 {
-                    _subscribedAudioGame.WaveScheduleEventRaised -= HandleScheduledWaveAudio;
+                    _subscribedAudioGame.WaveScheduleNotification -= HandleScheduledWaveAudio;
                 }
 
                 _subscribedAudioGame = _owner._game;
                 if (_owner._game != null)
                 {
-                    _owner._game.WaveScheduleEventRaised += HandleScheduledWaveAudio;
+                    _owner._game.WaveScheduleNotification += HandleScheduledWaveAudio;
                 }
             }
 
@@ -638,31 +641,31 @@ namespace PlantsVsZombies.Audio
         }
 
         /// <summary>Performs handle scheduled wave audio.</summary>
-        /// <param name = "e">The e.</param>
-        private void HandleScheduledWaveAudio(WaveScheduleEvent e)
+        /// <param name="kind">The native wave event kind consumed synchronously.</param>
+        private void HandleScheduledWaveAudio(WaveScheduleEventKind kind)
         {
             if (_owner._currentView != PvZGame.ScreenView.Board || _owner.Loading.OriginalLoadingActive)
             {
                 return;
             }
 
-            if (e.Kind == WaveScheduleEventKind.HugeWaveSound)
+            if (kind == WaveScheduleEventKind.HugeWaveSound)
             {
                 _owner.Sounds.PlayPresentationSound("hugewave");
             }
-            else if (e.Kind == WaveScheduleEventKind.FinalWaveSound)
+            else if (kind == WaveScheduleEventKind.FinalWaveSound)
             {
                 _owner.Sounds.PlayPresentationSound("finalwave");
             }
-            else if (e.Kind == WaveScheduleEventKind.SirenSound)
+            else if (kind == WaveScheduleEventKind.SirenSound)
             {
                 _owner.Sounds.PlayPresentationSound("siren");
             }
-            else if (e.Kind == WaveScheduleEventKind.FirstWaveApproaching)
+            else if (kind == WaveScheduleEventKind.FirstWaveApproaching)
             {
                 _owner.Sounds.PlayPresentationSound("awooga");
             }
-            else if (e.Kind == WaveScheduleEventKind.MusicBurst)
+            else if (kind == WaveScheduleEventKind.MusicBurst)
             {
                 _dynamicBurst.ForceBurst();
             }
@@ -978,7 +981,7 @@ namespace PlantsVsZombies.Audio
         {
             if (_subscribedAudioGame != null)
             {
-                _subscribedAudioGame.WaveScheduleEventRaised -= HandleScheduledWaveAudio;
+                _subscribedAudioGame.WaveScheduleNotification -= HandleScheduledWaveAudio;
             }
 
             if (_dynamicMusicStems != null)

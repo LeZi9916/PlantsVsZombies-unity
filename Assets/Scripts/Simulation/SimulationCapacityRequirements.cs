@@ -18,6 +18,8 @@ namespace PlantsVsZombies.Simulation
         internal int Events { get; }
         /// <summary>Gets the independently prepared sound-history and grace-period capacity.</summary>
         internal int SoundEvents { get; }
+        /// <summary>Gets inactive sound capacity reserved while pending history remains owned by audio.</summary>
+        internal int SoundReserve { get; }
         /// <summary>Gets the prepared count of each behavior and capability type.</summary>
         internal int Capabilities { get; }
 
@@ -28,14 +30,68 @@ namespace PlantsVsZombies.Simulation
         /// <param name="events">The target count of each event type.</param>
         /// <param name="capabilities">The target count of each capability type.</param>
         /// <param name="soundEvents">The optional sound-history target; omitted values follow the visual event target for small fixtures.</param>
-        internal SimulationCapacityRequirements(int plants, int zombies, int projectiles, int events, int capabilities, int? soundEvents = null)
+        /// <param name="soundReserve">The inactive sound reserve in addition to still-owned history.</param>
+        internal SimulationCapacityRequirements(int plants, int zombies, int projectiles, int events, int capabilities, int? soundEvents = null, int soundReserve = 256)
         {
-            Plants = Math.Clamp(plants, 0, 512);
-            Zombies = Math.Clamp(zombies, 0, 1024);
-            Projectiles = Math.Clamp(projectiles, 0, 256);
-            Events = Math.Clamp(events, 0, 512);
-            Capabilities = Math.Clamp(capabilities, 0, 128);
+            Plants = Math.Clamp(plants, 0, 8192);
+            Zombies = Math.Clamp(zombies, 0, 8192);
+            Projectiles = Math.Clamp(projectiles, 0, 8192);
+            Events = Math.Clamp(events, 0, 8192);
+            Capabilities = Math.Clamp(capabilities, 0, 8192);
             SoundEvents = Math.Clamp(soundEvents ?? Events, 0, MaximumSoundEvents);
+            SoundReserve = Math.Clamp(soundReserve, 0, SoundEvents);
+        }
+        /// <summary>Derives stage, attachment and observed demand without changing model values or random streams.</summary>
+        /// <param name="world">The authoritative board whose current roots and generated waves are read.</param>
+        /// <returns>Rounded reusable capacities for the match-local preparation queue.</returns>
+        internal static SimulationCapacityRequirements ForWorld(SimulationWorld world)
+        {
+            var waveDemand = 0;
+            var wavePeak = 0;
+            var previousWave = 0;
+            if (world._adventure != null)
+            {
+                // Entire generated stage bounds overlapping waves and the first summon/throw from each owner.
+                foreach (var wave in world._adventure.Waves)
+                {
+                    var waveCount = 0;
+                    foreach (var kind in wave.Zombies)
+                    {
+                        waveCount += kind == ZombieKind.Dancing ? 5 : kind == ZombieKind.Bobsled ? 4
+                            : kind == ZombieKind.Gargantuar || (int)kind == 32 || kind == ZombieKind.Bungee ? 2 : 1;
+                    }
+                    waveDemand += waveCount;
+                    wavePeak = Math.Max(wavePeak, previousWave + waveCount);
+                    previousWave = waveCount;
+                }
+            }
+            var pool = world.LifetimePool;
+            var plants = Math.Max(world.Plants.Count, pool.CategoryHighWater(0));
+            var zombies = Math.Max(world.Zombies.Count + world.Presentation.Corpses.Count, Math.Max(waveDemand, pool.CategoryHighWater(1)));
+            var concurrent = Math.Max(world.Zombies.Count + world.Presentation.Corpses.Count, Math.Max(wavePeak, pool.CategoryHighWater(1)));
+            var events = Math.Max(Math.Max(plants * 2, concurrent), pool.CategoryHighWater(2));
+            return new SimulationCapacityRequirements(
+                SimulationCapacityRequirements.WithHeadroom(Math.Max(96, plants)),
+                SimulationCapacityRequirements.WithHeadroom(Math.Max(192, concurrent)),
+                SimulationCapacityRequirements.WithHeadroom(Math.Max(96, Math.Max(world.Peas.Count, plants * 8))),
+                SimulationCapacityRequirements.WithHeadroom(Math.Max(96, events)),
+                16,
+                soundEvents: SimulationCapacityRequirements.MaximumSoundEvents,
+                soundReserve: SimulationCapacityRequirements.WithHeadroom(Math.Max(256, zombies * 4)));
+        }
+
+        /// <summary>Adds twenty-five percent headroom and rounds reusable demand up to a power of two.</summary>
+        /// <param name="demand">The greatest observed or known concurrent demand.</param>
+        /// <returns>The prepared capacity, bounded at 8192 records per concrete type.</returns>
+        internal static int WithHeadroom(int demand)
+        {
+            var target = Math.Min(8192L, Math.Max(0L, demand) + (Math.Max(0L, demand) + 3) / 4);
+            var capacity = target == 0 ? 0 : 1;
+            while (capacity < target)
+            {
+                capacity *= 2;
+            }
+            return capacity;
         }
     }
 }

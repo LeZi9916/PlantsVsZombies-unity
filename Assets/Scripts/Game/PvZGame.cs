@@ -403,10 +403,16 @@ namespace PlantsVsZombies.Game
         /// <summary>Performs update.</summary>
         private void Update()
         {
+#if PVZ_PERFORMANCE_REPLAY
+            using var allocations = new Diagnostics.PerformanceReplayAllocations.Scope(false);
+#endif
             using var update = s_updateMarker.Auto();
             Preparation.Advance();
             using (s_updateInputMarker.Auto())
             {
+#if PVZ_PERFORMANCE_REPLAY
+                using var allocationDetail = new Diagnostics.PerformanceReplayAllocations.DetailScope("Input");
+#endif
                 GameInput.Capture();
                 var pendingAction = _pendingUiAction;
                 _pendingUiAction = null;
@@ -446,6 +452,9 @@ namespace PlantsVsZombies.Game
             {
                 using (s_updateSimulationMarker.Auto())
                 {
+#if PVZ_PERFORMANCE_REPLAY
+                    using var allocationDetail = new Diagnostics.PerformanceReplayAllocations.DetailScope("Simulation");
+#endif
                     if (!IndependentModes.TickModes(Time.deltaTime))
                     {
                         RequiredGame.Update(Time.deltaTime);

@@ -14,6 +14,10 @@ namespace PlantsVsZombies.Rendering
     {
         /// <summary>Bounds retained image/crop combinations while allowing a busy board to reuse all common animation parts.</summary>
         private const int MaximumRegionCacheEntries = 512;
+        /// <summary>Bounds explicitly prepared stage geometry independently of the ordinary cache default.</summary>
+        private const int MaximumPreparedRegionCacheEntries = 8192;
+        /// <summary>The stage-derived retained capacity, grown only by explicit loading preparation.</summary>
+        private int _regionCacheCapacity = MaximumRegionCacheEntries;
 
         /// <summary>Identifies immutable prepared geometry independently of transient painter state.</summary>
         private readonly struct RegionCacheKey : IEquatable<RegionCacheKey>
@@ -96,6 +100,13 @@ namespace PlantsVsZombies.Rendering
         private readonly List<int> _unusedPageIds = new List<int>();
         /// <summary>The bounded cross-image geometry cache, populated only by actually sampled source requests.</summary>
         private readonly Dictionary<RegionCacheKey, SpriteRegionCacheEntry> _regionCache = new Dictionary<RegionCacheKey, SpriteRegionCacheEntry>(MaximumRegionCacheEntries);
+        /// <summary>Retains prepared empty slots for first-use fractional crops without constructing records during combat.</summary>
+        private readonly List<SpriteRegionCacheEntry> _spareRegions = new List<SpriteRegionCacheEntry>();
+        /// <summary>The greatest region count observed while preparing complete source images.</summary>
+        private int _maximumPreparedRegions = 1;
+        /// <summary>Whether existing region arrays already cover the current complete-image bound.</summary>
+        private bool _regionArraysValidated;
+
         /// <summary>Assigns stable integer identities to logical images without hashing paths during submission.</summary>
         private int _nextImageId;
         /// <summary>Gets the number of existing handles rebound after a complete layout change.</summary>
@@ -154,6 +165,66 @@ namespace PlantsVsZombies.Rendering
         internal int LoadedPageCount => _pages.Count;
         /// <summary>Gets the bounded number of retained original image/crop combinations.</summary>
         internal int PreparedRegionCacheCount => _regionCache.Count;
+
+        /// <summary>Reserves the known stage's image and cell combinations before gameplay can request them.</summary>
+        /// <param name="entries">The known image, geometry-mode and source-cell combinations.</param>
+        internal void PrepareRegionCacheCapacity(int entries)
+        {
+            var target = Math.Min(MaximumPreparedRegionCacheEntries, (long)entries + (entries + 3L) / 4);
+            var capacity = MaximumRegionCacheEntries;
+            while (capacity < target)
+            {
+                capacity *= 2;
+            }
+            if (capacity > _regionCacheCapacity)
+            {
+                _regionCache.EnsureCapacity(capacity);
+                _regionCacheCapacity = capacity;
+            }
+        }
+
+        /// <summary>Prepares one missing cache record or region array using already known complete-image bounds.</summary>
+        /// <returns>Whether retained entries and spare slots cover the prepared stage budget.</returns>
+        internal bool PrepareRegionStorageStep()
+        {
+            var regionCapacity = 16;
+            var demand = _maximumPreparedRegions + (_maximumPreparedRegions + 3) / 4;
+            while (regionCapacity < demand)
+            {
+                regionCapacity *= 2;
+            }
+            if (!_regionArraysValidated)
+            {
+                foreach (var entry in _regionCache.Values)
+                {
+                    if (entry.Regions.Length < regionCapacity)
+                    {
+                        Array.Resize(ref entry.Regions, regionCapacity);
+                        return false;
+                    }
+                }
+                foreach (var entry in _spareRegions)
+                {
+                    if (entry.Regions.Length < regionCapacity)
+                    {
+                        Array.Resize(ref entry.Regions, regionCapacity);
+                        return false;
+                    }
+                }
+                _regionArraysValidated = true;
+            }
+            var target = _regionCacheCapacity - _regionCache.Count;
+            if (_spareRegions.Capacity < target)
+            {
+                _spareRegions.Capacity = target;
+            }
+            if (_spareRegions.Count < target)
+            {
+                _spareRegions.Add(new SpriteRegionCacheEntry { Regions = new SpriteImageRegion[regionCapacity] });
+                return false;
+            }
+            return true;
+        }
 
         /// <summary>Acquires the shared provider for production assets or an external loose test directory.</summary>
         /// <param name="root">The original runtime asset root.</param>
@@ -551,9 +622,15 @@ namespace PlantsVsZombies.Rendering
             if (entry.LayoutVersion != LayoutVersion || entry.StorageVersion != _pageStorageVersion)
             {
                 BuildRegions(image, sourceUv, useTightGeometry);
+                if (_preparedCount > _maximumPreparedRegions)
+                {
+                    _maximumPreparedRegions = _preparedCount;
+                    _regionArraysValidated = false;
+                }
                 if (entry.Regions.Length < _preparedCount)
                 {
                     entry.Regions = new SpriteImageRegion[_preparedCount];
+                    _regionArraysValidated = false;
                 }
                 Array.Copy(_regionBuildBuffer, entry.Regions, _preparedCount);
                 entry.Count = _preparedCount;
@@ -575,8 +652,15 @@ namespace PlantsVsZombies.Rendering
         /// <returns>A new or safely detached reusable cache entry with invalid generation stamps.</returns>
         private SpriteRegionCacheEntry AcquireRegionCacheEntry()
         {
-            if (_regionCache.Count < MaximumRegionCacheEntries)
+            if (_regionCache.Count < _regionCacheCapacity)
             {
+                if (_spareRegions.Count > 0)
+                {
+                    var index = _spareRegions.Count - 1;
+                    var entry = _spareRegions[index];
+                    _spareRegions.RemoveAt(index);
+                    return entry;
+                }
                 return new SpriteRegionCacheEntry();
             }
             var oldestUse = long.MaxValue;
@@ -1161,6 +1245,7 @@ namespace PlantsVsZombies.Rendering
                 entry.StorageVersion = -1;
             }
             _regionCache.Clear();
+            _spareRegions.Clear();
             _preparedRegions = Array.Empty<SpriteImageRegion>();
             _regionBuildBuffer = Array.Empty<SpriteImageRegion>();
             _preparedBinding = null;

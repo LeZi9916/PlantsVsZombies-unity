@@ -63,7 +63,7 @@ Unity 7 中显式实例绘制与原生 Canvas 仅设置 `sortingOrder` 无法保
 
 加载、选卡及开场期间由 `GamePreparationController` 每帧按 2 ms 软预算准备资源、模型池、表现容量、粒子和实例缓冲；不可拆分的 Unity 资源操作可能超预算。必要准备完成后才进入本阶段战斗。模型回收检查全部权威引用，并经过两个完整更新边界，覆盖尸体、附属投射物与待消费事件；运行时池不进入存档。超出准备容量仍安全扩容并继续玩法，性能证据保留这些帧。复现与平台验证命令见 `Tools/Tests/RenderingPerformance/README.md` 和 `Tools/Tests/PerformanceReplay/README.md`。
 
-本轮性能实现尚未完成最终验收：动态事件仍有分配和准备容量增长，完整 Player 计时及五分钟压力循环未执行。按用户要求已停止测试并保存当前进度；具体已测结果、未验证补丁和未完成项目见 [`OrderedInstancingPerformance.md`](Assets/Tests/OrderedInstancingPerformance.md)。
+性能续作已在 Unity 7000.0.0a16 / macOS Metal 上完成三起点的模型与像素对照，精灵提交减少 92.97%–96.01%；已补齐容量、事件池、活跃动画容器与分帧生命周期预热，并执行五分钟 CoreCLR Player 压力观察。完整零 GC 和 Windows 平台验收仍未通过，当前已测结果、剩余分配及平台限制见 [`OrderedInstancingPerformance.md`](Assets/Tests/OrderedInstancingPerformance.md)。
 
 界面图像、文字、输入框、滑块与弹窗由 Canvas 组件显示，`GamePresenter` 提交每帧表现，`PvZGame` 只保留生命周期、跨界面共享状态与每帧执行顺序；音效与音乐（`Audio`）、输入路由与菜单（`Game`）、冒险开场/关卡/奖励（`Adventure`）、独立模式（`Modes`）、商店/花园/智慧树/Dave（`Progression`）、存档工具（`Profiles`）、纹理缓存（`Rendering`）和棋盘布局（`BoardUI`）分别由 `PvZGame` 按需创建的协作类负责。架构测试限制 `PvZGame.cs` 不超过 700 行。输入在帧更新时独立采样，使用与相机、Canvas 相同的 800×600 逻辑视口换算；宽屏留边不参与棋盘点击。运行时不再依赖 `OnGUI`、`GUI` 绘制或 `Event.current`。
 

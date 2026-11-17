@@ -2,6 +2,8 @@
 using System;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
+using System.Reflection;
+using PlantsVsZombies.VerifiedData;
 using PlantsVsZombies.Adventure;
 
 namespace PlantsVsZombies.Simulation
@@ -13,8 +15,6 @@ namespace PlantsVsZombies.Simulation
     {
         /// <summary>Separates retained consumed sound history from short-lived visual event capacity.</summary>
         private const int SoundCategory = 4;
-        /// <summary>Reserves new requests while cleared history waits for two completed update boundaries.</summary>
-        private const int SoundGraceReserve = 256;
         /// <summary>Indexes concrete type pools created once during match loading.</summary>
         private readonly Dictionary<Type, Bucket> _buckets = new Dictionary<Type, Bucket>(96);
         /// <summary>Retains deterministic preparation order.</summary>
@@ -31,8 +31,10 @@ namespace PlantsVsZombies.Simulation
         private SimulationCapacityRequirements _collectionRequirements;
         /// <summary>Whether a collection preparation request has been admitted.</summary>
         private bool _hasCollectionRequirements;
-        /// <summary>The next restored sound record adopted outside the gameplay hot path.</summary>
-        private int _soundHistoryPreparationIndex;
+        /// <summary>The next authoritative root adopted outside the gameplay hot path.</summary>
+        private int _rootPreparationIndex;
+        /// <summary>The next authoritative root collection admitted during loading.</summary>
+        private int _rootPreparationCategory;
         /// <summary>Counts safe returns without allocating a statistics snapshot.</summary>
         internal long RecycledCount { get; private set; }
         /// <summary>Gets the number of records still protected by active or delayed ownership.</summary>
@@ -50,6 +52,36 @@ namespace PlantsVsZombies.Simulation
                 return count;
             }
         }
+        /// <summary>Gets cumulative requests that exhausted prepared reusable records.</summary>
+        internal long MissCount
+        {
+            get
+            {
+                var count = 0L;
+                foreach (var bucket in _ordered)
+                {
+                    count += bucket.Misses;
+                }
+                return count;
+            }
+        }
+
+        /// <summary>Reads a category's greatest concrete-type population without allocating a diagnostic snapshot.</summary>
+        /// <param name="category">The plant, zombie, event, capability, or sound category.</param>
+        /// <returns>The greatest simultaneous population of any concrete type in that category.</returns>
+        internal int CategoryHighWater(int category)
+        {
+            var highWater = 0;
+            foreach (var bucket in _ordered)
+            {
+                if (bucket.Category == category)
+                {
+                    highWater = Math.Max(highWater, bucket.HighWater);
+                }
+            }
+            return highWater;
+        }
+
         /// <summary>Registers supported runtime record types without consuming any random stream.</summary>
         internal SimulationRuntimePool()
         {
@@ -61,6 +93,10 @@ namespace PlantsVsZombies.Simulation
         {
             Add<AdventurePlantZombieState>(3, 128);
             Add<AdventureMagnetItem>(3, 128);
+            Add<AdventureSeedFlashState>(2, 512);
+            Add<AdventureCobShell>(2, 512);
+            Add<AdventureSquishedPlant>(2, 512);
+            Add<AdventureZomboniParticle>(2, 512);
             Add<AdventureImpact>(2, 512);
             Add<AdventureSnowTrail>(2, 512);
             Add<AdventurePlantBiteEffect>(2, 512);
@@ -170,6 +206,7 @@ namespace PlantsVsZombies.Simulation
             entry.UnreferencedSince = -1;
             entry.InUse = true;
             bucket.Active++;
+            bucket.HighWater = Math.Max(bucket.HighWater, bucket.Active);
             _active.Add(entry);
             Attach(item);
             return item;
@@ -213,6 +250,7 @@ namespace PlantsVsZombies.Simulation
                 _entries.Add(item, entry);
                 _active.Add(entry);
                 bucket.Active++;
+                bucket.HighWater = Math.Max(bucket.HighWater, bucket.Active);
                 Attach(item);
             }
             if (entry.LastMarked == _epoch)
@@ -252,12 +290,12 @@ namespace PlantsVsZombies.Simulation
             MarkList(presentation.ZombieSounds);
             MarkList(presentation.ZombieRiseEffects);
             MarkList(presentation.ZombieSplashes);
-            foreach (var squished in presentation.SquishedPlants)
-            {
-                Mark(squished.Plant);
-            }
+            MarkList(presentation.SquishedPlants);
+            MarkList(presentation.ZomboniParticles);
             if (world._adventure != null)
             {
+                MarkList(world._adventure.SeedFlashes);
+                MarkList(world._adventure._cobShells);
                 MarkList(world._adventure._coins);
             }
             for (var index = _active.Count - 1; index >= 0; index--)
@@ -340,7 +378,8 @@ namespace PlantsVsZombies.Simulation
             {
                 return requirements.SoundEvents;
             }
-            return requirements.Capabilities;
+            return requirements.Capabilities == 0 ? 0 : Math.Max(requirements.Capabilities,
+                SimulationCapacityRequirements.WithHeadroom(Math.Max(bucket.Planned, bucket.HighWater)));
         }
 
         /// <summary>Reserves sound grace capacity even when restored or active history already exceeds its total target.</summary>
@@ -353,9 +392,195 @@ namespace PlantsVsZombies.Simulation
             var available = Math.Max(0, target - bucket.Active);
             if (bucket.Category == SoundCategory)
             {
-                available = Math.Max(available, Math.Min(SoundGraceReserve, target));
+                available = Math.Max(available, requirements.SoundReserve);
             }
             return available;
+        }
+
+        /// <summary>Plans concrete behavior and state demand without constructing live actors or consuming randomness.</summary>
+        /// <param name="world">The authoritative board whose kinds and generated waves are read.</param>
+        /// <param name="enabled">Whether this request includes capability preparation.</param>
+        private void PlanKnownCapabilities(SimulationWorld world, bool enabled)
+        {
+            foreach (var bucket in _ordered)
+            {
+                bucket.Planned = 0;
+            }
+            if (!enabled)
+            {
+                return;
+            }
+            var plants = new int[VerifiedDataCatalog.Plants.Count];
+            foreach (var plant in world.Plants)
+            {
+                if ((uint)plant.Kind < plants.Length)
+                {
+                    plants[(int)plant.Kind]++;
+                }
+            }
+            var board = world._adventure;
+            if (board != null)
+            {
+                var seeds = board.SelectedSeeds.Count > 0 ? board.SelectedSeeds : board.AvailableSeeds;
+                foreach (var seed in seeds)
+                {
+                    if ((uint)seed < plants.Length)
+                    {
+                        plants[(int)seed] = Math.Max(plants[(int)seed], world.RowCount * SimulationWorld.Columns);
+                    }
+                }
+            }
+            for (var kind = 0; kind < plants.Length; kind++)
+            {
+                if (plants[kind] > 0)
+                {
+                    PlanBehavior(PlantBehaviorFactory.Create((PlantKind)kind), plants[kind]);
+                }
+            }
+            var count = VerifiedDataCatalog.Zombies.Count;
+            var zombies = new int[count];
+            foreach (var zombie in world.Zombies)
+            {
+                if ((uint)zombie.Kind < count)
+                {
+                    zombies[(int)zombie.Kind]++;
+                }
+            }
+            if (board != null)
+            {
+                var previous = new int[count];
+                var current = new int[count];
+                foreach (var wave in board.Waves)
+                {
+                    Array.Clear(current, 0, count);
+                    foreach (var nativeKind in wave.Zombies)
+                    {
+                        var kind = (int)nativeKind == 32 ? ZombieKind.Gargantuar : nativeKind;
+                        if ((uint)kind >= count)
+                        {
+                            continue;
+                        }
+                        current[(int)kind] += kind == ZombieKind.Bobsled ? 4 : 1;
+                        if (kind == ZombieKind.Dancing)
+                        {
+                            current[(int)ZombieKind.BackupDancer] += 4;
+                        }
+                        else if (kind == ZombieKind.Gargantuar)
+                        {
+                            current[(int)ZombieKind.Imp]++;
+                        }
+                    }
+                    for (var kind = 0; kind < count; kind++)
+                    {
+                        zombies[kind] = Math.Max(zombies[kind], previous[kind] + current[kind]);
+                    }
+                    var swap = previous;
+                    previous = current;
+                    current = swap;
+                }
+            }
+            for (var kind = 0; kind < count; kind++)
+            {
+                if (zombies[kind] > 0)
+                {
+                    PlanBehavior(ZombieBehaviorFactory.Create((ZombieKind)kind), zombies[kind]);
+                }
+            }
+        }
+
+        /// <summary>Uses the authoritative behavior factory and declared state types to reserve only reachable concrete pools.</summary>
+        /// <param name="behavior">A detached default behavior used only as a type descriptor during loading.</param>
+        /// <param name="count">The known demand before headroom and rounding.</param>
+        private void PlanBehavior(object behavior, int count)
+        {
+            var type = behavior.GetType();
+            _buckets[type].Planned += count;
+            foreach (var field in type.GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic))
+            {
+                if (_buckets.TryGetValue(field.FieldType, out var state))
+                {
+                    state.Planned += count;
+                }
+            }
+        }
+
+        /// <summary>Adopts at most one restored root and its typed attachments per loading step.</summary>
+        /// <param name="world">The board whose model values remain unchanged.</param>
+        /// <returns>Whether all authoritative root collections have been visited.</returns>
+        private bool PrepareRootStep(SimulationWorld world)
+        {
+            var p = world.Presentation;
+            switch (_rootPreparationCategory)
+            {
+                case 0:
+                    return PrepareRoots(world.Plants.View);
+                case 1:
+                    return PrepareRoots(world.Zombies.View);
+                case 2:
+                    return PrepareRoots(p.ZombieSounds);
+                case 3:
+                    return PrepareRoots(p.Impacts);
+                case 4:
+                    return PrepareRoots(p.Corpses);
+                case 5:
+                    return PrepareRoots(p.SnowTrails);
+                case 6:
+                    return PrepareRoots(p.PlantBiteEffects);
+                case 7:
+                    return PrepareRoots(p.Explosions);
+                case 8:
+                    return PrepareRoots(p.ZombiePartDrops);
+                case 9:
+                    return PrepareRoots(p.ArmDrops);
+                case 10:
+                    return PrepareRoots(p.ZombieRiseEffects);
+                case 11:
+                    return PrepareRoots(p.ZombieSplashes);
+                case 12:
+                    return PrepareRoots(p.SquishedPlants);
+                case 13:
+                    return PrepareRoots(p.ZomboniParticles);
+                case 14:
+                    if (world._adventure != null)
+                    {
+                        return PrepareRoots(world._adventure._coins);
+                    }
+                    break;
+                case 15:
+                    if (world._adventure != null)
+                    {
+                        return PrepareRoots(world._adventure._cobShells);
+                    }
+                    break;
+                case 16:
+                    if (world._adventure != null)
+                    {
+                        return PrepareRoots(world._adventure.SeedFlashes);
+                    }
+                    break;
+                default:
+                    return true;
+            }
+            _rootPreparationCategory++;
+            return false;
+        }
+
+        /// <summary>Adopts one collection entry without changing its stored values or lifetime epoch.</summary>
+        /// <typeparam name="T">The concrete root record.</typeparam>
+        /// <param name="roots">The authoritative ordered root collection.</param>
+        /// <returns>False until every root collection has been processed.</returns>
+        private bool PrepareRoots<T>(IReadOnlyList<T> roots) where T : class
+        {
+            if (_rootPreparationIndex < roots.Count)
+            {
+                Mark(roots[_rootPreparationIndex++]);
+            }
+            else
+            {
+                _rootPreparationIndex = 0;
+                _rootPreparationCategory++;
+            }
+            return false;
         }
 
         /// <summary>Checks every capacity field without boxing a requirements value.</summary>
@@ -366,7 +591,8 @@ namespace PlantsVsZombies.Simulation
         {
             return left.Plants == right.Plants && left.Zombies == right.Zombies
                 && left.Projectiles == right.Projectiles && left.Events == right.Events
-                && left.Capabilities == right.Capabilities && left.SoundEvents == right.SoundEvents;
+                && left.Capabilities == right.Capabilities && left.SoundEvents == right.SoundEvents
+                && left.SoundReserve == right.SoundReserve;
         }
 
         /// <summary>Reserves ownership indices for every prepared record and sound-history adoption.</summary>
@@ -381,7 +607,7 @@ namespace PlantsVsZombies.Simulation
                 if (bucket.Category == SoundCategory)
                 {
                     var live = Math.Max(bucket.Active, world.Presentation.ZombieSounds.Count);
-                    total = Math.Max(total, live + Math.Min(SoundGraceReserve, requirements.SoundEvents));
+                    total = Math.Max(total, live + requirements.SoundReserve);
                 }
                 capacity += total;
             }
@@ -406,12 +632,14 @@ namespace PlantsVsZombies.Simulation
                 _collectionRequirements = requirements;
                 _hasCollectionRequirements = true;
                 _collectionStep = 0;
-                _soundHistoryPreparationIndex = 0;
+                _rootPreparationIndex = 0;
+                _rootPreparationCategory = 0;
             }
             var presentation = world.Presentation;
             switch (_collectionStep++)
             {
                 case 0:
+                    PlanKnownCapabilities(world, requirements.Capabilities > 0);
                     world.Plants.PrepareCapacity(requirements.Plants, world.RowCount);
                     break;
                 case 1:
@@ -446,7 +674,7 @@ namespace PlantsVsZombies.Simulation
                     break;
                 case 11:
                     PrepareList(presentation.ZombieSounds, Math.Max(requirements.SoundEvents,
-                        presentation.ZombieSounds.Count + Math.Min(SoundGraceReserve, requirements.SoundEvents)));
+                        presentation.ZombieSounds.Count + requirements.SoundReserve));
                     break;
                 case 12:
                     PrepareList(presentation.ZombieRiseEffects, requirements.Events);
@@ -464,15 +692,38 @@ namespace PlantsVsZombies.Simulation
                     PrepareEntryIndices(world, requirements);
                     break;
                 case 16:
-                    if (_soundHistoryPreparationIndex < presentation.ZombieSounds.Count)
+                    if (!PrepareRootStep(world))
                     {
-                        Mark(presentation.ZombieSounds[_soundHistoryPreparationIndex++]);
                         _collectionStep = 16;
                         return false;
                     }
                     break;
+                case 17:
+                    PrepareList(presentation.SquishedPlants, requirements.Plants);
+                    break;
+                case 18:
+                    PrepareList(presentation.ZomboniParticles, requirements.Events);
+                    break;
+                case 19:
+                    PrepareList(presentation.FootstepEffects, requirements.Events);
+                    break;
+                case 20:
+                    PrepareList(presentation._squashLandings, requirements.Events);
+                    break;
+                case 21:
+                    if (world._adventure != null)
+                    {
+                        PrepareList(world._adventure._cobShells, requirements.Projectiles);
+                    }
+                    break;
+                case 22:
+                    if (world._adventure != null)
+                    {
+                        PrepareList(world._adventure.SeedFlashes, requirements.Events);
+                    }
+                    break;
                 default:
-                    _collectionStep = 17;
+                    _collectionStep = 23;
                     return true;
             }
             return false;
@@ -520,6 +771,12 @@ namespace PlantsVsZombies.Simulation
             internal readonly int Category;
             /// <summary>Counts currently rented and adopted records.</summary>
             internal int Active;
+            /// <summary>Retains the greatest simultaneous rented and adopted population.</summary>
+            internal int HighWater;
+            /// <summary>Stores loading-only concrete demand from known actors, seeds, waves and attached states.</summary>
+            internal int Planned;
+            /// <summary>Gets unprepared rent requests for this concrete type.</summary>
+            internal abstract long Misses { get; }
             /// <summary>Gets inactive availability.</summary>
             internal abstract int Available { get; }
             /// <summary>Gets construction count.</summary>
@@ -555,6 +812,8 @@ namespace PlantsVsZombies.Simulation
             internal override int Available => Pool.AvailableCount;
             /// <inheritdoc/>
             internal override int Created => Pool.CreatedCount;
+            /// <inheritdoc/>
+            internal override long Misses => Pool.MissCount;
             /// <summary>Creates the bounded typed pool.</summary>
             /// <param name="category">The preparation category.</param>
             /// <param name="capacity">The retained inactive limit.</param>
