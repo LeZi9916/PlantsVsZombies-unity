@@ -21,8 +21,9 @@ For each camera, in ascending `Camera.depth` order, the pipeline:
 3. Calls `SetupCameraProperties`, which sets the target, viewport rect, and matrices.
 4. Clears by the camera's flags. `SolidColor` and `Skybox` both clear to `backgroundColor`
    (no skybox is drawn), `Depth` clears only depth, and `Nothing` skips the clear.
-5. Draws the opaque queue (`CommonOpaque`), then the transparent queue (`CommonTransparent`:
-   sorting layer and order, then render queue, then back to front). Only passes tagged
+5. Draws the opaque queue (`CommonOpaque`), then the transparent queue. The normal path
+   uses `CommonTransparent`; an active game queue bridge uses queues first on layer 31
+   as described below. Only passes tagged
    `SRPDefaultUnlit`, or with no `LightMode` (such as uGUI's `UI/Default`), are drawn.
 6. Draws gizmos for the Scene view and for Game cameras that render to the display.
 
@@ -40,13 +41,61 @@ frustum culling of the pooled quads is cheap.
 
 ## Ordered sprite batching and atlases
 
-`ObjectSpriteRenderer` retains source commands for diagnostics, but only creates a
-mesh renderer for each contiguous compatible run. Texture pages and hardware blend
-state select shared materials. Per-sprite color, grayscale, producer brightness,
-and textured hit values travel in vertex streams. Painter-order gaps preserve
-Canvas, pool-water, and other sprite-pool insertions. Each mesh stays within the
-16-bit index limit. CPU polygon clipping removes invisible geometry before upload.
-`PvZSpriteBatch` is separate from the legacy `PvZCombatSprite` used by pool water.
+`ObjectSpriteRenderer` retains source commands for diagnostics and prefers ordered
+`Graphics.RenderMeshPrimitives` draws. Each contiguous blend-compatible run binds
+up to eight existing textures in first-use order, so A/B/A pages can share a draw
+without repacking or changing transparency order. Canvas, pool water, other pools,
+blend changes, texture-bank exhaustion, and capacity limits retain boundaries.
+Layer 31, the original sorting layer, exact bounds, and each part's depth remain
+part of the submission contract.
+
+Burst clipping still produces the exact polygon. A shared twelve-vertex fan reads
+`float4(x,y,u,v)` vertices and a 64-byte instance record containing its range,
+texture slot, depth, color, feedback, and highlight. Unused triangles degenerate.
+Each chunk holds 8192 instances and at most 98304 vertices (2 MiB); eight chunks
+bound this data to 16 MiB, excluding the tiny shared template and CPU staging.
+The full scene is sealed before changed prefixes are uploaded with synchronous
+`GraphicsBuffer.SetData`; no submitted range is overwritten later in that frame.
+An unchanged scene skips uploads, but its draws are registered on each Unity frame.
+Native property blocks and queue materials use retained submission snapshots that
+remain immutable until the next Unity frame. A later presentation that requires
+different GPU data in the same Unity frame uses complete-scene Mesh rendering;
+an identical or shortened unchanged prefix can still instance without upload.
+There are at most 8192 retained submission snapshots. Last-owner teardown retains
+the submitted buffers until a later-frame render context completes. Eight fixed
+retirement slots bound exceptional same-frame session churn; filling all slots makes
+new sessions use Mesh. The 16 MiB active structured-buffer budget excludes these
+temporary retired sessions (normally one). Admission stops at eight occupied slots,
+bounding structured data across exceptional session churn to 128 MiB.
+Vulkan native validation also receives the exact same chunk buffers on the owned
+material. Cached buffer identities avoid redundant writes without extra buffers
+or texture copies. Local `RenderTo` requests cannot seal a partially collected
+legacy scene; portrait-only empty scenes retain the last native Canvas mapping.
+
+The original Mesh path remains for unsupported devices/shaders, excess capacity,
+and all local `RenderTo` captures. It retains fixed vertex/index capacity and layout,
+updates changed streams separately, and changes visibility only when needed.
+`SceneSpriteFrameScope` completes and retires the scene even for empty frames and
+exception paths. `PvZSpriteBatch` stays separate from pool water's `PvZCombatSprite`.
+
+In Unity 7000.0.0a16, `RenderParams.sortingOrder` alone does not interleave explicit
+draws and native Canvas/water correctly. `SpriteSceneRenderQueues` compresses the
+original painter spans into queues 3000 through 5000. Retained material copies
+preserve source textures, stencil/pop instructions, font keywords, and properties.
+Only native world MeshRenderer sort orders are normalized; Canvas sort orders stay
+unchanged so native UI raycast and pointer capture keep their priorities. On the scene
+and SceneView cameras, layer 31 uses `CommonTransparent` without `SortingLayer` and
+with explicit `CanvasOrder`, so material queues lead while native sibling order stays
+available. Other layers and local capture cameras keep the original sorting criteria.
+A nondefault native Canvas/world sorting layer selects complete-scene Mesh rendering
+to preserve its layer ordering. Materials are refreshed after Canvas rebuilds and
+before culling. More than 2001 spans or 8192 retained copies also selects complete-scene
+Mesh rendering. Pixel tests compare
+Canvas, masks, font rebuilds and water with the independent Mesh oracle; real
+Input System tests exercise overlapping controls and rebuilds during a press.
+The native-material-copy and instance-submission-snapshot budgets are independent.
+Unregistered external layer-31 renderers in SceneView need their own ordering
+integration; arbitrary cross-layer interleaving is not promised.
 
 `SpriteImage` preserves original image dimensions, identity, and source UVs while
 `SpriteAssetProvider` resolves lossless atlas tiles. The Editor baker generates
@@ -68,8 +117,16 @@ Static image consumers avoid retaining source GPU textures alongside their baked
 atlas copies. The existing dynamic pool renderer still uses its separate readable
 input cache; its platform file access requires target-device validation.
 
-The inspectable actor hierarchy owns visibility and source-pose metadata, not a
-renderer per track. Stable model IDs survive clip changes and death presentation.
+The Editor-only inspectable hierarchy owns visibility and source-pose metadata,
+with separate root, attachment and track pools and synchronous visibility notices.
+Player omits this hierarchy and traversal. Value identities include the session
+generation, entity, part and purpose; public string entry points remain compatible.
+Exact local-pose reuse includes time, resource, attachment and blend version, while
+parent transforms, equipment, feedback, visibility and order are applied live.
+Prepared atlas leases keep required stage pages resident until their owner retires.
+Leaving the board releases those preparation pins; returning to the same model runs
+the cooperative preparation phases again without changing any model clock or RNG.
+An options popup that keeps the board active retains its pins.
 `LastFrameStatistics` reports source counts, actual batch counts, uploaded geometry,
 culled commands, geometric coverage, and material/order/capacity split reasons.
 `RenderingBenchmarkTests` is opt-in through `PVZ_BOARD_STRESS_ASSETS` and

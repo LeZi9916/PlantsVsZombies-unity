@@ -67,6 +67,8 @@ namespace PlantsVsZombies.Rendering
         private int _chunkIndex;
         /// <summary>The next frame's bounded capacity request.</summary>
         private int _requestedChunks = 1;
+        /// <summary>The contiguous run prefix whose first native snapshot and material were prepared before presentation.</summary>
+        private int _preparedSubmissionRuns;
         /// <summary>The current complete scene generation.</summary>
         private int _generation;
         /// <summary>Whether a resource failure permanently selected the safe mesh path for this session.</summary>
@@ -109,6 +111,18 @@ namespace PlantsVsZombies.Rendering
         internal long RetiredRunCount { get; private set; }
         /// <summary>Gets actual retained property-block and material snapshot pairs created for immutable native submissions.</summary>
         internal long SubmissionBindingCreationCount { get; private set; }
+        /// <summary>Gets actual retained run descriptors created for scene painter spans.</summary>
+        internal long RunCreationCount { get; private set; }
+        /// <summary>Gets actual independently owned submission materials created for this rendering session.</summary>
+        internal long SubmissionMaterialCreationCount { get; private set; }
+        /// <summary>Gets run descriptors created during presentation after the explicit preparation budget was exceeded.</summary>
+        internal long RunCapacityMissCount { get; private set; }
+        /// <summary>Gets native snapshots created during presentation after the prepared reusable snapshot budget was exceeded.</summary>
+        internal long SubmissionBindingCapacityMissCount { get; private set; }
+        /// <summary>Gets retained run descriptors available without constructing another descriptor during presentation.</summary>
+        internal int PreparedRunCapacity => _runs.Count;
+        /// <summary>Gets the contiguous run prefix with a fully prepared native snapshot and material.</summary>
+        internal int PreparedSubmissionBindingCapacity => _preparedSubmissionRuns;
         /// <summary>Gets complete scene generations routed to meshes to avoid overwriting GPU data already submitted in the same Unity frame.</summary>
         internal long SameFrameBufferFallbackCount { get; private set; }
         /// <summary>Gets the number of polygon slots already prepared without recording draw commands.</summary>
@@ -175,25 +189,28 @@ namespace PlantsVsZombies.Rendering
             UploadCount = 0;
             UploadBytes = 0;
             FallbackCount = 0;
-            PrepareCapacityStep(_requestedChunks * InstancesPerChunk);
+            PrepareCapacityStep(_requestedChunks * InstancesPerChunk, 1, false);
             foreach (var chunk in _chunks)
             {
                 chunk.BeginFrame();
             }
         }
 
-        /// <summary>Prepares at most one fixed chunk without submitting graphics commands or advancing a frame.</summary>
+        /// <summary>Prepares bounded chunk, run, property-block, or material work without submitting draws or advancing a frame.</summary>
         /// <param name="expectedInstances">The expected number of simultaneously staged scene polygons.</param>
-        /// <param name="maxChunks">The maximum chunk allocations allowed in this preparation step.</param>
+        /// <param name="maxObjects">The maximum independently bounded resource work units allowed in this preparation step.</param>
+        /// <param name="prepareSubmissions">Whether explicit loading preparation also reserves painter spans and complete native bindings.</param>
         /// <returns>Whether the bounded requested capacity is ready or safe fallback was selected.</returns>
-        internal bool PrepareCapacityStep(int expectedInstances, int maxChunks = 1)
+        internal bool PrepareCapacityStep(int expectedInstances, int maxObjects = 1, bool prepareSubmissions = true)
         {
             var target = Math.Min(MaximumChunks, Math.Max(0, ((long)expectedInstances + InstancesPerChunk - 1) / InstancesPerChunk));
-            if (!_failed && _chunks.Count < target && maxChunks > 0)
+            var remaining = Math.Max(0, maxObjects);
+            if (!_failed && _chunks.Count < target && remaining > 0)
             {
                 try
                 {
                     _chunks.Add(new Chunk(this));
+                    remaining--;
                 }
                 catch (Exception error)
                 {
@@ -201,7 +218,37 @@ namespace PlantsVsZombies.Rendering
                     Debug.LogWarning($"{nameof(SpriteInstancingRenderer)}: GPU instancing allocation failed; using meshes. {error.Message}");
                 }
             }
-            return _failed || _chunks.Count >= target;
+            if (_failed || _chunks.Count < target || !prepareSubmissions || expectedInstances <= 0)
+            {
+                return _failed || _chunks.Count >= target;
+            }
+            var runTarget = Math.Min(SpriteSceneRenderQueues.MaximumSpans, Math.Max(128, (int)(((long)expectedInstances + 31) / 32)));
+            while (_preparedSubmissionRuns < runTarget)
+            {
+                if (_preparedSubmissionRuns == _runs.Count)
+                {
+                    if (remaining == 0)
+                    {
+                        return false;
+                    }
+                    _runs.Add(new Run());
+                    RunCreationCount++;
+                    remaining--;
+                }
+                var run = _runs[_preparedSubmissionRuns];
+                if (!run.HasSubmissionBinding && SubmissionBindingCreationCount >= MaximumSubmissionBindings)
+                {
+                    _failed = true;
+                    Debug.LogWarning($"{nameof(SpriteInstancingRenderer)}: Native submission preparation exceeded its bounded snapshot budget; using meshes for this session.");
+                    return true;
+                }
+                if (!run.PrepareSubmissionStep(this, _materials[0], _chunks[0], ref remaining))
+                {
+                    return false;
+                }
+                _preparedSubmissionRuns++;
+            }
+            return true;
         }
 
         /// <summary>Appends an already clipped polygon while retaining the original painter sequence.</summary>
@@ -272,6 +319,8 @@ namespace PlantsVsZombies.Rendering
                 if (_runCount == _runs.Count)
                 {
                     _runs.Add(new Run());
+                    RunCreationCount++;
+                    RunCapacityMissCount++;
                 }
                 run = _runs[_runCount++];
                 run.Reset(owner, _chunkIndex, chunk.InstanceCount, blend, order);
@@ -381,7 +430,7 @@ namespace PlantsVsZombies.Rendering
                 {
                     properties.SetTexture(s_textureIds[slot], run.Textures[Math.Min(slot, run.TextureCount - 1)]);
                 }
-                var parameters = new RenderParams(binding.GetMaterial(_materials[run.Blend], SpriteSceneRenderQueues.GetQueue(run.FirstOrder),
+                var parameters = new RenderParams(binding.GetMaterial(this, _materials[run.Blend], SpriteSceneRenderQueues.GetQueue(run.FirstOrder),
                     chunk.VertexBuffer, chunk.InstanceBuffer))
                 {
                     layer = 31,
@@ -696,6 +745,8 @@ namespace PlantsVsZombies.Rendering
             internal readonly Texture[] Textures = new Texture[TextureSlots];
             /// <summary>The retained native snapshots, quarantined until the Unity frame using them has completed.</summary>
             private readonly List<SubmissionBinding> _bindings = new List<SubmissionBinding>(1);
+            /// <summary>Gets whether this painter span already owns at least one retained native snapshot.</summary>
+            internal bool HasSubmissionBinding => _bindings.Count > 0;
             /// <summary>The scene pool owning this span.</summary>
             internal ObjectSpriteRenderer? Owner;
             /// <summary>The chunk containing the contiguous instance prefix.</summary>
@@ -785,7 +836,40 @@ namespace PlantsVsZombies.Rendering
                 var created = new SubmissionBinding { SubmittedFrame = frame };
                 _bindings.Add(created);
                 owner.SubmissionBindingCreationCount++;
+                owner.SubmissionBindingCapacityMissCount++;
                 return created;
+            }
+
+            /// <summary>Prepares this span's first native snapshot and material in separate bounded loading steps.</summary>
+            /// <param name="owner">The renderer owning preparation and diagnostic counters.</param>
+            /// <param name="source">The original premultiplied blend template used to initialize the owned material.</param>
+            /// <param name="chunk">An existing prepared chunk supplying valid native buffer defaults.</param>
+            /// <param name="remaining">The remaining independently bounded resource work units.</param>
+            /// <returns>Whether at least one complete native snapshot can be reused without constructing resources.</returns>
+            internal bool PrepareSubmissionStep(SpriteInstancingRenderer owner, Material source, Chunk chunk, ref int remaining)
+            {
+                if (_bindings.Count == 0)
+                {
+                    if (remaining == 0 || owner.SubmissionBindingCreationCount >= MaximumSubmissionBindings)
+                    {
+                        return false;
+                    }
+                    _bindings.Add(new SubmissionBinding());
+                    owner.SubmissionBindingCreationCount++;
+                    remaining--;
+                }
+                var binding = _bindings[0];
+                if (!binding.HasMaterial)
+                {
+                    if (remaining == 0)
+                    {
+                        return false;
+                    }
+                    binding.GetMaterial(owner, source, 3000, chunk.VertexBuffer, chunk.InstanceBuffer);
+                    binding.PrepareProperties(chunk);
+                    remaining--;
+                }
+                return true;
             }
 
             /// <summary>Clears completed native property references without touching a snapshot submitted in this frame.</summary>
@@ -844,19 +928,37 @@ namespace PlantsVsZombies.Rendering
             private GraphicsBuffer? _vertexBuffer;
             /// <summary>The structured instance buffer supplied to the material's native validation path.</summary>
             private GraphicsBuffer? _instanceBuffer;
+            /// <summary>Gets whether preparation or an earlier presentation already created this snapshot's owned material.</summary>
+            internal bool HasMaterial => _material != null;
+
+            /// <summary>Initializes the property sheet's fixed binding shape before any presentation records it.</summary>
+            /// <param name="chunk">The existing prepared chunk used for native buffer validation.</param>
+            internal void PrepareProperties(Chunk chunk)
+            {
+                Properties.SetBuffer(s_verticesId, chunk.VertexBuffer);
+                Properties.SetBuffer(s_instancesId, chunk.InstanceBuffer);
+                Properties.SetInt(s_startId, 0);
+                Properties.SetInt(s_runGenerationId, 0);
+                for (var slot = 0; slot < TextureSlots; slot++)
+                {
+                    Properties.SetTexture(s_textureIds[slot], Texture2D.whiteTexture);
+                }
+            }
 
             /// <summary>Gets an owned material whose properties and queue stay immutable until this Unity frame completes.</summary>
             /// <param name="source">The unchanged hardware blend template.</param>
+            /// <param name="owner">The renderer recording actual native material creations.</param>
             /// <param name="queue">The compressed painter-span queue of this submission.</param>
             /// <param name="vertices">The unchanged chunk vertex buffer also bound by this submission's property block.</param>
             /// <param name="instances">The unchanged chunk instance buffer also bound by this submission's property block.</param>
             /// <returns>The material owned only by this native submission snapshot.</returns>
-            internal Material GetMaterial(Material source, int queue, GraphicsBuffer vertices, GraphicsBuffer instances)
+            internal Material GetMaterial(SpriteInstancingRenderer owner, Material source, int queue, GraphicsBuffer vertices, GraphicsBuffer instances)
             {
                 if (_material == null)
                 {
                     _material = new Material(source) { hideFlags = HideFlags.HideAndDontSave, enableInstancing = true };
                     _materialSource = source;
+                    owner.SubmissionMaterialCreationCount++;
                     _vertexBuffer = null;
                     _instanceBuffer = null;
                 }

@@ -19,12 +19,18 @@ test assembly:
 | `PVZ_RENDER_BENCHMARK_ADVANCE` | `1` runs one additional native tick per measured frame. |
 | `PVZ_RENDER_BENCHMARK_FRAMES` | Measured frames, default `900`. |
 | `PVZ_RENDER_BACKEND` | `Auto`, `Mesh`, or `Instanced`; absent interfaces on older revisions use their original renderer. |
+| `PVZ_RENDER_USE_BAKED` | `1` uses the isolated project's production atlas/catalog and packaged texts. |
+| `PVZ_RENDER_PROFILE_ALLOCATIONS` | `1` records raw allocation callstacks for separate diagnosis; do not use its CPU timings for acceptance. |
 
 The fixture warms presentation for 120 frames with simulation held at the exact
 requested offset. It records all measured frames, per-scope `GC.Alloc` event
 counts, whole-frame GC bytes, simulation and presentation CPU time, draw counters,
 model population, elapsed time, random-stream position, final model hashes and a
-PNG. Whole-frame bytes include Test Runner and must not be advertised as Player
+PNG. Primitive renderer counters use delegates bound before warm-up, including
+instance draws, prefix uploads/bytes, retained GPU bytes, prepared instance slots,
+fallback polygons, and cumulative native buffer creations. Pool snapshots bracket
+the complete measured window. Older revisions explicitly report unavailable
+counters. Whole-frame bytes include Test Runner and must not be advertised as Player
 gameplay allocation. A deliberate allocation verifies both scoped recorders.
 Missing original assets skip this opt-in test; a skip is not verification.
 
@@ -36,8 +42,10 @@ Do not exclude allocating or slow event frames. Record full Player observations
 separately from these deterministic traversal measurements.
 
 ```powershell
-./Tools/Tests/Run-UnityTests.ps1 -Platform PlayMode -TestFilter CheckpointRenderingBenchmarkTests
+./Tools/Tests/Run-UnityTests.ps1 -Platform PlayMode -TestFilter CheckpointRenderingBenchmarkTests -IncludeRuntimeAssets
+./Tools/Tests/RenderingPerformance/Run-CheckpointBenchmarks.ps1 -BaselineProject .unity-runs/<baseline>/p -CandidateProject .unity-runs/<candidate>/p -Checkpoint <read-only-save> -Output .unity-runs/perf/paired
 python -B Tools/Tests/RenderingPerformance/CompareBenchmarks.py --baseline .unity-runs/perf/before --candidate .unity-runs/perf/after --output .unity-runs/perf/comparison.json
+python -B -m unittest discover -s Tools/Tests/RenderingPerformance -p 'test_*.py' -v
 ```
 
 `CompareBenchmarks.py` rejects differing authoritative model states and PNGs,
@@ -45,3 +53,18 @@ and reports unfiltered mean, nearest-rank P95/P99, allocation events and draw-ca
 changes. Zero allocations are an explicit reported result, not an assumed
 property of a warmed or compiled benchmark. GPU frame timings are advisory;
 use recorded GPU Profiler samples to distinguish rendering cost from frame pacing.
+
+The paired runner uses three sequential AB/BA/AB pairs at each requested starting
+point and refuses to overwrite a completed observation. Supply distinct, already
+prepared isolated baseline/candidate snapshots; it updates only the shared test
+fixture. It records source hashes and validates the immutable checkpoint after
+every run. Allocation-callstack capture is a separate opt-in diagnosis, never a
+formal timing source. Keep other Unity builds, graphics tests, and Player runs idle
+while collecting paired measurements. The comparator reports target booleans and
+resource growth without dropping any frame; its default exit code checks replay
+and exact PNG identity. Editor hierarchy/name costs remain included and cannot
+stand in for Player allocation acceptance.
+
+`-IncludeRuntimeAssets` copies both StreamingAssets and generated resources into
+the isolated project. Original pool-water decoding still needs the physical
+source images; an atlas-only copy is not a faithful complete-board benchmark.

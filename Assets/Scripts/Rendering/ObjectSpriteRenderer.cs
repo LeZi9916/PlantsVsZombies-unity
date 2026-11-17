@@ -73,6 +73,14 @@ namespace PlantsVsZombies.Rendering
         internal static long InstanceRetiredRunCount => s_instancing?.RetiredRunCount ?? 0;
         /// <summary>Gets actual retained property-block and material pairs created for immutable per-frame native submissions.</summary>
         internal static long InstanceSubmissionBindingCreationCount => s_instancing?.SubmissionBindingCreationCount ?? 0;
+        /// <summary>Gets actual scene painter-span descriptors created for this rendering session.</summary>
+        internal static long InstanceRunCreationCount => s_instancing?.RunCreationCount ?? 0;
+        /// <summary>Gets actual independently owned native submission materials created for this rendering session.</summary>
+        internal static long InstanceSubmissionMaterialCreationCount => s_instancing?.SubmissionMaterialCreationCount ?? 0;
+        /// <summary>Gets scene run descriptors constructed during presentation after prepared capacity was exceeded.</summary>
+        internal static long InstanceRunCapacityMissCount => s_instancing?.RunCapacityMissCount ?? 0;
+        /// <summary>Gets native snapshots constructed during presentation after prepared reusable capacity was exceeded.</summary>
+        internal static long InstanceSubmissionBindingCapacityMissCount => s_instancing?.SubmissionBindingCapacityMissCount ?? 0;
         /// <summary>Gets complete scene generations routed to meshes to preserve buffers already submitted within the same Unity frame.</summary>
         internal static long InstanceSameFrameBufferFallbackCount => s_instancing?.SameFrameBufferFallbackCount ?? 0;
         /// <summary>Gets complete retired instance sessions whose native draw frame has not yet expired.</summary>
@@ -81,12 +89,16 @@ namespace PlantsVsZombies.Rendering
         internal static long InstanceRetirementCapacityFallbackCount => SpriteInstancingRenderer.RetirementCapacityFallbackCount;
         /// <summary>Gets the number of prepared scene-polygon slots without recording a draw.</summary>
         internal static int PreparedInstanceCapacity => s_instancing?.PreparedInstanceCapacity ?? 0;
+        /// <summary>Gets retained painter-span descriptors available without construction during presentation.</summary>
+        internal static int PreparedInstanceRunCapacity => s_instancing?.PreparedRunCapacity ?? 0;
+        /// <summary>Gets the painter-span prefix with a prepared property block and owned material for one presentation per Unity frame.</summary>
+        internal static int PreparedInstanceSubmissionBindingCapacity => s_instancing?.PreparedSubmissionBindingCapacity ?? 0;
 
-        /// <summary>Prepares at most one GPU instance chunk without registering rendering commands.</summary>
+        /// <summary>Incrementally prepares instance chunks, painter spans, native snapshots and owned materials without registering draws.</summary>
         /// <param name="expectedInstances">The estimated simultaneously visible clipped polygon count.</param>
-        /// <param name="maxChunks">The maximum chunk allocations allowed in this bounded step.</param>
+        /// <param name="maxObjects">The maximum independently bounded resource work units allowed in this preparation step.</param>
         /// <returns>Whether bounded capacity is ready or the supported mesh fallback has been selected.</returns>
-        internal static bool PrepareSceneCapacityStep(int expectedInstances, int maxChunks = 1)
+        internal static bool PrepareSceneCapacityStep(int expectedInstances, int maxObjects = 1)
         {
             if (!s_instancingChecked && Backend != SpriteRenderingBackend.Mesh)
             {
@@ -97,7 +109,7 @@ namespace PlantsVsZombies.Rendering
                     s_instancing = new SpriteInstancingRenderer(shader);
                 }
             }
-            return s_instancing == null || s_instancing.PrepareCapacityStep(expectedInstances, maxChunks);
+            return s_instancing == null || s_instancing.PrepareCapacityStep(expectedInstances, maxObjects);
         }
         /// <summary>The logical source commands retained independently of their combined GPU geometry.</summary>
         private readonly List<ObjectSprite> _sprites = new List<ObjectSprite>();

@@ -11,6 +11,10 @@ include fractional, multi-tick and zero deltas. No depth cutoff silently skips
 state; unsupported state types fail validation. Add `--traces-only` after the
 output directory to omit performance measurements.
 Fixtures deliberately inject actors; these are not public-action playthroughs.
+The runner accepts both the historical instance inspection method and the current
+test-only `SimulationInspection` extension in each independently loaded assembly.
+This changes fixture access only; the compared schema, state, event order, and
+random-stream assertions remain unchanged.
 
 ```sh
 dotnet run --project Tools/Tests/SimulationParityTests/SimulationParityTests.csproj -c Release -- BASELINE_DLL CURRENT_DLL .unity-runs/simulation-parity

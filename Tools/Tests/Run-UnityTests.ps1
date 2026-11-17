@@ -15,6 +15,7 @@ param(
     [string]$TestFilter,
     [string]$PackageCache,
     [string]$ReuseProject,
+    [switch]$IncludeRuntimeAssets,
     [ValidateRange(60, 1800)]
     [int]$TimeoutSeconds = 600
 )
@@ -61,7 +62,8 @@ foreach ($directory in @('Packages', 'ProjectSettings')) {
 }
 
 foreach ($asset in Get-ChildItem -LiteralPath (Join-Path $repository 'Assets') -Force) {
-    if ($asset.Name -in @('StreamingAssets', 'StreamingAssets.meta', 'OriginalPvZ', 'OriginalPvZ.meta', 'Generated', 'Generated.meta')) {
+    if ($asset.Name -in @('OriginalPvZ', 'OriginalPvZ.meta') -or (-not $IncludeRuntimeAssets -and
+            $asset.Name -in @('StreamingAssets', 'StreamingAssets.meta', 'Generated', 'Generated.meta'))) {
         continue
     }
     Copy-Item -LiteralPath $asset.FullName -Destination $projectAssets -Recurse

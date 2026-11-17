@@ -270,7 +270,7 @@ namespace PlantsVsZombies.Tests.SimulationParity
             var type = value.GetType();
             if (type.Name == "GameSimulation" && type.GetField(name, Flags) == null && type.GetProperty(name, Flags) == null)
             {
-                value = type.GetMethod("MemberOwner", Flags)!.Invoke(value, new object[] { name })!;
+                value = MemberOwner(value, name);
                 type = value.GetType();
             }
             var field = type.GetField(name, Flags);
@@ -303,7 +303,7 @@ namespace PlantsVsZombies.Tests.SimulationParity
             var method = owner.GetType().GetMethods(Flags).FirstOrDefault(candidate => candidate.Name == name && candidate.GetParameters().Length >= arguments.Length);
             if (method == null)
             {
-                owner = game.GetType().GetMethod("MemberOwner", Flags)!.Invoke(game, new object[] { name })!;
+                owner = MemberOwner(game, name);
                 method = owner.GetType().GetMethods(Flags).First(candidate => candidate.Name == name && candidate.GetParameters().Length >= arguments.Length);
             }
             var parameters = method.GetParameters();
@@ -314,6 +314,27 @@ namespace PlantsVsZombies.Tests.SimulationParity
                 arguments[i] = parameters[i].DefaultValue!;
             }
             return method.Invoke(owner, arguments);
+        }
+        /// <summary>Resolves fixture ownership through the original instance API or the current test-only extension.</summary>
+        /// <param name="game">The match loaded in its independent assembly context.</param>
+        /// <param name="name">The member whose owning collaborator is required.</param>
+        /// <returns>The exact collaborator used by that revision's fixture inspection.</returns>
+        /// <exception cref="MissingMethodException">Neither revision exposes a supported inspection entry point.</exception>
+        private static object MemberOwner(object game, string name)
+        {
+            var type = game.GetType();
+            var legacy = type.GetMethod("MemberOwner", Flags);
+            if (legacy != null)
+            {
+                return legacy.Invoke(game, new object[] { name })!;
+            }
+            var inspection = type.Assembly.GetType("PlantsVsZombies.Simulation.SimulationInspection");
+            var extension = inspection?.GetMethod("MemberOwner", Flags);
+            if (extension == null)
+            {
+                throw new MissingMethodException(type.FullName, "MemberOwner / SimulationInspection.MemberOwner");
+            }
+            return extension.Invoke(null, new object[] { game, name })!;
         }
         /// <summary>Serializes baseline-defined state with exact round-trip numeric values.</summary>
         /// <param name="text">The output buffer.</param>

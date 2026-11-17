@@ -53,11 +53,17 @@ python3 -B Tools/PrepareRuntimeAssets.py \
 
 项目使用自定义的轻量渲染管线 **PvZRenderPipeline**（`Assets/Scripts/Rendering/Pipeline`），不依赖 URP 或任何渲染管线包，只提供游戏需要的无光照 2D 绘制：按深度排序的相机、清屏与视口、不透明/透明两个绘制阶段、渲染到 RenderTexture 的 render request、uGUI 与 Editor 视图。`Assets/Settings/PvZRenderPipeline.asset` 由菜单 **PlantsVsZombies > Configure Render Pipeline** 生成，Graphics 与所有 Quality 等级引用它，且所有 Quality 等级关闭 MSAA。结构、支持范围及扩展方式见该目录的 `README.md`。
 
-棋盘图像与动画部件通过逻辑图片句柄提交，按原绘制顺序合并到复用的动态网格；相邻、同图集页与同混合状态的命令共用一个 MeshRenderer。Canvas、水面及其他绘制插层保留合批边界。颜色、灰度和命中反馈使用顶点数据，部件不再分别设置 MaterialPropertyBlock。第 31 层 `PvZ Rendering` 专供游戏渲染相机使用。
+棋盘图像与动画部件通过逻辑图片句柄提交，优先使用 `Graphics.RenderMeshPrimitives` 按原绘制顺序实例化。同一批次可引用八张既有纹理，A/B/A 页序列无需重排或重新烘焙即可合并；Canvas、水面、其他池插层、混合变化及容量限制仍拆批。实例沿用精确多边形裁剪，每块固定容纳 8192 个部件，最多八块、约 16 MiB GPU 数据。全帧封存后才上传变化前缀并提交；冻结画面复用缓冲内容。能力不足、预算溢出与局部合成保留 Mesh 兼容路径，固定布局与容量避免普通帧重复清空网格。第 31 层 `PvZ Rendering` 专供游戏渲染相机使用。
+
+Unity 7 中显式实例绘制与原生 Canvas 仅设置 `sortingOrder` 无法保证交错顺序，因此完整场景把原绘制跨度压缩到 3000–5000 材质队列。桥接复用材质副本，保留原始纹理、Stencil、字体及 Shader 属性，仅在场景和 SceneView 的第 31 层使用队列优先并保留 CanvasOrder；Canvas 的排序值和输入优先级不变。非默认原生 sorting layer、跨度或材质预算不足时整帧使用 Mesh。不会按纹理重排透明部件，也不会改变每个部件的深度。
 
 进入 Play Mode 和构建 Player 前会增量生成四档无损图集（256、512、1024、2048）；也可使用 **PlantsVsZombies > Generate Rendering Atlases**。页面按实际占用输出紧致矩形（可为非二次幂），常用战斗页由完整动画、装备换图与粒子依赖确定，冷资源单独存放。运行时先根据 `SystemInfo.maxTextureSize` 和默认 16 MiB 单页预算选档，再按需加载页面；缺页或尺寸错配会降档，超大原图通过带采样保护边的切片保留像素精度。生成物位于忽略的 `Assets/Generated/PvZRendering`，不要提交。原始素材和既有 `.meta` 不变，首次生成需要额外磁盘空间。正式资源路径同时打包动画、粒子与原始文本；外部素材目录及合成测试保留散图兼容路径。
 
-Hierarchy 的 `PvZ Actors/Plants` 和 `PvZ Actors/Zombies` 下按实体 ID 管理部件、头部、旗帜和阴影。节点开关控制显隐，动画继续负责姿态；选中 sprite 可在只读 Inspector 查看源资源和完整变换，实际 Renderer 由批次池管理。透明网格会保守剔除空白区域并保留双线性边缘，符合条件的命中、灰度及生产亮度反馈直接绘制，局部合成仍保留原混合语义。
+仅 Editor 创建 `PvZ Actors/Plants` 和 `PvZ Actors/Zombies` 检查层级，根节点、附件与轨道分别复用；Player 跳过这些节点及其遍历。节点开关同步更新可见性版本，选中 sprite 可查看源资源和完整变换。表现缓存使用会话代次与实体 ID 组成的值身份；局部动画只在精确采样时间、资源、附件与混合版本相同时复用，位置、装备、颜色和绘制顺序继续实时应用。透明几何保留双线性边缘，命中、灰度及亮度反馈沿用原混色语义。
+
+加载、选卡及开场期间由 `GamePreparationController` 每帧按 2 ms 软预算准备资源、模型池、表现容量、粒子和实例缓冲；不可拆分的 Unity 资源操作可能超预算。必要准备完成后才进入本阶段战斗。模型回收检查全部权威引用，并经过两个完整更新边界，覆盖尸体、附属投射物与待消费事件；运行时池不进入存档。超出准备容量仍安全扩容并继续玩法，性能证据保留这些帧。复现与平台验证命令见 `Tools/Tests/RenderingPerformance/README.md` 和 `Tools/Tests/PerformanceReplay/README.md`。
+
+本轮性能实现尚未完成最终验收：动态事件仍有分配和准备容量增长，完整 Player 计时及五分钟压力循环未执行。按用户要求已停止测试并保存当前进度；具体已测结果、未验证补丁和未完成项目见 [`OrderedInstancingPerformance.md`](Assets/Tests/OrderedInstancingPerformance.md)。
 
 界面图像、文字、输入框、滑块与弹窗由 Canvas 组件显示，`GamePresenter` 提交每帧表现，`PvZGame` 只保留生命周期、跨界面共享状态与每帧执行顺序；音效与音乐（`Audio`）、输入路由与菜单（`Game`）、冒险开场/关卡/奖励（`Adventure`）、独立模式（`Modes`）、商店/花园/智慧树/Dave（`Progression`）、存档工具（`Profiles`）、纹理缓存（`Rendering`）和棋盘布局（`BoardUI`）分别由 `PvZGame` 按需创建的协作类负责。架构测试限制 `PvZGame.cs` 不超过 700 行。输入在帧更新时独立采样，使用与相机、Canvas 相同的 800×600 逻辑视口换算；宽屏留边不参与棋盘点击。运行时不再依赖 `OnGUI`、`GUI` 绘制或 `Event.current`。
 
