@@ -12,11 +12,11 @@ using UnityEngine;
 
 namespace PlantsVsZombies.Game
 {
-    /// <summary>Prepares derived battle storage in bounded main-thread steps without advancing the authoritative world.</summary>
+    /// <summary>Prepares derived battle storage before the first admitted gameplay update without advancing the authoritative world.</summary>
     internal sealed class GamePreparationController
     {
-        /// <summary>The cooperative preparation budget; a single Unity resource operation cannot be interrupted.</summary>
-        internal const double BudgetMilliseconds = 2d;
+        /// <summary>Failsafe bound on preparation steps in one call; normal preparation finishes far below it.</summary>
+        private const int MaximumStepsPerAdvance = 1 << 16;
         /// <summary>The game host whose current board owns this preparation.</summary>
         private readonly PvZGame _owner;
         /// <summary>The resource dependencies retained across preparation steps.</summary>
@@ -54,10 +54,12 @@ namespace PlantsVsZombies.Game
         /// <summary>Gets whether board interaction must wait before the first admitted simulation tick.</summary>
         internal bool BlocksGameplay => !IsReady && _owner._currentView == PvZGame.ScreenView.Board
             && !_owner._choosingSeeds && !_owner.Opening.AdventureIntroActive;
-        /// <summary>Gets the latest cooperative preparation duration, including indivisible Unity operations.</summary>
+        /// <summary>Gets the latest preparation duration, including indivisible Unity operations.</summary>
         internal double LastStepMilliseconds { get; private set; }
         /// <summary>Gets the number of admitted preparation steps for diagnostics.</summary>
         internal int StepCount { get; private set; }
+        /// <summary>Tracks whether an abnormal preparation overrun was already reported for this board.</summary>
+        private bool _overrunLogged;
 
         /// <summary>Creates a preparation coordinator without touching Unity resources.</summary>
         /// <param name="owner">The host whose board and loading UI are coordinated.</param>
@@ -66,7 +68,7 @@ namespace PlantsVsZombies.Game
             _owner = owner;
         }
 
-        /// <summary>Spends at most the cooperative budget preparing a current board without changing its clocks or RNG.</summary>
+        /// <summary>Prepares a current board completely without changing its clocks or RNG.</summary>
         internal void Advance()
         {
             var game = _owner._game;
@@ -93,13 +95,23 @@ namespace PlantsVsZombies.Game
                 return;
             }
             var start = Stopwatch.GetTimestamp();
-            do
+            for (var step = 0; !IsReady; step++)
             {
+                if (step >= MaximumStepsPerAdvance)
+                {
+                    if (!_overrunLogged)
+                    {
+                        _overrunLogged = true;
+                        UnityEngine.Debug.LogWarning($"{nameof(GamePreparationController)}: Preparation did not finish within {MaximumStepsPerAdvance} steps; continuing next frame.");
+                    }
+                    break;
+                }
+
                 Step(game);
                 StepCount++;
-                LastStepMilliseconds = (Stopwatch.GetTimestamp() - start) * 1000d / Stopwatch.Frequency;
             }
-            while (!IsReady && LastStepMilliseconds < BudgetMilliseconds);
+
+            LastStepMilliseconds = (Stopwatch.GetTimestamp() - start) * 1000d / Stopwatch.Frequency;
         }
 
         /// <summary>Displays progress only when the player would otherwise enter an unprepared live board.</summary>
@@ -141,6 +153,7 @@ namespace PlantsVsZombies.Game
             _assetOpened = false;
             _displayedPercent = -1;
             StepCount = 0;
+            _overrunLogged = false;
             _requirements = game.GetCapacityRequirements();
             var population = Math.Max(1, _requirements.Plants + _requirements.Zombies);
             _actors = Math.Min(256, population);
