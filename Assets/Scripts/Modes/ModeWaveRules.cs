@@ -43,13 +43,15 @@ namespace PlantsVsZombies.Modes
         /// <param name="stageIndex">The zero-based survival stage.</param>
         /// <param name="terrain">The board terrain used by native pool, roof, and grave restrictions.</param>
         /// <param name="context">The explicit native profile and seed inputs.</param>
+        /// <param name="previousWaveIndex">The board wave index the native generator observes; zero for a fresh board and the previous round's wave count on a survival re-selection.</param>
         /// <returns>All 34 eligibility flags, including zero-weight original identifiers.</returns>
         /// <exception cref="ArgumentNullException">A required definition or context is null.</exception>
-        /// <exception cref="ArgumentOutOfRangeException">The stage index is negative.</exception>
+        /// <exception cref="ArgumentOutOfRangeException">The stage index or previous wave index is negative.</exception>
         /// <exception cref="InvalidOperationException">A later survival stage has no profile or requests an impossible number of types.</exception>
-        public static bool[] BuildAllowed(ModeDefinition mode, int stageIndex, AdventureTerrain terrain, ModeWaveContext context)
+        public static bool[] BuildAllowed(ModeDefinition mode, int stageIndex, AdventureTerrain terrain, ModeWaveContext context,
+            int previousWaveIndex = 0)
         {
-            ValidateInputs(mode, stageIndex, context);
+            ValidateInputs(mode, stageIndex, context, previousWaveIndex);
             var enabled = new bool[AdventureWaveRules.ZombieTypeCount];
             if (mode.Survival)
             {
@@ -69,7 +71,7 @@ namespace PlantsVsZombies.Modes
                     var localRandom = new OriginalRandom(context.DeriveSeed(mode.Id, stageIndex));
                     enabled[localRandom.NextBounded(5) == 0 ? 5 : 2] = true;
                     var remaining = Math.Min(stageIndex + 1, 9);
-                    var flagsCompleted = stageIndex * mode.FlagsPerStage;
+                    var flagsCompleted = GenerationFlagsCompleted(mode, stageIndex, previousWaveIndex);
                     var available = 0;
                     for (var id = 0; id < enabled.Length; id++)
                     {
@@ -129,28 +131,29 @@ namespace PlantsVsZombies.Modes
         /// <param name="context">The explicit native profile and seed inputs.</param>
         /// <param name="random">The shared random stream used by PC 0x5267C0.</param>
         /// <param name="enabled">Optional eligibility flags already generated for the board.</param>
+        /// <param name="previousWaveIndex">The board wave index the native generator observes; zero for a fresh board and the previous round's wave count on a survival re-selection.</param>
         /// <returns>The original wave table; special controllers retain their catalog's empty table.</returns>
         /// <exception cref="ArgumentNullException">A required definition, context, or random source is null.</exception>
-        /// <exception cref="ArgumentOutOfRangeException">The stage index is negative.</exception>
+        /// <exception cref="ArgumentOutOfRangeException">The stage index or previous wave index is negative.</exception>
         /// <exception cref="ArgumentException">An eligibility array does not contain 34 entries.</exception>
         /// <exception cref="InvalidOperationException">No positive-weight candidate exists for a positive budget.</exception>
         public static IReadOnlyList<AdventureWave> Build(ModeDefinition mode, int stageIndex, AdventureTerrain terrain,
-            ModeWaveContext context, Random random, IReadOnlyList<bool>? enabled = null)
+            ModeWaveContext context, Random random, IReadOnlyList<bool>? enabled = null, int previousWaveIndex = 0)
         {
-            ValidateInputs(mode, stageIndex, context);
+            ValidateInputs(mode, stageIndex, context, previousWaveIndex);
             if (random == null)
             {
                 throw new ArgumentNullException(nameof(random));
             }
 
-            enabled ??= BuildAllowed(mode, stageIndex, terrain, context);
+            enabled ??= BuildAllowed(mode, stageIndex, terrain, context, previousWaveIndex);
             ValidateCounts(enabled.Count, nameof(enabled));
             var waveCount = mode.Id == 25 && !context.SpecialRulesEnabled ? 40 : mode.WaveCount;
             var waves = new List<AdventureWave>(waveCount);
             var waveCounts = new int[AdventureWaveRules.ZombieTypeCount];
             var roundCounts = new int[AdventureWaveRules.ZombieTypeCount];
             var candidates = new List<WeightedZombie>(AdventureWaveRules.ZombieTypeCount);
-            var flagsCompleted = stageIndex * mode.FlagsPerStage;
+            var flagsCompleted = GenerationFlagsCompleted(mode, stageIndex, previousWaveIndex);
             for (var waveIndex = 0; waveIndex < waveCount; waveIndex++)
             {
                 Array.Clear(waveCounts, 0, waveCounts.Length);
@@ -340,6 +343,27 @@ namespace PlantsVsZombies.Modes
             }
         }
 
+        /// <summary>Computes PC 0x41F370's completed-flag count at independent-mode wave generation time.</summary>
+        /// <param name="mode">The independent-mode definition.</param>
+        /// <param name="stageIndex">The zero-based survival stage being generated.</param>
+        /// <param name="previousWaveIndex">The board wave index still stored when the native generator runs.</param>
+        /// <returns>The completed flags PC 0x41F370 reports to the eligibility and quota rules.</returns>
+        /// <remarks>
+        /// PC 0x416900 calls the eligibility builder and 0x4150C0 before it stores zero to the board wave index,
+        /// and a survival re-selection keeps the previous round's final wave there. Because 0x41F370 excludes a
+        /// wave index whose predecessor is a flag wave, a twenty-wave round contributes floor((20 - 1) / 10) = 1
+        /// extra flag while a ten-wave round contributes none. A fresh board stores zero and adds nothing.
+        /// </remarks>
+        internal static int GenerationFlagsCompleted(ModeDefinition mode, int stageIndex, int previousWaveIndex)
+        {
+            if (stageIndex <= 0 || previousWaveIndex <= 0)
+            {
+                return stageIndex * mode.FlagsPerStage;
+            }
+
+            return stageIndex * mode.FlagsPerStage + (previousWaveIndex - 1) / 10;
+        }
+
         /// <summary>Samples PC 0x526F20's clamped linear float interpolation and integer rounding.</summary>
         /// <param name="value">The current flag count.</param>
         /// <param name="start">The interpolation's starting flag count.</param>
@@ -420,9 +444,10 @@ namespace PlantsVsZombies.Modes
         /// <param name="mode">The independent-mode definition.</param>
         /// <param name="stageIndex">The zero-based stage.</param>
         /// <param name="context">The explicit native profile context.</param>
+        /// <param name="previousWaveIndex">The board wave index the native generator observes.</param>
         /// <exception cref="ArgumentNullException">A required definition or context is null.</exception>
-        /// <exception cref="ArgumentOutOfRangeException">The stage index is negative.</exception>
-        private static void ValidateInputs(ModeDefinition mode, int stageIndex, ModeWaveContext context)
+        /// <exception cref="ArgumentOutOfRangeException">The stage index or previous wave index is negative.</exception>
+        private static void ValidateInputs(ModeDefinition mode, int stageIndex, ModeWaveContext context, int previousWaveIndex)
         {
             if (mode == null || context == null)
             {
@@ -432,6 +457,11 @@ namespace PlantsVsZombies.Modes
             if (stageIndex < 0)
             {
                 throw new ArgumentOutOfRangeException(nameof(stageIndex));
+            }
+
+            if (previousWaveIndex < 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(previousWaveIndex));
             }
         }
 

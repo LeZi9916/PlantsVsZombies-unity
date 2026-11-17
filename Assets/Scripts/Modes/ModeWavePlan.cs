@@ -17,9 +17,12 @@ namespace PlantsVsZombies.Modes
         {
             var stageIndex = session.Stage - 1;
             var terrain = session.Game.Adventure.Level.Terrain;
-            var enabled = ModeWaveRules.BuildAllowed(session.Definition, stageIndex, terrain, session.WaveContext);
+            // PC Board::InitSurvivalStage 0x41693F generates the re-selection table before 0x41694A clears
+            // the board wave index, so the finished round's last wave is still visible to 0x41F370 there.
+            var previousWaveIndex = stageIndex > 0 ? session.Definition.WaveCount : 0;
+            var enabled = ModeWaveRules.BuildAllowed(session.Definition, stageIndex, terrain, session.WaveContext, previousWaveIndex);
             Array.Copy(enabled, session.Game.Adventure.EnabledZombieTypes, enabled.Length);
-            return ModeWaveRules.Build(session.Definition, stageIndex, terrain, session.WaveContext, random, enabled);
+            return ModeWaveRules.Build(session.Definition, stageIndex, terrain, session.WaveContext, random, enabled, previousWaveIndex);
         }
     }
 }

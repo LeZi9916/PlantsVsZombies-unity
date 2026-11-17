@@ -136,6 +136,23 @@ namespace PlantsVsZombies.Tests.EditMode
             Assert.That(Candidates(13, 8, 19, 100, new[] { id }, id, 2).Count, Is.Zero);
         }
 
+        /// <summary>Checks PC 0x41F370's still-occupied previous flag wave raises the generated stage quotas.</summary>
+        [Test]
+        public void GeneratedStageQuotaCountsThePreviousRoundFlagWave()
+        {
+            var eligible = new bool[34];
+            eligible[0] = true;
+            eligible[23] = true;
+            var waves = ModeWaveRules.Build(ModeCatalog.Get(13), 6, AdventureTerrain.Pool,
+                new ModeWaveContext(12345), new OriginalRandomAdapter(12345), eligible, previousWaveIndex: 20);
+            Assert.That(waves[19].Zombies.Count(kind => (int)kind == 23), Is.EqualTo(6));
+            var fresh = ModeWaveRules.Build(ModeCatalog.Get(13), 6, AdventureTerrain.Pool,
+                new ModeWaveContext(12345), new OriginalRandomAdapter(12345), eligible);
+            Assert.That(fresh[19].Zombies.Count(kind => (int)kind == 23), Is.EqualTo(4));
+            Assert.That(ModeWaveRules.BuildAllowed(ModeCatalog.Get(13), 4, AdventureTerrain.Pool,
+                new ModeWaveContext(12345))[32], Is.False);
+        }
+
         /// <summary>Checks endless Bungee selection is flag-only and bypasses the remaining budget.</summary>
         [Test]
         public void EndlessBungeeUsesItsNativeFlagException()
