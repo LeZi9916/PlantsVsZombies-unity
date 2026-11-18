@@ -441,6 +441,11 @@ namespace PlantsVsZombies.Game
                 && !Continuation.DialogOpen && !_confirmingQuit && _unavailableFeature == null && RequiredGame.State != MatchState.Paused)
             {
                 _pendingSeeds.Advance(Time.deltaTime);
+                if (RequiredGame.IsAdventure && !_pendingSeeds.Contains(PlantKind.Imitater)
+                    && !_pendingSeeds.IsMoving(PlantKind.Imitater))
+                {
+                    RequiredGame.Adventure.ImitaterTarget = null;
+                }
             }
 
             var openingBlocksSimulation = Continuation.DialogOpen || Opening.UpdateAdventureOpening(Time.deltaTime) || !Preparation.IsReady;

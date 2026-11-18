@@ -185,6 +185,33 @@ namespace PlantsVsZombies.Tests.PlayMode
             Assert.That(owner.RequiredPendingSeeds.IsMoving(PlantKind.Peashooter), Is.False);
         }
 
+        /// <summary>Checks that the original home button returns after the copied packet flies out of the bank.</summary>
+        /// <returns>Real camera boundaries for chooser button pixels.</returns>
+        [UnityTest]
+        public IEnumerator ReturnedImitaterShowsItsOriginalChooserButton()
+        {
+            using var fixture = new OriginalStormGraphicsTests.StormFixture(28);
+            Prepare(fixture, 13, AdventureSeedAccess.DevelopmentAll());
+            var owner = fixture.Owner;
+            WaitForChooser(owner);
+            var home = owner.Opening.AdventureCampaignChooserRect(PlantKind.Imitater);
+            yield return fixture.Capture(null, () => fixture.DrawPass("DrawChooserHome", PlantKind.Imitater, home));
+            var initial = fixture.Pixels.GetPixels32();
+            Assert.That(owner.RequiredGame.SetModeImitaterTarget(PlantKind.Peashooter), Is.True);
+            Assert.That(owner.RequiredPendingSeeds.Choose(PlantKind.Imitater, (int)home.x, (int)home.y, owner.Layout.SeedBankCapacity), Is.True);
+            owner.RequiredPendingSeeds.LandFlyingSeeds();
+            yield return fixture.Capture(null, () => fixture.DrawPass("DrawChooserHome", PlantKind.Imitater, home));
+            Assert.That(fixture.Pixels.GetPixels32(), Is.Not.EqualTo(initial), "The chosen Imitater disables its home button.");
+            var bank = owner.Layout.AdventureSeedBankOrigin;
+            var x = bank.x + AdventureSeedSlotLayout.PositionX(0, owner.Layout.SeedBankCapacity);
+            Assert.That(owner.Router.ReturnSelectedChooserSeed(new Vector2(x + 25f, bank.y + 43f), owner.Layout.SeedBankCapacity, true), Is.True);
+            Assert.That(owner.RequiredPendingSeeds.IsMoving(PlantKind.Imitater), Is.True);
+            owner.RequiredPendingSeeds.Advance(.25f);
+            Assert.That(owner.RequiredPendingSeeds.IsMoving(PlantKind.Imitater), Is.False);
+            yield return fixture.Capture(null, () => fixture.DrawPass("DrawChooserHome", PlantKind.Imitater, home));
+            Assert.That(fixture.Pixels.GetPixels32(), Is.EqualTo(initial), "Only the moving packet carries the chosen plant artwork.");
+        }
+
         /// <summary>Checks all survival terrains enter the original preview and re-selection context.</summary>
         /// <returns>Native opening frames for day, night, pool, fog and roof.</returns>
         [UnityTest]
@@ -280,7 +307,8 @@ namespace PlantsVsZombies.Tests.PlayMode
         /// <summary>Creates a real standalone survival session without profiles or persistent stores.</summary>
         /// <param name="fixture">The original-resource production presenter fixture.</param>
         /// <param name="id">The original survival mode.</param>
-        private static void Prepare(OriginalStormGraphicsTests.StormFixture fixture, int id)
+        /// <param name="access">The optional purchased-seed access used by the scenario.</param>
+        private static void Prepare(OriginalStormGraphicsTests.StormFixture fixture, int id, AdventureSeedAccess? access = null)
         {
             var owner = fixture.Owner;
             owner._presenter = (GamePresenter)typeof(OriginalStormGraphicsTests.StormFixture)
@@ -288,7 +316,7 @@ namespace PlantsVsZombies.Tests.PlayMode
             owner.Dave.Initialize(owner.gameObject.AddComponent<AudioSource>(), 0f);
             owner.Opening.PlayOpeningInIsolatedSession = true;
             owner._currentView = PvZGame.ScreenView.Board;
-            var session = new ModeSession(id, packetSlots: 6, roofCleaners: true, poolCleaners: true,
+            var session = new ModeSession(id, access, packetSlots: 6, roofCleaners: true, poolCleaners: true,
                 waveContext: new ModeWaveContext(7529, profileProgress: 1, profileLevel: 50));
             owner.IndependentModes._modeSession = session;
             owner.Campaign.AttachAdventureGame(session.Game);

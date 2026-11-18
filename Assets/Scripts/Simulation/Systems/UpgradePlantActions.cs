@@ -162,7 +162,7 @@ namespace PlantsVsZombies.Simulation
                 mimic.Health = 300f;
                 mimic.Layer = target == PlantKind.CoffeeBean ? PlantLayer.Effect : PlantingSystem.LayerFor(target);
                 mimic.ImitaterTarget = target;
-                mimic.ImitaterTransformRemaining = 3.2f;
+                mimic.ImitaterTransformRemaining = (AdventureImitaterRules.IdleTicks + AdventureImitaterRules.MorphTicks) * .01f;
                 mimic.ActionTimer = float.MaxValue;
                 AdventurePlantBlinkRules.Initialize(mimic, _world._random);
                 AdventurePlantBlinkRules.CompleteInitialization(mimic, _world._random);
@@ -218,8 +218,22 @@ namespace PlantsVsZombies.Simulation
         {
             if (p.Kind == PlantKind.Imitater)
             {
-                p.ImitaterTransformRemaining = Math.Max(0, p.ImitaterTransformRemaining - dt);
-                if (p.ImitaterTransformRemaining <= 0.000001f)
+                var previous = (int)Math.Round(p.ImitaterTransformRemaining * 100f);
+                var remaining = Math.Max(0, previous - (int)Math.Round(dt * 100f));
+                p.ImitaterTransformRemaining = remaining * .01f;
+                if (previous > AdventureImitaterRules.ParticleRemainingTicks
+                    && remaining <= AdventureImitaterRules.ParticleRemainingTicks)
+                {
+                    var effect = _world.LifetimePool.Rent<AdventureExplosion>();
+                    effect.Id = ++_world.Presentation._effectId;
+                    effect.Seed = _world._random.Next();
+                    effect.Row = p.Row;
+                    effect.X = p.Column + .5f;
+                    effect.Effect = AdventureExplosionEffect.ImitaterMorph;
+                    _world.Presentation.Explosions.Add(effect);
+                }
+
+                if (remaining == 0)
                 {
                     MorphAdventureImitater(p);
                 }
@@ -540,7 +554,11 @@ namespace PlantsVsZombies.Simulation
                 var main = _boardQueries.AdventurePlantAt(p.Row, p.Column, PlantLayer.Main);
                 if (main != null && main.Asleep)
                 {
-                    _plantingSystem.PlaceAdventurePlant(target.Value, p.Row, p.Column);
+                    var bean = _plantingSystem.PlaceAdventurePlant(target.Value, p.Row, p.Column);
+                    if (bean != null)
+                    {
+                        bean.IsImitated = true;
+                    }
                 }
             }
             else

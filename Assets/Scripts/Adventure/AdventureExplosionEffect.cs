@@ -22,6 +22,8 @@ namespace PlantsVsZombies.Adventure
         /// <summary>Identifies the original Ice-shroom's full-screen flash and snowflake burst.</summary>
         IceTrap,
         /// <summary>Identifies the original jack-in-the-box detonation cloud and box fragments.</summary>
-        JackExplode
+        JackExplode,
+        /// <summary>Identifies the cloud emitted at the original Imitater animation cue.</summary>
+        ImitaterMorph
     }
 }

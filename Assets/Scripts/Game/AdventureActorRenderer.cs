@@ -189,19 +189,19 @@ namespace PlantsVsZombies.Game
         /// <param name="scale">The native scale.</param>
         /// <param name="clip">The optional selected animation clip.</param>
         /// <param name="kernel">Whether to hide the kernel catapult's butter layer.</param>
-        /// <param name="imitated">Whether to compose the grayscale imitation artwork.</param>
+        /// <param name="imitationFilter">The original cursor palette selector, or zero for the normal palette.</param>
         /// <param name="key">The cursor's persistent surface key.</param>
         /// <param name="viewport">The local composition viewport.</param>
-        internal void DrawCursor(string name, Vector2 origin, float scale, string? clip, bool kernel, bool imitated, PresentationIdentity key, Rect viewport)
+        internal void DrawCursor(string name, Vector2 origin, float scale, string? clip, bool kernel, float imitationFilter, PresentationIdentity key, Rect viewport)
         {
             _name = name;
             _origin = origin;
             _scale = scale;
             _clip = clip!;
             _cursorKernel = kernel;
-            if (imitated)
+            if (imitationFilter > 0f)
             {
-                RequiredRenderer.DrawNativeClippedIdentity(key, viewport, _drawCursor, false, true);
+                RequiredRenderer.DrawNativeClippedIdentity(key, viewport, _drawCursor, imitationFilter: imitationFilter);
             }
             else
             {

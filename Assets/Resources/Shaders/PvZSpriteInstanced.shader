@@ -26,6 +26,7 @@ Shader "PlantsVsZombies/SpriteInstanced"
             #pragma vertex SpriteVertex
             #pragma fragment SpriteFragment
             #include "Assets/Scripts/Rendering/Pipeline/ShaderLibrary/PvZPipelineCore.hlsl"
+            #include "Assets/Scripts/Rendering/Pipeline/ShaderLibrary/PvZSpriteColor.hlsl"
             struct InstanceData
             {
                 uint vertexOffset;
@@ -130,11 +131,19 @@ Shader "PlantsVsZombies/SpriteInstanced"
                     return half4(input.color.rgb * alpha, alpha);
                 }
 
+                bool imitation = mode < 0.5 && input.effects.x > 1.5;
+                if (imitation)
+                {
+                    source.rgb = ApplyImitaterFilter(source.rgb, input.effects.x);
+                }
                 half4 pixel = source * input.color;
                 if (mode < 0.5)
                 {
-                    half gray = dot(pixel.rgb, half3(0.299, 0.587, 0.114));
-                    pixel.rgb = lerp(pixel.rgb, gray.xxx, saturate(input.effects.x));
+                    if (!imitation)
+                    {
+                        half gray = dot(pixel.rgb, half3(0.299, 0.587, 0.114));
+                        pixel.rgb = lerp(pixel.rgb, gray.xxx, saturate(input.effects.x));
+                    }
                     pixel.rgb = saturate(pixel.rgb * (1 + input.effects.y));
                     if (input.effects.w > 0.5)
                     {

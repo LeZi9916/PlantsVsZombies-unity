@@ -249,16 +249,15 @@ namespace PlantsVsZombies.Tests.PlayMode.Smoke
 
         /// <summary>Checks opaque pixels from the real imitation draw, independently of its direct or captured submission path.</summary>
         /// <param name = "plantId">The plant id.</param>
-        private void CheckGrayPlant(int plantId)
+        private void CheckWashedOutPlant(int plantId)
         {
             var renderer = (global::PlantsVsZombies.Reanimation.ReanimationRenderer)Field("_animations");
             var plant = SimulationFixture.Plants(Sim).Find(candidate => candidate.Id == plantId);
             Check(plant != null, "The transformed Imitater is no longer on the board.");
             var presenter = Field("_presenter");
             var draw = presenter.GetType().GetMethod("DrawAdventurePlant", Private)!;
-            var captureKey = "smoke-gray-plant-" + plantId;
-            // The normal grayscale path uses vertex data and intentionally owns no actor surface.
-            // Capture the actual production draw without forcing grayscale on the capture itself.
+            var captureKey = "smoke-washed-plant-" + plantId;
+            // Capture the production draw with its own native Imitater palette.
             Check(renderer.DrawNativeClipped(captureKey, new Rect(0f, 0f, 800f, 600f), () =>
             {
                 draw.Invoke(presenter, new object[] { plant! });
@@ -274,25 +273,28 @@ namespace PlantsVsZombies.Tests.PlayMode.Smoke
                 RenderTexture.active = target;
                 pixels.ReadPixels(new Rect(0, 0, target.width, target.height), 0, 0);
                 pixels.Apply();
-                int opaque = 0, colored = 0;
-                var visibleGray = 0;
+                var opaque = 0;
+                var pale = 0;
+                var visiblyTinted = 0;
                 foreach (Color32 pixel in pixels.GetPixels32())
                 {
                     if (pixel.a > 250)
                     {
                         opaque++;
-                        if (Math.Abs(pixel.r - pixel.g) > 2 || Math.Abs(pixel.g - pixel.b) > 2)
+                        var maximum = Math.Max(pixel.r, Math.Max(pixel.g, pixel.b));
+                        var minimum = Math.Min(pixel.r, Math.Min(pixel.g, pixel.b));
+                        if (maximum - minimum <= 51 && maximum > 16)
                         {
-                            colored++;
-                        }
-                        else if (pixel.r > 16)
-                        {
-                            visibleGray++;
+                            pale++;
+                            if (maximum - minimum > 2)
+                            {
+                                visiblyTinted++;
+                            }
                         }
                     }
                 }
 
-                Check(opaque > 100 && visibleGray > 100 && colored == 0, "Imitater source pixels were not rendered in grayscale.");
+                Check(opaque > 100 && pale > 100 && visiblyTinted > 0, "Imitater artwork must keep its hue under the original washed-out palette.");
             }
             finally
             {
@@ -512,7 +514,7 @@ namespace PlantsVsZombies.Tests.PlayMode.Smoke
                 throw new System.InvalidOperationException("The value 'copied' is not available.");
             }
 
-            CheckGrayPlant(copied.Id);
+            CheckWashedOutPlant(copied.Id);
             RequiredController.Campaign.StartAdventureTestLevel(49);
             ClearChosenCards();
             foreach (PlantKind seed in new[]

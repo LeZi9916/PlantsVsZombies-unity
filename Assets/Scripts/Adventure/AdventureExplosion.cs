@@ -48,6 +48,8 @@ namespace PlantsVsZombies.Adventure
                         return nameof(AdventureExplosionEffect.IceTrap);
                     case AdventureExplosionEffect.JackExplode:
                         return nameof(AdventureExplosionEffect.JackExplode);
+                    case AdventureExplosionEffect.ImitaterMorph:
+                        return nameof(AdventureExplosionEffect.ImitaterMorph);
                     default:
                         return Effect.ToString();
                 }
@@ -61,6 +63,7 @@ namespace PlantsVsZombies.Adventure
             get
             {
                 return Effect == AdventureExplosionEffect.Pow ? 50
+                    : Effect == AdventureExplosionEffect.ImitaterMorph ? 60
                     : Effect == AdventureExplosionEffect.IceTrap ? 40
                     : Effect == AdventureExplosionEffect.Doom ? 400
                     : Effect == AdventureExplosionEffect.PotatoMineRise ? 120

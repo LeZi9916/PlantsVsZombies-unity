@@ -612,8 +612,8 @@ namespace PlantsVsZombies.Reanimation
             public Color ContentColor;
             /// <summary>The provider layout generation used by the cached artwork.</summary>
             public int ContentLayoutVersion;
-            /// <summary>Whether the cached pixels were captured in grayscale.</summary>
-            public bool ContentGrayscale;
+            /// <summary>The source palette selector used to capture the cached pixels.</summary>
+            public float ContentColorFilter;
             /// <summary>The complete scene frame still referencing this texture from a composite quad.</summary>
             public int LastPresentedFrame;
         }
@@ -1463,10 +1463,11 @@ namespace PlantsVsZombies.Reanimation
         /// <param name="additive">The white hit brightness applied to source tracks.</param>
         /// <param name="topCrop">The visible capture height, or a negative value for the complete surface.</param>
         /// <param name="producerAdditive">The source-colored brightness applied only while drawing the captured tracks.</param>
+        /// <param name="imitationFilter">The original washed-out palette selector, or zero for none.</param>
         /// <returns>Whether the capture callback submitted visible artwork.</returns>
-        internal bool DrawNativeClippedIdentity(PresentationIdentity key, Rect viewport, Func<bool> draw, bool freeze = false, bool grayscale = false, float additive = 0f, float topCrop = -1f, float producerAdditive = 0f)
+        internal bool DrawNativeClippedIdentity(PresentationIdentity key, Rect viewport, Func<bool> draw, bool freeze = false, bool grayscale = false, float additive = 0f, float topCrop = -1f, float producerAdditive = 0f, float imitationFilter = 0f)
         {
-            return DrawNativeClippedCore(key, viewport, draw, freeze, grayscale, additive, topCrop, producerAdditive, true);
+            return DrawNativeClippedCore(key, viewport, draw, freeze, grayscale ? 1f : imitationFilter, additive, topCrop, producerAdditive, true);
         }
 
         /// <summary>Reuses immutable interface pixels while applying the current transform and crop at composition time.</summary>
@@ -1476,11 +1477,12 @@ namespace PlantsVsZombies.Reanimation
         /// <param name="contentVersion">The caller's revision for all source-artwork changes, including imitation targets.</param>
         /// <param name="topCrop">The live visible height, or a negative value for the whole surface.</param>
         /// <param name="grayscale">Whether the complete source capture uses grayscale composition.</param>
+        /// <param name="imitationFilter">The original washed-out palette selector, or zero for none.</param>
         /// <returns>Whether valid source pixels were submitted.</returns>
         /// <remarks>The callback must not have required per-draw side effects on other submitted surfaces.
         /// Actor contexts use the uncached path so inspection switches and live feedback remain immediate.</remarks>
         internal bool DrawNativeCachedClipped(PresentationIdentity key, Rect viewport, Func<bool> draw, long contentVersion,
-            float topCrop = -1f, bool grayscale = false)
+            float topCrop = -1f, bool grayscale = false, float imitationFilter = 0f)
         {
             if (_disposed)
             {
@@ -1492,10 +1494,11 @@ namespace PlantsVsZombies.Reanimation
             }
             if (SpriteHierarchy.CurrentSpriteObject != null || _nativeCombatZombie != null || _nativeSpriteAdditive)
             {
-                return DrawNativeClippedIdentity(key, viewport, draw, grayscale: grayscale, topCrop: topCrop);
+                return DrawNativeClippedIdentity(key, viewport, draw, grayscale: grayscale, topCrop: topCrop, imitationFilter: imitationFilter);
             }
             var color = SpriteDrawState.Color;
             var layoutVersion = _assets?.LayoutVersion ?? -1;
+            var colorFilter = grayscale ? 1f : imitationFilter;
             if (_nativeSurfaces.TryGetValue(key, out var surface))
             {
                 if (surface.Texture.width != Mathf.CeilToInt(viewport.width)
@@ -1510,7 +1513,7 @@ namespace PlantsVsZombies.Reanimation
                 }
                 else if (!surface.HasStaticContent || surface.ContentVersion != contentVersion
                     || !surface.ContentViewport.Equals(viewport) || !surface.ContentColor.Equals(color)
-                    || surface.ContentLayoutVersion != layoutVersion || surface.ContentGrayscale != grayscale
+                    || surface.ContentLayoutVersion != layoutVersion || surface.ContentColorFilter != colorFilter
                     || !surface.Texture.IsCreated())
                 {
                     surface.Ready = false;
@@ -1520,7 +1523,7 @@ namespace PlantsVsZombies.Reanimation
                     }
                 }
             }
-            var drawn = DrawNativeClippedCore(key, viewport, draw, true, grayscale, 0f, topCrop, 0f, false);
+            var drawn = DrawNativeClippedCore(key, viewport, draw, true, colorFilter, 0f, topCrop, 0f, false);
             if (drawn && _nativeSurfaces.TryGetValue(key, out surface))
             {
                 surface.HasStaticContent = true;
@@ -1528,7 +1531,7 @@ namespace PlantsVsZombies.Reanimation
                 surface.ContentViewport = viewport;
                 surface.ContentColor = color;
                 surface.ContentLayoutVersion = _assets?.LayoutVersion ?? -1;
-                surface.ContentGrayscale = grayscale;
+                surface.ContentColorFilter = colorFilter;
             }
             return drawn;
         }
@@ -1538,13 +1541,13 @@ namespace PlantsVsZombies.Reanimation
         /// <param name="viewport">The complete source capture bounds.</param>
         /// <param name="draw">The synchronous original source callback.</param>
         /// <param name="freeze">Whether an existing complete capture can be reused.</param>
-        /// <param name="grayscale">Whether to grayscale the captured source.</param>
+        /// <param name="colorFilter">The source grayscale weight or imitation palette selector.</param>
         /// <param name="additive">The white source highlight.</param>
         /// <param name="topCrop">The current visible capture height.</param>
         /// <param name="producerAdditive">The source brightness.</param>
         /// <param name="observeHierarchy">Whether actor visibility must be refreshed and invalidate frozen actor pixels.</param>
         /// <returns>Whether a complete source capture is ready for composition.</returns>
-        private bool DrawNativeClippedCore(PresentationIdentity key, Rect viewport, Func<bool> draw, bool freeze, bool grayscale,
+        private bool DrawNativeClippedCore(PresentationIdentity key, Rect viewport, Func<bool> draw, bool freeze, float colorFilter,
             float additive, float topCrop, float producerAdditive, bool observeHierarchy)
         {
             using var objectScope = BeginObjectScope();
@@ -1622,7 +1625,7 @@ namespace PlantsVsZombies.Reanimation
                     _nativeCaptureClip = new Rect(0f, 0f, width, height);
                     _renderingNativeSurface = true;
                     _nativeObjectRenderer = captureRenderer;
-                    _nativeGrayscale = grayscale ? 1f : 0f;
+                    _nativeGrayscale = colorFilter;
                     _nativeProducerAdditive = producerAdditive;
                     _nativePortraitMaterial.SetFloat("_Grayscale", _nativeGrayscale);
                     _nativePortraitMaterial.SetFloat("_ProducerAdditive", _nativeProducerAdditive);
@@ -4802,7 +4805,8 @@ namespace PlantsVsZombies.Reanimation
                 visual = new AdventureProducerGlowVisual(true, visual.FlashTicks, (byte)brightness);
             }
 
-            return DrawProducerGlowIdentity(key, viewport, draw, visual, plant.IsImitated, surfaceKey);
+            return DrawProducerGlowIdentity(key, viewport, draw, visual, surfaceKey: surfaceKey,
+                imitationFilter: plant.IsImitated ? AdventureImitaterRules.SourceFilter(plant.Kind) : 0f);
         }
 
         /// <summary>Performs draw native potato mine light.</summary>
@@ -4871,8 +4875,9 @@ namespace PlantsVsZombies.Reanimation
         /// <param name="visual">The original producer brightness sampled by the simulation.</param>
         /// <param name="imitated">Whether the source tracks use imitation grayscale.</param>
         /// <param name="surfaceKey">The cached full surface identity, or null to derive it from the playback key.</param>
+        /// <param name="imitationFilter">The original washed-out palette selector, or zero for none.</param>
         /// <returns>Whether the source callback submitted visible artwork.</returns>
-        internal bool DrawProducerGlowIdentity(PresentationIdentity instanceKey, Rect viewport, Func<bool> draw, AdventureProducerGlowVisual visual, bool imitated = false, PresentationIdentity surfaceKey = default)
+        internal bool DrawProducerGlowIdentity(PresentationIdentity instanceKey, Rect viewport, Func<bool> draw, AdventureProducerGlowVisual visual, bool imitated = false, PresentationIdentity surfaceKey = default, float imitationFilter = 0f)
         {
             using var objectScope = BeginObjectScope();
             if (draw == null)
@@ -4880,7 +4885,7 @@ namespace PlantsVsZombies.Reanimation
                 return Fail("An existing producer reanimation draw callback is required.");
             }
 
-            if (!visual.Enabled && !imitated)
+            if (!visual.Enabled && !imitated && imitationFilter == 0f)
             {
                 return draw();
             }
@@ -4907,7 +4912,7 @@ namespace PlantsVsZombies.Reanimation
                 var previousProducer = _nativeProducerAdditive;
                 try
                 {
-                    _nativeGrayscale = imitated ? 1f : 0f;
+                    _nativeGrayscale = imitated ? 1f : imitationFilter;
                     _nativeProducerAdditive = visual.Enabled ? visual.SourceAdditive : 0f;
                     RequiredNativePortraitMaterial.SetFloat("_Grayscale", _nativeGrayscale);
                     RequiredNativePortraitMaterial.SetFloat("_ProducerAdditive", _nativeProducerAdditive);
@@ -4922,7 +4927,7 @@ namespace PlantsVsZombies.Reanimation
                 }
             }
 
-            return DrawNativeClippedIdentity(surfaceKey.IsEmpty ? instanceKey.WithRole("producer-") : surfaceKey, viewport, draw, grayscale: imitated, producerAdditive: visual.Enabled ? visual.SourceAdditive : 0f);
+            return DrawNativeClippedIdentity(surfaceKey.IsEmpty ? instanceKey.WithRole("producer-") : surfaceKey, viewport, draw, grayscale: imitated, producerAdditive: visual.Enabled ? visual.SourceAdditive : 0f, imitationFilter: imitationFilter);
         }
 
         /// <summary>Stores native combat zombie.</summary>

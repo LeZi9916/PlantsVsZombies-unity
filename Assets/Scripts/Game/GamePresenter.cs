@@ -1696,7 +1696,7 @@ namespace PlantsVsZombies.Game
                 var greenBlue = explosive ? 64f / 255f : 1f;
                 CanvasUI.Color = new Color(previous.r, previous.g * greenBlue, previous.b * greenBlue, previous.a * alpha);
                 // Plant::DrawSeedType uses the cached, stationary native reanimation pose.
-                ActorRenderer.DrawCursor(name, origin, nativeScale, clip, kind == PlantKind.KernelPult, imitated, key,
+                ActorRenderer.DrawCursor(name, origin, nativeScale, clip, kind == PlantKind.KernelPult, imitated ? AdventureImitaterRules.SourceFilter(kind) : 0f, key,
                     new Rect(origin.x - 80, origin.y - 160, 320, 340));
             }
             finally
@@ -2315,11 +2315,26 @@ namespace PlantsVsZombies.Game
         /// <param name="card">The packet's chooser position.</param>
         private void DrawChooserHome(PlantKind kind, Rect card)
         {
+            if (kind == PlantKind.Imitater)
+            {
+                DrawImitaterChooserButton(card);
+                return;
+            }
+
             var previous = CanvasUI.Color;
             var grayness = ChooserHomeGrayness(kind) / 255f;
             CanvasUI.Color = new Color(previous.r * grayness, previous.g * grayness, previous.b * grayness, previous.a);
             DrawAdventureCard(kind, card, true);
             CanvasUI.Color = previous;
+        }
+
+        /// <summary>Draws the original Imitater chooser button independently of the selected packet artwork.</summary>
+        /// <param name="card">The logical rectangle of the chooser button.</param>
+        private void DrawImitaterChooserButton(Rect card)
+        {
+            var disabled = _owner.RequiredPendingSeeds.Contains(PlantKind.Imitater)
+                || _owner.RequiredPendingSeeds.IsMoving(PlantKind.Imitater);
+            DrawImage(disabled ? "ImitaterSeedDisabled.png" : "ImitaterSeed.png", card);
         }
 
         /// <summary>Draws settled chooser packets using the bank capacity rather than the current selection count.</summary>
@@ -3300,6 +3315,9 @@ namespace PlantsVsZombies.Game
         {
             switch (kind)
             {
+                case PlantKind.Imitater:
+                    AddBattleParticle(nameof(AdventureExplosionEffect.ImitaterMorph));
+                    break;
                 case PlantKind.SnowPea:
                     AddBattleParticle("SnowPeaTrail");
                     AddBattleParticle("SnowPeaSplat");
@@ -4073,10 +4091,16 @@ namespace PlantsVsZombies.Game
                 loop = false;
             }
 
-            if (plant.Kind == PlantKind.Imitater && _owner.AnimationCatalog.AdventureClipExists(name, "anim_morph"))
+            if (plant.Kind == PlantKind.Imitater)
             {
-                clip = "anim_morph";
-                loop = false;
+                var remainingTicks = Mathf.RoundToInt(plant.ImitaterTransformRemaining * 100f);
+                if (remainingTicks <= AdventureImitaterRules.MorphTicks)
+                {
+                    clip = "anim_explode";
+                    age = (AdventureImitaterRules.MorphTicks - remainingTicks) * .01f + AdventureRenderRemainder;
+                    rate = AdventureImitaterRules.MorphRate;
+                    loop = false;
+                }
             }
 
             if (plant.Kind == PlantKind.Chomper && plant.ChomperPresentation != null)
@@ -4786,7 +4810,7 @@ namespace PlantsVsZombies.Game
                 remainder: AdventureRenderRemainder, bungeeGroup: group);
         }
 
-        /// <summary>Tiles PC 549520's unchanged eight-by-sixty-four cord from the original body-track center to the screen top.</summary>
+        /// <summary>Tiles PC 549520's cord using the horizontal offset supplied by DrawBungeeReanim at 5487FD.</summary>
         /// <param name="zombie">The bungee supplying its original body layer.</param>
         /// <param name="origin">The original source origin before track transforms.</param>
         /// <param name="nativeX">The original zombie position before its body overlay.</param>
@@ -4807,7 +4831,7 @@ namespace PlantsVsZombies.Game
             for (var y = anchorY - height; y > -height; y -= height)
             {
                 _owner.RequiredAnimations.DrawResourceSprite("IMAGE_BUNGEECORD",
-                    new Vector2(nativeX + 61f - 4f / scale + size.x * .5f, y + size.y * .5f), scale);
+                    new Vector2((int)nativeX - 22f + 61f - 4f / scale + size.x * .5f, y + size.y * .5f), scale);
             }
         }
 
@@ -4823,7 +4847,7 @@ namespace PlantsVsZombies.Game
             }
 
             var nativeX = (int)AdventureZombieNativeRules.NativePositionX(zombie.X, AdventureDancerRules.Scale(zombie));
-            var nativeY = (int)(AdventureFloorYAtPixel(zombie.Row, nativeX + 40f) - 30f);
+            var nativeY = AdventureFloorYAtPixel(zombie.Row, nativeX + 40f) - 30f;
             var t = state.Phase == 4 || state.Phase == 5 ? Mathf.Clamp01((3000f - (int)zombie.PresentationAltitude) / 400f) : 1f;
             var point = new Vector2(nativeX + 10f + 30f * (1f - t), nativeY + 60f - 600f * (1f - t));
             if (_owner.RequiredAnimations.TryGetNativeSpriteSize("IMAGE_BUNGEETARGET", out var size))
@@ -6661,7 +6685,7 @@ namespace PlantsVsZombies.Game
                         _cardSource = source;
                         var key = _presentationKeys.Get("imitater-card-", (int)card.x, (int)card.y);
                         ObserveImitaterCapture(key);
-                        _owner.RequiredAnimations.DrawNativeCachedClipped(key, card, _drawCardImage, id, grayscale: true);
+                        _owner.RequiredAnimations.DrawNativeCachedClipped(key, card, _drawCardImage, id, imitationFilter: AdventureImitaterRules.SourceFilter((PlantKind)id));
                     }
                     else
                     {
@@ -6683,7 +6707,7 @@ namespace PlantsVsZombies.Game
                         _cardThumbnailScale = scale;
                         var key = _presentationKeys.Get("imitater-card-", (int)card.x, (int)card.y);
                         ObserveImitaterCapture(key);
-                        _owner.RequiredAnimations.DrawNativeCachedClipped(key, card, _drawCardThumbnail, id, grayscale: true);
+                        _owner.RequiredAnimations.DrawNativeCachedClipped(key, card, _drawCardThumbnail, id, imitationFilter: AdventureImitaterRules.SourceFilter((PlantKind)id));
                     }
                     else
                     {
@@ -7001,20 +7025,18 @@ namespace PlantsVsZombies.Game
                     continue;
                 }
                 var rect = _owner.Opening.AdventureCampaignChooserRect(seed);
-                var previous = CanvasUI.Color;
-                if (!choosingImitater)
-                {
-                    var grayness = ChooserHomeGrayness(seed) / 255f;
-                    CanvasUI.Color = new Color(previous.r * grayness, previous.g * grayness, previous.b * grayness, previous.a);
-                }
-
                 if (seed == PlantKind.Imitater)
                 {
                     DrawImage("SeedChooser_ImitaterAddOn.png", new Rect(459, 503, 66, 93));
                 }
-
-                DrawAdventureCard(seed, rect, true);
-                CanvasUI.Color = previous;
+                if (choosingImitater)
+                {
+                    DrawAdventureCard(PlantKind.Imitater, rect, true, seed);
+                }
+                else
+                {
+                    DrawChooserHome(seed, rect);
+                }
             }
 
             var required = Math.Min(_owner.RequiredGame.Adventure.Level.PacketSlots, _owner.RequiredGame.Adventure.AvailableSeeds.Count);
@@ -7429,7 +7451,7 @@ namespace PlantsVsZombies.Game
             {
                 for (var i = 0; i < 40; i++)
                 {
-                    DrawAdventureCard((PlantKind)i, BoardLayout.AdventureChooserRect(i), true);
+                    DrawAdventureCard(PlantKind.Imitater, BoardLayout.AdventureChooserRect(i), true, (PlantKind)i);
                 }
             }
             else

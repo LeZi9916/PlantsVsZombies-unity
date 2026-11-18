@@ -21,6 +21,61 @@ namespace PlantsVsZombies.Tests.PlayMode
     /// <summary>Checks the changed original plant artwork, animation poses, target cursor and Foley on a real graphics device.</summary>
     public sealed class OriginalPlantParityGraphicsTests
     {
+        /// <summary>Checks the production Imitater pose and both original source-color filters on visible geometry.</summary>
+        /// <returns>Camera frames for the Imitater poses and palette readbacks.</returns>
+        [UnityTest]
+        public IEnumerator ImitaterPlaysTheOriginalMorphPoseAndKeepsNativePalette()
+        {
+            using var fixture = new OriginalStormGraphicsTests.StormFixture(8);
+            var plant = new Plant { Id = 91, Kind = PlantKind.Imitater, Row = 1, Column = 2,
+                Layer = PlantLayer.Main, Health = 300f, PresentationRate = 26f, ImitaterTransformRemaining = 1.7f };
+            SpriteSourceTestUtilities.SetImage(fixture.Owner.Textures, "plantshadow2.png", null!);
+            SpriteSourceTestUtilities.SetImage(fixture.Owner.Textures, "plantshadow.png", null!);
+            yield return fixture.Capture(null, () => fixture.DrawPass("DrawAdventurePlant", plant));
+            var idle = fixture.Pixels.GetPixels32();
+
+            plant.ImitaterTransformRemaining = .6f;
+            yield return fixture.Capture(null, () => fixture.DrawPass("DrawAdventurePlant", plant));
+            var morph = fixture.Pixels.GetPixels32();
+            Assert.That(morph, Is.Not.EqualTo(idle));
+            yield return fixture.Capture(null, () =>
+            {
+                Assert.That(fixture.Animations.DrawNativePlayback("Imitater", new Vector2(200f, 180f), 1f,
+                    .6f, "anim_explode", false, 26f), Is.True);
+            });
+            Assert.That(fixture.Pixels.GetPixels32(), Is.EqualTo(morph), "The lawn must draw the authored anim_explode pose at 26 FPS.");
+
+            var source = new Texture2D(1, 1, TextureFormat.RGBA32, false);
+            try
+            {
+                source.SetPixels32(new[] { new Color32(51, 102, 102, 255) });
+                source.Apply();
+                var area = new Rect(320, 220, 160, 160);
+                var uv = new Rect(0, 0, 1, 1);
+                var key = PresentationIdentity.FromExternal("original-imitater-palette");
+                plant.IsImitated = true;
+                foreach (var kind in new[] { PlantKind.Peashooter, PlantKind.Garlic })
+                {
+                    plant.Kind = kind;
+                    yield return fixture.Capture(null, () =>
+                    {
+                        Assert.That(fixture.Animations.DrawNativePlantHitFeedbackIdentity(key, area,
+                            () => fixture.Animations.DrawNativeImage(source, area, uv), plant), Is.True);
+                    });
+                    var pixel = (Color32)fixture.Pixels.GetPixel(fixture.Target.width / 2, fixture.Target.height / 2);
+                    // PC 451EC0 applied to source HSL (0.5, 1/3, 0.3), with native 8-bit quantization.
+                    var expected = kind == PlantKind.Peashooter ? new Color32(129, 145, 145, 255) : new Color32(82, 100, 100, 255);
+                    Assert.That((int)pixel.r, Is.EqualTo((int)expected.r).Within(1));
+                    Assert.That((int)pixel.g, Is.EqualTo((int)expected.g).Within(1));
+                    Assert.That((int)pixel.b, Is.EqualTo((int)expected.b).Within(1));
+                }
+            }
+            finally
+            {
+                UnityEngine.Object.Destroy(source);
+            }
+        }
+
         /// <summary>Checks both damaged garlic images, hidden stems, and the zombie's original gross-out head pixels.</summary>
         /// <returns>Original-resource camera readback frames.</returns>
         [UnityTest]

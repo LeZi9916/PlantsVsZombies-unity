@@ -237,6 +237,32 @@ namespace PlantsVsZombies.Tests.PlayMode
             }
         }
 
+        /// <summary>Checks the original 200-tick wait, the 0.8 animation cue and morph after the full 26 FPS clip.</summary>
+        [Test]
+        public void ImitaterMorphWaitsForTheNativeAnimationAndEmitsItsCloudOnce()
+        {
+            var game = _owner.RequiredGame;
+            Assert.That(game.TryPlant(PlantKind.Imitater, 2, 2), Is.True);
+            var plant = game.Plants[0];
+            Assert.That(plant.PresentationRate, Is.InRange(25f, 30f));
+            for (var tick = 1; tick <= 320; tick++)
+            {
+                game.Update(.01f);
+                Assert.That(game.Presentation.Explosions.Count, Is.EqualTo(tick < 296 ? 0 : 1));
+                if (tick < 320)
+                {
+                    Assert.That(game.Plants[0].Kind, Is.EqualTo(PlantKind.Imitater));
+                }
+            }
+
+            var effect = game.Presentation.Explosions[0];
+            Assert.That(effect.Particle, Is.EqualTo("ImitaterMorph"));
+            Assert.That(effect.Row, Is.EqualTo(2));
+            Assert.That(effect.X, Is.EqualTo(2.5f));
+            Assert.That(game.Plants[0].Kind, Is.EqualTo(PlantKind.Peashooter));
+            Assert.That(game.Plants[0].IsImitated, Is.True);
+        }
+
         /// <summary>Recreates correct pixels after a retained surface has been released or the renderer playback reset.</summary>
         /// <returns>Frame boundaries before reading reused capture attachments.</returns>
         [UnityTest]
@@ -634,7 +660,7 @@ namespace PlantsVsZombies.Tests.PlayMode
                 _referenceImitaterName = _animationName(target);
             }
             _renderer.DrawNativeClippedIdentity(_referenceKeys.Get("imitater-card-", (int)card.x, (int)card.y),
-                card, _drawReferenceImitater, grayscale: true);
+                card, _drawReferenceImitater, imitationFilter: AdventureImitaterRules.SourceFilter(target));
         }
 
         /// <summary>Submits the currently selected old imitation artwork without any retained inner-capture optimization.</summary>

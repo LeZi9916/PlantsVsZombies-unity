@@ -63,7 +63,7 @@ namespace PlantsVsZombies.Tests.PlayMode
                             state.AnimationSeconds, state.AnimationRate, out var anchor, state.AnimationLoops), Is.True);
                         for (var y = origin.y + anchor.y - .5f - 64f; y > -64f; y -= 64f)
                         {
-                            fixture.Animations.DrawResourceSprite("IMAGE_BUNGEECORD", new Vector2(341f, y + 32f), 1f);
+                            fixture.Animations.DrawResourceSprite("IMAGE_BUNGEECORD", new Vector2(319f, y + 32f), 1f);
                         }
 
                         fixture.Animations.DrawNativePlayback("Zombie_bungi", origin, 1f, state.AnimationSeconds,
@@ -184,7 +184,7 @@ namespace PlantsVsZombies.Tests.PlayMode
             }
         }
 
-        /// <summary>Checks PC 5496A6's +61 anchor and unscaled image centers for normal and small cords.</summary>
+        /// <summary>Checks PC 5487FD and 5496A6's combined -22 and +61 offsets and unscaled image centers for normal and small cords.</summary>
         /// <returns>Real graphics boundaries for the independent cord-only pixel oracle.</returns>
         [UnityTest]
         public IEnumerator CordUsesThePcHorizontalOffsetAtBothScales()
@@ -201,7 +201,7 @@ namespace PlantsVsZombies.Tests.PlayMode
                     Assert.That(fixture.Animations.TryGetNativeTrackCenter("Zombie_bungi", "anim_drop", "Zombie_bungi_body",
                         .25f, 24f, out var anchor), Is.True);
                     var height = scale == 1f ? 64f : 32f;
-                    var centerX = scale == 1f ? 201f : 197f;
+                    var centerX = scale == 1f ? 179f : 175f;
                     for (var y = 180f + anchor.y * scale - .5f - height; y > -height; y -= height)
                     {
                         fixture.Animations.DrawResourceSprite("IMAGE_BUNGEECORD", new Vector2(centerX, y + 32f), scale);
@@ -233,7 +233,7 @@ namespace PlantsVsZombies.Tests.PlayMode
                     .2f, 36f, out var anchor, false), Is.True);
                 for (var y = origin.y + anchor.y - .5f - 64f; y > -64f; y -= 64f)
                 {
-                    fixture.Animations.DrawResourceSprite("IMAGE_BUNGEECORD", new Vector2(341f, y + 32f), 1f);
+                    fixture.Animations.DrawResourceSprite("IMAGE_BUNGEECORD", new Vector2(319f, y + 32f), 1f);
                 }
 
                 fixture.Animations.DrawNativePlayback("Zombie_bungi", origin, 1f, .2f, "anim_raise", false, 36f, track => !ForegroundArms(track));
