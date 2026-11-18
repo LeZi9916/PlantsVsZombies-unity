@@ -546,7 +546,8 @@ namespace PlantsVsZombies.Simulation
         /// <param name = "dt">The dt.</param>
         internal void UpdateMode(float dt)
         {
-            if (_world.ModeSession == null || dt < 0f || float.IsNaN(dt) || float.IsInfinity(dt))
+            // The host admits each handoff tick immediately before decrementing the survival countdown.
+            if (_world.ModeSession == null || _world.ModeSession.SurvivalRepickPending || dt < 0f || float.IsNaN(dt) || float.IsInfinity(dt))
             {
                 return;
             }
@@ -574,6 +575,7 @@ namespace PlantsVsZombies.Simulation
             _boardEnvironment.AdvanceAdventurePoolEffect();
             var s = RequiredModeSession;
             var d = s.Definition;
+            var survivalRepick = s.SurvivalRepickPending;
             _world.Elapsed += dt;
             _world._nativeFeedbackTick++;
             _adventureModeRunner.Adventure._ticks++;
@@ -591,7 +593,8 @@ namespace PlantsVsZombies.Simulation
                 return;
             }
 
-            if (!d.Puzzle && d.Mechanic != ModeMechanic.LastStand && (!d.UsesPackets || d.Mechanic == ModeMechanic.Slots) && !IsModeMatch)
+            // PC 41FB40 and 41FDD0 gate sky sun and wave scheduling during the handoff.
+            if (!survivalRepick && !d.Puzzle && d.Mechanic != ModeMechanic.LastStand && (!d.UsesPackets || d.Mechanic == ModeMechanic.Slots) && !IsModeMatch)
             {
                 _economySystem.AdvanceAdventureEconomy(dt);
             }
@@ -610,7 +613,7 @@ namespace PlantsVsZombies.Simulation
             {
                 _bossSystem.AdvanceAdventureBoss(dt);
             }
-            else if (!d.Puzzle)
+            else if (!d.Puzzle && !survivalRepick)
             {
                 if ((d.Mechanic == ModeMechanic.Stars || d.Mechanic == ModeMechanic.Slots || IsModeMatch) && _adventureModeRunner.Adventure.CurrentWave >= _adventureModeRunner.Adventure.Waves.Count && _adventureModeRunner.Adventure.Waves.Count > 0)
                 {
@@ -727,6 +730,11 @@ namespace PlantsVsZombies.Simulation
                 }
             }
 
+            if (survivalRepick)
+            {
+                return;
+            }
+
             var cleared = false;
             if (d.Mechanic == ModeMechanic.Vases)
             {
@@ -801,10 +809,10 @@ namespace PlantsVsZombies.Simulation
             }
 
             s.Phase = next ? ModePhase.StageCleared : ModePhase.Won;
-            _adventureModeRunner.Adventure.Phase = AdventurePhase.Reward;
-            _world.State = MatchState.Won;
-            if (!s.Definition.Survival || !next)
+            if (!s.SurvivalRepickPending)
             {
+                _adventureModeRunner.Adventure.Phase = AdventurePhase.Reward;
+                _world.State = MatchState.Won;
                 _legacySimulation.Raise(GameEvent.Won);
             }
         }
@@ -886,7 +894,7 @@ namespace PlantsVsZombies.Simulation
         internal bool TryPlantMode(PlantKind kind, int row, int column)
         {
             var s = _world.ModeSession;
-            if (s == null || _world.State != MatchState.Playing || (s.Phase != ModePhase.Playing && s.Phase != ModePhase.Preparing) || s.Definition.Puzzle || IsModeMatch || s.Definition.Mechanic == ModeMechanic.Aquarium)
+            if (s == null || _world.State != MatchState.Playing || (s.Phase != ModePhase.Playing && s.Phase != ModePhase.Preparing && !s.SurvivalRepickPending) || s.Definition.Puzzle || IsModeMatch || s.Definition.Mechanic == ModeMechanic.Aquarium)
             {
                 return false;
             }

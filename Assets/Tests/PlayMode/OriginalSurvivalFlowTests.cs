@@ -2,6 +2,7 @@
 using System.Collections;
 using NUnit.Framework;
 using PlantsVsZombies.Adventure;
+using PlantsVsZombies.BoardUI;
 using PlantsVsZombies.Game;
 using PlantsVsZombies.Modes;
 using PlantsVsZombies.Simulation;
@@ -17,7 +18,7 @@ namespace PlantsVsZombies.Tests.PlayMode
         /// <summary>Runs the complete original intro in this isolated production host.</summary>
         protected override bool PlayOpening => true;
 
-        /// <summary>Checks PC's 500-tick stage delay, fade, retained lawn and native re-selection.</summary>
+        /// <summary>Checks PC's interactive 500-tick stage delay, retained lawn and native re-selection.</summary>
         /// <returns>Frames for the real loading, board and lawn-view presenter.</returns>
         [UnityTest]
         [Timeout(90000)]
@@ -32,15 +33,36 @@ namespace PlantsVsZombies.Tests.PlayMode
             SimulationInspection.GetMethod("ClearModeStage").Invoke(session.Game, null);
             Controller.IndependentModes.TickModes(.01f);
             Assert.That(Controller.IndependentModes.SurvivalTransitionTicks, Is.EqualTo(500));
+            var game = session.Game;
+            game.Adventure._nextSkySun = .01f;
+            var waveCountdown = game.Adventure.WaveCountdown;
+            var initialPlantAge = plant.Age;
+            var sun = (global::PlantsVsZombies.Simulation.Sun)SimulationInspection.GetMethod("CreateAdventurePresentationDroppedSun")
+                .Invoke(game, new object[] { 4f, 2f, 25 })!;
+            SimulationFixture.Suns(game).Add(sun);
+            Controller.IndependentModes.TryHandleModeClick(Controller.Layout.AdventureSunRect(sun).center);
+            Assert.That(sun.PresentationPickup.Collecting, Is.True);
+            Controller.IndependentModes.TryHandleModeClick(Controller.IndependentModes.ModeSeedRect(0).center);
+            Controller.IndependentModes.TryHandleModeClick(new Vector2(BoardLayout.AdventureGridX + BoardLayout.CellWidth * 1.5f,
+                BoardLayout.AdventureGridY + Controller.Layout.AdventurePitch * .5f));
+            Assert.That(game.Plants.Count, Is.EqualTo(2));
+            var plantedSun = 777 - GameSimulation.Cost(Controller._deck[0]);
+            Assert.That(game.SunAmount, Is.EqualTo(plantedSun));
+
             Controller.IndependentModes.TickModes(2.5f);
             Assert.That(Controller.IndependentModes.SurvivalTransitionTicks, Is.EqualTo(250));
             Assert.That(Controller.IndependentModes.SurvivalTransitionGain, Is.EqualTo(.5f));
             Assert.That(session.Stage, Is.EqualTo(1));
+            Assert.That(plant.Age, Is.GreaterThan(initialPlantAge));
+            Assert.That(game.SunAmount, Is.EqualTo(plantedSun + 25));
+            Assert.That(game.Suns, Is.Empty);
+            Assert.That(game.Adventure._nextSkySun, Is.EqualTo(.01f));
+            Assert.That(game.Adventure.WaveCountdown, Is.EqualTo(waveCountdown));
             Controller.IndependentModes.TickModes(2.5f);
             Assert.That(session.Stage, Is.EqualTo(2));
             Assert.That(session.Game.Plants, Has.Member(plant));
             Assert.That(plant.Health, Is.EqualTo(3210));
-            Assert.That(session.Game.SunAmount, Is.EqualTo(777));
+            Assert.That(session.Game.SunAmount, Is.EqualTo(plantedSun + 25));
             WaitForChooser();
             Assert.That(Controller.Opening.RequiredAdventureIntro.CanViewLawn, Is.True);
             var selected = Controller.RequiredPendingSeeds.Count;
@@ -53,7 +75,7 @@ namespace PlantsVsZombies.Tests.PlayMode
             Controller.Opening._adventureIntroFrame = Controller.Opening.RequiredAdventureIntro.Frame;
             yield return null;
             Assert.That(session.Game.Plants, Has.Member(plant));
-            Assert.That(session.Game.SunAmount, Is.EqualTo(777));
+            Assert.That(session.Game.SunAmount, Is.EqualTo(plantedSun + 25));
             Assert.That(Controller.RequiredPendingSeeds.Count, Is.EqualTo(selected));
             Assert.That(Controller.Accounts.RequiredAccountStore.Get(Controller.RequiredProfiles.RequiredSelectedId).ModeRecord(0), Is.EqualTo(1));
         }

@@ -129,6 +129,62 @@ namespace PlantsVsZombies.Tests.PlayMode
             Assert.That(fixture.Owner.RequiredGame.Elapsed, Is.EqualTo(before));
         }
 
+        /// <summary>Checks that selecting a flying packet leaves the chooser artwork below it stable on successive frames.</summary>
+        /// <returns>Real camera frames from the complete production presentation.</returns>
+        [UnityTest]
+        public IEnumerator ChoosingSeedsKeepsTheBackgroundStableDuringPacketFlight()
+        {
+            using var fixture = new OriginalStormGraphicsTests.StormFixture(28);
+            Prepare(fixture, 13);
+            var owner = fixture.Owner;
+            WaitForChooser(owner);
+            yield return null;
+            var scale = Mathf.Min(fixture.Target.width / 800f, fixture.Target.height / 600f);
+            var x = Mathf.CeilToInt((fixture.Target.width - 800f * scale) * .5f + 4f * scale);
+            var y = Mathf.CeilToInt((fixture.Target.height - 600f * scale) * .5f + 135f * scale);
+            var width = Mathf.FloorToInt(344f * scale);
+            var height = Mathf.FloorToInt(195f * scale);
+            Color[]? background = null;
+            for (var frame = 0; frame < 24; frame++)
+            {
+                if (frame == 2)
+                {
+                    Assert.That(owner.IndependentModes.TryHandleModeClick(
+                        owner.Opening.AdventureCampaignChooserRect(PlantKind.Peashooter).center), Is.True);
+                    Assert.That(owner.RequiredPendingSeeds.IsMoving(PlantKind.Peashooter), Is.True);
+                }
+
+                owner.RequiredPendingSeeds.Advance(.015f);
+                owner._presenter.Present();
+                Assert.That(ObjectSpriteRenderer.InstancedDrawCount, Is.Zero);
+                yield return null;
+
+                var previous = RenderTexture.active;
+                try
+                {
+                    RenderTexture.active = fixture.Target;
+                    fixture.Pixels.ReadPixels(new Rect(x, y, width, height), x, y);
+                }
+                finally
+                {
+                    RenderTexture.active = previous;
+                }
+                var pixels = fixture.Pixels.GetPixels(x, y, width, height);
+                if (background == null)
+                {
+                    Assert.That(pixels.Any(pixel => pixel.r > .1f), Is.True, "The camera must render the chooser before pixel comparison.");
+                    background = pixels;
+                }
+                else
+                {
+                    Assert.That(pixels, Is.EqualTo(background), $"The chooser background changed during frame {frame}.");
+                }
+            }
+
+            Assert.That(owner.RequiredPendingSeeds.Contains(PlantKind.Peashooter), Is.True);
+            Assert.That(owner.RequiredPendingSeeds.IsMoving(PlantKind.Peashooter), Is.False);
+        }
+
         /// <summary>Checks all survival terrains enter the original preview and re-selection context.</summary>
         /// <returns>Native opening frames for day, night, pool, fog and roof.</returns>
         [UnityTest]

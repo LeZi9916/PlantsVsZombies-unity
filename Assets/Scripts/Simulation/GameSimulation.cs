@@ -1472,6 +1472,22 @@ namespace PlantsVsZombies.Simulation
             _world.LifetimePool.CompleteFrame(_world);
         }
 
+        /// <summary>Restores the interactive board state for a survival handoff saved by an older version.</summary>
+        internal void ResumeSavedSurvivalRepick()
+        {
+            if (ModeSession?.SurvivalRepickPending == true && _world.State == MatchState.Won)
+            {
+                _world.State = MatchState.Playing;
+                Adventure.Phase = AdventurePhase.Playing;
+            }
+        }
+
+        /// <summary>Advances the interactive board once before the host decrements the survival handoff countdown.</summary>
+        internal void AdvanceSurvivalRepickTick()
+        {
+            _independentModeRunner.TickMode((float)SimulationWorld.SimulationStep);
+        }
+
         /// <summary>Performs continue mode stage.</summary>
         /// <returns>The resulting continue mode stage.</returns>
         public bool ContinueModeStage()

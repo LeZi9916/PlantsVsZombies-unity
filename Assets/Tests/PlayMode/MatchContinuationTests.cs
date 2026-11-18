@@ -86,11 +86,18 @@ namespace PlantsVsZombies.Tests.PlayMode
             }
             Assert.That(Controller.IndependentModes.SurvivalTransitionTicks, Is.EqualTo(1));
             var id = Controller.RequiredProfiles.RequiredSelectedId;
-            var saved = Controller.Continuation.Store.Load(id, 1, out _);
+            var saved = Controller.Continuation.Store.Load(id, 1, out var receipt);
             Assert.That(saved.ModeSession!.ReSelectionTicks, Is.EqualTo(1));
             Assert.That(saved.ModeSession.HasNextStage, Is.True);
+            Assert.That(saved.State, Is.EqualTo(MatchState.Playing));
+            // Older checkpoints marked this still-interactive survival board as a completed match.
+            SimulationInspection.GetProperty("State").SetValue(saved, MatchState.Won);
+            saved.Adventure.Phase = AdventurePhase.Reward;
+            Controller.Continuation.Store.Save(id, 1, receipt, saved);
             Controller._currentView = PvZGame.ScreenView.Modes;
             Assert.That(Controller.RequiredModeView.LaunchRequested!(1), Is.True);
+            Assert.That(Controller.RequiredGame.State, Is.EqualTo(MatchState.Playing));
+            Assert.That(Controller.RequiredGame.Adventure.Phase, Is.EqualTo(AdventurePhase.Playing));
             Controller.Continuation.Accept();
             Assert.That(Controller.Continuation.Store.Exists(id, 1), Is.True);
             Controller.IndependentModes.TickModes(.01f);

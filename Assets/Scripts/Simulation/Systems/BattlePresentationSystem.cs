@@ -66,7 +66,16 @@ namespace PlantsVsZombies.Simulation
         {
             get
             {
-                return _world.State == MatchState.Playing && _world.IsAdventure && _adventureModeRunner.Adventure.Phase == global::PlantsVsZombies.Adventure.AdventurePhase.Playing ? (float)Math.Max(0d, Math.Min(SimulationWorld.SimulationStep, _world.ModeSession == null ? _world._accumulatedTime : _world._modeAccumulated)) : 0f;
+                if (_world.State != MatchState.Playing || !_world.IsAdventure
+                    || _adventureModeRunner.Adventure.Phase != global::PlantsVsZombies.Adventure.AdventurePhase.Playing)
+                {
+                    return 0f;
+                }
+
+                var mode = _world.ModeSession;
+                var remainder = mode == null ? _world._accumulatedTime
+                    : mode.SurvivalRepickPending ? mode.ReSelectionRemainder : _world._modeAccumulated;
+                return (float)Math.Clamp(remainder, 0d, SimulationWorld.SimulationStep);
             }
         }
 

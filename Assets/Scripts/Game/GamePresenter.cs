@@ -303,7 +303,11 @@ namespace PlantsVsZombies.Game
             BeginImitaterCaptureFrame();
             _presentationKeys.BeginFrame();
             BeginHierarchyFrame();
-            using var sceneFrame = ObjectSpriteRenderer.BeginSceneFrameScope();
+            // PC SeedChooserScreen draws the panel and moving packets in one painter sequence.
+            // Use the sorted mesh path for the full chooser frame to keep the panel and packet layers stable.
+            var drawingChooser = _owner._currentView == PvZGame.ScreenView.Board
+                && (_owner._choosingSeeds || _owner.Opening._adventureIntroFrame?.ChooserVisible == true);
+            using var sceneFrame = ObjectSpriteRenderer.BeginSceneFrameScope(allowInstancing: !drawingChooser);
             SpriteDrawState.Clip = GameViewport.ScreenRect;
             CanvasUI.BeginFrame();
             _owner.RequiredAnimations.BeginObjectFrame();

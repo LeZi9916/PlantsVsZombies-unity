@@ -100,6 +100,9 @@ namespace PlantsVsZombies.Modes
             }
         }
 
+        /// <summary>Gets whether survival is still playing through the countdown to seed re-selection.</summary>
+        internal bool SurvivalRepickPending => Definition.Survival && HasNextStage;
+
         /// <summary>Gets or sets flags completed.</summary>
         public int FlagsCompleted
         {

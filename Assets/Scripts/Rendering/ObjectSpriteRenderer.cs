@@ -24,6 +24,8 @@ namespace PlantsVsZombies.Rendering
         private static bool s_instancingChecked;
         /// <summary>Whether a complete scene presentation is currently being assembled.</summary>
         private static bool s_sceneFrameOpen;
+        /// <summary>Whether this presentation uses the ordered instance backend when supported.</summary>
+        private static bool s_sceneInstancingAllowed;
         /// <summary>Whether the presenter owns an explicit scene completion scope.</summary>
         private static bool s_managedSceneFrame;
         /// <summary>The latest logical scene generation, also invalidating repeated same-frame GPU submissions.</summary>
@@ -350,7 +352,15 @@ namespace PlantsVsZombies.Rendering
         /// <summary>Retires the previous presentation and resets painter order before submitting the next complete frame.</summary>
         public static void BeginSceneFrame()
         {
+            BeginSceneFrame(allowInstancing: true);
+        }
+
+        /// <summary>Starts the scene frame with its requested renderer for the complete painter sequence.</summary>
+        /// <param name="allowInstancing">Whether sprites can be submitted as instances this frame.</param>
+        private static void BeginSceneFrame(bool allowInstancing)
+        {
             FlushPending();
+            s_sceneInstancingAllowed = allowInstancing;
             SpriteDrawState.BeginFrame();
             CompletedGeometrySegments = 0;
             s_sceneGeneration = unchecked(s_sceneGeneration + 1);
@@ -366,10 +376,11 @@ namespace PlantsVsZombies.Rendering
         }
 
         /// <summary>Starts one explicitly completed scene frame without allocating a disposable object.</summary>
+        /// <param name="allowInstancing">Whether the complete scene can use ordered instancing.</param>
         /// <returns>The scope publishing instances and retiring untouched pools on exit.</returns>
-        internal static SceneSpriteFrameScope BeginSceneFrameScope()
+        internal static SceneSpriteFrameScope BeginSceneFrameScope(bool allowInstancing = true)
         {
-            BeginSceneFrame();
+            BeginSceneFrame(allowInstancing);
             s_managedSceneFrame = true;
             return new SceneSpriteFrameScope();
         }
@@ -1462,7 +1473,7 @@ namespace PlantsVsZombies.Rendering
         private bool TryAppendInstance(Texture texture, int blend, int order, SpriteClipVertex[] vertices, int offset,
             int count, Color color, Vector4 effects, Vector4 highlight)
         {
-            if (!_scenePool || !IsFrameActive || blend == 2 || Backend == SpriteRenderingBackend.Mesh || s_instancing == null)
+            if (!_scenePool || !IsFrameActive || !s_sceneInstancingAllowed || blend == 2 || Backend == SpriteRenderingBackend.Mesh || s_instancing == null)
             {
                 return false;
             }

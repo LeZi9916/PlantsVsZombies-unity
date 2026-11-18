@@ -470,7 +470,7 @@ namespace PlantsVsZombies.Modes
         private void UpdateSurvivalTransition(float dt)
         {
             var session = RequiredModeSession;
-            if (session.HasNextStage)
+            if (session.SurvivalRepickPending && session.Game.State == MatchState.Playing)
             {
                 if (SurvivalTransitionTicks < 0)
                 {
@@ -486,6 +486,12 @@ namespace PlantsVsZombies.Modes
                     while (SurvivalTransitionRemainder + .000000001 >= (double).01f && SurvivalTransitionTicks > 0)
                     {
                         SurvivalTransitionRemainder -= (double).01f;
+                        // PC 4211C0 updates the board (420E20) before updating the countdown (417CD0).
+                        session.Game.AdvanceSurvivalRepickTick();
+                        if (!session.SurvivalRepickPending)
+                        {
+                            return;
+                        }
                         SurvivalTransitionTicks--;
                         if (SurvivalTransitionTicks == 1)
                         {
@@ -652,10 +658,6 @@ namespace PlantsVsZombies.Modes
                     }
                     return true;
                 }
-                if (RequiredModeSession.HasNextStage)
-                {
-                    return true;
-                }
                 if (RequiredModeSession.Phase == ModePhase.Lost)
                 {
                     if (_owner.RequiredGame.Adventure.Storm.LossDialogReady && new Rect(316, 340, 168, 48).Contains(point))
@@ -694,7 +696,7 @@ namespace PlantsVsZombies.Modes
                 return true;
             }
 
-            if (s.HasNextStage || s.Finished)
+            if ((s.HasNextStage && !s.SurvivalRepickPending) || s.Finished)
             {
                 if (s_modeNextButton.Contains(point))
                 {

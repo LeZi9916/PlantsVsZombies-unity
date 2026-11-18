@@ -147,6 +147,7 @@ namespace PlantsVsZombies.Game
         /// <summary>Opens the original modal after a verified saved board has been attached.</summary>
         internal void OpenContinueDialog()
         {
+            _owner.RequiredGame.ResumeSavedSurvivalRepick();
             if (_owner.RequiredGame.State == MatchState.Paused)
             {
                 _owner.RequiredGame.TogglePause();
