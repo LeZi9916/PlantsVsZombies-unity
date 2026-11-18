@@ -18,7 +18,7 @@ namespace PlantsVsZombies.Editor
         /// <summary>The ignored generated asset directory; source assets and existing source GUIDs remain untouched.</summary>
         public const string OutputRoot = "Assets/Generated/PvZRendering/Resources/PvZRendering";
         /// <summary>The optional atlas catalog and pages generated from the 4x sources.</summary>
-        private const string HighQualityOutputRoot = "Assets/Generated/PvZRendering/Resources/PvZRenderingHighQuality";
+        private const string HighQualityOutputRoot = HighQualityArtwork.ImportRoot + "PvZRenderingHighQuality";
         /// <summary>The bilinear sampling halo around every lossless content tile.</summary>
         private const int Padding = 2;
         /// <summary>The deterministic independently packed layout sizes, including a compatibility floor.</summary>
@@ -103,6 +103,51 @@ namespace PlantsVsZombies.Editor
         /// <exception cref="InvalidOperationException">The required Editor version or original resources are missing.</exception>
         public static void EnsureCurrent(bool force = false)
         {
+            var root = GetProductionRoot();
+            EnsureStandardCurrent(root, force);
+            if (OriginalPlayerBuild.HasHighQualityFiles(root))
+            {
+                Bake(root, HighQualityOutputRoot, force, root);
+                HighQualityArtworkBaker.Prepare(root, force);
+            }
+            else if (AssetDatabase.IsValidFolder(HighQualityArtwork.ImportRoot.TrimEnd('/')))
+            {
+                AssetDatabase.DeleteAsset(HighQualityArtwork.ImportRoot.TrimEnd('/'));
+            }
+        }
+
+        /// <summary>Prepares the original art used by every Player and removes artifacts from old embedded-HQ builds.</summary>
+        /// <returns>The catalog included in the standard Player.</returns>
+        internal static SpriteAtlasCatalog EnsureStandardCurrent()
+        {
+            return EnsureStandardCurrent(GetProductionRoot(), false);
+        }
+
+        /// <summary>Prepares the original catalog without generating optional pack assets.</summary>
+        /// <param name="root">The validated production asset directory.</param>
+        /// <param name="force">Whether to regenerate a current atlas.</param>
+        /// <returns>The original catalog.</returns>
+        private static SpriteAtlasCatalog EnsureStandardCurrent(string root, bool force)
+        {
+            foreach (var obsolete in new[]
+            {
+                "Assets/Generated/PvZRendering/Resources/PvZRenderingHighQuality",
+                "Assets/Generated/PvZRendering/Resources/PvZHighQualityArtwork"
+            })
+            {
+                if (Directory.Exists(obsolete) && !AssetDatabase.DeleteAsset(obsolete))
+                {
+                    throw new IOException("Could not remove the old embedded high-quality atlas: " + obsolete);
+                }
+            }
+            return Bake(root, OutputRoot, force);
+        }
+
+        /// <summary>Gets the original resource root for the required project Editor version.</summary>
+        /// <returns>The validated production asset directory.</returns>
+        /// <exception cref="InvalidOperationException">The Editor version or original resources are invalid.</exception>
+        private static string GetProductionRoot()
+        {
             if (Application.unityVersion != "7000.0.0a16")
             {
                 throw new InvalidOperationException("Use Unity 7000.0.0a16 to generate rendering atlases.");
@@ -112,25 +157,7 @@ namespace PlantsVsZombies.Editor
             {
                 throw new InvalidOperationException("Original reanim and images resources are required before generating rendering atlases.");
             }
-            Bake(root, OutputRoot, force);
-            using var companions = Directory.EnumerateFiles(root, "*" + RuntimeAssetPaths.HighQualityImageSuffix,
-                SearchOption.AllDirectories).GetEnumerator();
-            if (companions.MoveNext())
-            {
-                Bake(root, HighQualityOutputRoot, force, root);
-                HighQualityArtworkBaker.Prepare(root, force);
-            }
-            else
-            {
-                if (AssetDatabase.IsValidFolder(HighQualityOutputRoot))
-                {
-                    AssetDatabase.DeleteAsset(HighQualityOutputRoot);
-                }
-                if (AssetDatabase.IsValidFolder(HighQualityArtworkBaker.OutputRoot))
-                {
-                    AssetDatabase.DeleteAsset(HighQualityArtworkBaker.OutputRoot);
-                }
-            }
+            return root;
         }
 
         /// <summary>Generates a complete catalog from a source directory, including small synthetic test fixtures.</summary>
@@ -1171,7 +1198,7 @@ namespace PlantsVsZombies.Editor
         private static string ResourcePath(string assetPath)
         {
             var normalized = assetPath.Replace('\\', '/');
-            var start = normalized.LastIndexOf("/Resources/", StringComparison.Ordinal) + "/Resources/".Length;
+            var start = AssetNamespaceLength(normalized);
             return normalized.Substring(start, normalized.Length - start - Path.GetExtension(normalized).Length);
         }
 
@@ -1182,8 +1209,18 @@ namespace PlantsVsZombies.Editor
         private static string AssetPath(string outputRoot, string resourcePath)
         {
             var normalized = outputRoot.Replace('\\', '/');
-            var end = normalized.LastIndexOf("/Resources/", StringComparison.Ordinal) + "/Resources/".Length;
+            var end = AssetNamespaceLength(normalized);
             return normalized.Substring(0, end) + resourcePath;
+        }
+
+        /// <summary>Locates the prefix shared by assets in Resources or in the optional pack's import directory.</summary>
+        /// <param name="path">The normalized generated asset path.</param>
+        /// <returns>The length of the directory prefix omitted from an asset address.</returns>
+        private static int AssetNamespaceLength(string path)
+        {
+            return path.StartsWith(HighQualityArtwork.ImportRoot, StringComparison.Ordinal)
+                ? HighQualityArtwork.ImportRoot.Length
+                : path.LastIndexOf("/Resources/", StringComparison.Ordinal) + "/Resources/".Length;
         }
     }
 }

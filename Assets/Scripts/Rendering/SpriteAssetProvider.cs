@@ -310,7 +310,7 @@ namespace PlantsVsZombies.Rendering
                 _catalog = JsonUtility.FromJson<SpriteAtlasCatalog>(asset.text);
                 if (HighQualityArtwork.Enabled && _hardwareMaximum >= SpriteGeometryUtility.MaximumPageSize)
                 {
-                    var replacement = Resources.Load<TextAsset>(HighQualityArtwork.ResourceRoot + "catalog");
+                    var replacement = HighQualityArtwork.LoadCatalog(_catalog.SourceHash);
                     if (replacement != null)
                     {
                         var catalog = JsonUtility.FromJson<SpriteAtlasCatalog>(replacement.text);
@@ -1199,6 +1199,10 @@ namespace PlantsVsZombies.Rendering
         /// <returns>The imported texture, or null when absent.</returns>
         private static Texture2D? LoadResourcePage(string path)
         {
+            if (path.StartsWith(HighQualityArtwork.ResourceRoot, StringComparison.Ordinal))
+            {
+                return HighQualityArtwork.LoadPage(path);
+            }
             return Resources.Load<Texture2D>(path);
         }
 

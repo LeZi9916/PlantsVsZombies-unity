@@ -30,7 +30,13 @@ python3 -B Tools/PrepareRuntimeAssets.py \
 
 ### 高质量素材
 
-在主菜单或游戏内的设置中勾选「高质量素材」，关闭设置保存后重启游戏。该选项默认关闭。4x 源图放在 `Assets/StreamingAssets/` 的现有目录，文件名以 `HQ` 结尾，例如 `SeedBankHQ.png`。JPG、GIF 和 `.bytes` 转成 PNG 后保留原扩展名以区分同名素材，例如 `background1.jpgHQ.png`。进入 Play Mode 或构建时，Unity 会从这些源图生成 4x 渲染图集以及启动画面、位图字体和水面纹理。4x 图集按目标平台压缩，保留原有采样坐标。缺少替换图或图形设备无法加载高清版本时使用原素材。界面尺寸、动画坐标和水面采样规则沿用原始数据。生成物位于 `Assets/Generated/PvZRendering`。
+4x 源图位于 `Assets/StreamingAssets/` 的现有目录，文件名在扩展名前以 `HQ` 结尾，例如 `SeedBankHQ.png` 和 `background1.jpgHQ.png`。高清字体源图保留 `fonts/*.bytesHQ.png`。Editor Play Mode 可直接预览由这些源图生成的 4x 图集和纹理。
+
+- **基础包**通过 Unity 的构建窗口或 `PlantsVsZombies > Build Windows` 构建，只包含原版素材。自定义构建脚本使用 `OriginalPlayerBuild.Build(options)`。构建时暂存 HQ 源图及其 `.meta`，结束后恢复。如果 Editor 中断，重新打开项目会恢复暂存的文件。
+- **独立高清包**通过 `PlantsVsZombies > Build High Quality Asset Pack` 生成。先在 Unity 选中与基础包一致的目标平台，再选择 `Assets` 之外的输出目录。发布时只需分发生成的 `pvz-hq.bundle`。
+- **安装使用**将 `pvz-hq.bundle` 放在游戏的 `Application.persistentDataPath` 下。在设置中勾选「高质量素材」，保存并重启。设置默认关闭。资源包缺失或不兼容时使用原版素材，游戏日志会提供查找路径。
+
+自动构建高清包可在已切换到对应目标平台的 Unity 中使用 `-executeMethod PlantsVsZombies.Editor.HighQualityPackBuild.BuildFromCommandLine -pvz-hq-pack-output <目录>`。生成物位于忽略的 `Assets/Generated/PvZRendering`。
 
 ## 代码组织
 

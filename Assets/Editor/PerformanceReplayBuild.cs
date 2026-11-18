@@ -63,7 +63,7 @@ namespace PlantsVsZombies.Editor
                 throw new InvalidOperationException("The isolated replay bootstrap scene could not be saved.");
             }
             Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(output))!);
-            var report = BuildPipeline.BuildPlayer(new BuildPlayerOptions
+            var report = OriginalPlayerBuild.Build(new BuildPlayerOptions
             {
                 scenes = new[] { scenePath },
                 target = target,

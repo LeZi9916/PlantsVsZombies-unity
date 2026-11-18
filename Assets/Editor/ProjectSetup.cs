@@ -48,7 +48,12 @@ namespace PlantsVsZombies.Editor
         {
             PrepareScene();
             Directory.CreateDirectory("Build");
-            var report = BuildPipeline.BuildPlayer(EditorBuildSettings.scenes, "Build/PvZUnity.exe", BuildTarget.StandaloneWindows64, BuildOptions.None);
+            var report = OriginalPlayerBuild.Build(new BuildPlayerOptions
+            {
+                scenes = Array.ConvertAll(Array.FindAll(EditorBuildSettings.scenes, scene => scene.enabled), scene => scene.path),
+                target = BuildTarget.StandaloneWindows64,
+                locationPathName = "Build/PvZUnity.exe"
+            });
             if (report.summary.result != BuildResult.Succeeded)
             {
                 throw new Exception("Windows build failed: " + report.summary.result);

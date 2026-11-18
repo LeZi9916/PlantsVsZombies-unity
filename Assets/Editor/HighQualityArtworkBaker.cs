@@ -13,7 +13,7 @@ namespace PlantsVsZombies.Editor
     internal static class HighQualityArtworkBaker
     {
         /// <summary>The generated Resources directory owned by this baker.</summary>
-        internal const string OutputRoot = "Assets/Generated/PvZRendering/Resources/PvZHighQualityArtwork";
+        internal const string OutputRoot = HighQualityArtwork.ImportRoot + "PvZHighQualityArtwork";
 
         /// <summary>The names of startup textures supplied as standalone Resources images.</summary>
         private static readonly string[] s_loadingImages = { "title", "popcap", "logo", "grass", "dirt", "sodroll" };

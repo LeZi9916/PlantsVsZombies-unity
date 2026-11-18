@@ -25,7 +25,11 @@ namespace PlantsVsZombies.Editor
         /// <param name="report">The build report supplied by Unity.</param>
         public void OnPreprocessBuild(BuildReport report)
         {
-            SpriteAtlasBaker.EnsureCurrent();
+            if (OriginalPlayerBuild.HasHighQualityFiles(Application.streamingAssetsPath))
+            {
+                throw new BuildFailedException("Build using the Unity Build window or OriginalPlayerBuild.Build to exclude the optional HQ source images.");
+            }
+            SpriteAtlasBaker.EnsureStandardCurrent();
         }
 
         /// <summary>Generates production resources before Play Mode while allowing isolated synthetic test projects.</summary>

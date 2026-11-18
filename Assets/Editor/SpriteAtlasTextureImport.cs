@@ -37,7 +37,8 @@ namespace PlantsVsZombies.Editor
                 ConfigureCompanion(importer);
                 return;
             }
-            var highQuality = assetPath.Contains("/Resources/PvZRenderingHighQuality/Layouts/", StringComparison.Ordinal);
+            var highQuality = assetPath.StartsWith(HighQualityArtwork.ImportRoot + "PvZRenderingHighQuality/Layouts/", StringComparison.Ordinal)
+                || assetPath.Contains("/Resources/PvZRenderingHighQuality/Layouts/", StringComparison.Ordinal);
             if (!highQuality && !assetPath.Contains("/Resources/PvZRendering/Layouts/", StringComparison.Ordinal))
             {
                 return;
