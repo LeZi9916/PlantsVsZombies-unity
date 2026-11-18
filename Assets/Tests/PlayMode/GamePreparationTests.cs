@@ -4,6 +4,7 @@ using System.Collections;
 using System.IO;
 using NUnit.Framework;
 using PlantsVsZombies.Game;
+using PlantsVsZombies.Modes;
 using PlantsVsZombies.Reanimation;
 using PlantsVsZombies.Simulation;
 using Unity.Profiling;
@@ -12,7 +13,7 @@ using UnityEngine.TestTools;
 
 namespace PlantsVsZombies.Tests.PlayMode
 {
-    /// <summary>Checks cooperative preparation never advances the model and becomes allocation-free once ready.</summary>
+    /// <summary>Checks stage preparation never advances the model and becomes allocation-free once ready.</summary>
     public sealed class GamePreparationTests
     {
         /// <summary>Prepares an isolated board across real frames and preserves its complete serialized model.</summary>
@@ -91,6 +92,53 @@ namespace PlantsVsZombies.Tests.PlayMode
             {
                 presenter.Dispose();
                 renderer.Dispose();
+                UnityEngine.Object.Destroy(host);
+                Directory.Delete(root, true);
+            }
+        }
+
+        /// <summary>Checks restoring a cleared survival board skips its old combat preparation and the following stage still prepares.</summary>
+        [Test]
+        public void ClearedSurvivalCheckpointPreparesOnlyTheFollowingStage()
+        {
+            var root = Path.Combine(Path.GetTempPath(), "PvZPreparation-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(root);
+            var host = new GameObject("Inactive survival preparation regression");
+            host.SetActive(false);
+            var owner = host.AddComponent<PvZGame>();
+            using var renderer = new ReanimationRenderer(root);
+            var presenter = new GamePresenter(owner);
+            try
+            {
+                var saved = new ModeSession(13);
+                saved.Phase = ModePhase.StageCleared;
+                saved.ReSelectionTicks = 1;
+                var checkpoint = saved.Game.CaptureCheckpoint();
+                var restored = GameSimulation.RestoreCheckpoint(checkpoint);
+                owner._root = root;
+                owner._animations = renderer;
+                owner._presenter = presenter;
+                owner._currentView = PvZGame.ScreenView.Board;
+                owner._game = restored;
+
+                var preparation = owner.Preparation;
+                preparation.Advance();
+                Assert.That(preparation.IsReady, Is.True);
+                Assert.That(preparation.BlocksGameplay, Is.False);
+                Assert.That(preparation.StepCount, Is.Zero);
+                Assert.That(restored.CaptureCheckpoint(), Is.EqualTo(checkpoint));
+
+                Assert.That(restored.RequiredModeSession.Continue(), Is.True);
+                Assert.That(restored.RequiredModeSession.Phase, Is.EqualTo(ModePhase.ChoosingSeeds));
+                var nextStage = restored.CaptureCheckpoint();
+                preparation.Advance();
+                Assert.That(preparation.IsReady, Is.True);
+                Assert.That(preparation.StepCount, Is.Positive);
+                Assert.That(restored.CaptureCheckpoint(), Is.EqualTo(nextStage));
+            }
+            finally
+            {
+                presenter.Dispose();
                 UnityEngine.Object.Destroy(host);
                 Directory.Delete(root, true);
             }

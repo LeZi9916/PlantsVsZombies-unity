@@ -181,6 +181,54 @@ namespace PlantsVsZombies.Tests.EditMode
             particles.Clear();
         }
 
+        /// <summary>Checks a restored ambient loop replays bounded history and advances exact native ticks until recycled.</summary>
+        [Test]
+        public void RestoredAmbientLoopRebuildsRecentHistoryAndAdvancesByNativeTicks()
+        {
+            const int savedTick = (1 << 24) + 1;
+            const int warmupTicks = 100;
+            var particles = new OriginalParticleRenderer(_root, _renderer);
+            var key = PresentationIdentity.FromExternal("restored-ambient");
+            var flags = BindingFlags.Instance | BindingFlags.NonPublic;
+            var systems = (IDictionary)typeof(OriginalParticleRenderer).GetField("_systems", flags)!.GetValue(particles)!;
+            try
+            {
+                particles.BeginFrame();
+                Assert.That(particles.DrawAmbientLoop(key, "Synthetic", savedTick, warmupTicks, Vector2.zero, 1), Is.True);
+                particles.EndFrame();
+                var system = systems[key]!;
+                var tick = system.GetType().GetField("Tick")!;
+                Assert.That(tick.GetValue(system), Is.EqualTo(warmupTicks));
+
+                particles.BeginFrame();
+                particles.DrawAmbientLoop(key, "Synthetic", savedTick + 1, warmupTicks, Vector2.zero, 1);
+                particles.EndFrame();
+                Assert.That(systems[key], Is.SameAs(system));
+                Assert.That(tick.GetValue(system), Is.EqualTo(warmupTicks + 1));
+
+                particles.BeginFrame();
+                particles.EndFrame();
+                Assert.That(systems.Contains(key), Is.False);
+
+                particles.BeginFrame();
+                particles.DrawAmbientLoop(key, "Synthetic", savedTick + 2, warmupTicks, Vector2.zero, 1);
+                particles.EndFrame();
+                Assert.That(systems[key], Is.SameAs(system));
+                Assert.That(tick.GetValue(system), Is.EqualTo(warmupTicks));
+
+                particles.Clear();
+                particles.BeginFrame();
+                particles.Draw(key, "Synthetic", 0.5f, Vector2.zero, 1);
+                particles.EndFrame();
+                Assert.That(systems[key], Is.SameAs(system));
+                Assert.That(tick.GetValue(system), Is.EqualTo(50));
+            }
+            finally
+            {
+                particles.Clear();
+            }
+        }
+
         /// <summary>Preserves default selection, aliases, and case-insensitive clip identities after caching.</summary>
         /// <param name="animation">The requested alias for the idle clip.</param>
         [TestCase(null)]

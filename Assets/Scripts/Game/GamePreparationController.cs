@@ -6,9 +6,7 @@ using System.IO;
 using PlantsVsZombies.Rendering;
 using PlantsVsZombies.Adventure;
 using PlantsVsZombies.Simulation;
-using PlantsVsZombies.UI;
 using PlantsVsZombies.VerifiedData;
-using UnityEngine;
 
 namespace PlantsVsZombies.Game
 {
@@ -43,12 +41,6 @@ namespace PlantsVsZombies.Game
         private int _instances;
         /// <summary>The independently restored production lifecycle being rehearsed during loading.</summary>
         private SimulationPreparationRehearsal? _rehearsal;
-        /// <summary>The lazily created preparation label style.</summary>
-        private GUIStyle? _style;
-        /// <summary>The last formatted preparation percentage.</summary>
-        private int _displayedPercent = -1;
-        /// <summary>The preparation message, formatted only when progress changes.</summary>
-        private string _message = string.Empty;
         /// <summary>Gets whether necessary capacity has been prepared for the current board and stage.</summary>
         internal bool IsReady => _phase == 6;
         /// <summary>Gets whether board interaction must wait before the first admitted simulation tick.</summary>
@@ -62,7 +54,7 @@ namespace PlantsVsZombies.Game
         private bool _overrunLogged;
 
         /// <summary>Creates a preparation coordinator without touching Unity resources.</summary>
-        /// <param name="owner">The host whose board and loading UI are coordinated.</param>
+        /// <param name="owner">The host whose board is being prepared.</param>
         internal GamePreparationController(PvZGame owner)
         {
             _owner = owner;
@@ -114,32 +106,6 @@ namespace PlantsVsZombies.Game
             LastStepMilliseconds = (Stopwatch.GetTimestamp() - start) * 1000d / Stopwatch.Frequency;
         }
 
-        /// <summary>Displays progress only when the player would otherwise enter an unprepared live board.</summary>
-        internal void DrawOverlay()
-        {
-            if (!BlocksGameplay || _owner.Loading.OriginalLoadingActive)
-            {
-                return;
-            }
-            var percent = _phase == 0 ? _asset * 16 / Math.Max(1, _assets.Count) : _phase * 100 / 6;
-            if (_displayedPercent != percent)
-            {
-                _displayedPercent = percent;
-                _message = "正在准备关卡… " + percent + "%";
-            }
-            if (_style == null)
-            {
-                _style = new GUIStyle { font = _owner._font, fontSize = 20, alignment = TextAnchor.MiddleCenter };
-                _style.normal.textColor = Color.white;
-            }
-            var previous = CanvasUI.Color;
-            CanvasUI.Color = new Color(0f, 0f, 0f, .85f);
-            CanvasUI.DrawTexture(new Rect(170f, 260f, 460f, 80f), Texture2D.whiteTexture);
-            CanvasUI.Color = Color.white;
-            CanvasUI.Label(new Rect(170f, 260f, 460f, 80f), _message, _style);
-            CanvasUI.Color = previous;
-        }
-
         /// <summary>Collects known stage dependencies before admitting its first gameplay update.</summary>
         /// <param name="game">The authoritative board, read without invoking gameplay constructors.</param>
         /// <param name="stage">The native stage identity.</param>
@@ -147,20 +113,28 @@ namespace PlantsVsZombies.Game
         {
             _preparedGame = game;
             _stage = stage;
-            _phase = 0;
             _rehearsal = null;
             _asset = 0;
             _assetOpened = false;
-            _displayedPercent = -1;
             StepCount = 0;
+            LastStepMilliseconds = 0d;
             _overrunLogged = false;
+            _assets.Clear();
+            if (game.ModeSession is { Definition: { Survival: true }, HasNextStage: true })
+            {
+                // This board can be displayed immediately. The following stage owns its own combat preparation.
+                _owner.RequiredAnimations.ReleasePreparedPages();
+                _phase = 6;
+                return;
+            }
+
+            _phase = 0;
             _requirements = game.GetCapacityRequirements();
             var population = Math.Max(1, _requirements.Plants + _requirements.Zombies);
             _actors = Math.Min(256, population);
             _playbacks = Math.Min(2048, RoundedCapacity(population * 2));
             _sprites = Math.Min(65536, RoundedCapacity(population * 40));
             _instances = Math.Min(65536, RoundedCapacity(population * 40));
-            _assets.Clear();
             AdventureZombieDeathData.TryGet("Zombie", "anim_death", out _);
             for (var kind = 0; kind < VerifiedDataCatalog.Zombies.Count; kind++)
             {

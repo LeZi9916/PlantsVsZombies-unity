@@ -280,6 +280,8 @@ namespace PlantsVsZombies.Reanimation
         {
             /// <summary>Stores tick, seen, stop tick, fade duration.</summary>
             public int Tick, Seen, StopTick = -1, FadeDuration;
+            /// <summary>The board tick mapped to the first local step of a restored ambient loop.</summary>
+            public int TickOrigin;
             /// <summary>Stores fade out.</summary>
             public EmitterDefinition? FadeOut;
             /// <summary>Stores origin.</summary>
@@ -414,6 +416,36 @@ namespace PlantsVsZombies.Reanimation
         /// <returns>The resulting draw.</returns>
         internal bool Draw(PresentationIdentity key, string name, float age, Vector2 origin, int seed, float scale = 1f, float stopAge = -1f, Matrix4x4? fullScreenMatrix = null)
         {
+            return DrawAtTick(key, name, age * 100f, origin, seed, scale, stopAge, fullScreenMatrix);
+        }
+
+        /// <summary>Draws a decorative loop, rebuilding only its recent history when its presentation state is missing.</summary>
+        /// <param name="key">The persistent effect identity.</param>
+        /// <param name="name">The immutable looping effect resource.</param>
+        /// <param name="tick">The elapsed native board ticks, including ticks restored from a save.</param>
+        /// <param name="warmupTicks">The maximum number of historical ticks to replay at creation.</param>
+        /// <param name="origin">The destination origin.</param>
+        /// <param name="seed">The deterministic decorative random seed.</param>
+        /// <returns>Whether the effect could be drawn.</returns>
+        internal bool DrawAmbientLoop(PresentationIdentity key, string name, int tick, int warmupTicks, Vector2 origin, int seed)
+        {
+            return DrawAtTick(key, name, tick, origin, seed, 1f, -1f, null, warmupTicks);
+        }
+
+        /// <summary>Advances a particle instance to its local presentation time and submits its artwork.</summary>
+        /// <param name="key">The persistent effect identity.</param>
+        /// <param name="name">The immutable effect resource.</param>
+        /// <param name="tick">Elapsed ticks in the caller's clock, with optional sub-tick interpolation.</param>
+        /// <param name="origin">The destination origin.</param>
+        /// <param name="seed">The deterministic decorative random seed.</param>
+        /// <param name="scale">The destination scale.</param>
+        /// <param name="stopAge">The emission stop time in seconds, or minus one.</param>
+        /// <param name="fullScreenMatrix">The optional inherited transform for full-screen fills.</param>
+        /// <param name="warmupTicks">The optional initial history limit for a decorative loop.</param>
+        /// <returns>Whether the effect could be drawn.</returns>
+        private bool DrawAtTick(PresentationIdentity key, string name, double tick, Vector2 origin, int seed, float scale,
+            float stopAge, Matrix4x4? fullScreenMatrix, int? warmupTicks = null)
+        {
 #if PVZ_PERFORMANCE_REPLAY
             using var allocationDetail = new PlantsVsZombies.Diagnostics.PerformanceReplayAllocations.DetailScope("Draw");
 #endif
@@ -427,6 +459,7 @@ namespace PlantsVsZombies.Reanimation
                 }
 
                 system = RentSystem(list, seed, origin);
+                system.TickOrigin = warmupTicks.HasValue ? Math.Max(0, (int)tick - warmupTicks.Value) : 0;
 
                 _systems.Add(key, system);
                 if (stopAge >= 0f)
@@ -443,7 +476,8 @@ namespace PlantsVsZombies.Reanimation
                 system.StopTick = Math.Max(0, (int)Math.Round(stopAge * 100f));
             }
 
-            var target = Math.Max(0, (int)Math.Floor(age * 100f));
+            var playbackTick = tick - system.TickOrigin;
+            var target = Math.Max(0, (int)Math.Floor(playbackTick));
             int firstTick = system.Tick, span = target - firstTick;
             var firstOrigin = system.Origin;
             while (system.Tick < target)
@@ -456,7 +490,7 @@ namespace PlantsVsZombies.Reanimation
             }
 
             MoveSystemOrigin(system, origin, scale);
-            var fraction = age * 100f - target;
+            var fraction = (float)(playbackTick - target);
             var previous = SpriteDrawState.Color;
             foreach (Emitter emitter in system.Emitters)
             {

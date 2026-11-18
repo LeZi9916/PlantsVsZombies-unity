@@ -383,7 +383,6 @@ namespace PlantsVsZombies.Game
                 {
                     _owner._profileDialog.Draw();
                 }
-                _owner.Preparation.DrawOverlay();
             }
             finally
             {
@@ -2449,6 +2448,11 @@ namespace PlantsVsZombies.Game
         /// <summary>Retains the PC pool's three meshes and generated caustic texture across board frames.</summary>
         private OriginalPoolRenderer? _poolRenderer;
 
+        /// <summary>The pool sparkle warm-up in native ticks, covering the authored maximum particle lifetime of 80 ticks.</summary>
+        private const int PoolSparkleWarmupTicks = 100;
+        /// <summary>The persistent identity of the daytime pool sparkle emitter.</summary>
+        private static readonly PresentationIdentity s_poolSparkle = PresentationIdentity.FromExternal("native-pool-sparkly");
+
         /// <summary>Draws the original day or night water grids and the daytime PoolSparkly emitter.</summary>
         private void DrawAdventurePool()
         {
@@ -2476,7 +2480,8 @@ namespace PlantsVsZombies.Game
             if (!night)
             {
                 // PC Board::Update 0x42145C creates effect PoolSparkly at (450,295), below lawn actors.
-                RequiredAdventureParticles.Draw("native-pool-sparkly", "PoolSparkly", ticks * .01f, new Vector2(450f, 295f), 0);
+                RequiredAdventureParticles.DrawAmbientLoop(s_poolSparkle, "PoolSparkly", ticks, PoolSparkleWarmupTicks,
+                    new Vector2(450f, 295f), 0);
             }
         }
 

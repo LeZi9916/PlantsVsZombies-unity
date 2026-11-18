@@ -61,7 +61,7 @@ Unity 7 中显式实例绘制与原生 Canvas 仅设置 `sortingOrder` 无法保
 
 仅 Editor 创建 `PvZ Actors/Plants` 和 `PvZ Actors/Zombies` 检查层级，根节点、附件与轨道分别复用；Player 跳过这些节点及其遍历。节点开关同步更新可见性版本，选中 sprite 可查看源资源和完整变换。表现缓存使用会话代次与实体 ID 组成的值身份；局部动画只在精确采样时间、资源、附件与混合版本相同时复用，位置、装备、颜色和绘制顺序继续实时应用。透明几何保留双线性边缘，命中、灰度及亮度反馈沿用原混色语义。
 
-加载、选卡及开场期间由 `GamePreparationController` 每帧按 2 ms 软预算准备资源、模型池、表现容量、粒子和实例缓冲；不可拆分的 Unity 资源操作可能超预算。必要准备完成后才进入本阶段战斗。模型回收检查全部权威引用，并经过两个完整更新边界，覆盖尸体、附属投射物与待消费事件；运行时池不进入存档。超出准备容量仍安全扩容并继续玩法，性能证据保留这些帧。复现与平台验证命令见 `Tools/Tests/RenderingPerformance/README.md` 和 `Tools/Tests/PerformanceReplay/README.md`。
+进入新关卡或生存阶段时，`GamePreparationController` 在开始战斗前准备资源、模型池、表现容量、粒子和实例缓冲。恢复已完成的生存阶段时直接显示棋盘，随后在新的阶段准备战斗资源。白天泳池的闪光粒子恢复时最多预热 100 个原版 tick，水面网格继续使用存档计时。模型回收检查全部权威引用，并经过两个完整更新边界，覆盖尸体、附属投射物与待消费事件；运行时池不进入存档。超出准备容量仍安全扩容并继续玩法，性能证据保留这些帧。复现与平台验证命令见 `Tools/Tests/RenderingPerformance/README.md` 和 `Tools/Tests/PerformanceReplay/README.md`。
 
 性能续作已在 Unity 7000.0.0a16 / macOS Metal 上完成三起点的模型与像素对照，精灵提交减少 92.97%–96.01%；已补齐容量、事件池、活跃动画容器与分帧生命周期预热，并执行五分钟 CoreCLR Player 压力观察。完整零 GC 和 Windows 平台验收仍未通过，当前已测结果、剩余分配及平台限制见 [`OrderedInstancingPerformance.md`](Assets/Tests/OrderedInstancingPerformance.md)。
 
