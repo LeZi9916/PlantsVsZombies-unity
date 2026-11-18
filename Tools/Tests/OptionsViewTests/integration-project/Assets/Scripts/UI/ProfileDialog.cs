@@ -1,10 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using PvZReplica.Profiles;
+using PlantsVsZombies.Profiles;
 using UnityEngine;
 
-namespace PvZReplica.UI
+namespace PlantsVsZombies.UI
 {
     /// <summary>A modal, 800 by 600 logical-coordinate profile picker.</summary>
     public sealed class ProfileDialog : IDisposable

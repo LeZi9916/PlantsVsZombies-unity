@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 
-namespace PvZReplica.VerifiedData
+namespace PlantsVsZombies.VerifiedData
 {
     /// <summary>
     /// A static plant row. Costs and recharge thresholds are base values that runtime

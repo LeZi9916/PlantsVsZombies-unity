@@ -1,4 +1,5 @@
 #nullable enable
+using PlantsVsZombies.Infrastructure;
 using PlantsVsZombies.Inputs;
 using PlantsVsZombies.Rendering;
 using PlantsVsZombies.Adventure;
@@ -332,8 +333,8 @@ namespace PlantsVsZombies.Game
             var effectsSource = gameObject.AddComponent<AudioSource>();
             var voiceSource = gameObject.AddComponent<AudioSource>();
             var musicSource = gameObject.AddComponent<AudioSource>();
-            var musicVolume = Mathf.Clamp01(PlayerPrefs.GetFloat("PvZReplica.Music", 0.35f));
-            var soundVolume = Mathf.Clamp01(PlayerPrefs.GetFloat("PvZReplica.Sound", 0.7f));
+            var musicVolume = Mathf.Clamp01(GamePreferences.ReadFloat(GamePreferences.MusicVolumeKey, 0.35f));
+            var soundVolume = Mathf.Clamp01(GamePreferences.ReadFloat(GamePreferences.SoundVolumeKey, 0.7f));
             Sounds.Initialize(effectsSource, soundVolume);
             Dave.Initialize(voiceSource, soundVolume);
             Music.Initialize(musicSource, musicVolume);

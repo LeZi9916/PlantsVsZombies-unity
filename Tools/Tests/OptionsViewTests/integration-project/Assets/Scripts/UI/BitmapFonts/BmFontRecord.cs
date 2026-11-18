@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
 
-namespace PvZReplica.UI.BitmapFonts
+namespace PlantsVsZombies.UI.BitmapFonts
 {
     internal sealed class BmFontRecord
     {

@@ -4,7 +4,7 @@
 using System;
 using System.Collections.ObjectModel;
 
-namespace PvZReplica.VerifiedData
+namespace PlantsVsZombies.VerifiedData
 {
     public static partial class VerifiedDataCatalog
     {

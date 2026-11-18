@@ -4,8 +4,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
-using PvZReplica.UI;
-using PvZReplica.UI.BitmapFonts;
+using PlantsVsZombies.UI;
+using PlantsVsZombies.UI.BitmapFonts;
 using UnityEngine;
 
 public sealed class OptionsViewSmoke : MonoBehaviour

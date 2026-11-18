@@ -16,7 +16,7 @@ namespace PlantsVsZombies.Editor
     {
         /// <summary>Performs prepare scene.</summary>
         /// <exception cref = "Exception">The operation cannot satisfy its preconditions.</exception>
-        [MenuItem("PvZ Replica/Prepare Scene")]
+        [MenuItem("PlantsVsZombies/Prepare Scene")]
         public static void PrepareScene()
         {
             const string scenePath = "Assets/Scenes/Lawn.unity";
@@ -35,8 +35,6 @@ namespace PlantsVsZombies.Editor
             {
                 new EditorBuildSettingsScene(scenePath, true)
             };
-            PlayerSettings.companyName = "PvZ Replica";
-            PlayerSettings.productName = "PvZ Unity Prototype";
             PlayerSettings.defaultScreenWidth = 800;
             PlayerSettings.defaultScreenHeight = 600;
             PlayerSettings.fullScreenMode = FullScreenMode.Windowed;
@@ -45,7 +43,7 @@ namespace PlantsVsZombies.Editor
 
         /// <summary>Performs build windows.</summary>
         /// <exception cref = "Exception">The operation cannot satisfy its preconditions.</exception>
-        [MenuItem("PvZ Replica/Build Windows")]
+        [MenuItem("PlantsVsZombies/Build Windows")]
         public static void BuildWindows()
         {
             PrepareScene();

@@ -322,9 +322,13 @@ namespace PlantsVsZombies.Tests.EditMode
             var key = HighQualityArtwork.PreferenceKey;
             var existed = PlayerPrefs.HasKey(key);
             var previous = PlayerPrefs.GetInt(key);
+            const string legacyKey = "PvZReplica.HighQualityArtwork";
+            var legacyExisted = PlayerPrefs.HasKey(legacyKey);
+            var legacyValue = PlayerPrefs.GetInt(legacyKey);
             try
             {
                 PlayerPrefs.DeleteKey(key);
+                PlayerPrefs.DeleteKey(legacyKey);
                 Assert.That(HighQualityArtwork.ReadPreference(), Is.False);
                 using var options = new OptionsView(_resourceRoot);
                 options.GameplayButtonsEnabled = gameplay;
@@ -345,7 +349,10 @@ namespace PlantsVsZombies.Tests.EditMode
                 options.HandlePointer(pointer, PointerPhase.Down);
                 options.Close();
                 HighQualityArtwork.WritePreference(options.UseHighQualityArtwork);
+                PlayerPrefs.SetInt(legacyKey, 1);
                 Assert.That(HighQualityArtwork.ReadPreference(), Is.False);
+                PlayerPrefs.DeleteKey(key);
+                Assert.That(HighQualityArtwork.ReadPreference(), Is.True);
             }
             finally
             {
@@ -356,6 +363,15 @@ namespace PlantsVsZombies.Tests.EditMode
                 else
                 {
                     PlayerPrefs.DeleteKey(key);
+                }
+
+                if (legacyExisted)
+                {
+                    PlayerPrefs.SetInt(legacyKey, legacyValue);
+                }
+                else
+                {
+                    PlayerPrefs.DeleteKey(legacyKey);
                 }
             }
         }

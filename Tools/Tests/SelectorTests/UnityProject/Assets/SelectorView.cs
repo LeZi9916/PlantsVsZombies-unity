@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using UnityEngine;
 
-namespace PvZReplica.UI
+namespace PlantsVsZombies.UI
 {
     public enum SelectorAction
     {

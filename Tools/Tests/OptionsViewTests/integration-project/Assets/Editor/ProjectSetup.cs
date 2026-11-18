@@ -6,11 +6,11 @@ using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
-namespace PvZReplica
+namespace PlantsVsZombies
 {
     public static class ProjectSetup
     {
-        [MenuItem("PvZ Replica/Prepare Scene")]
+        [MenuItem("PlantsVsZombies/Prepare Scene")]
         public static void PrepareScene()
         {
             const string scenePath = "Assets/Scenes/Lawn.unity";
@@ -23,7 +23,7 @@ namespace PvZReplica
                     throw new Exception("Could not save " + scenePath);
             }
             EditorBuildSettings.scenes = new[] { new EditorBuildSettingsScene(scenePath, true) };
-            PlayerSettings.companyName = "PvZ Replica";
+            PlayerSettings.companyName = "PlantsVsZombies";
             PlayerSettings.productName = "PvZ Unity Prototype";
             PlayerSettings.defaultScreenWidth = 800;
             PlayerSettings.defaultScreenHeight = 600;
@@ -31,7 +31,7 @@ namespace PvZReplica
             AssetDatabase.SaveAssets();
         }
 
-        [MenuItem("PvZ Replica/Build Windows")]
+        [MenuItem("PlantsVsZombies/Build Windows")]
         public static void BuildWindows()
         {
             PrepareScene();

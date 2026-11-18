@@ -3,10 +3,10 @@ using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
-using PvZReplica.Reanimation;
+using PlantsVsZombies.Reanimation;
 using UnityEngine;
 
-namespace PvZReplica
+namespace PlantsVsZombies
 {
     // This runner is enabled only by the explicit -pvz-smoke command-line switch.
     internal sealed class VisualSmokeTest : MonoBehaviour

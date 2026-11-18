@@ -1,6 +1,6 @@
 using System;
 
-namespace PvZReplica.Randomness
+namespace PlantsVsZombies.Randomness
 {
     /// <summary>
     /// The isolated 31-bit generator used by the examined executable. A matching

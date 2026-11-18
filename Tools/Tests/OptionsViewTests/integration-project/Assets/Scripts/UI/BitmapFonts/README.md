@@ -15,7 +15,7 @@
 ## API
 
 ```csharp
-using PvZReplica.UI.BitmapFonts;
+using PlantsVsZombies.UI.BitmapFonts;
 using UnityEngine;
 
 // 在组件中持有，切勿每次 OnGUI 都加载图集。

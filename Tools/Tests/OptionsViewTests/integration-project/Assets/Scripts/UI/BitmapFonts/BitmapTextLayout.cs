@@ -4,7 +4,7 @@ using System.Collections.ObjectModel;
 using System.Globalization;
 using System.Text;
 
-namespace PvZReplica.UI.BitmapFonts
+namespace PlantsVsZombies.UI.BitmapFonts
 {
     public struct MissingBitmapGlyph
     {

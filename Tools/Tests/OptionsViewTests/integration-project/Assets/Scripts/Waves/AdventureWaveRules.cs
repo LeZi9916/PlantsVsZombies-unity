@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace PvZReplica.Waves
+namespace PlantsVsZombies.Waves
 {
     /// <summary>Raw EXE selection fields for one numeric zombie ID.</summary>
     public struct ZombieWaveDefinition

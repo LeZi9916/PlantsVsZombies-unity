@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
-using PvZReplica.VerifiedData;
+using PlantsVsZombies.VerifiedData;
 using OriginalTiming = PvZUnity.Timing;
 
-namespace PvZReplica
+namespace PlantsVsZombies
 {
     public enum PlantKind
     {

@@ -4,8 +4,8 @@ using System.Collections.Generic;
 using System.Reflection;
 using System.IO;
 using System.Text;
-using PvZReplica.Reanimation;
-using PvZReplica.UI;
+using PlantsVsZombies.Reanimation;
+using PlantsVsZombies.UI;
 using UnityEngine;
 
 public sealed class AlmanacSmoke : MonoBehaviour

@@ -2,10 +2,10 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
-using PvZReplica.VerifiedData;
+using PlantsVsZombies.VerifiedData;
 using UnityEngine;
 
-namespace PvZReplica.UI
+namespace PlantsVsZombies.UI
 {
     public sealed class ModeSelectionView
     {

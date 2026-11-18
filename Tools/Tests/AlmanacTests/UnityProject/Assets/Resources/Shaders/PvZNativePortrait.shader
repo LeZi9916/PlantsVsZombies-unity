@@ -1,4 +1,4 @@
-Shader "Hidden/PvZReplica/NativePortrait"
+Shader "Hidden/PlantsVsZombies/NativePortrait"
 {
     Properties { _MainTex ("Texture", 2D) = "white" {} _Grayscale ("Grayscale", Float) = 0 }
     SubShader

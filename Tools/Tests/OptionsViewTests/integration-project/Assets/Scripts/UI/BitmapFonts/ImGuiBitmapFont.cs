@@ -3,7 +3,7 @@ using System.IO;
 using System.Text;
 using UnityEngine;
 
-namespace PvZReplica.UI.BitmapFonts
+namespace PlantsVsZombies.UI.BitmapFonts
 {
     /// <summary>Owns the decoded atlas pages. Load once, draw in OnGUI, and dispose when finished.</summary>
     public sealed class ImGuiBitmapFont : IDisposable

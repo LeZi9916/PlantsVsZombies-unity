@@ -1,7 +1,7 @@
 using System;
 using System.IO;
 using System.Reflection;
-using PvZReplica.UI;
+using PlantsVsZombies.UI;
 using UnityEditor;
 using UnityEngine;
 

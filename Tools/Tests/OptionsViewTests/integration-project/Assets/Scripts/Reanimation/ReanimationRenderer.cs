@@ -5,7 +5,7 @@ using System.IO;
 using System.Xml;
 using UnityEngine;
 
-namespace PvZReplica.Reanimation
+namespace PlantsVsZombies.Reanimation
 {
     public enum ZombieVariant { Normal, Conehead, Buckethead, Flag, ScreenDoor }
 

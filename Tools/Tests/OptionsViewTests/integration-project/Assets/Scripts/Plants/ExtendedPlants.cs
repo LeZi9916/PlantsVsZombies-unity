@@ -1,4 +1,4 @@
-namespace PvZReplica
+namespace PlantsVsZombies
 {
     public sealed partial class GameSimulation
     {

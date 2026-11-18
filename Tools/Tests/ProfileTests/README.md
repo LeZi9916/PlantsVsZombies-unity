@@ -6,7 +6,7 @@ save, importer, exporter, or compatibility layer. It is not connected to
 
 ## Public API
 
-Namespace: `PvZReplica.Profiles`.
+Namespace: `PlantsVsZombies.Profiles`.
 
 ```csharp
 var catalog = new ProfileCatalog(filePath);

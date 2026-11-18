@@ -4,12 +4,12 @@ using System.Collections.Generic;
 using System.IO;
 using UnityEngine;
 using UnityEngine.Networking;
-using PvZReplica.Reanimation;
-using PvZReplica.UI;
-using PvZReplica.Profiles;
-using PvZReplica.UI.BitmapFonts;
+using PlantsVsZombies.Reanimation;
+using PlantsVsZombies.UI;
+using PlantsVsZombies.Profiles;
+using PlantsVsZombies.UI.BitmapFonts;
 
-namespace PvZReplica
+namespace PlantsVsZombies
 {
     public sealed class PvZGame : MonoBehaviour
     {
@@ -88,8 +88,8 @@ namespace PvZReplica
             audioSource = gameObject.AddComponent<AudioSource>();
             musicSource = gameObject.AddComponent<AudioSource>();
             musicSource.loop = true;
-            musicVolume = Mathf.Clamp01(PlayerPrefs.GetFloat("PvZReplica.Music", 0.35f));
-            soundVolume = Mathf.Clamp01(PlayerPrefs.GetFloat("PvZReplica.Sound", 0.7f));
+            musicVolume = Mathf.Clamp01(PlayerPrefs.GetFloat("PlantsVsZombies.Music", 0.35f));
+            soundVolume = Mathf.Clamp01(PlayerPrefs.GetFloat("PlantsVsZombies.Sound", 0.7f));
             musicSource.volume = musicVolume;
             audioSource.volume = soundVolume;
             font = Font.CreateDynamicFontFromOSFont(new[] { "Microsoft YaHei", "Arial" }, 16);
@@ -570,8 +570,8 @@ namespace PvZReplica
             audioSource.volume = soundVolume;
             if (!smokeMode)
             {
-                PlayerPrefs.SetFloat("PvZReplica.Music", musicVolume);
-                PlayerPrefs.SetFloat("PvZReplica.Sound", soundVolume);
+                PlayerPrefs.SetFloat("PlantsVsZombies.Music", musicVolume);
+                PlayerPrefs.SetFloat("PlantsVsZombies.Sound", soundVolume);
                 PlayerPrefs.Save();
                 if (Screen.fullScreen != optionsView.FullScreen) Screen.fullScreen = optionsView.FullScreen;
             }

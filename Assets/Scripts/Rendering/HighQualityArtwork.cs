@@ -1,5 +1,6 @@
 #nullable enable
 using System;
+using PlantsVsZombies.Infrastructure;
 using UnityEngine;
 
 namespace PlantsVsZombies.Rendering
@@ -8,7 +9,7 @@ namespace PlantsVsZombies.Rendering
     internal static class HighQualityArtwork
     {
         /// <summary>The persisted option used on the next startup.</summary>
-        internal const string PreferenceKey = "PvZReplica.HighQualityArtwork";
+        internal const string PreferenceKey = GamePreferences.KeyPrefix + "HighQualityArtwork";
 
         /// <summary>The extensionless prefix of optional high-resolution resources.</summary>
         internal const string ResourceRoot = "PvZRenderingHighQuality/";
@@ -26,7 +27,7 @@ namespace PlantsVsZombies.Rendering
         /// <returns>Whether high-resolution artwork is requested for the next session.</returns>
         internal static bool ReadPreference()
         {
-            return PlayerPrefs.GetInt(PreferenceKey, 0) == 1;
+            return GamePreferences.ReadInt(PreferenceKey, 0) == 1;
         }
 
         /// <summary>Writes the next-session setting for the calling menu to save with its other preferences.</summary>

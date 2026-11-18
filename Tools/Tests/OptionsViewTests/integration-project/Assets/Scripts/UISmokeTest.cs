@@ -2,11 +2,11 @@ using System;
 using System.Collections;
 using System.IO;
 using System.Reflection;
-using PvZReplica.Profiles;
-using PvZReplica.UI;
+using PlantsVsZombies.Profiles;
+using PlantsVsZombies.UI;
 using UnityEngine;
 
-namespace PvZReplica
+namespace PlantsVsZombies
 {
     // Enabled only for explicit player smoke tests.
     internal sealed class UISmokeTest : MonoBehaviour

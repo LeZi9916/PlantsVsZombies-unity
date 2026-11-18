@@ -4,10 +4,10 @@ using System.Collections.ObjectModel;
 using System.IO;
 using System.Text;
 using UnityEngine;
-using PvZReplica.Reanimation;
-using PvZReplica.VerifiedData;
+using PlantsVsZombies.Reanimation;
+using PlantsVsZombies.VerifiedData;
 
-namespace PvZReplica.UI
+namespace PlantsVsZombies.UI
 {
     public enum AlmanacScreen { Home, PlantIndex, PlantDetail, ZombieIndex, ZombieDetail }
 

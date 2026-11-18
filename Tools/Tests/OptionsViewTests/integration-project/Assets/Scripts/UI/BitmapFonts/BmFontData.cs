@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 
-namespace PvZReplica.UI.BitmapFonts
+namespace PlantsVsZombies.UI.BitmapFonts
 {
     public sealed class BmFontGlyph
     {

@@ -14,7 +14,7 @@ namespace PlantsVsZombies.Editor
         private const string Root = "Assets/OriginalPvZ/";
         /// <summary>Performs verify.</summary>
         /// <exception cref = "Exception">The operation cannot satisfy its preconditions.</exception>
-        [MenuItem("PvZ Replica/Verify Original Assets")]
+        [MenuItem("PlantsVsZombies/Verify Original Assets")]
         public static void Verify()
         {
             AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);

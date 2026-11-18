@@ -1,10 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using PvZReplica.UI.BitmapFonts;
+using PlantsVsZombies.UI.BitmapFonts;
 using UnityEngine;
 
-namespace PvZReplica.UI
+namespace PlantsVsZombies.UI
 {
     public enum OptionsCloseResult
     {

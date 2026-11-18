@@ -1,7 +1,7 @@
 using System;
-using PvZReplica.Levels;
+using PlantsVsZombies.Levels;
 
-namespace PvZReplica
+namespace PlantsVsZombies
 {
     public sealed partial class GameRules
     {

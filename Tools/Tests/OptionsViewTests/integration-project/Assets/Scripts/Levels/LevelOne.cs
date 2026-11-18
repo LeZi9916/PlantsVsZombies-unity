@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace PvZReplica.Levels
+namespace PlantsVsZombies.Levels
 {
     /// <summary>
     /// The statically verified first-play, adventure-mode level 1 facts for the

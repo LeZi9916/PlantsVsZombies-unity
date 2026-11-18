@@ -1,7 +1,7 @@
 using System;
 using UnityEngine;
 
-namespace PvZReplica.UI
+namespace PlantsVsZombies.UI
 {
     /// <summary>Source-pixel coordinates from the local EXE's almanac and seed-packet draw paths.</summary>
     public static class AlmanacPortraitLayout

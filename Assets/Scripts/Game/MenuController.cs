@@ -1,4 +1,5 @@
 #nullable enable
+using PlantsVsZombies.Infrastructure;
 using PlantsVsZombies.Inputs;
 using PlantsVsZombies.Profiles;
 using PlantsVsZombies.Rendering;
@@ -163,8 +164,8 @@ namespace PlantsVsZombies.Game
             _owner.Dave.SetVoiceVolume(_owner.Sounds._soundVolume);
             if (!_owner._smokeMode)
             {
-                PlayerPrefs.SetFloat("PvZReplica.Music", _owner.Music._musicVolume);
-                PlayerPrefs.SetFloat("PvZReplica.Sound", _owner.Sounds._soundVolume);
+                PlayerPrefs.SetFloat(GamePreferences.MusicVolumeKey, _owner.Music._musicVolume);
+                PlayerPrefs.SetFloat(GamePreferences.SoundVolumeKey, _owner.Sounds._soundVolume);
                 HighQualityArtwork.WritePreference(_owner.RequiredOptionsView.UseHighQualityArtwork);
                 PlayerPrefs.Save();
                 if (Screen.fullScreen != _owner.RequiredOptionsView.FullScreen)

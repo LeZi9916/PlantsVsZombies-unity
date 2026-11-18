@@ -1,6 +1,6 @@
 # Verified data catalog
 
-The pure C# API is `PvZReplica.VerifiedData.VerifiedDataCatalog`. It has no Unity,
+The pure C# API is `PlantsVsZombies.VerifiedData.VerifiedDataCatalog`. It has no Unity,
 JSON, or gameplay dependencies. `TryGetPlant`, `TryGetZombie`,
 `TryGetAdventureLevel`, `TryGetAdventureZombieRowHeader`, `TryGetChallengeMode`,
 `TryGetReanimation`, and `TryGetAdventureZombieFlagRaw` look up original numeric

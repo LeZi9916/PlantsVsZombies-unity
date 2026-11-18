@@ -1,6 +1,6 @@
 using System;
 
-namespace PvZReplica.Profiles
+namespace PlantsVsZombies.Profiles
 {
     /// <summary>An immutable snapshot in the replica's own, non-original format.</summary>
     public sealed class UserProfile

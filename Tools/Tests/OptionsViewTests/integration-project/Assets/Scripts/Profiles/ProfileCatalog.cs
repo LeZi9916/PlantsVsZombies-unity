@@ -5,7 +5,7 @@ using System.IO;
 using System.Security.Cryptography;
 using System.Text;
 
-namespace PvZReplica.Profiles
+namespace PlantsVsZombies.Profiles
 {
     internal enum ProfileSaveStage
     {
