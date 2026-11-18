@@ -59,12 +59,10 @@ namespace PlantsVsZombies.Tests.PlayMode
                     yield return fixture.Capture(null, () =>
                     {
                         var origin = new Vector2(295f, (level == 48 ? 232f : 242f) - zombie.PresentationAltitude);
-                        Assert.That(fixture.Animations.TryGetNativeTrackCenter("Zombie_bungi", state.Animation, "Zombie_bungi_body",
+                        var bodyTrack = phase == 8 ? "Zombie_bungi_body2" : "Zombie_bungi_body";
+                        Assert.That(fixture.Animations.TryGetNativeTrackCenter("Zombie_bungi", state.Animation, bodyTrack,
                             state.AnimationSeconds, state.AnimationRate, out var anchor, state.AnimationLoops), Is.True);
-                        for (var y = origin.y + anchor.y - .5f - 64f; y > -64f; y -= 64f)
-                        {
-                            fixture.Animations.DrawResourceSprite("IMAGE_BUNGEECORD", new Vector2(319f, y + 32f), 1f);
-                        }
+                        DrawReferenceCord(fixture, origin, anchor, 1f);
 
                         fixture.Animations.DrawNativePlayback("Zombie_bungi", origin, 1f, state.AnimationSeconds,
                             state.Animation, state.AnimationLoops, state.AnimationRate, track => !ForegroundArms(track));
@@ -184,30 +182,41 @@ namespace PlantsVsZombies.Tests.PlayMode
             }
         }
 
-        /// <summary>Checks PC 5487FD and 5496A6's combined -22 and +61 offsets and unscaled image centers for normal and small cords.</summary>
-        /// <returns>Real graphics boundaries for the independent cord-only pixel oracle.</returns>
+        /// <summary>Checks the cord meets the actual torso artwork in the drop and raise poses at both scales.</summary>
+        /// <returns>Real graphics boundaries for the independent original-art pose and cord oracle.</returns>
         [UnityTest]
-        public IEnumerator CordUsesThePcHorizontalOffsetAtBothScales()
+        public IEnumerator CordEndsAtTheVisibleTorsoAtBothScales()
         {
             using var fixture = new OriginalStormGraphicsTests.StormFixture(48);
             var zombie = new Zombie { Kind = ZombieKind.Bungee, BungeeState = new AdventureBungeeState() };
             var origin = new Vector2(155f, 180f);
-            foreach (var scale in new[] { 1f, .5f })
+            foreach (var phase in new[] { 4, 8 })
             {
-                yield return fixture.Capture(null, () => fixture.DrawPass("DrawAdventureBungeeCord", zombie, origin, 140f, .25f, scale));
-                var actual = fixture.Pixels.GetPixels32();
-                yield return fixture.Capture(null, () =>
+                zombie.BungeeState!.Enter(phase);
+                // First source frame of anim_drop (73x69 torso) and anim_raise (63x77 torso).
+                var anchor = phase == 4 ? new Vector2(17.6f + .702f * 36.5f, 17f + .702f * 34.5f)
+                    : new Vector2(18.4f + .7f * 31.5f, 17.2f + .7f * 38.5f);
+                foreach (var scale in new[] { 1f, .5f })
                 {
-                    Assert.That(fixture.Animations.TryGetNativeTrackCenter("Zombie_bungi", "anim_drop", "Zombie_bungi_body",
-                        .25f, 24f, out var anchor), Is.True);
-                    var height = scale == 1f ? 64f : 32f;
-                    var centerX = scale == 1f ? 179f : 175f;
-                    for (var y = 180f + anchor.y * scale - .5f - height; y > -height; y -= height)
-                    {
-                        fixture.Animations.DrawResourceSprite("IMAGE_BUNGEECORD", new Vector2(centerX, y + 32f), scale);
-                    }
-                });
-                Assert.That(fixture.Pixels.GetPixels32(), Is.EqualTo(actual), "Original cord scale " + scale);
+                    yield return fixture.Capture(null, () => fixture.DrawPass("DrawAdventureBungeeCord", zombie, origin, 0f, scale));
+                    var actual = fixture.Pixels.GetPixels32();
+                    yield return fixture.Capture(null, () => DrawReferenceCord(fixture, origin, anchor, scale));
+                    Assert.That(fixture.Pixels.GetPixels32(), Is.EqualTo(actual), $"Torso attachment at phase {phase} and scale {scale}.");
+                }
+            }
+        }
+
+        /// <summary>Draws the rope oracle with an endpoint derived independently from the original torso pose.</summary>
+        /// <param name="fixture">The camera fixture drawing the original rope asset.</param>
+        /// <param name="origin">The body placement in board coordinates.</param>
+        /// <param name="anchor">The independently sampled center of the active torso artwork.</param>
+        /// <param name="scale">The body and rope scale.</param>
+        private static void DrawReferenceCord(OriginalStormGraphicsTests.StormFixture fixture, Vector2 origin, Vector2 anchor, float scale)
+        {
+            var point = origin + anchor * scale;
+            for (var y = point.y; y > 0f; y -= 64f * scale)
+            {
+                fixture.Animations.DrawResourceSprite("IMAGE_BUNGEECORD", new Vector2(point.x, y - 32f * scale), scale);
             }
         }
 
@@ -229,12 +238,9 @@ namespace PlantsVsZombies.Tests.PlayMode
             yield return fixture.Capture(null, () =>
             {
                 var origin = new Vector2(295f, 42f);
-                Assert.That(fixture.Animations.TryGetNativeTrackCenter("Zombie_bungi", "anim_raise", "Zombie_bungi_body",
+                Assert.That(fixture.Animations.TryGetNativeTrackCenter("Zombie_bungi", "anim_raise", "Zombie_bungi_body2",
                     .2f, 36f, out var anchor, false), Is.True);
-                for (var y = origin.y + anchor.y - .5f - 64f; y > -64f; y -= 64f)
-                {
-                    fixture.Animations.DrawResourceSprite("IMAGE_BUNGEECORD", new Vector2(319f, y + 32f), 1f);
-                }
+                DrawReferenceCord(fixture, origin, anchor, 1f);
 
                 fixture.Animations.DrawNativePlayback("Zombie_bungi", origin, 1f, .2f, "anim_raise", false, 36f, track => !ForegroundArms(track));
                 fixture.Animations.DrawZombiePlayback(new Vector2(280f, 42f), 1f, 0f, Reanimation.ZombieVariant.Normal,

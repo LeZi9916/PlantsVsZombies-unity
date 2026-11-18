@@ -4452,6 +4452,54 @@ namespace PlantsVsZombies.Reanimation
             return true;
         }
 
+        /// <summary>Samples the visible torso from the same source pose and blend as the bungee body draw.</summary>
+        /// <param name="animation">The original bungee clip.</param>
+        /// <param name="seconds">The body playback time.</param>
+        /// <param name="rate">The native playback rate.</param>
+        /// <param name="loop">Whether the clip wraps.</param>
+        /// <param name="position">Receives the local center of the visible torso.</param>
+        /// <param name="key">The live body playback identity, or default for a frozen pose.</param>
+        /// <param name="blendTicks">The body draw's blend duration in native ticks.</param>
+        /// <returns>Whether the original pose has a visible torso.</returns>
+        internal bool TryGetNativeBungeeCordAnchor(string animation, float seconds, float rate, bool loop,
+            out Vector2 position, PresentationIdentity key = default, int blendTicks = 0)
+        {
+            position = default;
+            if (!TryGetClip("Zombie_bungi", animation, out var asset, out var clip))
+            {
+                return false;
+            }
+
+            var time = SampleFrame(clip, NativeSeconds(clip, seconds, rate, asset.Fps, loop), asset.Fps, false);
+            var blend = PrepareNativeBlend(key, animation, seconds, blendTicks);
+            return TryGetVisibleTrackCenter(FindTrack(asset, "Zombie_bungi_body"), time, blend, out position)
+                || TryGetVisibleTrackCenter(FindTrack(asset, "Zombie_bungi_body2"), time, blend, out position);
+        }
+
+        /// <summary>Gets the center of an image quad using the exact track sampling used by the body draw.</summary>
+        /// <param name="track">The original source track, if present.</param>
+        /// <param name="time">The sampled clip position.</param>
+        /// <param name="blend">The shared live playback blend.</param>
+        /// <param name="position">Receives the center in animation coordinates.</param>
+        /// <returns>Whether the current frame draws a visible image.</returns>
+        private bool TryGetVisibleTrackCenter(Track? track, FrameSample time, NativePoseBlend? blend, out Vector2 position)
+        {
+            position = default;
+            if (track == null)
+            {
+                return false;
+            }
+
+            ref readonly var frame = ref GetFrame(track, time.Current);
+            if (frame.Texture == null || frame.Visibility < 0f || SampleLocalPose(track, time, blend, out var matrix).Alpha <= 0f)
+            {
+                return false;
+            }
+
+            position = matrix.MultiplyPoint3x4(new Vector3(frame.Texture.Width * .5f, frame.Texture.Height * .5f, 0f));
+            return true;
+        }
+
         /// <summary>Gets the original unscaled cell dimensions of a native resource sprite.</summary>
         /// <param name="resource">The original image resource identifier.</param>
         /// <param name="size">Receives the original width and height of one atlas cell.</param>

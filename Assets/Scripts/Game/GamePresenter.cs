@@ -1997,7 +1997,7 @@ namespace PlantsVsZombies.Game
                     zombie.PresentationAltitude = preview.Altitude;
                     var origin = new Vector2(preview.WorldX + 45f - 30f * preview.Scale,
                         preview.WorldY - 8f + 120f * (1f - preview.Scale) - preview.Altitude);
-                    DrawAdventureBungeeCord(zombie, origin, preview.WorldX, seconds, preview.Scale);
+                    DrawAdventureBungeeCord(zombie, origin, seconds, preview.Scale);
                     DrawAdventureBungeeBodyGroup(zombie, origin, seconds, preview.Scale, 0);
                     DrawAdventureBungeeBodyGroup(zombie, origin, seconds, preview.Scale, 2);
                 }
@@ -4743,7 +4743,7 @@ namespace PlantsVsZombies.Game
             var nativeX = AdventureZombieNativeRules.NativePositionX(x, scale);
             var nativeY = AdventureFloorYAtPixel(zombie.Row, nativeX + 40f) - 30f;
             var seconds = state.AnimationSeconds + (zombie.FrozenRemaining > 0f || zombie.PresentationButter > 0f ? 0f : AdventureRenderRemainder);
-            DrawAdventureBungeeCord(zombie, origin, nativeX, seconds, scale);
+            DrawAdventureBungeeCord(zombie, origin, seconds, scale);
             DrawAdventureBungeeBodyGroup(zombie, origin, seconds, scale, 0);
             var matrix = CanvasUI.Matrix;
             try
@@ -4810,28 +4810,42 @@ namespace PlantsVsZombies.Game
                 remainder: AdventureRenderRemainder, bungeeGroup: group);
         }
 
-        /// <summary>Tiles PC 549520's cord using the horizontal offset supplied by DrawBungeeReanim at 5487FD.</summary>
-        /// <param name="zombie">The bungee supplying its original body layer.</param>
-        /// <param name="origin">The original source origin before track transforms.</param>
-        /// <param name="nativeX">The original zombie position before its body overlay.</param>
-        /// <param name="seconds">The current native body age.</param>
-        /// <param name="scale">The original uniform zombie scale.</param>
-        private void DrawAdventureBungeeCord(Zombie zombie, Vector2 origin, float nativeX, float seconds, float scale)
+        /// <summary>Attaches the cord to the visible torso using the live body's playback identity.</summary>
+        /// <param name="zombie">The bungee whose body is being drawn.</param>
+        /// <param name="origin">The same placement origin supplied to the body.</param>
+        /// <param name="seconds">The native body playback time.</param>
+        /// <param name="scale">The body scale.</param>
+        private void DrawAdventureBungeeCord(Zombie zombie, Vector2 origin, float seconds, float scale)
         {
             var state = zombie.BungeeState!;
-            if (!_owner.RequiredAnimations.TryGetNativeTrackCenterIdentity("Zombie_bungi", state.Animation, "Zombie_bungi_body",
-                seconds, state.AnimationRate, out var anchor, state.AnimationLoops)
-                || !_owner.RequiredAnimations.TryGetNativeSpriteSize("IMAGE_BUNGEECORD", out var size))
+            var key = _presentationKeys.Get("bungee-body-", zombie.Id);
+            var blendTicks = zombie.PresentationBodyBlendTicks >= 0 ? zombie.PresentationBodyBlendTicks : state.BlendTicks;
+            if (_owner.RequiredAnimations.TryGetNativeBungeeCordAnchor(state.Animation, seconds, state.AnimationRate, state.AnimationLoops,
+                out var anchor, key, blendTicks))
+            {
+                DrawBungeeCord(origin, anchor, scale, zombie.PresentationWalkingBackwards ?? zombie.Hypnotized, 90f);
+            }
+        }
+
+        /// <summary>Tiles the original cord upward from the posed torso so the bottom stays behind the body.</summary>
+        /// <param name="origin">The same placement origin supplied to the body.</param>
+        /// <param name="anchor">The visible torso center in source coordinates.</param>
+        /// <param name="scale">The body and cord scale.</param>
+        /// <param name="facingLeft">Whether the original body draw mirrors the source artwork.</param>
+        /// <param name="mirrorWidth">The corresponding body mirror width.</param>
+        private void DrawBungeeCord(Vector2 origin, Vector2 anchor, float scale, bool facingLeft, float mirrorWidth)
+        {
+            if (!_owner.RequiredAnimations.TryGetNativeSpriteSize("IMAGE_BUNGEECORD", out var size))
             {
                 return;
             }
 
-            var height = Math.Max(1, (int)(size.y * scale));
-            var anchorY = origin.y + anchor.y * scale - .5f;
-            for (var y = anchorY - height; y > -height; y -= height)
+            var centerX = origin.x + (facingLeft ? mirrorWidth - anchor.x : anchor.x) * scale;
+            var halfHeight = size.y * scale * .5f;
+            var step = Math.Max(1, (int)(halfHeight * 2f));
+            for (var y = origin.y + anchor.y * scale - halfHeight; y > -halfHeight; y -= step)
             {
-                _owner.RequiredAnimations.DrawResourceSprite("IMAGE_BUNGEECORD",
-                    new Vector2((int)nativeX - 22f + 61f - 4f / scale + size.x * .5f, y + size.y * .5f), scale);
+                _owner.RequiredAnimations.DrawResourceSprite("IMAGE_BUNGEECORD", new Vector2(centerX, y), scale);
             }
         }
 
@@ -5593,10 +5607,11 @@ namespace PlantsVsZombies.Game
                 var origin = AdventureZombieOrigin(zombie, zombie.X);
                 try
                 {
-                    if (zombie.Kind == ZombieKind.Bungee && zombie.BungeeState != null)
+                    if (zombie.Kind == ZombieKind.Bungee && clip != null
+                        && _owner.RequiredAnimations.TryGetNativeBungeeCordAnchor(clip, corpse.FrozenSeconds,
+                            corpse.FrozenRate, true, out var anchor))
                     {
-                        DrawAdventureBungeeCord(zombie, origin,
-                            AdventureZombieNativeRules.NativePositionX(zombie.X, burn.Scale), corpse.FrozenSeconds, burn.Scale);
+                        DrawBungeeCord(origin, anchor, burn.Scale, burn.FacingLeft, 60f);
                     }
 
                     if (string.Equals(name, "Zombie", StringComparison.OrdinalIgnoreCase) && !zombie.Headless && !plantHead && !burn.FacingLeft && zombie.Kind != ZombieKind.DuckyTube)
