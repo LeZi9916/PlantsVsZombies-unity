@@ -12,10 +12,12 @@ namespace PlantsVsZombies.Rendering
         public string SourceIdentity = string.Empty;
         /// <summary>The original resource identifiers that resolve to this image.</summary>
         public string[] Aliases = Array.Empty<string>();
-        /// <summary>The original image width before trimming or tiling.</summary>
+        /// <summary>The stored image width before trimming or tiling.</summary>
         public int Width;
-        /// <summary>The original image height before trimming or tiling.</summary>
+        /// <summary>The stored image height before trimming or tiling.</summary>
         public int Height;
+        /// <summary>The number of stored texels per logical source pixel. Older catalogs use one.</summary>
+        public int PixelScale;
         /// <summary>Nonoverlapping visible pixel rectangles using the original bottom-left coordinate system.</summary>
         public Rect[] VisiblePixels = Array.Empty<Rect>();
         /// <summary>The losslessly packed tiles using the original bottom-left coordinate system.</summary>

@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Diagnostics.CodeAnalysis;
 using System.Xml;
+using PlantsVsZombies.Infrastructure;
 using UnityEngine;
 
 namespace PlantsVsZombies.Rendering
@@ -72,6 +73,10 @@ namespace PlantsVsZombies.Rendering
         private readonly string _root;
         /// <summary>The complete catalog, or null for an external loose resource directory.</summary>
         private readonly SpriteAtlasCatalog? _catalog;
+        /// <summary>The optional 4x layout used until a page fails to load.</summary>
+        private SpriteAtlasLayout? _highQualityLayout;
+        /// <summary>Gets the active layout, including its companion page paths.</summary>
+        private SpriteAtlasLayout CurrentLayout => _highQualityLayout ?? _catalog!.Layouts[_layoutIndex];
         /// <summary>The callback loading one imported texture page without retaining a readable CPU copy.</summary>
         private readonly Func<string, Texture2D?> _loadPage;
         /// <summary>The callback releasing a page after all submitted frames have retired.</summary>
@@ -154,7 +159,7 @@ namespace PlantsVsZombies.Rendering
         /// <summary>Gets the layout generation, incremented when the entire layout falls back.</summary>
         public int LayoutVersion { get; private set; }
         /// <summary>Gets the selected maximum page size, or zero for an external loose source.</summary>
-        public int MaxPageSize => _catalog == null ? 0 : _catalog.Layouts[_layoutIndex].MaximumPageSize;
+        public int MaxPageSize => _catalog == null ? 0 : CurrentLayout.MaximumPageSize;
         /// <summary>Gets whether this provider resolves imported baked resources.</summary>
         public bool IsBaked => _catalog != null;
         /// <summary>Gets the original relative paths of all available images, without loading texture pages.</summary>
@@ -303,6 +308,19 @@ namespace PlantsVsZombies.Rendering
                     throw new InvalidOperationException("The generated PvZ rendering catalog is missing. Generate rendering atlases with the required Unity Editor before playing or building.");
                 }
                 _catalog = JsonUtility.FromJson<SpriteAtlasCatalog>(asset.text);
+                if (HighQualityArtwork.Enabled && _hardwareMaximum >= SpriteGeometryUtility.MaximumPageSize)
+                {
+                    var replacement = Resources.Load<TextAsset>(HighQualityArtwork.ResourceRoot + "catalog");
+                    if (replacement != null)
+                    {
+                        var catalog = JsonUtility.FromJson<SpriteAtlasCatalog>(replacement.text);
+                        if (catalog?.Version == SpriteAtlasCatalog.CurrentVersion && catalog.Layouts?.Length == 1
+                            && catalog.Layouts[0].MaximumPageSize == SpriteGeometryUtility.MaximumPageSize)
+                        {
+                            _highQualityLayout = catalog.Layouts[0];
+                        }
+                    }
+                }
                 InitializeCatalog();
             }
             else
@@ -316,10 +334,13 @@ namespace PlantsVsZombies.Rendering
         /// <param name="hardwareMaximum">The simulated graphics dimension limit.</param>
         /// <param name="loadPage">The page loader, invoked only after selecting a compatible layout.</param>
         /// <param name="releasePage">The callback releasing a test page.</param>
-        internal SpriteAssetProvider(SpriteAtlasCatalog catalog, int hardwareMaximum, Func<string, Texture2D?> loadPage, Action<Texture2D> releasePage)
+        /// <param name="highQualityLayout">An optional compatible replacement layout.</param>
+        internal SpriteAssetProvider(SpriteAtlasCatalog catalog, int hardwareMaximum, Func<string, Texture2D?> loadPage,
+            Action<Texture2D> releasePage, SpriteAtlasLayout? highQualityLayout = null)
         {
             _root = string.Empty;
             _catalog = catalog;
+            _highQualityLayout = highQualityLayout;
             _hardwareMaximum = hardwareMaximum;
             _loadPage = loadPage;
             _releasePage = releasePage;
@@ -354,7 +375,7 @@ namespace PlantsVsZombies.Rendering
         private void SelectMetadata()
         {
             _metadata.Clear();
-            var entries = _catalog!.Layouts[_layoutIndex].Images;
+            var entries = CurrentLayout.Images;
             var paths = new string[entries.Length];
             for (var index = 0; index < entries.Length; index++)
             {
@@ -704,6 +725,7 @@ namespace PlantsVsZombies.Rendering
         {
             _preparedCount = 0;
             var source = SourcePixels(image, sourceUv);
+            var inverseScale = 1f / Math.Max(1, image.PixelScale);
             if (source.width <= 0f || source.height <= 0f)
             {
                 return;
@@ -748,7 +770,9 @@ namespace PlantsVsZombies.Rendering
                                 Array.Resize(ref _regionBuildBuffer, Math.Max(16, _preparedCount * 2));
                             }
                             _regionBuildBuffer[_preparedCount++] = new SpriteImageRegion(_pages[tile.Page], new Rect(virtualPiece.x / image.Width, virtualPiece.y / image.Height,
-                                virtualPiece.width / image.Width, virtualPiece.height / image.Height), textureUv, virtualPiece);
+                                virtualPiece.width / image.Width, virtualPiece.height / image.Height), textureUv,
+                                new Rect(virtualPiece.x * inverseScale, virtualPiece.y * inverseScale,
+                                    virtualPiece.width * inverseScale, virtualPiece.height * inverseScale));
                         }
                     }
                 }
@@ -923,8 +947,8 @@ namespace PlantsVsZombies.Rendering
                 }
                 catch (Exception error) when (error is InvalidOperationException || error is UnityException || error is IOException)
                 {
-                    var layout = _catalog!.Layouts[_layoutIndex];
-                    var next = SpriteGeometryUtility.SelectLayout(_catalog.Layouts, Math.Min(_hardwareMaximum, layout.MaximumPageSize - 1));
+                    var next = _highQualityLayout != null ? _layoutIndex
+                        : SpriteGeometryUtility.SelectLayout(_catalog!.Layouts, Math.Min(_hardwareMaximum, MaxPageSize - 1));
                     if (next < 0)
                     {
                         throw new InvalidOperationException("Every compatible baked atlas layout failed to load image: " + binding.Image.SourceIdentity, error);
@@ -938,9 +962,10 @@ namespace PlantsVsZombies.Rendering
                     _pagePins.Clear();
                     _leasePinsNeedRefresh = _pageLeases.Count > 0;
                     _pageStorageVersion++;
+                    _highQualityLayout = null;
                     _layoutIndex = next;
                     SelectMetadata();
-                    Debug.LogWarning($"{nameof(SpriteAssetProvider)}: Falling back to {MaxPageSize}px atlas pages after a resource loading failure: {error.Message}");
+                    Debug.LogWarning($"{nameof(SpriteAssetProvider)}: Falling back to standard {MaxPageSize}px atlas pages after a resource loading failure: {error.Message}");
                 }
             }
         }
@@ -958,7 +983,7 @@ namespace PlantsVsZombies.Rendering
                 }
                 return;
             }
-            var layout = _catalog!.Layouts[_layoutIndex];
+            var layout = CurrentLayout;
             if (tile.Page < 0 || tile.Page >= layout.Pages.Length || tile.PageWidth <= 0 || tile.PageHeight <= 0
                 || tile.PageWidth > layout.MaximumPageSize || tile.PageHeight > layout.MaximumPageSize
                 || tile.PageWidth > _hardwareMaximum || tile.PageHeight > _hardwareMaximum
@@ -1029,6 +1054,10 @@ namespace PlantsVsZombies.Rendering
                 }
                 foreach (var path in Directory.EnumerateFiles(folder, "*", SearchOption.AllDirectories))
                 {
+                    if (RuntimeAssetPaths.IsHighQualityImage(path))
+                    {
+                        continue;
+                    }
                     var relative = Normalize(Path.GetRelativePath(_root, path));
                     var extension = Path.GetExtension(path);
                     if (IsImage(extension))

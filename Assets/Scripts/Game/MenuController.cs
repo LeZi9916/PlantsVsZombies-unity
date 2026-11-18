@@ -1,6 +1,7 @@
 #nullable enable
 using PlantsVsZombies.Inputs;
 using PlantsVsZombies.Profiles;
+using PlantsVsZombies.Rendering;
 using PlantsVsZombies.UI;
 using PlantsVsZombies.UI.BitmapFonts;
 using System;
@@ -132,7 +133,8 @@ namespace PlantsVsZombies.Game
         internal void OpenOptions()
         {
             _owner.RequiredOptionsView.GameplayButtonsEnabled = _owner._currentView == PvZGame.ScreenView.Board;
-            _owner.RequiredOptionsView.Open(_owner.Music._musicVolume, _owner.Sounds._soundVolume, Screen.fullScreen);
+            _owner.RequiredOptionsView.Open(_owner.Music._musicVolume, _owner.Sounds._soundVolume, Screen.fullScreen,
+                HighQualityArtwork.ReadPreference());
         }
 
         /// <summary>Performs close options.</summary>
@@ -163,6 +165,7 @@ namespace PlantsVsZombies.Game
             {
                 PlayerPrefs.SetFloat("PvZReplica.Music", _owner.Music._musicVolume);
                 PlayerPrefs.SetFloat("PvZReplica.Sound", _owner.Sounds._soundVolume);
+                HighQualityArtwork.WritePreference(_owner.RequiredOptionsView.UseHighQualityArtwork);
                 PlayerPrefs.Save();
                 if (Screen.fullScreen != _owner.RequiredOptionsView.FullScreen)
                 {

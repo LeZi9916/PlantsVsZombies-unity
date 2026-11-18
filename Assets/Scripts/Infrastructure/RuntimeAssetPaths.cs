@@ -7,6 +7,17 @@ namespace PlantsVsZombies.Infrastructure
     /// <summary>Resolves the original game's loose runtime resource directory.</summary>
     public static class RuntimeAssetPaths
     {
+        /// <summary>The suffix marking a high-resolution PNG companion in StreamingAssets.</summary>
+        internal const string HighQualityImageSuffix = "HQ.png";
+
+        /// <summary>Checks whether an image is a high-resolution companion.</summary>
+        /// <param name="path">The filename or path to check.</param>
+        /// <returns>Whether the filename ends in the high-resolution PNG suffix.</returns>
+        internal static bool IsHighQualityImage(string path)
+        {
+            return path.EndsWith(HighQualityImageSuffix, StringComparison.OrdinalIgnoreCase);
+        }
+
         /// <summary>Resolves the legacy PvZ subdirectory or the current StreamingAssets layout.</summary>
         /// <param name = "streamingAssetsPath">The platform's StreamingAssets directory.</param>
         /// <returns>The resource directory containing the images and animation folders.</returns>

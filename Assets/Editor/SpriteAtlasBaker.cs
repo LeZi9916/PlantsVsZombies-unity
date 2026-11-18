@@ -17,6 +17,8 @@ namespace PlantsVsZombies.Editor
     {
         /// <summary>The ignored generated asset directory; source assets and existing source GUIDs remain untouched.</summary>
         public const string OutputRoot = "Assets/Generated/PvZRendering/Resources/PvZRendering";
+        /// <summary>The optional atlas catalog and pages generated from the 4x sources.</summary>
+        private const string HighQualityOutputRoot = "Assets/Generated/PvZRendering/Resources/PvZRenderingHighQuality";
         /// <summary>The bilinear sampling halo around every lossless content tile.</summary>
         private const int Padding = 2;
         /// <summary>The deterministic independently packed layout sizes, including a compatibility floor.</summary>
@@ -33,6 +35,8 @@ namespace PlantsVsZombies.Editor
             internal int Width;
             /// <summary>The unchanged original height.</summary>
             internal int Height;
+            /// <summary>The number of physical texels per original logical pixel.</summary>
+            internal int PixelScale = 1;
             /// <summary>The original bottom-left RGBA pixels, released after generation.</summary>
             internal Color32[] Pixels = Array.Empty<Color32>();
             /// <summary>The conservative disjoint visible rectangles, limited to 32 pieces.</summary>
@@ -56,6 +60,8 @@ namespace PlantsVsZombies.Editor
             internal Source Source = null!;
             /// <summary>The unpadded original pixel content rectangle.</summary>
             internal RectInt SourcePixels;
+            /// <summary>The allocated size including the sampling halo and any compression block padding.</summary>
+            internal Vector2Int PaddedSize;
             /// <summary>The lower-left padded page allocation.</summary>
             internal RectInt Destination;
             /// <summary>The runtime tile whose normalized page mapping is finalized after packing.</summary>
@@ -107,6 +113,24 @@ namespace PlantsVsZombies.Editor
                 throw new InvalidOperationException("Original reanim and images resources are required before generating rendering atlases.");
             }
             Bake(root, OutputRoot, force);
+            using var companions = Directory.EnumerateFiles(root, "*" + RuntimeAssetPaths.HighQualityImageSuffix,
+                SearchOption.AllDirectories).GetEnumerator();
+            if (companions.MoveNext())
+            {
+                Bake(root, HighQualityOutputRoot, force, root);
+                HighQualityArtworkBaker.Prepare(root, force);
+            }
+            else
+            {
+                if (AssetDatabase.IsValidFolder(HighQualityOutputRoot))
+                {
+                    AssetDatabase.DeleteAsset(HighQualityOutputRoot);
+                }
+                if (AssetDatabase.IsValidFolder(HighQualityArtworkBaker.OutputRoot))
+                {
+                    AssetDatabase.DeleteAsset(HighQualityArtworkBaker.OutputRoot);
+                }
+            }
         }
 
         /// <summary>Generates a complete catalog from a source directory, including small synthetic test fixtures.</summary>
@@ -117,17 +141,31 @@ namespace PlantsVsZombies.Editor
         /// <exception cref="InvalidDataException">A source image, alpha grid, or source manifest is malformed.</exception>
         public static SpriteAtlasCatalog Bake(string root, string outputRoot, bool force = false)
         {
+            return Bake(root, outputRoot, force, null);
+        }
+
+        /// <summary>Bakes standard artwork or a complete layout with optional 4x replacement images.</summary>
+        /// <param name="root">The directory supplying original identities, artwork, and rendering data.</param>
+        /// <param name="outputRoot">The generated Unity Resources directory.</param>
+        /// <param name="force">Whether to regenerate all output even when the inputs match.</param>
+        /// <param name="highQualityRoot">The optional directory supplying replacement PNG files.</param>
+        /// <returns>The generated or validated catalog.</returns>
+        /// <exception cref="InvalidDataException">A required image or mask cannot be decoded or matched.</exception>
+        internal static SpriteAtlasCatalog Bake(string root, string outputRoot, bool force, string? highQualityRoot)
+        {
             var paths = CollectSources(root);
-            var hash = Fingerprint(root, paths);
+            var hash = Fingerprint(root, paths, highQualityRoot);
+            var highQuality = highQualityRoot != null;
+            var pageSizes = highQuality ? new[] { SpriteGeometryUtility.MaximumPageSize } : s_pageSizes;
             var catalogPath = outputRoot + "/catalog.json";
             if (!force && File.Exists(catalogPath))
             {
                 var cached = JsonUtility.FromJson<SpriteAtlasCatalog>(File.ReadAllText(catalogPath));
                 if (cached != null && cached.Version == SpriteAtlasCatalog.CurrentVersion && cached.SourceHash == hash
-                    && CompleteOutputExists(outputRoot, cached))
+                    && CompleteOutputExists(outputRoot, cached, pageSizes.Length))
                 {
                     // Source bytes and import artifacts have separate lifecycles; copied or old metadata must not bypass repair.
-                    ConfigureTextureImports(cached, outputRoot);
+                    ConfigureTextureImports(cached, outputRoot, highQuality);
                     return cached;
                 }
             }
@@ -135,8 +173,8 @@ namespace PlantsVsZombies.Editor
             // A failed regeneration must not leave a usable stale catalog pointing at partially replaced pages.
             File.WriteAllText(catalogPath, "{}", new UTF8Encoding(false));
             AssetDatabase.ImportAsset(catalogPath, ImportAssetOptions.ForceSynchronousImport);
-            var sources = DecodeSources(root, paths);
-            AddManifestAliasesAndMasks(root, sources);
+            var sources = DecodeSources(root, paths, highQualityRoot);
+            AddManifestAliasesAndMasks(root, sources, highQualityRoot);
             var imageIdentities = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             foreach (var source in sources)
             {
@@ -150,20 +188,20 @@ namespace PlantsVsZombies.Editor
             foreach (var source in sources)
             {
                 source.CommonBattle = common.Contains(source.Identity);
-                source.DedicatedPage = source.CommonBattle || source.Identity.StartsWith("images/background", StringComparison.OrdinalIgnoreCase) && source.Width >= 1024;
+                source.DedicatedPage = source.CommonBattle || source.Identity.StartsWith("images/background", StringComparison.OrdinalIgnoreCase) && source.Width / source.PixelScale >= 1024;
                 source.PackingFamily = source.CommonBattle ? "BattleCommon" : source.DedicatedPage ? source.Identity : SourceFamily(source.Identity);
                 source.PackingPriority = SourcePriority(source);
             }
             AssignFamilyAreas(sources);
             sources.Sort(CompareSources);
-            var catalog = new SpriteAtlasCatalog { SourceHash = hash, Layouts = new SpriteAtlasLayout[s_pageSizes.Length] };
+            var catalog = new SpriteAtlasCatalog { SourceHash = hash, Layouts = new SpriteAtlasLayout[pageSizes.Length] };
             var generated = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { catalogPath };
-            for (var index = 0; index < s_pageSizes.Length; index++)
+            for (var index = 0; index < pageSizes.Length; index++)
             {
-                catalog.Layouts[index] = BakeLayout(sources, s_pageSizes[index], outputRoot, generated);
+                catalog.Layouts[index] = BakeLayout(sources, pageSizes[index], outputRoot, generated, highQuality);
             }
             var texts = new List<SpriteAtlasText>();
-            foreach (var relative in paths)
+            foreach (var relative in highQualityRoot == null ? (IEnumerable<string>)paths : Array.Empty<string>())
             {
                 var extension = Path.GetExtension(relative);
                 if (!extension.Equals(".xml", StringComparison.OrdinalIgnoreCase) && !extension.Equals(".reanim", StringComparison.OrdinalIgnoreCase)
@@ -180,7 +218,7 @@ namespace PlantsVsZombies.Editor
             catalog.Texts = texts.ToArray();
             RemoveObsoleteOutputs(outputRoot, generated);
             AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
-            ConfigureTextureImports(catalog, outputRoot);
+            ConfigureTextureImports(catalog, outputRoot, highQuality);
             var temporaryCatalog = catalogPath + ".tmp";
             try
             {
@@ -214,6 +252,10 @@ namespace PlantsVsZombies.Editor
                 }
                 foreach (var source in Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories))
                 {
+                    if (RuntimeAssetPaths.IsHighQualityImage(source))
+                    {
+                        continue;
+                    }
                     var extension = Path.GetExtension(source).ToLowerInvariant();
                     if (extension == ".png" || extension == ".jpg" || extension == ".jpeg" || extension == ".reanim" || extension == ".xml" || extension == ".txt")
                     {
@@ -229,15 +271,25 @@ namespace PlantsVsZombies.Editor
         /// <param name="root">The original asset root.</param>
         /// <param name="paths">The deterministically ordered original relative paths.</param>
         /// <returns>A stable SHA256 fingerprint.</returns>
-        private static string Fingerprint(string root, List<string> paths)
+        /// <param name="highQualityRoot">The optional directory containing replacement images.</param>
+        private static string Fingerprint(string root, List<string> paths, string? highQualityRoot)
         {
             using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
             hash.AppendData(Encoding.UTF8.GetBytes("PvZAtlasBakeV5;256,512,1024,2048;RGBA32;Pad2;Grid8;Halo1;Pieces32;ExactCommonClipDependencies;SealedCommon;RectCandidates64;TightNPOT;DedicatedBoardBackgrounds;ExactFirstImport;AtomicCatalog;ColorSourceFamilies"));
             hash.AppendData(Encoding.UTF8.GetBytes(SpriteAtlasHotDependencies.RecipeIdentity));
+            if (highQualityRoot != null)
+            {
+                hash.AppendData(Encoding.UTF8.GetBytes("HighQuality4xV2;2048;NoDuplicateTexts;BlockAligned"));
+            }
             foreach (var path in paths)
             {
                 hash.AppendData(Encoding.UTF8.GetBytes(path));
                 hash.AppendData(File.ReadAllBytes(Path.Combine(root, path)));
+                var replacement = HighQualityArtworkBaker.FindReplacement(highQualityRoot, path);
+                if (replacement != null)
+                {
+                    hash.AppendData(File.ReadAllBytes(replacement));
+                }
             }
             return BitConverter.ToString(hash.GetHashAndReset()).Replace("-", string.Empty);
         }
@@ -246,7 +298,8 @@ namespace PlantsVsZombies.Editor
         /// <param name="outputRoot">The generated resource directory.</param>
         /// <param name="catalog">The previously generated catalog.</param>
         /// <returns>True when all referenced page and text outputs exist.</returns>
-        private static bool CompleteOutputExists(string outputRoot, SpriteAtlasCatalog catalog)
+        /// <param name="layoutCount">The number of layouts expected for this quality.</param>
+        private static bool CompleteOutputExists(string outputRoot, SpriteAtlasCatalog catalog, int layoutCount)
         {
             foreach (var layout in catalog.Layouts)
             {
@@ -265,14 +318,15 @@ namespace PlantsVsZombies.Editor
                     return false;
                 }
             }
-            return catalog.Layouts.Length == s_pageSizes.Length;
+            return catalog.Layouts.Length == layoutCount;
         }
 
         /// <summary>Decodes original color images once, preserving PNG precedence and automatic JPEG masks.</summary>
         /// <param name="root">The original asset directory.</param>
         /// <param name="paths">The complete deterministic source list.</param>
         /// <returns>The original decoded sources with conservative visible geometry.</returns>
-        private static List<Source> DecodeSources(string root, List<string> paths)
+        /// <param name="highQualityRoot">The optional directory supplying replacement PNG files.</param>
+        private static List<Source> DecodeSources(string root, List<string> paths, string? highQualityRoot)
         {
             var selected = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             foreach (var relative in paths)
@@ -296,7 +350,7 @@ namespace PlantsVsZombies.Editor
                 {
                     continue;
                 }
-                var source = Decode(root, relative);
+                var source = Decode(root, relative, highQualityRoot);
                 var folder = relative.StartsWith("reanim/", StringComparison.OrdinalIgnoreCase) ? "IMAGE_REANIM_" : "IMAGE_";
                 var stem = relative.Substring(0, relative.Length - extension.Length);
                 if (selected[stem] == relative)
@@ -315,23 +369,56 @@ namespace PlantsVsZombies.Editor
         /// <param name="relative">The selected original relative color image path.</param>
         /// <returns>The original source pixels and dimensions.</returns>
         /// <exception cref="InvalidDataException">The image or automatic alpha mask cannot be decoded.</exception>
-        private static Source Decode(string root, string relative)
+        /// <param name="highQualityRoot">The optional directory supplying replacement PNG files.</param>
+        private static Source Decode(string root, string relative, string? highQualityRoot)
         {
             var path = Path.Combine(root, relative);
-            var texture = DecodeTexture(path);
+            var maskRelative = Path.ChangeExtension(relative, null) + "_.png";
+            var maskPath = Path.Combine(root, maskRelative);
+            var hasMask = Path.GetExtension(path).Equals(".jpg", StringComparison.OrdinalIgnoreCase) && File.Exists(maskPath);
+            var replacement = HighQualityArtworkBaker.FindReplacement(highQualityRoot, relative);
+            var replacementMask = hasMask ? HighQualityArtworkBaker.FindReplacement(highQualityRoot, maskRelative) : null;
+            if (hasMask && replacementMask == null)
+            {
+                replacement = null;
+            }
+
+            var original = DecodeTexture(path);
+            var texture = original;
             try
             {
-                var source = new Source { Identity = relative, Width = texture.width, Height = texture.height, Pixels = texture.GetPixels32() };
-                var maskPath = Path.Combine(Path.GetDirectoryName(path)!, Path.GetFileNameWithoutExtension(path) + "_.png");
-                if (Path.GetExtension(path).Equals(".jpg", StringComparison.OrdinalIgnoreCase) && File.Exists(maskPath))
+                var scale = 1;
+                if (replacement != null)
                 {
-                    ApplyMask(source, maskPath);
+                    texture = DecodeTexture(replacement);
+                    scale = HighQualityArtwork.PixelScale;
+                    if (texture.width != original.width * scale || texture.height != original.height * scale)
+                    {
+                        throw new InvalidDataException("Invalid 4x atlas source dimensions: " + replacement);
+                    }
+                }
+
+                var source = new Source
+                {
+                    Identity = relative,
+                    Width = texture.width,
+                    Height = texture.height,
+                    Pixels = texture.GetPixels32(),
+                    PixelScale = scale
+                };
+                if (hasMask)
+                {
+                    ApplyMask(source, scale == 1 ? maskPath : replacementMask!);
                 }
                 return source;
             }
             finally
             {
-                UnityEngine.Object.DestroyImmediate(texture);
+                if (texture != original)
+                {
+                    UnityEngine.Object.DestroyImmediate(texture);
+                }
+                UnityEngine.Object.DestroyImmediate(original);
             }
         }
 
@@ -385,7 +472,8 @@ namespace PlantsVsZombies.Editor
         /// <summary>Resolves manifest aliases and explicit alpha grids without allocating standalone runtime textures.</summary>
         /// <param name="root">The original asset root.</param>
         /// <param name="sources">The decoded original sources, extended with explicit color/mask pairs.</param>
-        private static void AddManifestAliasesAndMasks(string root, List<Source> sources)
+        /// <param name="highQualityRoot">The optional directory supplying replacement PNG files.</param>
+        private static void AddManifestAliasesAndMasks(string root, List<Source> sources, string? highQualityRoot)
         {
             var byStem = new Dictionary<string, Source>(StringComparer.OrdinalIgnoreCase);
             foreach (var source in sources)
@@ -438,7 +526,7 @@ namespace PlantsVsZombies.Editor
                         var alphaName = node.Attributes["alphagrid"]?.Value;
                         if (alphaName != null && byStem.TryGetValue(folder + "/" + alphaName, out var mask))
                         {
-                            source = AddExplicitPair(root, sources, source, mask);
+                            source = AddExplicitPair(root, sources, source, mask, highQualityRoot);
                         }
                         var alias = prefix + node.Attributes["id"]!.Value;
                         foreach (var entry in sources)
@@ -449,8 +537,8 @@ namespace PlantsVsZombies.Editor
                     }
                 }
             }
-            AddKnownPair(root, sources, byStem, "images/pool_base", "images/pool_base_");
-            AddKnownPair(root, sources, byStem, "images/pool_shading", "images/pool_shading_");
+            AddKnownPair(root, sources, byStem, "images/pool_base", "images/pool_base_", highQualityRoot);
+            AddKnownPair(root, sources, byStem, "images/pool_shading", "images/pool_shading_", highQualityRoot);
         }
 
         /// <summary>Adds a known day-pool alpha pair absent from resources.xml alphagrid attributes.</summary>
@@ -459,11 +547,13 @@ namespace PlantsVsZombies.Editor
         /// <param name="byStem">The original image lookup without file extensions.</param>
         /// <param name="colorStem">The original color-image stem.</param>
         /// <param name="maskStem">The original alpha-grid stem.</param>
-        private static void AddKnownPair(string root, List<Source> sources, Dictionary<string, Source> byStem, string colorStem, string maskStem)
+        /// <param name="highQualityRoot">The optional directory supplying replacement PNG files.</param>
+        private static void AddKnownPair(string root, List<Source> sources, Dictionary<string, Source> byStem, string colorStem, string maskStem,
+            string? highQualityRoot)
         {
             if (byStem.TryGetValue(colorStem, out var color) && byStem.TryGetValue(maskStem, out var mask))
             {
-                AddExplicitPair(root, sources, color, mask);
+                AddExplicitPair(root, sources, color, mask, highQualityRoot);
             }
         }
 
@@ -473,7 +563,8 @@ namespace PlantsVsZombies.Editor
         /// <param name="color">The original color source.</param>
         /// <param name="mask">The original mask source whose red channel supplies alpha.</param>
         /// <returns>The shared explicit-pair source.</returns>
-        private static Source AddExplicitPair(string root, List<Source> sources, Source color, Source mask)
+        /// <param name="highQualityRoot">The optional directory supplying replacement PNG files.</param>
+        private static Source AddExplicitPair(string root, List<Source> sources, Source color, Source mask, string? highQualityRoot)
         {
             var identity = color.Identity + "|" + mask.Identity;
             foreach (var existing in sources)
@@ -483,8 +574,26 @@ namespace PlantsVsZombies.Editor
                     return existing;
                 }
             }
-            var source = new Source { Identity = identity, Width = color.Width, Height = color.Height, Pixels = (Color32[])color.Pixels.Clone() };
-            ApplyMask(source, Path.Combine(root, mask.Identity));
+            var maskPath = Path.Combine(root, mask.Identity);
+            var highQualityMask = HighQualityArtworkBaker.FindReplacement(highQualityRoot, mask.Identity);
+            Source source;
+            if (color.PixelScale > 1 && highQualityMask == null)
+            {
+                source = Decode(root, color.Identity, null);
+                source.Identity = identity;
+            }
+            else
+            {
+                source = new Source
+                {
+                    Identity = identity,
+                    Width = color.Width,
+                    Height = color.Height,
+                    Pixels = (Color32[])color.Pixels.Clone(),
+                    PixelScale = color.PixelScale
+                };
+            }
+            ApplyMask(source, source.PixelScale == 1 ? maskPath : highQualityMask!);
             source.Geometry = SpriteGeometryUtility.BuildVisibleGeometry(source.Pixels, source.Width, source.Height);
             sources.Add(source);
             return source;
@@ -663,7 +772,9 @@ namespace PlantsVsZombies.Editor
         /// <param name="outputRoot">The generated Resources asset directory.</param>
         /// <param name="generated">The set of owned outputs retained after generation.</param>
         /// <returns>The complete variant metadata.</returns>
-        private static SpriteAtlasLayout BakeLayout(List<Source> sources, int maximum, string outputRoot, HashSet<string> generated)
+        /// <param name="highQuality">Whether to align every padded tile to the GPU compression blocks.</param>
+        private static SpriteAtlasLayout BakeLayout(List<Source> sources, int maximum, string outputRoot, HashSet<string> generated,
+            bool highQuality)
         {
             var pages = new List<Page>();
             var images = new List<SpriteAtlasImage>();
@@ -683,7 +794,7 @@ namespace PlantsVsZombies.Editor
                     dedicated = source.DedicatedPage;
                 }
                 var image = new SpriteAtlasImage { SourceIdentity = source.Identity, Aliases = source.Aliases.ToArray(), Width = source.Width,
-                    Height = source.Height, VisiblePixels = source.Geometry };
+                    Height = source.Height, PixelScale = source.PixelScale, VisiblePixels = source.Geometry };
                 var tiles = new List<SpriteAtlasTile>();
                 if (source.Geometry.Length > 0)
                 {
@@ -712,7 +823,20 @@ namespace PlantsVsZombies.Editor
                                 continue;
                             }
                             var tile = new SpriteAtlasTile { SourcePixels = new Rect(rectangle.x, rectangle.y, rectangle.width, rectangle.height) };
-                            familyPlacements.Add(new Placement { Source = source, SourcePixels = rectangle, Tile = tile });
+                            var paddedWidth = rectangle.width + Padding * 2;
+                            var paddedHeight = rectangle.height + Padding * 2;
+                            if (highQuality)
+                            {
+                                paddedWidth = (paddedWidth + 3) & ~3;
+                                paddedHeight = (paddedHeight + 3) & ~3;
+                            }
+                            familyPlacements.Add(new Placement
+                            {
+                                Source = source,
+                                SourcePixels = rectangle,
+                                PaddedSize = new Vector2Int(paddedWidth, paddedHeight),
+                                Tile = tile
+                            });
                             tiles.Add(tile);
                         }
                     }
@@ -787,7 +911,7 @@ namespace PlantsVsZombies.Editor
             var sizes = new Vector2Int[placements.Count];
             for (var index = 0; index < sizes.Length; index++)
             {
-                sizes[index] = new Vector2Int(placements[index].SourcePixels.width + Padding * 2, placements[index].SourcePixels.height + Padding * 2);
+                sizes[index] = placements[index].PaddedSize;
             }
             if (!SpriteAtlasRectanglePacker.TryPack(sizes, maximum, out var positions, out var extent))
             {
@@ -823,8 +947,8 @@ namespace PlantsVsZombies.Editor
             for (var index = 0; index < placements.Count; index++)
             {
                 var placement = placements[index];
-                var width = placement.SourcePixels.width + Padding * 2;
-                var height = placement.SourcePixels.height + Padding * 2;
+                var width = placement.PaddedSize.x;
+                var height = placement.PaddedSize.y;
                 if (!TryAllocate(candidate, width, height, out destinations[index]))
                 {
                     return false;
@@ -889,8 +1013,8 @@ namespace PlantsVsZombies.Editor
         /// <param name="firstPage">The first page belonging to the oversized family.</param>
         private static void Place(List<Page> pages, int maximum, Placement placement, int firstPage)
         {
-            var width = placement.SourcePixels.width + Padding * 2;
-            var height = placement.SourcePixels.height + Padding * 2;
+            var width = placement.PaddedSize.x;
+            var height = placement.PaddedSize.y;
             var selectedPage = -1;
             var selectedFree = -1;
             var bestWaste = int.MaxValue;
@@ -974,10 +1098,11 @@ namespace PlantsVsZombies.Editor
             }
         }
 
-        /// <summary>Applies exact uncompressed import settings without resizing source assets or creating readable copies.</summary>
+        /// <summary>Applies atlas import settings without resizing source assets or creating readable copies.</summary>
         /// <param name="catalog">The generated complete layout metadata.</param>
         /// <param name="outputRoot">The generated Resources directory.</param>
-        private static void ConfigureTextureImports(SpriteAtlasCatalog catalog, string outputRoot)
+        /// <param name="highQuality">Whether the pages use block-aligned high-resolution artwork.</param>
+        private static void ConfigureTextureImports(SpriteAtlasCatalog catalog, string outputRoot, bool highQuality)
         {
             var repaired = 0;
             var report = new StringBuilder();
@@ -997,13 +1122,13 @@ namespace PlantsVsZombies.Editor
                             throw new InvalidOperationException("Generated atlas page was not imported: " + path);
                         }
                     }
-                    var configured = SpriteAtlasTextureImport.IsConfigured(importer, layout.MaximumPageSize, out var differences);
+                    var configured = SpriteAtlasTextureImport.IsConfigured(importer, layout.MaximumPageSize, highQuality, out var differences);
                     if (!configured)
                     {
-                        SpriteAtlasTextureImport.Configure(importer, layout.MaximumPageSize);
+                        SpriteAtlasTextureImport.Configure(importer, layout.MaximumPageSize, highQuality);
                         importer.SaveAndReimport();
                         importer = (TextureImporter)AssetImporter.GetAtPath(path);
-                        if (!SpriteAtlasTextureImport.IsConfigured(importer, layout.MaximumPageSize, out var remaining))
+                        if (!SpriteAtlasTextureImport.IsConfigured(importer, layout.MaximumPageSize, highQuality, out var remaining))
                         {
                             throw new InvalidOperationException("Generated atlas import settings were overridden after repair: " + path + " (" + remaining + ")");
                         }

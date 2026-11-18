@@ -2,6 +2,7 @@
 using System;
 using System.IO;
 using System.Text;
+using PlantsVsZombies.Rendering;
 using UnityEngine;
 
 namespace PlantsVsZombies.UI.BitmapFonts
@@ -13,6 +14,8 @@ namespace PlantsVsZombies.UI.BitmapFonts
         public const string DefaultResourceRoot = "PvZBitmapFonts";
         /// <summary>Stores pages.</summary>
         private readonly Texture2D[] _pages;
+        /// <summary>Records which pages were decoded and are owned by this font.</summary>
+        private readonly bool[] _ownedPages;
         /// <summary>Stores disposed.</summary>
         private bool _disposed;
         /// <summary>Gets or sets data.</summary>
@@ -21,10 +24,12 @@ namespace PlantsVsZombies.UI.BitmapFonts
         /// <summary>Initializes ownership of decoded bitmap atlas pages.</summary>
         /// <param name = "data">The data.</param>
         /// <param name = "textures">The textures.</param>
-        private CanvasBitmapFont(BmFontData data, Texture2D[] textures)
+        /// <param name="ownedPages">Whether each page is privately decoded or a shared Resources asset.</param>
+        private CanvasBitmapFont(BmFontData data, Texture2D[] textures, bool[] ownedPages)
         {
             Data = data;
             _pages = textures;
+            _ownedPages = ownedPages;
         }
 
         /// <summary>Loads a converted layer. Bare font names resolve to the __Main layer.</summary>
@@ -56,11 +61,19 @@ namespace PlantsVsZombies.UI.BitmapFonts
             var text = new UTF8Encoding(false, true).GetString(description.bytes);
             var data = BmFontData.Parse(text);
             var textures = new Texture2D[data.Pages.Count];
+            var ownedPages = new bool[textures.Length];
             try
             {
                 for (var i = 0; i < textures.Length; i++)
                 {
                     var pagePath = resourceRoot + "/Atlases/" + Path.GetFileNameWithoutExtension(data.Pages[i]);
+                    var replacement = HighQualityArtwork.LoadTexture(pagePath, data.AtlasWidth, data.AtlasHeight);
+                    if (replacement != null)
+                    {
+                        textures[i] = replacement;
+                        continue;
+                    }
+
                     var image = Resources.Load<TextAsset>(pagePath);
                     if (image == null)
                     {
@@ -69,6 +82,7 @@ namespace PlantsVsZombies.UI.BitmapFonts
 
                     var texture = new Texture2D(2, 2, TextureFormat.RGBA32, false);
                     textures[i] = texture;
+                    ownedPages[i] = true;
                     texture.name = data.Pages[i];
                     texture.filterMode = FilterMode.Point;
                     texture.wrapMode = TextureWrapMode.Clamp;
@@ -110,11 +124,11 @@ namespace PlantsVsZombies.UI.BitmapFonts
                     }
                 }
 
-                return new CanvasBitmapFont(data, textures);
+                return new CanvasBitmapFont(data, textures, ownedPages);
             }
             catch
             {
-                DestroyPages(textures);
+                DestroyPages(textures, ownedPages);
                 throw;
             }
         }
@@ -199,7 +213,7 @@ namespace PlantsVsZombies.UI.BitmapFonts
             }
 
             _disposed = true;
-            DestroyPages(_pages);
+            DestroyPages(_pages, _ownedPages);
         }
 
         /// <summary>Performs throw if disposed.</summary>
@@ -214,11 +228,13 @@ namespace PlantsVsZombies.UI.BitmapFonts
 
         /// <summary>Performs destroy pages.</summary>
         /// <param name = "textures">The textures.</param>
-        private static void DestroyPages(Texture2D[] textures)
+        /// <param name="ownedPages">Which textures were decoded by this font and need destruction.</param>
+        private static void DestroyPages(Texture2D[] textures, bool[] ownedPages)
         {
-            foreach (Texture2D texture in textures)
+            for (var i = 0; i < textures.Length; i++)
             {
-                if (texture == null)
+                var texture = textures[i];
+                if (!ownedPages[i] || texture == null)
                 {
                     continue;
                 }
@@ -232,6 +248,7 @@ namespace PlantsVsZombies.UI.BitmapFonts
                     UnityEngine.Object.DestroyImmediate(texture);
                 }
             }
+            Array.Clear(textures, 0, textures.Length);
         }
     }
 }

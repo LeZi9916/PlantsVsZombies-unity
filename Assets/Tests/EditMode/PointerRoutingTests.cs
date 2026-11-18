@@ -6,6 +6,7 @@ using System.Reflection;
 using NUnit.Framework;
 using PlantsVsZombies.Game;
 using PlantsVsZombies.Inputs;
+using PlantsVsZombies.Rendering;
 using PlantsVsZombies.UI;
 using UnityEngine;
 
@@ -309,6 +310,54 @@ namespace PlantsVsZombies.Tests.EditMode
             Assert.That(options.SoundVolume, Is.EqualTo(.7f));
             Assert.That(options.FullScreen, Is.True);
             Assert.That(options.CloseResult, Is.EqualTo(OptionsCloseResult.None));
+        }
+
+        /// <summary>Checks both menu layouts can edit a default-off option and reopen the saved draft.</summary>
+        /// <param name="gameplay">Whether the options are opened from the board.</param>
+        /// <param name="y">The center of the artwork toggle in that layout.</param>
+        [TestCase(false, 260f)]
+        [TestCase(true, 245f)]
+        public void HighQualityArtworkDefaultsOffAndCanBeToggledInBothMenus(bool gameplay, float y)
+        {
+            var key = HighQualityArtwork.PreferenceKey;
+            var existed = PlayerPrefs.HasKey(key);
+            var previous = PlayerPrefs.GetInt(key);
+            try
+            {
+                PlayerPrefs.DeleteKey(key);
+                Assert.That(HighQualityArtwork.ReadPreference(), Is.False);
+                using var options = new OptionsView(_resourceRoot);
+                options.GameplayButtonsEnabled = gameplay;
+                options.Open(.35f, .7f, false, HighQualityArtwork.ReadPreference());
+                Assert.That(options.UseHighQualityArtwork, Is.False);
+
+                var pointer = new Vector2(366f, y);
+                options.HandlePointer(pointer, PointerPhase.Down);
+                options.HandlePointer(pointer, PointerPhase.Up);
+                Assert.That(options.UseHighQualityArtwork, Is.True);
+                Assert.That(options.FullScreen, Is.False);
+                Assert.That(HighQualityArtwork.ReadPreference(), Is.False, "The menu should edit a draft.");
+
+                options.Close();
+                HighQualityArtwork.WritePreference(options.UseHighQualityArtwork);
+                options.Open(.35f, .7f, false, HighQualityArtwork.ReadPreference());
+                Assert.That(options.UseHighQualityArtwork, Is.True);
+                options.HandlePointer(pointer, PointerPhase.Down);
+                options.Close();
+                HighQualityArtwork.WritePreference(options.UseHighQualityArtwork);
+                Assert.That(HighQualityArtwork.ReadPreference(), Is.False);
+            }
+            finally
+            {
+                if (existed)
+                {
+                    PlayerPrefs.SetInt(key, previous);
+                }
+                else
+                {
+                    PlayerPrefs.DeleteKey(key);
+                }
+            }
         }
 
         /// <summary>Checks both logical axes within a fraction of a pixel after float viewport arithmetic.</summary>

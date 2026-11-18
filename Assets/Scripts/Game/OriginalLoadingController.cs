@@ -1,4 +1,6 @@
 #nullable enable
+using PlantsVsZombies.Infrastructure;
+using PlantsVsZombies.Rendering;
 using PlantsVsZombies.UI.BitmapFonts;
 using System;
 using System.Collections;
@@ -52,7 +54,7 @@ namespace PlantsVsZombies.Game
             -1f
         };
         /// <summary>Stores original title textures.</summary>
-        internal readonly Dictionary<string, Texture2D> _originalTitleTextures = new Dictionary<string, Texture2D>();
+        internal readonly Dictionary<string, SpriteImage> _originalTitleTextures = new Dictionary<string, SpriteImage>();
         /// <summary>Stores original loading font.</summary>
         internal CanvasBitmapFont? _originalLoadingFont;
         /// <summary>Stores original sprout info,  original head info.</summary>
@@ -114,12 +116,15 @@ namespace PlantsVsZombies.Game
 
             )
             {
-                var texture = Resources.Load<Texture2D>("PvZLoading/" + key);
-                if (texture != null)
+                var path = "PvZLoading/" + key;
+                var original = Resources.Load<Texture2D>(path);
+                if (original != null)
                 {
+                    var replacement = HighQualityArtwork.LoadTexture(path, original.width, original.height);
+                    var texture = replacement ?? original;
                     texture.filterMode = FilterMode.Bilinear;
                     texture.wrapMode = TextureWrapMode.Clamp;
-                    _originalTitleTextures[key] = texture;
+                    _originalTitleTextures[key] = new SpriteImage(texture, key, replacement != null ? HighQualityArtwork.PixelScale : 1);
                 }
                 else
                 {
@@ -142,6 +147,10 @@ namespace PlantsVsZombies.Game
             {
                 foreach (string path in Directory.GetFiles(imageRoot))
                 {
+                    if (RuntimeAssetPaths.IsHighQualityImage(path))
+                    {
+                        continue;
+                    }
                     var name = Path.GetFileName(path);
                     if (name.StartsWith("SelectorScreen", StringComparison.OrdinalIgnoreCase) || name.StartsWith("SeedChooser", StringComparison.OrdinalIgnoreCase) || name.StartsWith("SeedBank", StringComparison.OrdinalIgnoreCase) || name.StartsWith("background", StringComparison.OrdinalIgnoreCase))
                     {

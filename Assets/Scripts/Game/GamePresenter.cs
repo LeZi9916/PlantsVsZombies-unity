@@ -2478,11 +2478,11 @@ namespace PlantsVsZombies.Game
             var night = _owner.RequiredGame.Adventure.Level.IsNight;
             if (_poolRenderer == null)
             {
-                var pool = _owner.Textures.Load("pool.jpg");
-                var dayBase = _owner.Textures.LoadAlphaGrid("pool_base.jpg", "pool_base_.png");
-                var nightBase = _owner.Textures.LoadAlphaGrid("pool_base_night.jpg", "pool_base_.png");
-                var dayShading = _owner.Textures.LoadAlphaGrid("pool_shading.jpg", "pool_shading_.jpg");
-                var nightShading = _owner.Textures.LoadAlphaGrid("pool_shading_night.jpg", "pool_shading_.jpg");
+                var pool = _owner.Textures.LoadImage("pool.jpg");
+                var dayBase = LoadPoolLayer("pool_base", "pool_base_.png");
+                var nightBase = LoadPoolLayer("pool_base_night", "pool_base_.png");
+                var dayShading = LoadPoolLayer("pool_shading", "pool_shading_.jpg");
+                var nightShading = LoadPoolLayer("pool_shading_night", "pool_shading_.jpg");
                 var causticSource = _owner.Textures.Load("pool_caustic_effect.jpg");
                 if (pool == null || dayBase == null || nightBase == null || dayShading == null || nightShading == null || causticSource == null)
                 {
@@ -2491,7 +2491,7 @@ namespace PlantsVsZombies.Game
                     return;
                 }
 
-                _poolRenderer = new OriginalPoolRenderer(new Vector2(pool.width, pool.height), dayBase, nightBase, dayShading, nightShading, causticSource);
+                _poolRenderer = new OriginalPoolRenderer(new Vector2(pool.Width, pool.Height), dayBase, nightBase, dayShading, nightShading, causticSource);
             }
 
             var ticks = _owner.RequiredGame.Adventure.PoolEffectTicks;
@@ -2502,6 +2502,16 @@ namespace PlantsVsZombies.Game
                 RequiredAdventureParticles.DrawAmbientLoop(s_poolSparkle, "PoolSparkly", ticks, PoolSparkleWarmupTicks,
                     new Vector2(450f, 295f), 0);
             }
+        }
+
+        /// <summary>Loads a water-mesh layer with its original red-channel alpha already applied.</summary>
+        /// <param name="name">The pool artwork filename without its extension.</param>
+        /// <param name="mask">The filename of the corresponding alpha image.</param>
+        /// <returns>The high-resolution layer or the original masked texture when available.</returns>
+        private Texture2D? LoadPoolLayer(string name, string mask)
+        {
+            return HighQualityArtwork.LoadTexture("Pool/" + name)
+                ?? _owner.Textures.LoadAlphaGrid(name + ".jpg", mask);
         }
 
         /// <summary>Performs draw adventure board.</summary>
@@ -7156,13 +7166,12 @@ namespace PlantsVsZombies.Game
                     var travel = _owner.Loading._originalLoadWidth * .94f;
                     var capScale = Mathf.Lerp(1f, .5f, _owner.Loading._originalLoadWidth / 314f);
                     float x = 251f + travel, y = grassY - 3f - 35f * capScale + 35f;
-                    Texture2D cap;
-                    if (_owner.Loading._originalTitleTextures.TryGetValue("sodroll", out cap) && cap != null)
+                    if (_owner.Loading._originalTitleTextures.TryGetValue("sodroll", out var cap))
                     {
                         var beforeCap = CanvasUI.Matrix;
                         // Literal PC TodScaleRotateTransformMatrix, with its native image origin.
                         CanvasUI.Matrix = beforeCap * Matrix4x4.TRS(new Vector3(x, y, 0), Quaternion.Euler(0, 0, -travel * 2f), new Vector3(capScale, capScale, 1));
-                        CanvasUI.DrawTexture(new Rect(-cap.width * .5f, -cap.height * .5f, cap.width, cap.height), cap, ScaleMode.StretchToFill, true);
+                        CanvasUI.DrawTexture(new Rect(-cap.Width * .5f, -cap.Height * .5f, cap.Width, cap.Height), cap, ScaleMode.StretchToFill, true);
                         CanvasUI.Matrix = beforeCap;
                     }
                 }
@@ -7226,8 +7235,7 @@ namespace PlantsVsZombies.Game
         /// <param name = "width">The width.</param>
         private void DrawOriginalLoadingGrass(float x, float y, float width)
         {
-            Texture2D grass;
-            if (!_owner.Loading._originalTitleTextures.TryGetValue("grass", out grass) || grass == null)
+            if (!_owner.Loading._originalTitleTextures.TryGetValue("grass", out var grass))
             {
                 return;
             }
@@ -7238,7 +7246,7 @@ namespace PlantsVsZombies.Game
                 return;
             }
 
-            CanvasUI.DrawTextureWithTexCoords(new Rect(x, y, pixels, grass.height), grass, new Rect(0, 0, pixels / (float)grass.width, 1), true);
+            CanvasUI.DrawTextureWithTexCoords(new Rect(x, y, pixels, grass.Height), grass, new Rect(0, 0, pixels / (float)grass.Width, 1), true);
         }
 
         /// <summary>Performs draw original title texture.</summary>
@@ -7246,8 +7254,7 @@ namespace PlantsVsZombies.Game
         /// <param name = "rect">The rect.</param>
         private void DrawOriginalTitleTexture(string key, Rect rect)
         {
-            Texture2D image;
-            if (_owner.Loading._originalTitleTextures.TryGetValue(key, out image) && image != null)
+            if (_owner.Loading._originalTitleTextures.TryGetValue(key, out var image))
             {
                 CanvasUI.DrawTexture(rect, image, ScaleMode.StretchToFill, true);
             }

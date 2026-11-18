@@ -28,6 +28,10 @@ python3 -B Tools/PrepareRuntimeAssets.py \
 
 原始 MO3/AU 和 151 份 Flash 美术源一并保留；Unity 音频使用已转换的 OGG/WAV，动态音乐仍使用现有分轨。菜单 **PlantsVsZombies > Verify Imported Runtime Assets** 可验证 Unity 图片、音频、字体引用及 metadata，结果位于 `.unity-runs/assets-import`。原始素材、导入报告和个人运行数据不自动提交。
 
+### 高质量素材
+
+在主菜单或游戏内的设置中勾选「高质量素材」，关闭设置保存后重启游戏。该选项默认关闭。4x 源图放在 `Assets/StreamingAssets/` 的现有目录，文件名以 `HQ` 结尾，例如 `SeedBankHQ.png`。JPG、GIF 和 `.bytes` 转成 PNG 后保留原扩展名以区分同名素材，例如 `background1.jpgHQ.png`。进入 Play Mode 或构建时，Unity 会从这些源图生成 4x 渲染图集以及启动画面、位图字体和水面纹理。4x 图集按目标平台压缩，保留原有采样坐标。缺少替换图或图形设备无法加载高清版本时使用原素材。界面尺寸、动画坐标和水面采样规则沿用原始数据。生成物位于 `Assets/Generated/PvZRendering`。
+
 ## 代码组织
 
 | 目录 | 职责 |

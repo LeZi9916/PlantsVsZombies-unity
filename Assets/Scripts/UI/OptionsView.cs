@@ -33,6 +33,8 @@ namespace PlantsVsZombies.UI
         private static readonly Rect s_musicTrack = new Rect(PanelX + 199f, PanelY + 116f, 135f, 40f);
         /// <summary>Stores sound track.</summary>
         private static readonly Rect s_soundTrack = new Rect(PanelX + 199f, PanelY + 143f, 135f, 40f);
+        /// <summary>The switch and label hit target to the left of the original acceleration indicator.</summary>
+        private static readonly Rect s_highQualityRow = new Rect(PanelX + 38f, PanelY + 175f, 159f, 39f);
         /// <summary>Stores acceleration box.</summary>
         private static readonly Rect s_accelerationBox = new Rect(PanelX + 283f, PanelY + 175f, 46f, 45f);
         /// <summary>Stores full screen box.</summary>
@@ -149,6 +151,8 @@ namespace PlantsVsZombies.UI
         public float SoundVolume { get; private set; }
         /// <summary>Gets or sets full screen.</summary>
         public bool FullScreen { get; private set; }
+        /// <summary>Gets the draft artwork quality for the next game startup.</summary>
+        public bool UseHighQualityArtwork { get; private set; }
         /// <summary>Gets or sets is open.</summary>
         public bool IsOpen { get; private set; }
         /// <summary>Gets or sets close result.</summary>
@@ -197,7 +201,13 @@ namespace PlantsVsZombies.UI
         }
 
         /// <summary>Starts a new edit session without changing the owner's settings.</summary>
-        public void Open(float musicVolume, float soundVolume, bool fullScreen)
+        /// <param name="musicVolume">The active music volume.</param>
+        /// <param name="soundVolume">The active sound volume.</param>
+        /// <param name="fullScreen">Whether the game is currently fullscreen.</param>
+        /// <param name="useHighQualityArtwork">The saved artwork quality for the next startup.</param>
+        /// <exception cref="InvalidOperationException">The options view is already open.</exception>
+        /// <exception cref="ObjectDisposedException">The options view has been disposed.</exception>
+        public void Open(float musicVolume, float soundVolume, bool fullScreen, bool useHighQualityArtwork = false)
         {
             ThrowIfDisposed();
             if (IsOpen)
@@ -210,6 +220,7 @@ namespace PlantsVsZombies.UI
             MusicVolume = music;
             SoundVolume = sound;
             FullScreen = fullScreen;
+            UseHighQualityArtwork = useHighQualityArtwork;
             _selectorMode = !GameplayButtonsEnabled;
             _confirmingRestart = false;
             CloseResult = OptionsCloseResult.None;
@@ -304,6 +315,7 @@ namespace PlantsVsZombies.UI
 
                 DrawSlider(musicTrack, MusicVolume);
                 DrawSlider(soundTrack, SoundVolume);
+                DrawHighQualityOption(OffsetY(s_highQualityRow, accelerationOffset), labelColor);
                 Image(new Rect(accelerationBox.x, accelerationBox.y, 42f, 39f), _uncheckedBox, new Color(0.55f, 0.55f, 0.55f, 0.7f));
                 Image(new Rect(fullScreenBox.x, fullScreenBox.y, 42f, 39f), FullScreen ? _checkedBox : _uncheckedBox, Color.white);
                 DrawReturnButton(_selectorMode ? "确定" : "返回游戏");
@@ -377,6 +389,10 @@ namespace PlantsVsZombies.UI
                 else if (fullScreenBox.Contains(position))
                 {
                     FullScreen = !FullScreen;
+                }
+                else if (OffsetY(s_highQualityRow, _selectorMode ? 15f : 0f).Contains(position))
+                {
+                    UseHighQualityArtwork = !UseHighQualityArtwork;
                 }
                 else if (accelerationBox.Contains(position))
                 {
@@ -857,6 +873,18 @@ namespace PlantsVsZombies.UI
             {
                 Label(fallback, text, 18, TextAnchor.MiddleRight, color);
             }
+        }
+
+        /// <summary>Draws the artwork switch and indicates when the saved selection takes effect.</summary>
+        /// <param name="row">The logical position and hit target of the setting.</param>
+        /// <param name="color">The standard options label color.</param>
+        private void DrawHighQualityOption(Rect row, Color color)
+        {
+            var boxX = row.xMax - 42f;
+            var label = new Rect(row.x, row.y + 2f, boxX - row.x - 4f, 22f);
+            NativeOrSystemLabel(label, "高质量素材", label.xMax, row.y + 20f, color);
+            Label(new Rect(label.x, row.y + 20f, label.width, 19f), "重启后生效", 13, TextAnchor.MiddleRight, color);
+            Image(new Rect(boxX, row.y, 42f, 39f), UseHighQualityArtwork ? _checkedBox : _uncheckedBox, Color.white);
         }
 
         /// <summary>Loads a logical source image from the shared atlas provider.</summary>

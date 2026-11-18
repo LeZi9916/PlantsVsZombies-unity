@@ -32,19 +32,21 @@ namespace PlantsVsZombies.Rendering
         {
             _provider = provider;
             _binding = provider.CreateBinding(image);
-            Width = image.Width;
-            Height = image.Height;
+            var pixelScale = Math.Max(1, image.PixelScale);
+            Width = image.Width / pixelScale;
+            Height = image.Height / pixelScale;
             SourceIdentity = image.SourceIdentity;
         }
 
         /// <summary>Wraps a standalone texture while preserving its dimensions.</summary>
         /// <param name="texture">The externally owned or provider-owned source texture.</param>
         /// <param name="identity">The source identity retained by diagnostics.</param>
-        internal SpriteImage(Texture texture, string identity)
+        /// <param name="pixelScale">The number of texture texels per logical source pixel.</param>
+        internal SpriteImage(Texture texture, string identity, int pixelScale = 1)
         {
             SourceTexture = texture;
-            Width = texture.width;
-            Height = texture.height;
+            Width = texture.width / pixelScale;
+            Height = texture.height / pixelScale;
             SourceIdentity = identity;
         }
 

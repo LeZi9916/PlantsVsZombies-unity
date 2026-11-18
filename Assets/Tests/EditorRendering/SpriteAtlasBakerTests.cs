@@ -174,6 +174,70 @@ namespace PlantsVsZombies.Tests.EditorRendering
             Assert.That(cached.SourceHash, Is.EqualTo(catalog.SourceHash));
         }
 
+        /// <summary>Checks 4x sampling, missing-image fallback, original alpha grids, and fallback from unavailable 4x pages.</summary>
+        [Test]
+        public void HighQualityLayoutKeepsOriginalIdentityAndGeometry()
+        {
+            WriteSolidImage("ink.jpg", 4, 3);
+            WriteSolidImage("ink_.png", 4, 3);
+            WriteSolidImage("original.png", 2, 2);
+            WriteSolidImage("ink.jpgHQ.png", 16, 12);
+            WriteSolidImage("ink_HQ.png", 16, 12);
+            File.WriteAllText(Path.Combine(_source, "properties", "LawnStrings.txt"), "[GREETING]\nHello\n");
+            var standard = SpriteAtlasBaker.Bake(_source, _output + "/Standard", true);
+            var quality = SpriteAtlasBaker.Bake(_source, _assets + "/Resources/PvZRenderingHighQuality/Layouts/Quality", true, _source);
+
+            Assert.That(standard.Layouts[0].Images, Has.Length.EqualTo(3));
+            using (var loose = SpriteAssetProvider.ForRoot(_source))
+            {
+                Assert.That(loose.ContainsImage("ink.jpg"), Is.True);
+                Assert.That(loose.ContainsImage("ink.jpgHQ.png"), Is.False);
+                Assert.That(loose.ContainsImage("ink_HQ.png"), Is.False);
+            }
+
+            Assert.That(quality.Layouts, Has.Length.EqualTo(1));
+            Assert.That(quality.Texts, Is.Empty);
+            var layout = quality.Layouts[0];
+            Assert.That(layout.Images, Has.Length.EqualTo(3));
+            foreach (var page in layout.Pages)
+            {
+                var texture = Resources.Load<Texture2D>(page);
+                Assert.That(texture.width % 4, Is.Zero);
+                Assert.That(texture.height % 4, Is.Zero);
+                var importer = (TextureImporter)AssetImporter.GetAtPath(AssetDatabase.GetAssetPath(texture));
+                Assert.That(importer.GetPlatformTextureSettings("Standalone").format, Is.EqualTo(TextureImporterFormat.BC7));
+                Assert.That(importer.GetPlatformTextureSettings("Android").format, Is.EqualTo(TextureImporterFormat.ASTC_4x4));
+            }
+            Assert.That(FindImage(layout, "images/ink.jpg").PixelScale, Is.EqualTo(4));
+            Assert.That(FindImage(layout, "images/original.png").PixelScale, Is.EqualTo(1));
+
+            using (var provider = new SpriteAssetProvider(standard, 2048, ReadPage,
+                texture => UnityEngine.Object.DestroyImmediate(texture), layout))
+            {
+                var image = provider.LoadAlphaGrid("ink.jpg", "ink_.png");
+                Assert.That(provider.LoadImage("IMAGE_ink"), Is.SameAs(image));
+                Assert.That(image.Width, Is.EqualTo(4));
+                Assert.That(image.Height, Is.EqualTo(3));
+                Assert.That(image.TryGetRegion(new Rect(.25f, 0f, .5f, 1f), 0, out var region), Is.True);
+                Assert.That(region.SourcePixels, Is.EqualTo(new Rect(1f, 0f, 2f, 3f)));
+                Assert.That(region.TextureUv.width * region.Texture.width, Is.EqualTo(8f).Within(.001f));
+                var origin = region.TextureUv.position;
+                var pixel = ((Texture2D)region.Texture).GetPixel(Mathf.RoundToInt(origin.x * region.Texture.width),
+                    Mathf.RoundToInt(origin.y * region.Texture.height));
+                Assert.That((Color32)pixel, Is.EqualTo(new Color32(80, 120, 160, 80)));
+                Assert.That(provider.TryReadText("properties/LawnStrings.txt", out var text), Is.True);
+                Assert.That(text, Does.Contain("Hello"));
+            }
+
+            using var fallback = new SpriteAssetProvider(standard, 2048,
+                path => path.Contains("/Quality/", StringComparison.Ordinal) ? null : ReadPage(path),
+                texture => UnityEngine.Object.DestroyImmediate(texture), layout);
+            var fallbackImage = fallback.LoadImage("ink.jpg");
+            Assert.That(fallbackImage.TryGetRegion(new Rect(0f, 0f, 1f, 1f), 0, out var fallbackRegion), Is.True);
+            Assert.That(fallbackRegion.TextureUv.width * fallbackRegion.Texture.width, Is.EqualTo(4f).Within(.001f));
+            Assert.That(fallback.LoadImage("ink.jpg"), Is.SameAs(fallbackImage));
+        }
+
         /// <summary>Checks a source-hash cache hit still repairs invalid generated import settings without repacking or changing GUIDs.</summary>
         [Test]
         public void CachedCatalogRepairsInvalidImporterWithoutRepackingOrChangingUvs()
